@@ -1,5 +1,7 @@
 import type { Database } from "bun:sqlite";
-import type { ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketStatus } from "@harness/shared";
+import type { ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import { hasSearchIndex } from "../db";
+import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
 
 interface TicketRow {
@@ -28,6 +30,7 @@ interface TicketRow {
   allowed_tools: string;
   review_rejections: number;
   model: string | null;
+  completed_at: number | null;
   busy: number;
 }
 
@@ -62,7 +65,10 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(norm(value) ?? null);
 }
 
-const SELECT = `SELECT t.*, EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.status IN ('queued','running')) AS busy FROM tickets t`;
+const BUSY = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.status IN ('queued','running')) AS busy`;
+const SELECT = `SELECT t.*, ${BUSY} FROM tickets t`;
+
+type SqlParams = Record<string, string | number | null>;
 
 export interface NewTicket {
   key: string;
@@ -166,14 +172,20 @@ export class TicketRepo {
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
       model: r.model ?? null,
       position: r.position,
+      completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
   }
 
-  list(filter: { projectId?: string; parentId?: string } = {}): Ticket[] {
+  list(filter: { projectId?: string; parentId?: string; statuses?: TicketStatus[] } = {}): Ticket[] {
     const where: string[] = [];
     const params: Record<string, string> = {};
+    if (filter.statuses) {
+      if (!filter.statuses.length) return [];
+      where.push(`t.status IN (${filter.statuses.map((_, i) => `$status${i}`).join(", ")})`);
+      filter.statuses.forEach((st, i) => (params[`status${i}`] = st));
+    }
     if (filter.projectId) {
       where.push("t.project_id = $projectId");
       params.projectId = filter.projectId;
@@ -184,6 +196,142 @@ export class TicketRepo {
     }
     const sql = `${SELECT} ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY t.position, t.created_at`;
     return this.map(this.db.query(sql).all(params) as TicketRow[]);
+  }
+
+  /**
+   * The search hit set for `q` as CTEs ending in `hits(id, rank)`: rank 0 exact key, 1 key
+   * prefix (current key or an old one from before a rename), 2 every term in the title, 3 every
+   * term somewhere in key/old keys/title/description/latest summary. FTS5 prefix matching when
+   * the index exists, LIKE substring matching otherwise.
+   */
+  private hitsCte(q: string, params: SqlParams): string {
+    const k = keyCandidate(q);
+    params.kExact = k;
+    params.kPrefix = k === null ? null : likePattern(k, true);
+    let text: string;
+    if (this.fts()) {
+      const all = ftsQuery(q);
+      const title = ftsQuery(q, "title");
+      if (all && title) {
+        params.ftsAll = all;
+        params.ftsTitle = title;
+        const via = (p: string) =>
+          `SELECT s.ticket_id AS id FROM ticket_fts JOIN ticket_search s ON s.rowid = ticket_fts.rowid WHERE ticket_fts MATCH $${p}`;
+        text = `fts AS (${via("ftsAll")}), ftitle AS (${via("ftsTitle")})`;
+      } else {
+        text = "fts AS (SELECT NULL AS id WHERE 0), ftitle AS (SELECT NULL AS id WHERE 0)";
+      }
+    } else {
+      const terms = searchTerms(q);
+      if (terms.length) {
+        const cols = ["key", "aliases", "title", "description", "summary"];
+        terms.forEach((term, i) => (params[`like${i}`] = `%${likePattern(term, false)}%`));
+        const anyCol = terms.map((_, i) => `(${cols.map((c) => `s.${c} LIKE $like${i} ESCAPE '\\'`).join(" OR ")})`).join(" AND ");
+        const inTitle = terms.map((_, i) => `s.title LIKE $like${i} ESCAPE '\\'`).join(" AND ");
+        text = `fts AS (SELECT s.ticket_id AS id FROM ticket_search s WHERE ${anyCol}), ftitle AS (SELECT s.ticket_id AS id FROM ticket_search s WHERE ${inTitle})`;
+      } else {
+        text = "fts AS (SELECT NULL AS id WHERE 0), ftitle AS (SELECT NULL AS id WHERE 0)";
+      }
+    }
+    return `WITH ${text},
+      kexact AS (SELECT id FROM tickets WHERE key = $kExact UNION SELECT ticket_id FROM ticket_key_aliases WHERE key = $kExact),
+      kprefix AS (SELECT id FROM tickets WHERE key LIKE $kPrefix ESCAPE '\\' UNION SELECT ticket_id FROM ticket_key_aliases WHERE key LIKE $kPrefix ESCAPE '\\'),
+      hits AS (
+        SELECT t.id AS id, CASE
+          WHEN t.id IN (SELECT id FROM kexact) THEN 0
+          WHEN t.id IN (SELECT id FROM kprefix) THEN 1
+          WHEN t.id IN (SELECT id FROM ftitle) THEN 2
+          ELSE 3 END AS rank
+        FROM tickets t WHERE t.id IN (SELECT id FROM kprefix) OR t.id IN (SELECT id FROM fts)
+      )`;
+  }
+
+  private ftsAvailable: boolean | undefined;
+  private fts(): boolean {
+    return (this.ftsAvailable ??= hasSearchIndex(this.db));
+  }
+
+  /**
+   * One page of a single column, keyset-paged (no OFFSET, so tickets completed, moved or deleted
+   * between fetches never cause a duplicate or a skip). done: newest completion first; other
+   * statuses: position, then creation. `q` narrows to search hits (same matching as search).
+   * Throws CursorError for a cursor that isn't from this ordering.
+   */
+  page(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number; cursor?: string | null }): TicketPage {
+    const limit = clampLimit(opts.limit, DEFAULT_PAGE_LIMIT);
+    const params: SqlParams = { status: opts.status };
+    const where = ["t.status = $status"];
+    if (opts.projectId) {
+      where.push("t.project_id = $projectId");
+      params.projectId = opts.projectId;
+    }
+    let cte = "";
+    if (opts.q !== undefined) {
+      cte = this.hitsCte(opts.q, params);
+      where.push("t.id IN (SELECT id FROM hits)");
+    }
+    const total = (this.db.query(`${cte} SELECT COUNT(*) AS n FROM tickets t WHERE ${where.join(" AND ")}`).get(params) as { n: number }).n;
+
+    const done = opts.status === "done";
+    const keyed = [...where];
+    const pageParams: SqlParams = { ...params, limit: limit + 1 };
+    if (opts.cursor) {
+      if (done) {
+        const [c, id] = decodeCursor(opts.cursor, "d", ["n", "s"]);
+        keyed.push("(t.completed_at < $cC OR (t.completed_at = $cC AND t.id < $cId))");
+        Object.assign(pageParams, { cC: c!, cId: id! });
+      } else {
+        const [pos, created, id] = decodeCursor(opts.cursor, "p", ["n", "n", "s"]);
+        keyed.push("(t.position > $cP OR (t.position = $cP AND (t.created_at > $cT OR (t.created_at = $cT AND t.id > $cId))))");
+        Object.assign(pageParams, { cP: pos!, cT: created!, cId: id! });
+      }
+    }
+    const order = done ? "t.completed_at DESC, t.id DESC" : "t.position, t.created_at, t.id";
+    const rows = this.db.query(`${cte} SELECT t.*, ${BUSY} FROM tickets t WHERE ${keyed.join(" AND ")} ORDER BY ${order} LIMIT $limit`).all(pageParams) as TicketRow[];
+    const more = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows[pageRows.length - 1];
+    const nextCursor =
+      more && last
+        ? done
+          ? encodeCursor("d", [last.completed_at ?? 0, last.id])
+          : encodeCursor("p", [last.position, last.created_at, last.id])
+        : null;
+    return { tickets: this.map(pageRows), nextCursor, total };
+  }
+
+  /**
+   * Search every status (see hitsCte for matching and ranks): rank first, newest first within a
+   * rank, keyset-paged. The caller rejects an empty `q`. Throws CursorError for a bad cursor.
+   */
+  search(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null }): TicketPage {
+    const limit = clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT);
+    const params: SqlParams = {};
+    const cte = this.hitsCte(opts.q, params);
+    const where = ["1"];
+    if (opts.projectId) {
+      where.push("t.project_id = $projectId");
+      params.projectId = opts.projectId;
+    }
+    const from = "FROM tickets t JOIN hits h ON h.id = t.id";
+    const total = (this.db.query(`${cte} SELECT COUNT(*) AS n ${from} WHERE ${where.join(" AND ")}`).get(params) as { n: number }).n;
+    const pageParams: SqlParams = { ...params, limit: limit + 1 };
+    if (opts.cursor) {
+      const [rank, created, id] = decodeCursor(opts.cursor, "s", ["n", "n", "s"]);
+      where.push("(h.rank > $cR OR (h.rank = $cR AND (t.created_at < $cT OR (t.created_at = $cT AND t.id < $cId))))");
+      Object.assign(pageParams, { cR: rank!, cT: created!, cId: id! });
+    }
+    const rows = this.db
+      .query(`${cte} SELECT t.*, ${BUSY}, h.rank AS rank ${from} WHERE ${where.join(" AND ")} ORDER BY h.rank, t.created_at DESC, t.id DESC LIMIT $limit`)
+      .all(pageParams) as (TicketRow & { rank: number })[];
+    const more = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows[pageRows.length - 1];
+    return {
+      tickets: this.map(pageRows),
+      nextCursor: more && last ? encodeCursor("s", [last.rank, last.created_at, last.id]) : null,
+      total,
+    };
   }
 
   get(id: string): Ticket | null {

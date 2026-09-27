@@ -11,6 +11,7 @@ import { createWsHandlers, type WsData } from "./ws";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
+import { TICKET_STATUSES, type TicketStatus } from "@harness/shared";
 
 /** The bearer token, rotatable at runtime (POST /token/rotate). */
 export interface TokenStore {
@@ -116,6 +117,16 @@ export interface RouteExtras {
   onRotate?: () => void;
 }
 
+/** `?status=planning,review` → validated statuses; absent/empty → undefined (no filter). */
+function statusList(raw: string | null): TicketStatus[] | undefined {
+  if (raw === null) return undefined;
+  const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!list.length) return undefined;
+  const bad = list.filter((s) => !(TICKET_STATUSES as readonly string[]).includes(s));
+  if (bad.length) throw new HarnessError(400, `Unknown status: ${bad.join(", ")} (expected ${TICKET_STATUSES.join(", ")})`);
+  return [...new Set(list)] as TicketStatus[];
+}
+
 export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: RouteExtras = {}): Route[] {
   const { plugins, network, tokens } = extras;
   const routes: Route[] = [];
@@ -128,8 +139,25 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
 
   // Tickets
-  add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") ?? undefined));
+  add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));
   add("POST", "/tickets", async ({ body }) => o.createTicket(await body()));
+  // Before /tickets/:key so "page" and "search" aren't taken for keys (keys always contain a dash).
+  add("GET", "/tickets/page", ({ url }) => {
+    const sp = url.searchParams;
+    const [status, ...rest] = statusList(sp.get("status")) ?? [];
+    if (!status || rest.length) throw new HarnessError(400, "status must be exactly one ticket status");
+    return o.ticketPage({
+      status,
+      projectId: sp.get("projectId") || undefined,
+      q: sp.has("q") ? sp.get("q")! : undefined,
+      limit: sp.get("limit"),
+      cursor: sp.get("cursor") || null,
+    });
+  });
+  add("GET", "/tickets/search", ({ url }) => {
+    const sp = url.searchParams;
+    return o.searchTickets({ q: sp.get("q") ?? "", projectId: sp.get("projectId") || undefined, limit: sp.get("limit"), cursor: sp.get("cursor") || null });
+  });
   add("GET", "/tickets/:key", ({ params }) => o.ticketDetail(params.key!));
   add("PATCH", "/tickets/:key", async ({ params, body }) => o.updateTicket(params.key!, await body()));
   add("DELETE", "/tickets/:key", async ({ params }) => (await o.deleteTicket(params.key!), ok));

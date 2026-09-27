@@ -202,7 +202,129 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX ticket_key_aliases_ticket ON ticket_key_aliases(ticket_id);
   `,
+  // 6: paging + search (DESIGN.md "HTTP API": /tickets/page, /tickets/search).
+  //    tickets.completed_at: when the ticket last entered done (the Done column's sort key). The
+  //    triggers keep it right for every write path: set to updated_at on the move into done,
+  //    cleared on the move out. Existing done tickets are backfilled from updated_at.
+  //    ticket_search: one denormalized search document per ticket (key, old keys, title,
+  //    description, latest summary), kept in sync by triggers on tickets, ticket_key_aliases and
+  //    summaries. Its INTEGER PRIMARY KEY is the stable rowid the FTS5 index (ticket_fts,
+  //    external content = ticket_search) points at; that index is created by ensureSearchIndex
+  //    below, outside the versioned migrations, so a SQLite without FTS5 still migrates.
+  `
+  ALTER TABLE tickets ADD COLUMN completed_at INTEGER;
+  UPDATE tickets SET completed_at = updated_at WHERE status = 'done';
+  CREATE INDEX tickets_status_completed ON tickets(status, completed_at, id);
+
+  CREATE TRIGGER tickets_completed_at_insert AFTER INSERT ON tickets
+  WHEN NEW.status = 'done' AND NEW.completed_at IS NULL BEGIN
+    UPDATE tickets SET completed_at = NEW.updated_at WHERE id = NEW.id;
+  END;
+  CREATE TRIGGER tickets_completed_at_update AFTER UPDATE OF status ON tickets
+  WHEN NEW.status IS NOT OLD.status AND (NEW.status = 'done' OR OLD.status = 'done') BEGIN
+    UPDATE tickets SET completed_at = CASE WHEN NEW.status = 'done' THEN NEW.updated_at ELSE NULL END WHERE id = NEW.id;
+  END;
+
+  CREATE TABLE ticket_search (
+    rowid INTEGER PRIMARY KEY,
+    ticket_id TEXT NOT NULL UNIQUE,
+    key TEXT NOT NULL,
+    aliases TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT ''
+  );
+
+  INSERT INTO ticket_search (ticket_id, key, aliases, title, description, summary)
+  SELECT t.id, t.key,
+    COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = t.id), ''),
+    t.title, t.description,
+    COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = t.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), '')
+  FROM tickets t;
+
+  CREATE TRIGGER ticket_search_ticket_insert AFTER INSERT ON tickets BEGIN
+    INSERT INTO ticket_search (ticket_id, key, aliases, title, description, summary) VALUES (
+      NEW.id, NEW.key,
+      COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = NEW.id), ''),
+      NEW.title, NEW.description,
+      COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), ''));
+  END;
+  CREATE TRIGGER ticket_search_ticket_update AFTER UPDATE OF key, title, description, session_id ON tickets BEGIN
+    UPDATE ticket_search SET key = NEW.key, title = NEW.title, description = NEW.description,
+      summary = COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), '')
+    WHERE ticket_id = NEW.id;
+  END;
+  CREATE TRIGGER ticket_search_ticket_delete AFTER DELETE ON tickets BEGIN
+    DELETE FROM ticket_search WHERE ticket_id = OLD.id;
+  END;
+
+  CREATE TRIGGER ticket_search_alias_insert AFTER INSERT ON ticket_key_aliases BEGIN
+    UPDATE ticket_search SET aliases = COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = NEW.ticket_id), '')
+    WHERE ticket_id = NEW.ticket_id;
+  END;
+  CREATE TRIGGER ticket_search_alias_delete AFTER DELETE ON ticket_key_aliases BEGIN
+    UPDATE ticket_search SET aliases = COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = OLD.ticket_id), '')
+    WHERE ticket_id = OLD.ticket_id;
+  END;
+
+  CREATE TRIGGER ticket_search_summary_insert AFTER INSERT ON summaries BEGIN
+    UPDATE ticket_search SET summary = COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), '')
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = NEW.session_id);
+  END;
+  CREATE TRIGGER ticket_search_summary_delete AFTER DELETE ON summaries BEGIN
+    UPDATE ticket_search SET summary = COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = OLD.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), '')
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = OLD.session_id);
+  END;
+  CREATE TRIGGER ticket_search_summary_update AFTER UPDATE OF body ON summaries BEGIN
+    UPDATE ticket_search SET summary = COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), '')
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = NEW.session_id);
+  END;
+  `,
 ];
+
+/**
+ * The FTS5 index over ticket_search (external content, so it stores only the index). It's
+ * derived data: created (and rebuilt from ticket_search) whenever it's missing, which also covers
+ * a database migrated by a SQLite without FTS5 and later opened by one with it. Returns whether
+ * FTS5 is available; without it, search falls back to LIKE over ticket_search.
+ */
+export function ensureSearchIndex(db: Database): boolean {
+  const exists = !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ticket_fts'").get();
+  if (exists) return true;
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE VIRTUAL TABLE ticket_fts USING fts5(
+          key, aliases, title, description, summary,
+          content = 'ticket_search', content_rowid = 'rowid', tokenize = 'unicode61 remove_diacritics 2'
+        );
+        CREATE TRIGGER ticket_fts_insert AFTER INSERT ON ticket_search BEGIN
+          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+        END;
+        CREATE TRIGGER ticket_fts_delete AFTER DELETE ON ticket_search BEGIN
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary);
+        END;
+        CREATE TRIGGER ticket_fts_update AFTER UPDATE ON ticket_search BEGIN
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+        END;
+        INSERT INTO ticket_fts (ticket_fts) VALUES ('rebuild');
+      `);
+    })();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether this database has the FTS5 search index (see ensureSearchIndex). */
+export function hasSearchIndex(db: Database): boolean {
+  return !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ticket_fts'").get();
+}
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
@@ -227,4 +349,5 @@ export function migrate(db: Database) {
       db.exec(`PRAGMA user_version = ${v + 1}`);
     })();
   }
+  ensureSearchIndex(db);
 }

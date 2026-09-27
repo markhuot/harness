@@ -25,6 +25,7 @@ import type {
   SummaryAuthor,
   Ticket,
   TicketDetail,
+  TicketPage,
   TicketStatus,
   TranscriptContent,
   TranscriptRole,
@@ -35,6 +36,7 @@ import type {
 import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
+import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
@@ -478,8 +480,30 @@ export class Orchestrator {
   // Tickets (human / API surface)
   // =========================================================================
 
-  listTickets(projectId?: string): Ticket[] {
-    return this.store.tickets.list(projectId ? { projectId } : {});
+  /** Every ticket (one project's), or only those whose status is in `statuses`. */
+  listTickets(projectId?: string, statuses?: TicketStatus[]): Ticket[] {
+    return this.store.tickets.list({ ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+  }
+
+  /** One page of a column (GET /tickets/page). See TicketRepo.page. */
+  ticketPage(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
+    if (opts.q !== undefined && !opts.q.trim()) throw badRequest("q must not be empty");
+    return this.withCursor(() => this.store.tickets.page({ ...opts, limit: clampLimit(opts.limit, DEFAULT_PAGE_LIMIT) }));
+  }
+
+  /** Ticket search across every status (GET /tickets/search). See TicketRepo.search. */
+  searchTickets(opts: { q: string; projectId?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
+    if (!opts.q?.trim()) throw badRequest("q is required");
+    return this.withCursor(() => this.store.tickets.search({ ...opts, limit: clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT) }));
+  }
+
+  private withCursor<T>(fn: () => T): T {
+    try {
+      return fn();
+    } catch (err) {
+      if (err instanceof CursorError) throw badRequest(err.message);
+      throw err;
+    }
   }
 
   private requireTicket(key: string): Ticket {

@@ -356,3 +356,74 @@ describe("http api", () => {
     await expect(client.request("POST", `/tickets/${t.key}/approval`, { decision: "maybe" })).rejects.toMatchObject({ status: 409 });
   });
 });
+
+describe("ticket paging + search over http", () => {
+  async function seedBoard() {
+    const env = await boot();
+    const { client, dir } = env;
+    const p = await client.createProject({ path: dir, key: "PG" });
+    const make = async (title: string, status?: "done" | "review") => {
+      const t = await client.createTicket({ projectId: p.id, prompt: title, title, start: false });
+      if (status) await client.updateTicket(t.key, { status });
+      await Bun.sleep(2); // distinct completion timestamps
+      return (await client.getTicket(t.key)).ticket;
+    };
+    const planning = await make("login planning");
+    const review = await make("review me", "review");
+    const done1 = await make("login done first", "done");
+    const done2 = await make("done second", "done");
+    const done3 = await make("login done third", "done");
+    return { ...env, p, planning, review, done1, done2, done3 };
+  }
+
+  test("GET /tickets keeps returning everything; ?status= filters; unknown status is a 400", async () => {
+    const { client, p, planning, review } = await seedBoard();
+    expect(await client.listTickets()).toHaveLength(5);
+    expect(await client.listTickets(p.id)).toHaveLength(5);
+    const open = await client.listTickets(p.id, { status: ["planning", "in_progress", "blocked", "review"] });
+    expect(open.map((t) => t.key).sort()).toEqual([planning.key, review.key].sort());
+    expect(await client.listTickets(undefined, { status: [] })).toHaveLength(5); // empty filter = no filter
+    await expect(client.request("GET", "/tickets?status=planning,nope")).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("moving a ticket into done over REST sets completedAt; moving it out clears it", async () => {
+    const { client, done1 } = await seedBoard();
+    expect(done1.completedAt).toBeGreaterThan(0);
+    const back = await client.updateTicket(done1.key, { status: "review" });
+    expect(back.completedAt).toBeNull();
+  });
+
+  test("GET /tickets/page pages done newest-completion first with q, limit and cursor; bad input is a 400", async () => {
+    const { client, p, done1, done2, done3 } = await seedBoard();
+    const first = await client.ticketPage({ status: "done", projectId: p.id, limit: 2 });
+    expect(first.tickets.map((t) => t.key)).toEqual([done3.key, done2.key]);
+    expect(first.total).toBe(3);
+    const second = await client.ticketPage({ status: "done", projectId: p.id, limit: 2, cursor: first.nextCursor });
+    expect(second.tickets.map((t) => t.key)).toEqual([done1.key]);
+    expect(second.nextCursor).toBeNull();
+    const filtered = await client.ticketPage({ status: "done", q: "login" });
+    expect(filtered.tickets.map((t) => t.key)).toEqual([done3.key, done1.key]);
+    expect(filtered.total).toBe(2);
+    expect((await client.request<any>("GET", "/tickets/page?status=done&limit=0")).tickets).toHaveLength(1);
+    await expect(client.request("GET", "/tickets/page")).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("GET", "/tickets/page?status=done,review")).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("GET", "/tickets/page?status=done&q=%20")).rejects.toMatchObject({ status: 400 });
+    await expect(client.ticketPage({ status: "done", cursor: "garbage" })).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("GET /tickets/search searches every status, pages, and rejects an empty q", async () => {
+    const { client, p, planning, done1, done3 } = await seedBoard();
+    const res = await client.searchTickets({ q: "login" });
+    expect(res.tickets.map((t) => t.key)).toEqual([done3.key, done1.key, planning.key]);
+    expect(res.total).toBe(3);
+    const page1 = await client.searchTickets({ q: "login", projectId: p.id, limit: 2 });
+    const page2 = await client.searchTickets({ q: "login", projectId: p.id, limit: 2, cursor: page1.nextCursor });
+    expect([...page1.tickets, ...page2.tickets].map((t) => t.key)).toEqual(res.tickets.map((t) => t.key));
+    expect((await client.searchTickets({ q: planning.key.toLowerCase() })).tickets[0]!.key).toBe(planning.key);
+    expect((await client.searchTickets({ q: `"login (done` })).tickets.map((t) => t.key)).toEqual([done3.key, done1.key]);
+    await expect(client.searchTickets({ q: "   " })).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("GET", "/tickets/search")).rejects.toMatchObject({ status: 400 });
+    // /tickets/:key still works alongside the new routes.
+    expect((await client.getTicket(planning.key)).ticket.id).toBe(planning.id);
+  });
+});
