@@ -1,0 +1,11 @@
+{
+  "name": "inbox",
+  "command": "bun",
+  "args": ["file-drop.ts", "~/.harness/inbox"],
+  "cwd": "~/Sites/harness/service/examples/watchers",
+  "env": {},
+  "mode": "loop",
+  "intervalSec": 60,
+  "enabled": true,
+  "driver": null
+}

@@ -1,0 +1,11 @@
+{
+  "name": "jira-once",
+  "command": "/bin/zsh",
+  "args": ["-lc", "exec watch-jira --project=CEPFR --assigned=unassigned --open-sprints --once"],
+  "cwd": null,
+  "env": {},
+  "mode": "interval",
+  "intervalSec": 600,
+  "enabled": true,
+  "driver": null
+}

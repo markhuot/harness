@@ -1,0 +1,1468 @@
+// The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
+// notifications and triage. Implements HarnessOps for tools.
+
+import { existsSync, statSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
+import type {
+  ApprovalBody,
+  CompleteBody,
+  PendingApproval,
+  CreateProjectBody,
+  CreateTicketBody,
+  DriverInfo,
+  HumanReviewBody,
+  Mapping,
+  Project,
+  PublicSettings,
+  Run,
+  RunKind,
+  Session,
+  Settings,
+  Summary,
+  SummaryAuthor,
+  Ticket,
+  TicketDetail,
+  TicketStatus,
+  TranscriptContent,
+  TranscriptRole,
+  UpdateTicketBody,
+  Watcher,
+  WorkItem,
+} from "@harness/shared";
+import { isTicketKey, TICKET_STATUSES } from "@harness/shared";
+import type { Store } from "../store";
+import type { TicketPatch } from "../store/tickets";
+import type { WatcherInput } from "../store/watchers";
+import type { EventBus } from "../events";
+import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
+import type { HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
+import type { BrowserService } from "../browser/types";
+import type { HarnessPaths } from "../config";
+import { toolsForRun } from "../tools/index";
+import * as prompts from "./prompts";
+import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
+import { RunQueue, type QueuedJob } from "./queue";
+import { ensureWorktree, isGitRepo } from "./worktree";
+import { badRequest, conflict, HarnessError, notFound } from "./errors";
+import { resolveSettings, toPublicSettings, validateSettingsPatch } from "./settings";
+
+export interface ConductorChange {
+  key: string;
+  title: string;
+  from: TicketStatus;
+  to: TicketStatus;
+  summary?: string;
+}
+
+/** Minimal surface of WatcherRunner the orchestrator uses (injectable for tests). */
+export interface WatcherSupervisor {
+  sync(watchers: Watcher[]): void;
+  runNow(id: string): Promise<void>;
+  stopAll(): Promise<void>;
+}
+
+export interface OrchestratorOptions {
+  store: Store;
+  bus: EventBus;
+  drivers: Driver[];
+  browser: BrowserService;
+  paths: HarnessPaths;
+  /** Tool selection per run (defaults to tools/index toolsForRun) */
+  tools?: (kind: RunKind, driver: Driver) => ToolDefinition[];
+  /** Base URL of the HTTP server, used to build run-scoped MCP URLs */
+  baseUrl?: () => string;
+  /** Build the watcher supervisor (defaults to WatcherRunner); null disables watchers */
+  watchers?: ((handlers: ConstructorParameters<typeof WatcherRunner>[0]) => WatcherSupervisor) | null;
+  log?: (msg: string) => void;
+}
+
+interface ActiveRun {
+  run: Run;
+  controller: AbortController;
+  cancelled: boolean;
+  submitted: boolean;
+  decided: boolean;
+  lastText: string | null;
+  mcpToken: string | null;
+}
+
+interface TriageMeta {
+  source: string;
+  item: WorkItem;
+}
+
+const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
+/** Run kinds with a human in the loop for tool-permission prompts */
+const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+export const MAX_AGENT_REJECTIONS = 3;
+export const APPROVAL_PENDING_MESSAGE =
+  "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
+
+/** Compact one-line description of a tool input: command / file_path / url / JSON. */
+export function summarizeToolInput(input: unknown, max = 120): string {
+  let text: string;
+  if (typeof input === "string") text = input;
+  else if (input && typeof input === "object") {
+    const o = input as Record<string, unknown>;
+    const pick = ["command", "file_path", "path", "url", "pattern", "query"].find((k) => typeof o[k] === "string" && o[k]);
+    text = pick ? String(o[pick]) : JSON.stringify(input);
+  } else text = JSON.stringify(input ?? null);
+  text = text.replace(/\s+/g, " ").trim();
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+/** True when text ends with a question, ignoring trailing emoji, punctuation and closing markdown. */
+export function endsWithQuestion(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const stripped = text.trim().replace(/[\s*_`~)\]}>"'”’.!…\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]+$/u, "");
+  return stripped.endsWith("?") || stripped.endsWith("？");
+}
+
+function errMsg(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Title from the first meaningful line of a prompt. */
+export function deriveTitle(prompt: string): string {
+  const line =
+    prompt
+      .split("\n")
+      .map((l) => l.replace(/^[#>*\-\s]+/, "").trim())
+      .find((l) => l.length > 0) ?? "Untitled";
+  return line.length > 80 ? line.slice(0, 79).trimEnd() + "…" : line;
+}
+
+export class Orchestrator {
+  readonly store: Store;
+  readonly bus: EventBus;
+  readonly browser: BrowserService;
+  readonly paths: HarnessPaths;
+  private drivers = new Map<string, Driver>();
+  private tools: (kind: RunKind, driver: Driver) => ToolDefinition[];
+  private baseUrl: () => string;
+  private log: (msg: string) => void;
+  private queue: RunQueue;
+  private active = new Map<string, ActiveRun>(); // runId → active run
+  private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
+  private conductorBuffer = new Map<string, ConductorChange[]>();
+  private starting = new Set<string>();
+  private watcherRunner: WatcherSupervisor | null;
+  private stopping = false;
+  /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
+  private background = new Set<Promise<unknown>>();
+
+  constructor(opts: OrchestratorOptions) {
+    this.store = opts.store;
+    this.bus = opts.bus;
+    this.browser = opts.browser;
+    this.paths = opts.paths;
+    for (const d of opts.drivers) this.drivers.set(d.id, d);
+    this.tools = opts.tools ?? ((kind, driver) => toolsForRun(kind, driver));
+    this.baseUrl = opts.baseUrl ?? (() => "http://127.0.0.1:0");
+    this.log = opts.log ?? ((m) => console.log(`[orchestrator] ${m}`));
+    this.queue = new RunQueue({
+      limit: () => this.settings().maxConcurrentRuns,
+      execute: (job) => this.execute(job),
+      onError: (job, err) => this.log(`run ${job.runId} crashed: ${errMsg(err)}`),
+    });
+    const handlers = {
+      onItems: async (w: Watcher, items: WorkItem[]) => {
+        for (const item of items) await this.ingest(w.id, w.name, item, w.driver);
+      },
+      onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
+        const w = this.store.watchers.update(id, patch);
+        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: w });
+      },
+    };
+    this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner(handlers);
+  }
+
+  // =========================================================================
+  // Lifecycle of the service
+  // =========================================================================
+
+  /** Recover from a previous process and start watchers. */
+  start() {
+    const stale = this.recoverStaleRuns();
+    if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
+    this.syncWatchers();
+  }
+
+  /** Runs left queued/running by a previous process become failed ("service restarted"). */
+  recoverStaleRuns(): number {
+    const stale = this.store.runs.listUnfinished();
+    for (const run of stale) {
+      if (this.active.has(run.id)) continue;
+      const r = this.store.runs.finish(run.id, "failed", "service restarted");
+      this.bus.emit({ kind: "run.upserted", run: r });
+      this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): service restarted`);
+      const session = this.store.sessions.get(run.sessionId);
+      if (session?.kind === "triage" && session.triageStatus === "triaging") {
+        this.store.sessions.update(session.id, { triageStatus: "failed", outcome: "Interrupted: service restarted" });
+      }
+      this.touchSession(run.sessionId);
+    }
+    return stale.length;
+  }
+
+  async stop() {
+    this.stopping = true;
+    this.queue.pause();
+    await this.watcherRunner?.stopAll().catch(() => {});
+    const actives = [...this.active.values()];
+    for (const a of actives) {
+      a.cancelled = true;
+      a.controller.abort();
+    }
+    await Promise.race([Promise.all(actives.map((a) => this.queue.whenSessionIdle(a.run.sessionId))), Bun.sleep(5000)]);
+  }
+
+  /** Resolves when no runs are queued or running (tests). */
+  async idle(timeoutMs = 10_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    // Microtask-scheduled work (conductor flushes) may enqueue right after a run ends.
+    for (;;) {
+      await Promise.race([this.queue.idle(), Bun.sleep(Math.max(0, deadline - Date.now()))]);
+      await Promise.race([Promise.allSettled([...this.background]), Bun.sleep(Math.max(0, deadline - Date.now()))]);
+      await Bun.sleep(1);
+      if (this.queue.pendingCount === 0 && this.queue.runningCount === 0 && this.background.size === 0) return;
+      if (Date.now() > deadline) throw new Error("orchestrator did not become idle in time");
+    }
+  }
+
+  // =========================================================================
+  // Settings & drivers
+  // =========================================================================
+
+  settings(): Settings {
+    return resolveSettings(this.store.settings.all());
+  }
+
+  publicSettings(): PublicSettings {
+    return toPublicSettings(this.settings());
+  }
+
+  updateSettings(body: unknown): PublicSettings {
+    const patch = validateSettingsPatch(body, [...this.drivers.keys()]);
+    this.store.settings.set(patch);
+    const pub = this.publicSettings();
+    this.bus.emit({ kind: "settings.updated", settings: pub });
+    this.queue.pump();
+    return pub;
+  }
+
+  driverList(): Driver[] {
+    return [...this.drivers.values()];
+  }
+
+  async driverInfos(): Promise<DriverInfo[]> {
+    return Promise.all(
+      this.driverList().map(async (d) => {
+        try {
+          return await d.info();
+        } catch (err) {
+          return {
+            id: d.id,
+            name: d.name,
+            description: d.description,
+            available: false,
+            authenticated: false,
+            detail: errMsg(err),
+            supportsLogin: !!d.login,
+          };
+        }
+      }),
+    );
+  }
+
+  async loginDriver(id: string) {
+    const d = this.drivers.get(id);
+    if (!d) throw notFound(`Unknown driver: ${id}`);
+    if (!d.login) throw badRequest(`Driver ${id} does not support login`);
+    return d.login();
+  }
+
+  // =========================================================================
+  // Projects
+  // =========================================================================
+
+  listProjects(): Project[] {
+    return this.store.projects.list();
+  }
+
+  createProject(body: CreateProjectBody): Project {
+    if (!body || typeof body.path !== "string" || !body.path.trim()) throw badRequest("path is required");
+    const path = resolve(body.path.trim().replace(/^~(?=$|\/)/, process.env.HOME ?? "~"));
+    if (!existsSync(path) || !statSync(path).isDirectory()) throw badRequest(`Not a directory: ${path}`);
+    if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
+    const project = this.store.projects.create({
+      path,
+      name: body.name?.trim() || basename(path),
+      key: body.key,
+      defaultDriver: body.defaultDriver ?? null,
+      useWorktrees: body.useWorktrees,
+      requireHumanReview: body.requireHumanReview,
+    });
+    this.bus.emit({ kind: "project.upserted", project });
+    return project;
+  }
+
+  updateProject(id: string, body: Partial<CreateProjectBody>): Project {
+    if (!this.store.projects.get(id)) throw notFound(`Unknown project: ${id}`);
+    if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
+    let path: string | undefined;
+    if (body.path !== undefined) {
+      path = resolve(body.path);
+      if (!existsSync(path) || !statSync(path).isDirectory()) throw badRequest(`Not a directory: ${path}`);
+    }
+    const project = this.store.projects.update(id, { ...body, path })!;
+    this.bus.emit({ kind: "project.upserted", project });
+    return project;
+  }
+
+  async deleteProject(id: string) {
+    if (!this.store.projects.get(id)) throw notFound(`Unknown project: ${id}`);
+    for (const t of this.store.tickets.list({ projectId: id })) await this.deleteTicket(t.key);
+    for (const m of this.store.mappings.list().filter((m) => m.projectId === id)) {
+      this.store.mappings.delete(m.id);
+      this.bus.emit({ kind: "mapping.deleted", id: m.id });
+    }
+    this.store.projects.delete(id);
+    this.bus.emit({ kind: "project.deleted", id });
+  }
+
+  // =========================================================================
+  // Tickets (human / API surface)
+  // =========================================================================
+
+  listTickets(projectId?: string): Ticket[] {
+    return this.store.tickets.list(projectId ? { projectId } : {});
+  }
+
+  private requireTicket(key: string): Ticket {
+    const t = this.store.tickets.getByKey(key);
+    if (!t) throw notFound(`Unknown ticket: ${key}`);
+    return t;
+  }
+
+  ticketDetail(key: string): TicketDetail {
+    const ticket = this.requireTicket(key);
+    return {
+      ticket,
+      session: this.store.sessions.get(ticket.sessionId)!,
+      summaries: this.store.summaries.listBySession(ticket.sessionId),
+      runs: this.store.runs.listBySession(ticket.sessionId),
+      dependents: this.store.tickets.dependents(ticket.key).map((t) => t.key),
+      children: this.store.tickets.list({ parentId: ticket.id }),
+    };
+  }
+
+  summaries(key: string): Summary[] {
+    return this.store.summaries.listBySession(this.requireTicket(key).sessionId);
+  }
+
+  async createTicket(body: CreateTicketBody): Promise<Ticket> {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    const project = this.store.projects.get(body.projectId);
+    if (!project) throw notFound(`Unknown project: ${body.projectId}`);
+    const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    if (!prompt.trim() && !body.title?.trim()) throw badRequest("prompt is required");
+    const kind = body.kind ?? "task";
+    if (kind !== "task" && kind !== "conductor") throw badRequest(`Invalid kind: ${kind}`);
+    const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
+    if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
+    const dependsOn = this.validateDeps(body.dependsOn ?? []);
+    let parentId: string | null = null;
+    if (body.parentId) {
+      const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
+      if (!parent) throw badRequest(`Unknown parent: ${body.parentId}`);
+      parentId = parent.id;
+    }
+    let explicitKey: string | null = null;
+    if (body.key) {
+      explicitKey = body.key.trim().toUpperCase();
+      if (!isTicketKey(explicitKey)) throw badRequest(`Invalid ticket key: ${body.key}`);
+      if (this.store.tickets.keyExists(explicitKey)) throw conflict(`Ticket ${explicitKey} already exists`);
+    }
+    const start = body.start ?? true;
+    const autoStart = body.autoStart ?? parentId !== null;
+    const title = body.title?.trim() || deriveTitle(prompt);
+
+    const ticket = this.store.transaction(() => {
+      const key = explicitKey ?? this.store.projects.takeNextKey(project.id, (k) => this.store.tickets.keyExists(k));
+      const session = this.store.sessions.create({ key, kind: "ticket", ticketId: null, driver, cwd: project.path, title });
+      const t = this.store.tickets.create({
+        key,
+        projectId: project.id,
+        kind,
+        title,
+        description: prompt,
+        status: "planning",
+        sessionId: session.id,
+        driver,
+        parentId,
+        dependsOn,
+        autoStart: autoStart || (start && dependsOn.length > 0),
+        externalRef: body.externalRef ?? null,
+        workdir: null,
+      });
+      this.store.sessions.update(session.id, { ticketId: t.id });
+      return t;
+    });
+    const p2 = this.store.projects.get(project.id);
+    if (p2) this.bus.emit({ kind: "project.upserted", project: p2 });
+    this.touchSession(ticket.sessionId);
+    this.appendStatus(ticket.sessionId, null, "Ticket created");
+
+    const depsDone = this.depsDone(ticket);
+    if ((start || ticket.autoStart) && depsDone) {
+      await this.begin(ticket, prompt);
+    } else if (start || ticket.autoStart) {
+      this.appendStatus(ticket.sessionId, null, `Waiting on ${ticket.dependsOn.filter((k) => !this.isDone(k)).join(", ")}`);
+    } else {
+      this.enqueueRun(ticket.sessionId, "plan", prompt);
+    }
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  private validateDeps(keys: string[]): string[] {
+    if (!Array.isArray(keys)) throw badRequest("dependsOn must be an array of ticket keys");
+    const out: string[] = [];
+    for (const raw of keys) {
+      const key = String(raw).trim().toUpperCase();
+      if (!this.store.tickets.keyExists(key)) throw badRequest(`Unknown dependency: ${raw}`);
+      if (!out.includes(key)) out.push(key);
+    }
+    return out;
+  }
+
+  async updateTicket(key: string, body: UpdateTicketBody): Promise<Ticket> {
+    let ticket = this.requireTicket(key);
+    const patch: TicketPatch = {};
+    if (body.title !== undefined) patch.title = String(body.title);
+    if (body.description !== undefined) patch.description = String(body.description);
+    if (body.position !== undefined) {
+      if (typeof body.position !== "number" || !Number.isFinite(body.position)) throw badRequest("position must be a number");
+      patch.position = body.position;
+    }
+    if (body.driver !== undefined) {
+      if (!this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
+      patch.driver = body.driver;
+      this.store.sessions.update(ticket.sessionId, { driver: body.driver });
+    }
+    if (body.dependsOn !== undefined) {
+      const deps = this.validateDeps(body.dependsOn);
+      if (deps.includes(ticket.key)) throw badRequest("A ticket cannot depend on itself");
+      patch.dependsOn = deps;
+    }
+    if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
+    if (Object.keys(patch).length) {
+      ticket = this.store.tickets.update(ticket.id, patch)!;
+      if (patch.title) this.store.sessions.update(ticket.sessionId, { title: patch.title });
+      this.touchSession(ticket.sessionId);
+    }
+    if (body.status !== undefined && body.status !== ticket.status) {
+      switch (body.status) {
+        case "in_progress":
+          await this.begin(ticket, prompts.workStartPrompt(ticket));
+          break;
+        case "done":
+          this.transition(ticket, "done", { blockedReason: null }, "Moved to done");
+          break;
+        case "blocked":
+          this.transition(ticket, "blocked", {}, "Moved to blocked");
+          break;
+        case "review":
+          this.transition(ticket, "review", {}, "Moved to review");
+          break;
+        case "planning":
+          this.transition(ticket, "planning", { blockedReason: null }, "Moved to planning");
+          break;
+      }
+    }
+    if (patch.dependsOn) this.kickScheduler();
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  async deleteTicket(key: string) {
+    const ticket = this.requireTicket(key);
+    await this.cancelSession(ticket.sessionId, true);
+    for (const child of this.store.tickets.list({ parentId: ticket.id })) {
+      this.store.db.query("UPDATE tickets SET parent_id = NULL WHERE id = $id").run({ id: child.id });
+      this.touchTicket(child.id);
+    }
+    this.conductorBuffer.delete(ticket.id);
+    await this.browser.close(ticket.sessionId).catch(() => {});
+    this.store.transaction(() => {
+      this.store.tickets.delete(ticket.id);
+      this.store.sessions.delete(ticket.sessionId);
+    });
+    this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
+    this.bus.emit({ kind: "session.deleted", id: ticket.sessionId });
+    this.kickScheduler();
+  }
+
+  async startTicket(key: string): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
+    if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
+    await this.begin(ticket, prompts.workStartPrompt(ticket));
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  async sendMessage(key: string, text: string): Promise<Ticket> {
+    if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
+    const ticket = this.requireTicket(key);
+    if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
+    this.resetRejections(ticket);
+    switch (ticket.status) {
+      case "planning":
+        this.enqueueRun(ticket.sessionId, "plan", text);
+        break;
+      case "in_progress":
+        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
+        break;
+      case "blocked":
+        if (!ticket.workdir) {
+          await this.begin(ticket, text);
+        } else {
+          this.transition(ticket, "in_progress", { blockedReason: null }, "Unblocked by human reply");
+          this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
+        }
+        break;
+      case "review":
+      case "done":
+        this.transition(
+          ticket,
+          "in_progress",
+          { agentReview: "pending", humanReview: "pending", blockedReason: null },
+          `Moved back to in progress (human message)`,
+        );
+        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
+        break;
+    }
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  humanReview(key: string, body: HumanReviewBody): Ticket {
+    const ticket = this.requireTicket(key);
+    return this.applyReview(ticket, body.decision, body.notes ?? "", "human");
+  }
+
+  private resetRejections(ticket: Ticket) {
+    if (this.store.tickets.reviewRejections(ticket.id) !== 0) this.store.tickets.update(ticket.id, { reviewRejections: 0 });
+  }
+
+  /** Answer the ticket's pending tool-permission request and resume the agent. */
+  async answerApproval(key: string, body: ApprovalBody): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    const pa = ticket.pendingApproval;
+    if (!pa) throw conflict(`${ticket.key} has no pending approval`);
+    const decision = body?.decision;
+    if (decision !== "allow_once" && decision !== "allow_tool" && decision !== "deny") {
+      throw badRequest("decision must be allow_once, allow_tool or deny");
+    }
+    const what = `${pa.toolName} (${summarizeToolInput(pa.input)})`;
+    const note = typeof body.message === "string" ? body.message.trim().replace(/[.\s]+$/, "") : "";
+    let prompt: string;
+    let allowedTools = ticket.allowedTools;
+    if (decision === "allow_once") {
+      this.store.tickets.addGrant(ticket.id, pa.toolName, pa.input);
+      prompt = `The human approved your request to use ${what}. Retry it now and continue.`;
+    } else if (decision === "allow_tool") {
+      if (!allowedTools.includes(pa.toolName)) allowedTools = [...allowedTools, pa.toolName];
+      prompt = `The human approved your request to use ${what}; you may use ${pa.toolName} freely for the rest of this ticket. Retry it now and continue.`;
+    } else {
+      prompt = `The human denied ${what}.${note ? ` ${note}.` : ""} Find another way or call block if you can't proceed.`;
+    }
+    if (note && decision !== "deny") prompt += ` Note from the human: ${note}.`;
+    this.addSummary(ticket.sessionId, ticket.id, "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
+    const kind = this.store.runs.get(pa.runId)?.kind === "complete" ? "complete" : this.workKind(ticket);
+    const t = this.transition(
+      ticket,
+      kind === "complete" ? "review" : "in_progress",
+      { pendingApproval: null, blockedReason: null, allowedTools, reviewRejections: 0 },
+      `Approval answered: ${decision}`,
+    );
+    this.enqueueRun(t.sessionId, kind, prompt);
+    return this.store.tickets.get(t.id)!;
+  }
+
+  private applyReview(ticket: Ticket, decision: "approve" | "request_changes", notes: string, by: "human" | "conductor"): Ticket {
+    if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
+    this.resetRejections(ticket);
+    if (decision === "approve") {
+      const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, by === "human" ? "Human review: approved" : "Conductor review: approved");
+      if (notes.trim()) this.addSummary(t.sessionId, t.id, by === "human" ? "human" : "agent", `Approved: ${notes.trim()}`);
+      this.noteReady(t);
+      return t;
+    }
+    if (decision !== "request_changes") throw badRequest(`Invalid decision: ${decision}`);
+    return this.requestChanges(ticket, notes, by);
+  }
+
+  async completeTicket(key: string, body: CompleteBody = {}): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    if (ticket.status === "done") throw conflict(`${ticket.key} is already done`);
+    if (body.skipAgent) {
+      this.transition(ticket, "done", { blockedReason: null }, "Marked done");
+      return this.store.tickets.get(ticket.id)!;
+    }
+    if (ticket.status !== "review") throw conflict(`${ticket.key} must be in review to complete`);
+    this.appendStatus(ticket.sessionId, null, "Completing");
+    this.enqueueRun(ticket.sessionId, "complete", prompts.completePrompt(ticket, body.instructions));
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  rerunAgentReview(key: string): Ticket {
+    const ticket = this.requireTicket(key);
+    if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
+    const t = this.store.tickets.update(ticket.id, { agentReview: "pending" })!;
+    this.enqueueReview(t);
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  async cancelTicket(key: string): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    await this.cancelSession(ticket.sessionId, true);
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** Cancel queued runs and abort the active run of a session. */
+  async cancelSession(sessionId: string, wait: boolean) {
+    for (const job of this.queue.pendingFor(sessionId)) {
+      if (this.queue.remove(job.runId)) {
+        const r = this.store.runs.finish(job.runId, "cancelled", null);
+        this.bus.emit({ kind: "run.upserted", run: r });
+        this.appendStatus(sessionId, job.runId, `Run cancelled (${job.kind})`);
+      }
+    }
+    const running = this.queue.runningFor(sessionId);
+    if (running) {
+      const a = this.active.get(running.runId);
+      if (a) {
+        a.cancelled = true;
+        a.controller.abort();
+      }
+      if (wait) await Promise.race([this.queue.whenSessionIdle(sessionId), Bun.sleep(5000)]);
+    }
+    this.touchSession(sessionId);
+  }
+
+  // =========================================================================
+  // Sessions & transcript
+  // =========================================================================
+
+  listSessions(kind?: "ticket" | "triage"): Session[] {
+    return this.store.sessions.list(kind);
+  }
+
+  getSession(id: string): Session {
+    const s = this.store.sessions.get(id);
+    if (!s) throw notFound(`Unknown session: ${id}`);
+    return s;
+  }
+
+  transcript(sessionId: string, after = 0) {
+    this.getSession(sessionId);
+    return this.store.transcript.list(sessionId, after);
+  }
+
+  // =========================================================================
+  // Watchers, mappings, triage
+  // =========================================================================
+
+  listWatchers() {
+    return this.store.watchers.list();
+  }
+
+  createWatcher(body: WatcherInput & { name: string; command: string }): Watcher {
+    const input = this.validateWatcher(body, true) as WatcherInput & { name: string; command: string };
+    const w = this.store.watchers.create(input);
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    this.syncWatchers();
+    return w;
+  }
+
+  updateWatcher(id: string, body: WatcherInput): Watcher {
+    if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
+    const w = this.store.watchers.update(id, this.validateWatcher(body, false))!;
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    this.syncWatchers();
+    return w;
+  }
+
+  deleteWatcher(id: string) {
+    if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
+    this.store.watchers.delete(id);
+    this.bus.emit({ kind: "watcher.deleted", id });
+    this.syncWatchers();
+  }
+
+  async runWatcher(id: string) {
+    if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
+    if (!this.watcherRunner) throw badRequest("Watchers are disabled");
+    await this.watcherRunner.runNow(id);
+  }
+
+  private validateWatcher(body: WatcherInput, creating: boolean): WatcherInput {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    const out: WatcherInput = {};
+    if (creating || body.name !== undefined) {
+      if (typeof body.name !== "string" || !body.name.trim()) throw badRequest("name is required");
+      out.name = body.name.trim();
+    }
+    if (creating || body.command !== undefined) {
+      if (typeof body.command !== "string" || !body.command.trim()) throw badRequest("command is required");
+      out.command = body.command.trim();
+    }
+    if (body.args !== undefined) {
+      if (!Array.isArray(body.args) || body.args.some((a) => typeof a !== "string")) throw badRequest("args must be an array of strings");
+      out.args = body.args;
+    }
+    if (body.env !== undefined) {
+      if (!body.env || typeof body.env !== "object" || Object.values(body.env).some((v) => typeof v !== "string"))
+        throw badRequest("env must be an object of strings");
+      out.env = body.env;
+    }
+    if (body.mode !== undefined) {
+      if (body.mode !== "loop" && body.mode !== "interval") throw badRequest("mode must be loop or interval");
+      out.mode = body.mode;
+    }
+    if (body.intervalSec !== undefined) {
+      if (typeof body.intervalSec !== "number" || body.intervalSec <= 0) throw badRequest("intervalSec must be a positive number");
+      out.intervalSec = Math.round(body.intervalSec);
+    }
+    if (body.enabled !== undefined) out.enabled = !!body.enabled;
+    if (body.cwd !== undefined) out.cwd = body.cwd || null;
+    if (body.driver !== undefined) {
+      if (body.driver && !this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
+      out.driver = body.driver || null;
+    }
+    return out;
+  }
+
+  syncWatchers() {
+    this.watcherRunner?.sync(this.store.watchers.list());
+  }
+
+  listMappings() {
+    return this.store.mappings.list();
+  }
+
+  createMapping(body: { pattern: string; projectId: string; notes?: string }): Mapping {
+    if (!body || typeof body.pattern !== "string" || !body.pattern.trim()) throw badRequest("pattern is required");
+    const pattern = body.pattern.trim();
+    const rx = /^\/(.+)\/([a-z]*)$/.exec(pattern);
+    if (rx) {
+      try {
+        new RegExp(rx[1]!, rx[2]);
+      } catch (err) {
+        throw badRequest(`Invalid regex: ${errMsg(err)}`);
+      }
+    }
+    if (!this.store.projects.get(body.projectId)) throw badRequest(`Unknown project: ${body.projectId}`);
+    const m = this.store.mappings.create({ pattern, projectId: body.projectId, notes: body.notes });
+    this.bus.emit({ kind: "mapping.upserted", mapping: m });
+    return m;
+  }
+
+  deleteMapping(id: string) {
+    if (!this.store.mappings.get(id)) throw notFound(`Unknown mapping: ${id}`);
+    this.store.mappings.delete(id);
+    this.bus.emit({ kind: "mapping.deleted", id });
+  }
+
+  /** Feed a raw item as if a watcher named `source` emitted it. Null when deduped. */
+  async injectWorkItem(source: string, raw: unknown): Promise<Session | null> {
+    if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
+    const item = parseWorkItem(typeof raw === "string" ? raw : JSON.stringify(raw ?? null));
+    if (!item) throw badRequest("item must be an object with a key (or id)");
+    return this.ingest(`inject:${source.trim()}`, source.trim(), item, null);
+  }
+
+  /** Dedupe then triage one item. */
+  async ingest(sourceId: string, sourceName: string, item: WorkItem, driver: string | null): Promise<Session | null> {
+    if (!this.store.seen.markSeen(sourceId, item.key, item.version)) return null;
+    return this.triage(sourceName, item, driver);
+  }
+
+  triage(source: string, item: WorkItem, driverId: string | null): Session {
+    const projects = this.store.projects.list();
+    const mappings = this.store.mappings.list();
+    const mapping = matchMapping(item.key, mappings);
+    const suggestion = mapping ? (projects.find((p) => p.id === mapping.projectId) ?? null) : null;
+    const existingTicket = isTicketKey(item.key) ? this.store.tickets.getByKey(item.key) : null;
+    const n = this.store.counters.next("triage");
+    const session = this.store.sessions.create({
+      key: `TRIAGE-${n}`,
+      kind: "triage",
+      ticketId: null,
+      driver: driverId ?? this.settings().defaultDriver,
+      cwd: suggestion?.path ?? this.paths.home,
+      title: item.title,
+      triageStatus: "triaging",
+      meta: { source, item } satisfies TriageMeta,
+    });
+    this.touchSession(session.id);
+    this.appendStatus(session.id, null, `New item ${item.key} from ${source}`);
+    this.enqueueRun(session.id, "triage", prompts.triagePrompt({ item, source, suggestion, projects, mappings, existingTicket }));
+    return this.store.sessions.get(session.id)!;
+  }
+
+  // =========================================================================
+  // MCP
+  // =========================================================================
+
+  /** Resolve a run-scoped MCP token (null once the run has ended). */
+  mcpRun(token: string): { tools: ToolDefinition[]; ctx: ToolContext } | null {
+    return this.mcpRuns.get(token) ?? null;
+  }
+
+  // =========================================================================
+  // HarnessOps (called by tools during a run)
+  // =========================================================================
+
+  private ctxTicket(ctx: ToolContext): Ticket {
+    if (!ctx.ticket) throw new Error("This run has no ticket");
+    const t = this.store.tickets.get(ctx.ticket.id);
+    if (!t) throw new Error("Ticket no longer exists");
+    return t;
+  }
+
+  private ctxActive(ctx: ToolContext): ActiveRun | undefined {
+    return this.active.get(ctx.runId);
+  }
+
+  async postSummary(ctx: ToolContext, body: string): Promise<void> {
+    if (!body?.trim()) throw new Error("summary is empty");
+    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim());
+  }
+
+  async updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (!plan?.trim()) throw new Error("plan is empty");
+    const patch: TicketPatch = { description: plan };
+    if (title?.trim()) patch.title = title.trim();
+    const u = this.store.tickets.update(t.id, patch)!;
+    if (patch.title) this.store.sessions.update(u.sessionId, { title: patch.title });
+    this.touchSession(u.sessionId);
+    this.appendStatus(u.sessionId, ctx.runId, "Plan updated");
+  }
+
+  async block(ctx: ToolContext, question: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
+    if (!question?.trim()) throw new Error("question is empty");
+    this.addSummary(t.sessionId, t.id, "agent", `Blocked: ${question.trim()}`);
+    this.transition(t, "blocked", { blockedReason: question.trim() }, `Blocked: ${question.trim()}`, question.trim());
+  }
+
+  async submitForReview(ctx: ToolContext, summary: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
+    this.submit(t, summary?.trim() || "Work submitted for review.", "agent");
+    const a = this.ctxActive(ctx);
+    if (a) a.submitted = true;
+    else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
+  }
+
+  async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (ctx.runKind !== "review") throw new Error("review_decision is only available in review runs");
+    if (t.status !== "review") throw new Error(`${t.key} is no longer in review`);
+    const a = this.ctxActive(ctx);
+    if (a?.decided) throw new Error("A review decision was already recorded for this run");
+    if (a) a.decided = true;
+    if (decision === "approve") {
+      const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
+      this.touchSession(u.sessionId);
+      this.appendStatus(u.sessionId, ctx.runId, "Agent review: approved");
+      if (notes?.trim()) this.addSummary(u.sessionId, u.id, "agent", `Review approved: ${notes.trim()}`);
+      if (u.parentId) this.notifyConductor(u.parentId, { key: u.key, title: u.title, from: "review", to: "review", summary: `Agent review approved. ${notes ?? ""}`.trim() });
+      this.noteReady(u);
+    } else if (decision === "request_changes") {
+      const n = this.store.tickets.reviewRejections(t.id) + 1;
+      if (n >= MAX_AGENT_REJECTIONS) {
+        const reason = `Agent review requested changes ${n} times — needs a human decision`;
+        this.addSummary(t.sessionId, t.id, "agent", `Changes requested (agent): ${notes?.trim() || "no notes"}`);
+        this.transition(
+          t,
+          "blocked",
+          { reviewRejections: n, agentReview: "changes_requested", blockedReason: reason },
+          reason,
+          notes,
+        );
+      } else {
+        this.store.tickets.update(t.id, { reviewRejections: n });
+        this.requestChanges(t, notes ?? "", "agent");
+      }
+    } else {
+      throw new Error(`Invalid decision: ${decision}`);
+    }
+  }
+
+  private conductorOf(ctx: ToolContext): Ticket {
+    const c = this.ctxTicket(ctx);
+    if (c.kind !== "conductor") throw new Error("Only conductor tickets can manage other tickets");
+    return c;
+  }
+
+  private childOf(conductor: Ticket, key: string): Ticket {
+    const t = this.store.tickets.getByKey(key);
+    if (!t) throw new Error(`Unknown ticket: ${key}`);
+    if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
+    return t;
+  }
+
+  async createTicket_(ctx: ToolContext, input: Parameters<HarnessOps["createTicket"]>[1]): Promise<Ticket> {
+    const c = this.conductorOf(ctx);
+    const project = input.projectKey ? this.store.projects.getByKey(input.projectKey) : this.store.projects.get(c.projectId);
+    if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
+    return this.createTicket({
+      projectId: project.id,
+      prompt: input.description || input.title,
+      title: input.title,
+      dependsOn: input.dependsOn,
+      autoStart: input.autoStart ?? true,
+      parentId: c.id,
+      start: false,
+      driver: c.driver,
+    });
+  }
+
+  async listTickets_(ctx: ToolContext, scope: "children" | "project"): Promise<Ticket[]> {
+    const c = this.ctxTicket(ctx);
+    return scope === "project" ? this.store.tickets.list({ projectId: c.projectId }) : this.store.tickets.list({ parentId: c.id });
+  }
+
+  async getTicket_(ctx: ToolContext, key: string) {
+    this.ctxTicket(ctx);
+    const t = this.store.tickets.getByKey(key);
+    if (!t) throw new Error(`Unknown ticket: ${key}`);
+    return {
+      ticket: t,
+      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
+    };
+  }
+
+  async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
+    const child = this.childOf(this.conductorOf(ctx), key);
+    return this.startTicket(child.key);
+  }
+
+  async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
+    const child = this.childOf(this.conductorOf(ctx), key);
+    await this.sendMessage(child.key, text);
+  }
+
+  async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
+    const child = this.childOf(this.conductorOf(ctx), key);
+    try {
+      return this.applyReview(child, decision, notes ?? "", "conductor");
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  async completeTicket_(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket> {
+    const child = this.childOf(this.conductorOf(ctx), key);
+    if (child.status !== "review" || child.agentReview !== "approved" || child.humanReview !== "approved") {
+      throw new Error(`${child.key} is not ready: both reviews must be approved first`);
+    }
+    return this.completeTicket(child.key, { instructions });
+  }
+
+  async listProjects_(_ctx: ToolContext) {
+    return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
+  }
+
+  private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
+    const session = this.store.sessions.get(ctx.session.id);
+    if (!session || session.kind !== "triage") throw new Error("Not a triage session");
+    const meta = this.store.sessions.getMeta<TriageMeta>(session.id);
+    if (!meta) throw new Error("Triage session has no work item");
+    if (session.triageStatus !== "triaging") throw new Error(`This item was already ${session.triageStatus}`);
+    return { session, meta };
+  }
+
+  async dispatchTicket(ctx: ToolContext, input: Parameters<HarnessOps["dispatchTicket"]>[1]): Promise<Ticket> {
+    const { session, meta } = this.triageMeta(ctx);
+    const project = this.store.projects.getByKey(input.projectKey ?? "");
+    if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
+    const key = (input.key ?? meta.item.key).trim().toUpperCase();
+    const existing = this.store.tickets.getByKey(key);
+    if (existing) {
+      const body = input.description?.trim() || `Update from ${meta.source}: ${meta.item.title}`;
+      const t = await this.sendMessage(existing.key, body);
+      this.finishTriage(session.id, "dispatched", `Sent update to existing ${existing.key}`);
+      return t;
+    }
+    if (!isTicketKey(key)) throw new Error(`Invalid ticket key: ${key}`);
+    const t = await this.createTicket({
+      projectId: project.id,
+      key,
+      title: input.title,
+      prompt: input.description || input.title,
+      kind: input.conductor ? "conductor" : "task",
+      start: input.start ?? false,
+      driver: project.defaultDriver ?? session.driver,
+      externalRef: { source: meta.source, key: meta.item.key, url: meta.item.url, raw: meta.item.raw },
+    });
+    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key} in ${project.key}`);
+    return t;
+  }
+
+  async requestApproval(
+    ctx: ToolContext,
+    toolName: string,
+    input: unknown,
+  ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
+    if (!APPROVABLE_RUNS.includes(ctx.runKind) || !ctx.ticket) {
+      return {
+        behavior: "deny",
+        message: `No human is available to approve tools during a ${ctx.runKind} run; proceed without it and mention it in your notes.`,
+      };
+    }
+    const t = this.ctxTicket(ctx);
+    if (t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
+    if (this.store.tickets.consumeGrant(t.id, toolName, input)) return { behavior: "allow", updatedInput: input };
+    if (t.pendingApproval) return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE }; // one request at a time
+    const pending: PendingApproval = { id: crypto.randomUUID(), runId: ctx.runId, toolName, input, requestedAt: Date.now() };
+    const reason = `Permission needed: ${toolName} — ${summarizeToolInput(input)}`;
+    this.addSummary(t.sessionId, t.id, "system", reason);
+    this.transition(t, "blocked", { pendingApproval: pending, blockedReason: reason }, reason, reason);
+    return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
+  }
+
+  async declineWork(ctx: ToolContext, reason: string): Promise<void> {
+    const { session } = this.triageMeta(ctx);
+    this.finishTriage(session.id, "declined", `Declined: ${reason?.trim() || "no reason given"}`);
+  }
+
+  private finishTriage(sessionId: string, status: "dispatched" | "declined" | "failed", outcome: string) {
+    this.store.sessions.update(sessionId, { triageStatus: status, outcome });
+    this.appendStatus(sessionId, null, outcome);
+    this.touchSession(sessionId);
+  }
+
+  // =========================================================================
+  // State machine internals
+  // =========================================================================
+
+  private workKind(t: Ticket): RunKind {
+    return t.kind === "conductor" ? "conductor" : "work";
+  }
+
+  private isDone(key: string): boolean {
+    const t = this.store.tickets.getByKey(key);
+    return !t || t.status === "done"; // deleted dependencies no longer block
+  }
+
+  private depsDone(t: Ticket): boolean {
+    return t.dependsOn.every((k) => this.isDone(k));
+  }
+
+  /** Prepare the workdir, move to in_progress and enqueue the first work/conductor run. */
+  private async begin(ticket: Ticket, prompt: string) {
+    if (this.starting.has(ticket.id)) return;
+    this.starting.add(ticket.id);
+    try {
+      let workdir = ticket.workdir;
+      let branch = ticket.branch;
+      if (!workdir) {
+        const project = this.store.projects.get(ticket.projectId)!;
+        workdir = project.path;
+        if (project.useWorktrees && (await isGitRepo(project.path))) {
+          try {
+            ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
+          } catch (err) {
+            this.transition(ticket, "blocked", { blockedReason: `Could not create worktree: ${errMsg(err)}` }, "Could not create worktree");
+            return;
+          }
+        }
+      }
+      const fresh = this.store.tickets.get(ticket.id);
+      if (!fresh) return;
+      this.store.sessions.update(fresh.sessionId, { cwd: workdir });
+      this.transition(fresh, "in_progress", { workdir, branch, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, "Moved to in progress");
+      this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt);
+    } finally {
+      this.starting.delete(ticket.id);
+    }
+  }
+
+  /**
+   * Change a ticket's status (plus optional fields), record a status line, and fire
+   * status-change hooks: parent conductor notification and dependency scheduling.
+   */
+  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, note?: string, summary?: string): Ticket {
+    const from = ticket.status;
+    const t = this.store.tickets.update(ticket.id, { ...patch, status: to })!;
+    this.touchSession(t.sessionId);
+    if (note) this.appendStatus(t.sessionId, null, note);
+    if (from !== to) {
+      if (t.parentId && !(from === "planning" && to === "in_progress")) {
+        this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
+      }
+      if (t.kind === "conductor" && to === "in_progress") queueMicrotask(() => this.flushConductor(t.id));
+      if (to === "done") this.kickScheduler();
+    }
+    return t;
+  }
+
+  private submit(ticket: Ticket, summary: string, author: SummaryAuthor) {
+    const project = this.store.projects.get(ticket.projectId);
+    const humanReview = project && !project.requireHumanReview ? "approved" : "pending";
+    this.addSummary(ticket.sessionId, ticket.id, author, summary);
+    this.transition(ticket, "review", { agentReview: "pending", humanReview, blockedReason: null }, "Moved to review", summary);
+  }
+
+  private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor"): Ticket {
+    const author: SummaryAuthor = by === "human" ? "human" : "agent";
+    this.addSummary(ticket.sessionId, ticket.id, author, `Changes requested (${by}): ${notes.trim() || "no notes"}`);
+    const t = this.transition(
+      ticket,
+      "in_progress",
+      { agentReview: "pending", humanReview: "pending", blockedReason: null },
+      `Changes requested by ${by}`,
+      notes,
+    );
+    this.enqueueRun(t.sessionId, this.workKind(t), prompts.changesRequestedPrompt(notes, by));
+    return this.store.tickets.get(t.id)!;
+  }
+
+  private noteReady(t: Ticket) {
+    if (t.status === "review" && t.agentReview === "approved" && t.humanReview === "approved") {
+      this.appendStatus(t.sessionId, null, "Ready to complete");
+    }
+  }
+
+  private enqueueReview(t: Ticket) {
+    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId)));
+  }
+
+  private allChildrenDone(t: Ticket): boolean {
+    return this.store.tickets.list({ parentId: t.id }).every((c) => c.status === "done");
+  }
+
+  /** Run async work in the background, tracked for idle(). Errors are logged. */
+  private track(p: Promise<unknown>) {
+    const tracked = p.catch((err) => this.log(`background task failed: ${errMsg(err)}`));
+    this.background.add(tracked);
+    tracked.finally(() => this.background.delete(tracked));
+  }
+
+  /** Kick the scheduler without awaiting it. */
+  private kickScheduler() {
+    this.track(this.schedule());
+  }
+
+  /** Start autoStart tickets whose dependencies are all done. */
+  async schedule() {
+    if (this.stopping) return;
+    for (const t of this.store.tickets.list()) {
+      if (!t.autoStart || t.status !== "planning" || t.busy || this.starting.has(t.id)) continue;
+      if (!this.depsDone(t)) continue;
+      const fresh = this.store.tickets.get(t.id); // an earlier await may have started it already
+      if (!fresh || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
+      await this.begin(fresh, prompts.workStartPrompt(fresh));
+    }
+  }
+
+  private notifyConductor(conductorId: string, change: ConductorChange) {
+    const buf = this.conductorBuffer.get(conductorId) ?? [];
+    buf.push(change);
+    this.conductorBuffer.set(conductorId, buf);
+    queueMicrotask(() => this.flushConductor(conductorId));
+  }
+
+  /** Enqueue one conductor run for all buffered child changes, if the conductor is free. */
+  private flushConductor(conductorId: string) {
+    const buf = this.conductorBuffer.get(conductorId);
+    if (!buf?.length || this.stopping) return;
+    const c = this.store.tickets.get(conductorId);
+    if (!c) {
+      this.conductorBuffer.delete(conductorId);
+      return;
+    }
+    if (c.status !== "in_progress") return; // keep buffered until it is back in progress
+    // Busy conductors are flushed from afterRun (which runs after the run left `active`).
+    if ([...this.active.values()].some((a) => a.run.sessionId === c.sessionId) || this.queue.pendingFor(c.sessionId).length) return;
+    this.conductorBuffer.delete(conductorId);
+    this.enqueueRun(c.sessionId, "conductor", prompts.conductorUpdatePrompt(buf));
+  }
+
+  // =========================================================================
+  // Runs
+  // =========================================================================
+
+  private enqueueRun(sessionId: string, kind: RunKind, prompt: string): Run {
+    const session = this.store.sessions.get(sessionId)!;
+    const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
+    const driver = ticket?.driver ?? session.driver;
+    const run = this.store.runs.create({ sessionId, kind, driver, prompt });
+    this.bus.emit({ kind: "run.upserted", run });
+    this.append(sessionId, run.id, "user", { type: "text", text: prompt });
+    this.touchSession(sessionId);
+    this.queue.enqueue({ runId: run.id, sessionId, kind });
+    return run;
+  }
+
+  private async execute(job: QueuedJob) {
+    let run = this.store.runs.get(job.runId);
+    if (!run || run.status !== "queued") return;
+    const session = this.store.sessions.get(run.sessionId);
+    if (!session) return;
+    const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
+    const project = ticket ? this.store.projects.get(ticket.projectId) : null;
+    const driver = this.drivers.get(run.driver);
+    const controller = new AbortController();
+    const active: ActiveRun = { run, controller, cancelled: false, submitted: false, decided: false, lastText: null, mcpToken: null };
+    this.active.set(run.id, active);
+    run = this.store.runs.markRunning(run.id);
+    active.run = run;
+    this.bus.emit({ kind: "run.upserted", run });
+    this.appendStatus(session.id, run.id, `Run started (${run.kind})`);
+
+    let error: string | null = null;
+    const cwd = (run.kind === "plan" ? null : ticket?.workdir) ?? session.cwd ?? project?.path ?? this.paths.home;
+    if (!driver) error = `Unknown driver: ${run.driver}`;
+    else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
+    else {
+      const ctx: ToolContext = {
+        runId: run.id,
+        runKind: run.kind,
+        session,
+        ticket,
+        cwd,
+        ops: this.opsFacade,
+        browser: this.browser,
+        signal: controller.signal,
+      };
+      const tools = this.tools(run.kind, driver);
+      const token = randomBytes(24).toString("hex");
+      this.mcpRuns.set(token, { tools, ctx });
+      active.mcpToken = token;
+      try {
+        const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
+        const children = ticket?.kind === "conductor" ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
+        const req: RunRequest = {
+          runId: run.id,
+          kind: run.kind,
+          prompt: run.prompt,
+          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children }),
+          cwd,
+          state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
+          tools,
+          toolContext: ctx,
+          mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
+          signal: controller.signal,
+        };
+        error = await this.consume(driver.run(req), active, controller.signal);
+      } catch (err) {
+        if (!controller.signal.aborted) error = errMsg(err);
+      } finally {
+        this.mcpRuns.delete(token);
+        active.mcpToken = null;
+      }
+    }
+
+    const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
+    run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
+    this.active.delete(run.id);
+    this.bus.emit({ kind: "run.upserted", run });
+    this.appendStatus(
+      session.id,
+      run.id,
+      status === "succeeded" ? `Run finished (${run.kind})` : status === "cancelled" ? `Run cancelled (${run.kind})` : `Run failed (${run.kind}): ${error}`,
+    );
+    this.touchSession(session.id);
+    if (this.stopping) return;
+    try {
+      await this.afterRun(run, active, error);
+    } catch (err) {
+      this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
+    }
+    this.kickScheduler();
+  }
+
+  /** Iterate driver events until done or aborted; returns the run error, if any. */
+  private async consume(events: AsyncIterable<DriverEvent>, active: ActiveRun, signal: AbortSignal): Promise<string | null> {
+    const it = events[Symbol.asyncIterator]();
+    const aborted = new Promise<"abort">((resolve) => {
+      if (signal.aborted) resolve("abort");
+      signal.addEventListener("abort", () => resolve("abort"), { once: true });
+    });
+    let error: string | null = null;
+    for (;;) {
+      const next = await Promise.race([it.next(), aborted]);
+      if (next === "abort") {
+        const r = it.return?.();
+        if (r) r.catch(() => {});
+        return error;
+      }
+      if (next.done) return error;
+      const e = this.handleEvent(active, next.value);
+      if (e) error = e;
+    }
+  }
+
+  private handleEvent(active: ActiveRun, ev: DriverEvent): string | null {
+    const { run } = active;
+    switch (ev.type) {
+      case "text_delta":
+        this.bus.emit({ kind: "transcript.delta", sessionId: run.sessionId, runId: run.id, text: ev.text });
+        return null;
+      case "text":
+        if (ev.text.trim()) active.lastText = ev.text;
+        this.append(run.sessionId, run.id, "assistant", { type: "text", text: ev.text });
+        return null;
+      case "thinking":
+        this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text });
+        return null;
+      case "tool_call":
+        this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input });
+        return null;
+      case "tool_result":
+        this.append(run.sessionId, run.id, "tool", {
+          type: "tool_result",
+          callId: ev.callId,
+          name: ev.name,
+          output: ev.result.content,
+          isError: !!ev.result.isError,
+        });
+        return null;
+      case "state":
+        if (run.kind !== "review") this.store.sessions.setDriverState(run.sessionId, ev.state);
+        return null;
+      case "usage":
+        return null;
+      case "error":
+        this.append(run.sessionId, run.id, "system", { type: "error", text: ev.message });
+        return ev.message || "Driver error";
+    }
+    return null;
+  }
+
+  private async afterRun(run: Run, active: ActiveRun, error: string | null) {
+    const session = this.store.sessions.get(run.sessionId);
+    if (!session) return;
+    if (run.kind === "triage") {
+      if (session.triageStatus === "triaging") {
+        if (run.status === "succeeded") this.finishTriage(session.id, "failed", "Triage ended without dispatching or declining");
+        else if (run.status === "failed") this.finishTriage(session.id, "failed", `Triage failed: ${error}`);
+        else this.finishTriage(session.id, "failed", "Triage cancelled");
+      }
+      return;
+    }
+    const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
+    if (!ticket) return;
+    if (run.status === "cancelled") return;
+    if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
+    if (run.status === "failed") {
+      if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
+        this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
+      }
+      return;
+    }
+    switch (run.kind) {
+      case "work":
+      case "conductor": {
+        if (active.submitted) {
+          if (ticket.status === "review") this.enqueueReview(ticket);
+        } else if (ticket.status === "in_progress") {
+          const moreWork = this.queue.pendingFor(session.id).some((j) => RUNNABLE_WORK.includes(j.kind));
+          if (!moreWork && run.kind === "work" && endsWithQuestion(active.lastText)) {
+            // The agent is asking the human something: block with its question instead of submitting.
+            const question = active.lastText!.trim();
+            this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
+            this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
+          } else if (!moreWork && (run.kind === "work" || this.allChildrenDone(ticket))) {
+            this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
+            this.enqueueReview(this.store.tickets.get(ticket.id)!);
+          }
+        }
+        if (run.kind === "conductor") this.flushConductor(ticket.id);
+        break;
+      }
+      case "complete":
+        if (ticket.status !== "done") this.transition(ticket, "done", { blockedReason: null }, "Completed");
+        break;
+      case "review":
+        if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+        break;
+      case "plan":
+        break;
+    }
+  }
+
+  /** HarnessOps facade handed to tools (maps conductor/triage op names onto internals). */
+  private get opsFacade(): HarnessOps {
+    return this._ops ?? (this._ops = this.buildOps());
+  }
+  private _ops: HarnessOps | null = null;
+
+  private buildOps(): HarnessOps {
+    return {
+      postSummary: (c, b) => this.postSummary(c, b),
+      updatePlan: (c, p, t) => this.updatePlan(c, p, t),
+      block: (c, q) => this.block(c, q),
+      submitForReview: (c, s) => this.submitForReview(c, s),
+      reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
+      createTicket: (c, i) => this.createTicket_(c, i),
+      listTickets: (c, s) => this.listTickets_(c, s),
+      getTicket: (c, k) => this.getTicket_(c, k),
+      startTicket: (c, k) => this.startTicket_(c, k),
+      messageTicket: (c, k, t) => this.messageTicket_(c, k, t),
+      reviewTicket: (c, k, d, n) => this.reviewTicket_(c, k, d, n),
+      completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
+      listProjects: (c) => this.listProjects_(c),
+      dispatchTicket: (c, i) => this.dispatchTicket(c, i),
+      declineWork: (c, r) => this.declineWork(c, r),
+      requestApproval: (c, n, i) => this.requestApproval(c, n, i),
+    };
+  }
+
+  /** The HarnessOps implementation handed to tools as ctx.ops. */
+  get ops(): HarnessOps {
+    return this.opsFacade;
+  }
+
+  // =========================================================================
+  // Persistence + event helpers
+  // =========================================================================
+
+  private append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent) {
+    const entry = this.store.transcript.append(sessionId, runId, role, content);
+    this.bus.emit({ kind: "transcript.appended", entry });
+    return entry;
+  }
+
+  private appendStatus(sessionId: string, runId: string | null, text: string) {
+    return this.append(sessionId, runId, "system", { type: "status", text });
+  }
+
+  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
+    const summary = this.store.summaries.add({ sessionId, ticketId, author, body });
+    this.bus.emit({ kind: "summary.added", summary });
+    return summary;
+  }
+
+  private touchSession(sessionId: string) {
+    const s = this.store.sessions.get(sessionId);
+    if (!s) return;
+    this.bus.emit({ kind: "session.upserted", session: s });
+    if (s.ticketId) this.touchTicket(s.ticketId);
+  }
+
+  private touchTicket(id: string) {
+    const t = this.store.tickets.get(id);
+    if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
+  }
+}
+
+export { HarnessError };

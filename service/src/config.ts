@@ -1,0 +1,98 @@
+// Runtime paths, port and the service bearer token.
+
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { randomBytes } from "node:crypto";
+import { DEFAULT_PORT } from "@harness/shared";
+
+export const VERSION = "0.1.0";
+
+export interface HarnessPaths {
+  home: string;
+  dbPath: string;
+  tokenPath: string;
+  logsDir: string;
+  logPath: string;
+  worktreesDir: string;
+  chromeProfileDir: string;
+  serviceJsonPath: string;
+}
+
+export interface ServiceInfo {
+  port: number;
+  pid: number;
+  startedAt: number;
+}
+
+export function resolveHome(env: Record<string, string | undefined> = process.env): string {
+  const raw = env.HARNESS_HOME?.trim();
+  if (!raw) return join(homedir(), ".harness");
+  return resolve(raw.replace(/^~(?=$|\/)/, homedir()));
+}
+
+export function resolvePort(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.HARNESS_PORT?.trim();
+  if (!raw) return DEFAULT_PORT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 65535) throw new Error(`Invalid HARNESS_PORT: ${raw}`);
+  return n;
+}
+
+export function harnessPaths(home: string): HarnessPaths {
+  const logsDir = join(home, "logs");
+  return {
+    home,
+    dbPath: join(home, "harness.db"),
+    tokenPath: join(home, "token"),
+    logsDir,
+    logPath: join(logsDir, "service.log"),
+    worktreesDir: join(home, "worktrees"),
+    chromeProfileDir: join(home, "chrome-profile"),
+    serviceJsonPath: join(home, "service.json"),
+  };
+}
+
+/** Create HARNESS_HOME and its subdirectories. */
+export function ensureHome(home: string): HarnessPaths {
+  const paths = harnessPaths(home);
+  for (const dir of [paths.home, paths.logsDir, paths.worktreesDir]) mkdirSync(dir, { recursive: true });
+  return paths;
+}
+
+/** Read the bearer token, creating a random one (32 bytes hex, mode 0600) when missing. */
+export function ensureToken(paths: Pick<HarnessPaths, "tokenPath">): string {
+  if (existsSync(paths.tokenPath)) {
+    const existing = readFileSync(paths.tokenPath, "utf8").trim();
+    if (existing) {
+      chmodSync(paths.tokenPath, 0o600);
+      return existing;
+    }
+  }
+  const token = randomBytes(32).toString("hex");
+  writeFileSync(paths.tokenPath, token + "\n", { mode: 0o600 });
+  chmodSync(paths.tokenPath, 0o600);
+  return token;
+}
+
+export function readToken(paths: Pick<HarnessPaths, "tokenPath">): string | null {
+  try {
+    return readFileSync(paths.tokenPath, "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeServiceJson(paths: Pick<HarnessPaths, "serviceJsonPath">, info: ServiceInfo) {
+  writeFileSync(paths.serviceJsonPath, JSON.stringify(info, null, 2) + "\n");
+}
+
+export function readServiceJson(paths: Pick<HarnessPaths, "serviceJsonPath">): ServiceInfo | null {
+  try {
+    const json = JSON.parse(readFileSync(paths.serviceJsonPath, "utf8"));
+    if (typeof json?.port === "number" && typeof json?.pid === "number") return json as ServiceInfo;
+    return null;
+  } catch {
+    return null;
+  }
+}

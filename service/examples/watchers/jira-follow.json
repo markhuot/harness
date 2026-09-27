@@ -1,0 +1,11 @@
+{
+  "name": "jira-sprint",
+  "command": "/bin/zsh",
+  "args": ["-lc", "exec watch-jira --project=PLAYR,MEDL,RFAWC,CEPFR --assigned=@me --open-sprints --follow --interval=300"],
+  "cwd": null,
+  "env": {},
+  "mode": "loop",
+  "intervalSec": 60,
+  "enabled": true,
+  "driver": null
+}

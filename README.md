@@ -1,0 +1,73 @@
+# Harness
+
+An AI coding harness. A background service runs agent sessions against local project
+directories. A desktop app shows them as a live kanban board, with transcripts, summaries
+and an agent-driven browser. Every session is a Jira-style ticket (`NYTIMES-3`).
+
+The architecture, ticket lifecycle, tool list and HTTP API are in [DESIGN.md](DESIGN.md).
+
+## Quick start
+
+```sh
+bun install
+bun service/src/cli.ts service ensure     # install + start the launchd service (127.0.0.1:7717)
+cd app && bun run install-app             # build Harness.app into ~/Applications
+open ~/Applications/Harness.app
+```
+
+The app starts the service itself if it isn't running, so after the first install you only
+need to open the app. Quitting the app leaves the service and its agents running.
+
+Service management:
+
+```sh
+bun service/src/cli.ts service status|start|stop|restart|uninstall
+tail -f ~/.harness/logs/service.log
+```
+
+Everything the service stores lives under `~/.harness/`: the database, the API token,
+logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different location.
+
+## Drivers
+
+| Driver | Auth | Notes |
+| --- | --- | --- |
+| `claude-code` | Your Claude team plan, via `claude auth login` (Settings → Drivers → Login) | Wraps the `claude` CLI. Harness tools are exposed over MCP. |
+| `anthropic-api` | API key (Settings, or `ANTHROPIC_API_KEY`) | Calls the Messages API directly and runs the tool loop itself. |
+| `dummy` | none | Returns scripted responses with no network calls. See DESIGN.md for its `/block`, `/fail`, `/browse` and `/approve` directives. |
+
+**Permissions.** Happy Cog's org policy disables Claude Code's `bypassPermissions` mode, so
+agents run in `acceptEdits`. Any tool call that mode doesn't auto-allow (most Bash commands,
+for example) moves the ticket to **Blocked** with an approval card. You can allow that one
+call, always allow that tool for the ticket, or deny it with a note. The agent resumes once
+you answer.
+
+## Workflow
+
+**Planning → In progress → Blocked → Review → Done.**
+
+- Humans own Planning and Blocked, agents own In progress, and Review is shared.
+- Leave "Start immediately" on to skip planning.
+- A ticket moves to Review when the agent submits it. An independent agent reviewer
+  then runs, and you give your own review.
+- Once both reviews approve, **Complete** runs a final agent step. If the ticket was
+  worked in a git worktree, that step merges the branch. You can also mark the ticket
+  done without an agent run.
+- **Conductor** tickets break a goal into child tickets with dependencies, start each
+  child when its dependencies finish, review and complete the children, and submit
+  themselves for review once every child is done.
+- **Watchers** are commands that print NDJSON work items, such as `watch-jira`. Examples
+  are in `service/examples/watchers/`. Each new item starts a triage session in the
+  Inbox. Triage either dispatches the item to a local ticket keyed by the external ID
+  (`FOO-123`, in the project your mappings point to) or declines it.
+
+## Tests
+
+```sh
+cd shared && bun test     # key helpers
+cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
+cd app && bun test        # reducer, routes, rendering
+cd app && bun run smoke   # drives the Electron UI against a mock service
+cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
+cd app && bun scripts/acceptance.ts [dummy|claude-code]   # installed app + launchd service, hello world → Done
+```

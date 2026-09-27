@@ -1,0 +1,19 @@
+{
+  "name": "@harness/service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "harness": "src/cli.ts" },
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run src/daemon.ts"
+  },
+  "dependencies": {
+    "@harness/shared": "workspace:*",
+    "@anthropic-ai/sdk": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

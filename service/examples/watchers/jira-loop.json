@@ -1,0 +1,11 @@
+{
+  "name": "jira",
+  "command": "/bin/zsh",
+  "args": ["-lc", "exec watch-jira --project=PLAYR --assigned=@me --status='To Do'"],
+  "cwd": null,
+  "env": {},
+  "mode": "loop",
+  "intervalSec": 60,
+  "enabled": true,
+  "driver": null
+}
