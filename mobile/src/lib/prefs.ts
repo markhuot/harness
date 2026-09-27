@@ -17,14 +17,19 @@ export interface Prefs {
   /** Board project filter (null = All projects) */
   boardProject: string | null;
   activeServer: string | null;
+  /** Prefs schema version. 2: hideChildren defaults to hidden (older blobs saved false as a side effect). */
+  version: number;
 }
 
-export const DEFAULT_PREFS: Prefs = { theme: "system", lightTheme: DEFAULT_LIGHT_THEME, darkTheme: DEFAULT_DARK_THEME, hideChildren: HIDE_CHILDREN_DEFAULT, lastProject: null, boardProject: null, activeServer: null };
+export const DEFAULT_PREFS: Prefs = { theme: "system", lightTheme: DEFAULT_LIGHT_THEME, darkTheme: DEFAULT_DARK_THEME, hideChildren: HIDE_CHILDREN_DEFAULT, lastProject: null, boardProject: null, activeServer: null, version: 2 };
 
 /** Stored prefs (possibly from an older build, or hand-damaged) → valid prefs. */
 export function normalizePrefs(stored: Partial<Prefs> | null | undefined): Prefs {
   const p = { ...DEFAULT_PREFS, ...(stored && typeof stored === "object" ? stored : {}) };
-  if (typeof p.hideChildren !== "boolean") p.hideChildren = DEFAULT_PREFS.hideChildren;
+  // Blobs from before v2 carried hideChildren: false whether or not the user chose it — reset once.
+  const storedVersion = stored && typeof stored === "object" && typeof stored.version === "number" ? stored.version : 0;
+  if (typeof p.hideChildren !== "boolean" || storedVersion < 2) p.hideChildren = DEFAULT_PREFS.hideChildren;
+  p.version = DEFAULT_PREFS.version;
   const choice = normalizeThemeChoice({ appearance: p.theme, lightTheme: p.lightTheme, darkTheme: p.darkTheme });
   return { ...p, theme: choice.appearance, lightTheme: choice.lightTheme, darkTheme: choice.darkTheme };
 }

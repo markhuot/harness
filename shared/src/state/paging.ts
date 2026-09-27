@@ -68,7 +68,10 @@ export interface SearchState {
 export type PagingAction =
   /** A done page request for `scope` went out (first page when `cursor` is null) */
   | { type: "donePage.request"; scope: string }
-  | { type: "donePage"; scope: string; page: TicketPage; append: boolean }
+  /** `cursor` is the cursor the page was requested with (null for a first page). An appended page
+   *  only applies while it still matches the scope's nextCursor, so a "Load more" that was in flight
+   *  when a refresh re-seeded the scope can't splice a stale page (and cursor) into the new run. */
+  | { type: "donePage"; scope: string; page: TicketPage; append: boolean; cursor?: string | null }
   | { type: "donePage.error"; scope: string; error: string }
   /** The board's filter box changed ("" clears the search) */
   | { type: "search.set"; q: string; scope: string }
@@ -125,6 +128,7 @@ export function reducePaging(state: State, action: PagingAction): State {
       const prev = state.donePaging[action.scope];
       // A "Load more" page for a scope that was reset (reconnect snapshot) in the meantime is stale.
       if (action.append && !prev) return state;
+      if (action.append && action.cursor !== undefined && prev && prev.nextCursor !== action.cursor) return state;
       return {
         ...state,
         tickets: mergeTickets(state.tickets, action.page.tickets),

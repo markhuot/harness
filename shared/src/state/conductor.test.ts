@@ -12,6 +12,7 @@ import {
   progressOf,
   progressSegments,
   readHideChildren,
+  HIDE_CHILDREN_KEY,
   waitingOn,
   writeHideChildren,
 } from "./conductor";
@@ -164,11 +165,11 @@ describe("hide-children preference", () => {
     const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
     expect(readHideChildren(storage)).toBe(true); // nothing stored → hidden
     writeHideChildren(false, storage);
-    expect(mem.get("harness.board.hideChildren")).toBe("0");
+    expect(mem.get(HIDE_CHILDREN_KEY)).toBe("0");
     expect(readHideChildren(storage)).toBe(false); // "Show child tickets" sticks
     writeHideChildren(true, storage);
     expect(readHideChildren(storage)).toBe(true);
-    mem.set("harness.board.hideChildren", "garbage");
+    mem.set(HIDE_CHILDREN_KEY, "garbage");
     expect(readHideChildren(storage)).toBe(true); // unreadable value → the default
   });
 

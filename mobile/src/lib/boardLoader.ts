@@ -126,7 +126,7 @@ export class BoardLoader {
     try {
       const page = await this.deps.client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE, cursor });
       if (gen !== this.gen) return;
-      this.deps.dispatch({ type: "donePage", scope, page, append: cursor !== null });
+      this.deps.dispatch({ type: "donePage", scope, page, append: cursor !== null, cursor });
     } catch (e) {
       if (gen !== this.gen) return;
       this.asked.delete(key);

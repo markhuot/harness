@@ -199,7 +199,7 @@ export function StoreProvider({
       dispatch({ type: "donePage.request", scope });
       try {
         const page = await client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE, cursor });
-        dispatch({ type: "donePage", scope, page, append });
+        dispatch({ type: "donePage", scope, page, append, cursor });
       } catch (e) {
         dispatch({ type: "donePage.error", scope, error: (e as Error).message });
       }

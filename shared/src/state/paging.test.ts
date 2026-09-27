@@ -329,3 +329,20 @@ describe("parent conductor from the detail", () => {
     expect(s.tickets.cond?.title).toBe("Old conductor");
   });
 });
+
+describe("stale Load more after a refresh of the same scope", () => {
+  test("a page requested with an old cursor is dropped once a refresh re-seeds the scope", () => {
+    // First run: page 1 → cursor "c1"; the user hits Load more (in flight with "c1").
+    let s = run(initialState, snapshot([], { scope: "p1", page: page([done("a", 90), done("b", 80)], "c1", 6) }));
+    // Refresh re-seeds the same scope with a new first page and a new cursor.
+    s = run(s, snapshot([], { scope: "p1", page: page([done("z", 99), done("a", 90)], "c1b", 7) }));
+    // The old Load more (requested with "c1") now lands — it must not splice into the new run.
+    const stale = run(s, { type: "donePage", scope: "p1", page: page([done("old", 10)], null, 6), append: true, cursor: "c1" });
+    expect(stale.tickets.old).toBeUndefined();
+    expect(stale.donePaging.p1?.nextCursor).toBe("c1b");
+    // A Load more for the current cursor still applies.
+    const fresh = run(s, { type: "donePage", scope: "p1", page: page([done("y", 70)], null, 7), append: true, cursor: "c1b" });
+    expect(fresh.tickets.y).toBeDefined();
+    expect(fresh.donePaging.p1?.nextCursor).toBeNull();
+  });
+});

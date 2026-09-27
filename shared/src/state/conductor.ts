@@ -165,7 +165,9 @@ export function groupChildren(children: Ticket[]): ChildGroup[] {
 // nothing stored (first run) = hide.
 // ---------------------------------------------------------------------------
 
-export const HIDE_CHILDREN_KEY = "harness.board.hideChildren";
+// v2: the default flipped to hidden. Older builds stored "0" (shown), so a new key lets every
+// install pick up the new default once; toggling afterwards is remembered as before.
+export const HIDE_CHILDREN_KEY = "harness.board.hideChildren.v2";
 export const HIDE_CHILDREN_DEFAULT = true;
 
 /** The slice of Web Storage the preference needs (localStorage on desktop; any sync KV elsewhere). */
