@@ -19,6 +19,17 @@ export type DriverEvent =
   | { type: "status"; text: string }
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
   | { type: "permission"; log: PermissionDecisionLog }
+  /**
+   * A tool call a permission system inside the driver denied without asking the harness
+   * (Claude Code's auto-mode classifier). The orchestrator turns the run's last one into a
+   * pending approval when the run ends without block/submit (DESIGN.md "Permissions").
+   */
+  | { type: "permission_denied"; callId: string; toolName: string; input: unknown; reason: string }
+  /**
+   * A one-time grant from RunRequest.grants the driver handed to its agent up front (claude-code:
+   * an exact --allowedTools rule). The grant is used up: the orchestrator consumes it.
+   */
+  | { type: "grant_applied"; toolName: string; input: unknown }
   | { type: "error"; message: string };
 
 export interface RunRequest {
@@ -41,6 +52,13 @@ export interface RunRequest {
    * Absent → settings.permissionMode.
    */
   permissionMode?: PermissionMode;
+  /**
+   * Human grants for this ticket (DESIGN.md "Permissions"): tools always allowed on the ticket
+   * and one-time grants for exact calls. Absent for review runs (independent reviewers), plan
+   * and triage runs and read-only tickets. Native-tool drivers ignore it (the PermissionGate
+   * checks grants itself); claude-code passes them to the CLI as --allowedTools rules.
+   */
+  grants?: RunGrants;
   /** Previously persisted driver state for this session (null on first run) */
   state: unknown;
   /** Tools available in this run. Native-loop drivers call tool.execute(input, toolContext). */
@@ -52,6 +70,17 @@ export interface RunRequest {
    */
   mcp: { url: string; headers: Record<string, string> };
   signal: AbortSignal;
+}
+
+export interface RunGrants {
+  /** ticket.allowedTools: "Always allow <Tool> on this ticket" */
+  tools: string[];
+  /**
+   * One-time grants (allow_once) for exact calls. `viaPrompt`: an exact CLI rule for this call
+   * was already tried and the call was still denied, so the driver must let its agent ask
+   * (claude-code: the permission prompt tool) instead of pre-approving it.
+   */
+  once: { toolName: string; input: unknown; viaPrompt?: boolean }[];
 }
 
 export interface Driver {

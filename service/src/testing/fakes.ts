@@ -66,6 +66,7 @@ export interface RecordedCall {
   mcpUrl: string;
   toolNames: string[];
   model: string | null;
+  grants: RunRequest["grants"];
 }
 
 /**
@@ -128,6 +129,7 @@ export class FakeDriver implements Driver {
       mcpUrl: req.mcp.url,
       toolNames: req.tools.map((t) => t.name),
       model: req.model,
+      grants: req.grants,
     });
     this.running++;
     this.maxRunning = Math.max(this.maxRunning, this.running);

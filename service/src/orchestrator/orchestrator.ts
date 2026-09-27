@@ -34,10 +34,10 @@ import type {
 } from "@harness/shared";
 import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
-import type { TicketPatch } from "../store/tickets";
+import { grantKey, type TicketPatch } from "../store/tickets";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
-import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
+import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
 import type { HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
@@ -104,6 +104,12 @@ interface ActiveRun {
   decided: boolean;
   lastText: string | null;
   mcpToken: string | null;
+  /** The agent called block during this run */
+  blocked: boolean;
+  /** Calls a permission system inside the driver denied without asking (permission_denied) */
+  denials: { toolName: string; input: unknown; reason: string }[];
+  /** grantKey()s of the one-time grants the driver pre-approved for this run (grant_applied) */
+  appliedGrants: Set<string>;
 }
 
 interface TriageMeta {
@@ -115,6 +121,8 @@ const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
 export const MAX_AGENT_REJECTIONS = 3;
+/** Classifier denials of an already-allowed tool retried without a human, before asking one */
+export const MAX_AUTO_RETRIES = 3;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -170,6 +178,14 @@ export class Orchestrator {
   private log: (msg: string) => void;
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
+  /**
+   * `${ticketId}\0${grantKey}` of calls whose exact CLI rule was passed and the call was still
+   * denied: their next one-time grant goes to the driver with viaPrompt (in memory: after a
+   * restart the rule is simply tried once more).
+   */
+  private ruleFailures = new Set<string>();
+  /** ticketId → classifier denials retried in a row without a human (MAX_AUTO_RETRIES) */
+  private autoRetries = new Map<string, number>();
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
   private conductorBuffer = new Map<string, ConductorChange[]>();
   private starting = new Set<string>();
@@ -647,6 +663,7 @@ export class Orchestrator {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
+    this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
     switch (ticket.status) {
       case "planning":
@@ -699,11 +716,15 @@ export class Orchestrator {
     const note = typeof body.message === "string" ? body.message.trim().replace(/[.\s]+$/, "") : "";
     let prompt: string;
     let allowedTools = ticket.allowedTools;
+    this.autoRetries.delete(ticket.id);
     if (decision === "allow_once") {
       this.store.tickets.addGrant(ticket.id, pa.toolName, pa.input);
       prompt = `The human approved your request to use ${what}. Retry it now and continue.`;
     } else if (decision === "allow_tool") {
       if (!allowedTools.includes(pa.toolName)) allowedTools = [...allowedTools, pa.toolName];
+      // Claude Code's auto mode ignores a bare rule for some tools (Bash): the denied call itself
+      // also gets a one-time grant so the retry goes through as an exact rule.
+      if (pa.source === "classifier") this.store.tickets.addGrant(ticket.id, pa.toolName, pa.input);
       prompt = `The human approved your request to use ${what}; you may use ${pa.toolName} freely for the rest of this ticket. Retry it now and continue.`;
     } else {
       prompt = `The human denied ${what}.${note ? ` ${note}.` : ""} Find another way or call block if you can't proceed.`;
@@ -991,6 +1012,8 @@ export class Orchestrator {
     if (!question?.trim()) throw new Error("question is empty");
     this.addSummary(t.sessionId, t.id, "agent", `Blocked: ${question.trim()}`);
     this.transition(t, "blocked", { blockedReason: question.trim() }, `Blocked: ${question.trim()}`, question.trim());
+    const a = this.ctxActive(ctx);
+    if (a) a.blocked = true;
   }
 
   async submitForReview(ctx: ToolContext, summary: string): Promise<void> {
@@ -1166,16 +1189,77 @@ export class Orchestrator {
       // Nothing in read-only mode goes to a human: the answer would always be no.
       return { behavior: "deny", message: `${toolName} isn't allowed: this ticket is in read-only mode. Don't retry it; report what you would change instead.` };
     }
-    if (t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
+    // A matching one-time grant is used up first, even when the tool is also allowed outright.
     if (this.store.tickets.consumeGrant(t.id, toolName, input)) return { behavior: "allow", updatedInput: input };
+    if (t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
     if (t.pendingApproval) return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE }; // one request at a time
-    const pending: PendingApproval = { id: crypto.randomUUID(), runId: ctx.runId, toolName, input, requestedAt: Date.now() };
+    this.openApproval(t, ctx.runId, toolName, input, meta);
+    return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
+  }
+
+  /**
+   * Put a tool call in front of a human: pendingApproval + blocked. A ticket the agent already
+   * blocked (it called block after a denial) keeps its question; the approval is attached to it.
+   */
+  private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: { reason?: string; source?: "classifier" | "policy" }) {
+    const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: Date.now() };
     if (meta.reason) pending.reason = meta.reason;
     if (meta.source) pending.source = meta.source;
     const reason = `Permission needed: ${toolName} — ${summarizeToolInput(input)}`;
     this.addSummary(t.sessionId, t.id, "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
-    this.transition(t, "blocked", { pendingApproval: pending, blockedReason: reason }, reason, reason);
-    return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
+    if (t.status === "blocked") {
+      this.store.tickets.update(t.id, { pendingApproval: pending });
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, reason);
+    } else {
+      this.transition(t, "blocked", { pendingApproval: pending, blockedReason: reason }, reason, reason);
+    }
+  }
+
+  /** RunRequest.grants: human grants for runs that act for the ticket (not review/plan/triage, not read_only). */
+  private runGrants(kind: RunKind, ticket: Ticket | null, project: Project | null): RunGrants | undefined {
+    if (!ticket || !APPROVABLE_RUNS.includes(kind)) return undefined;
+    if (this.permissionModeFor(ticket, project) === "read_only") return undefined;
+    const once = this.store.tickets.listGrants(ticket.id).map((g) => {
+      const viaPrompt = this.ruleFailures.has(`${ticket.id}\u0000${grantKey(g.toolName, g.input)}`);
+      return viaPrompt ? { toolName: g.toolName, input: g.input, viaPrompt } : { toolName: g.toolName, input: g.input };
+    });
+    return { tools: [...ticket.allowedTools], once };
+  }
+
+  /**
+   * After a succeeded work/complete/conductor run: the driver's own permission system denied a
+   * call without asking (Claude Code's auto-mode classifier). Unless the agent submitted, the
+   * run's last denial becomes a pending approval (attached to the agent's block, if it blocked).
+   * A denial of a tool the human already allows on the ticket is retried with the exact call
+   * pre-approved instead (bounded by MAX_AUTO_RETRIES). Returns true when it handled the run.
+   */
+  private surfaceDenial(ticket: Ticket, run: Run, active: ActiveRun): boolean {
+    const denial = active.denials.at(-1);
+    if (!denial || !APPROVABLE_RUNS.includes(run.kind) || active.submitted) return false;
+    const t = this.store.tickets.get(ticket.id);
+    if (!t || t.pendingApproval || this.permissionModeFor(t) === "read_only") return false;
+    if (t.status !== "in_progress" && t.status !== "blocked" && !(run.kind === "complete" && t.status === "review")) return false;
+    const key = grantKey(denial.toolName, denial.input);
+    // The exact rule for this call was passed and it was still denied: next time, ask instead.
+    if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
+    const what = `${denial.toolName} (${summarizeToolInput(denial.input)})`;
+    const retries = this.autoRetries.get(t.id) ?? 0;
+    if (t.allowedTools.includes(denial.toolName) && retries < MAX_AUTO_RETRIES) {
+      this.autoRetries.set(t.id, retries + 1);
+      this.store.tickets.addGrant(t.id, denial.toolName, denial.input);
+      const kind = run.kind === "complete" ? "complete" : this.workKind(t);
+      this.appendStatus(t.sessionId, run.id, `Claude Code's classifier denied ${what}, but ${denial.toolName} is allowed on this ticket: retrying with that call pre-approved`);
+      const u = this.transition(t, kind === "complete" ? "review" : "in_progress", { blockedReason: null }, t.status === "blocked" ? "Unblocked: the denied tool is allowed on this ticket" : undefined);
+      this.enqueueRun(
+        u.sessionId,
+        kind,
+        `${what} was denied by Claude Code's classifier, but the human allows ${denial.toolName} on this ticket. Retry it now and continue.`,
+      );
+      return true;
+    }
+    this.openApproval(t, run.id, denial.toolName, denial.input, { reason: denial.reason, source: "classifier" });
+    return true;
   }
 
   // =========================================================================
@@ -1223,7 +1307,7 @@ export class Orchestrator {
       runKind: ctx.runKind,
       cwd: ctx.cwd,
       signal: ctx.signal,
-      isGranted: (tool, i) => !!ticket && (ticket.allowedTools.includes(tool) || this.store.tickets.consumeGrant(ticket.id, tool, i)),
+      isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
@@ -1439,7 +1523,18 @@ export class Orchestrator {
     const project = ticket ? this.store.projects.get(ticket.projectId) : null;
     const driver = this.drivers.get(run.driver);
     const controller = new AbortController();
-    const active: ActiveRun = { run, controller, cancelled: false, submitted: false, decided: false, lastText: null, mcpToken: null };
+    const active: ActiveRun = {
+      run,
+      controller,
+      cancelled: false,
+      submitted: false,
+      decided: false,
+      lastText: null,
+      mcpToken: null,
+      blocked: false,
+      denials: [],
+      appliedGrants: new Set(),
+    };
     this.active.set(run.id, active);
     run = this.store.runs.markRunning(run.id);
     active.run = run;
@@ -1477,6 +1572,7 @@ export class Orchestrator {
           cwd,
           model,
           permissionMode: this.permissionModeFor(ticket, project),
+          grants: this.runGrants(run.kind, ticket, project),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
           toolContext: ctx,
@@ -1568,6 +1664,15 @@ export class Orchestrator {
       case "permission":
         this.logPermission(run.sessionId, run.id, ev.log);
         return null;
+      case "permission_denied":
+        active.denials.push({ toolName: ev.toolName, input: ev.input, reason: ev.reason });
+        return null;
+      case "grant_applied": {
+        const ticketId = this.store.sessions.get(run.sessionId)?.ticketId;
+        if (ticketId) this.store.tickets.consumeGrant(ticketId, ev.toolName, ev.input);
+        active.appliedGrants.add(grantKey(ev.toolName, ev.input));
+        return null;
+      }
       case "error":
         this.append(run.sessionId, run.id, "system", { type: "error", text: ev.message });
         return ev.message || "Driver error";
@@ -1590,6 +1695,7 @@ export class Orchestrator {
     if (!ticket) return;
     if (run.status === "cancelled") return;
     if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
+    if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);

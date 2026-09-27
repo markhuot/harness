@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
 import { queryClaudeModels } from "./claude-code-models";
-import type { Driver, DriverEvent, RunRequest } from "./types";
+import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
 const MCP_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
@@ -82,12 +82,96 @@ export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
 
+// ---------------------------------------------------------------------------
+// Human grants → --allowedTools rules (verified against claude 2.1.283, DESIGN.md "Permissions")
+// ---------------------------------------------------------------------------
+
+/** A tool name that is safe as a bare rule: no rule syntax, no list separators. */
+const BARE_TOOL_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
+/**
+ * "Always allow <Tool>" → the bare rule `<Tool>`. null for anything that isn't a plain tool
+ * name, so a stored name can never smuggle in a pattern (`Bash(*)`) or a second rule (`Bash Edit`).
+ * Note: in auto mode the CLI drops allow rules it considers arbitrary code execution (bare
+ * `Bash`, `Bash(npx:*)`, ...) before its classifier runs; they still apply in ask mode.
+ */
+export function cliToolRule(name: string): string | null {
+  return BARE_TOOL_NAME.test(name) ? name : null;
+}
+
+/** Shapes a Bash allow rule cannot express as the exact command (measured, see DESIGN.md). */
+const INEXPRESSIBLE_BASH = [
+  /\*/, // an unescaped * makes the rule a wildcard; an escaped one (\*) didn't match either
+  /(^|[^|])\|(?!\|)/, // pipelines are checked per segment, so the whole-command rule never matches
+  /[<>]/, // redirections (incl. 2>/dev/null) aren't matched by the exact rule
+  /\$\(/, // $(…) command substitution isn't either
+  /[\r\n\0]/, // multi-line commands: untested, not risked
+  /\\$/, // a trailing backslash would sit right before the rule's closing parenthesis
+];
+
+/**
+ * A one-time grant → an exact `Bash(<command>)` rule, or null when the CLI can't express exactly
+ * that call (other tools, or a command shape the rule syntax doesn't match exactly). Rule
+ * content escapes `\` `(` `)` with a backslash (the CLI unescapes `\(` `\)` then `\\`). Only
+ * the command is matched: Bash's description/timeout aren't part of a rule.
+ */
+export function cliExactRule(toolName: string, input: unknown): string | null {
+  if (toolName !== "Bash" || !input || typeof input !== "object") return null;
+  const command = (input as Record<string, unknown>).command;
+  if (typeof command !== "string" || !command.trim() || command !== command.trim()) return null;
+  if (INEXPRESSIBLE_BASH.some((re) => re.test(command))) return null;
+  return `Bash(${command.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)")})`;
+}
+
+export interface GrantPlan {
+  /** --permission-mode for the run (auto may become acceptEdits, see below) */
+  permissionMode: string;
+  /** Rules appended to --allowedTools after the harness server entry */
+  rules: string[];
+  /** One-time grants passed as exact rules (reported as grant_applied) */
+  applied: RunGrants["once"];
+  /** One-time grants left to the permission prompt tool */
+  prompted: RunGrants["once"];
+}
+
+/**
+ * How a run's human grants reach the CLI. Tool grants become bare rules and one-time grants
+ * exact rules. A one-time grant the rule syntax can't express (or whose rule was already tried)
+ * is left to the permission prompt tool, which allows exactly that call once; auto mode would
+ * send it to the classifier instead (the prompt tool is never asked about its denials), so such
+ * a run is downgraded to acceptEdits.
+ */
+export function planGrants(
+  req: Pick<RunRequest, "kind" | "permissionMode" | "grants"> & { tools?: Pick<RunRequest["tools"][number], "name">[] },
+  settings: Pick<Settings, "permissionMode">,
+): GrantPlan {
+  const base = cliPermissionMode(req, settings);
+  const plan: GrantPlan = { permissionMode: base, rules: [], applied: [], prompted: [] };
+  // Plan and read-only runs never take grants (the orchestrator doesn't send them either).
+  if (!req.grants || base === "plan" || base === "dontAsk") return plan;
+  for (const name of req.grants.tools) {
+    const rule = cliToolRule(name);
+    if (rule && !plan.rules.includes(rule)) plan.rules.push(rule);
+  }
+  for (const g of req.grants.once) {
+    const rule = g.viaPrompt ? null : cliExactRule(g.toolName, g.input);
+    if (rule) {
+      if (!plan.rules.includes(rule)) plan.rules.push(rule);
+      plan.applied.push(g);
+    } else plan.prompted.push(g);
+  }
+  const hasPromptTool = !req.tools || req.tools.some((t) => t.name === "permission_prompt");
+  if (plan.prompted.length && base === "auto" && hasPromptTool) plan.permissionMode = "acceptEdits";
+  return plan;
+}
+
 const CLASSIFIER_DENIAL = /denied by the Claude Code auto mode classifier\.?\s*(?:Reason:\s*([^\n]*?)(?:\.\s+If you|\n|$))?/i;
 
 export function buildClaudeArgs(
   req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & {
     model?: string | null;
     permissionMode?: PermissionMode;
+    grants?: RunGrants;
     tools?: Pick<RunRequest["tools"][number], "name">[];
   },
   settings: Settings,
@@ -96,7 +180,7 @@ export function buildClaudeArgs(
   // alwaysLoad: opt the harness server out of Claude Code's tool deferral, so its tools are in
   // the prompt from the first turn instead of being discovered through ToolSearch.
   const mcpConfig = { mcpServers: { [MCP_SERVER_NAME]: { type: "http", url: req.mcp.url, headers: req.mcp.headers, alwaysLoad: true } } };
-  const permissionMode = cliPermissionMode(req, settings);
+  const { permissionMode, rules } = planGrants(req, settings);
   const args = [
     "-p",
     "--output-format",
@@ -107,8 +191,11 @@ export function buildClaudeArgs(
     JSON.stringify(mcpConfig),
     // Server-level rule: allow every tool of the harness MCP server without prompting
     // (matters for acceptEdits / dontAsk / plan; bypassPermissions allows them anyway).
+    // Human grants follow as separate entries: one argv entry per rule, so a rule's spaces
+    // stay inside it (the flag is variadic; the next --flag ends the list).
     "--allowedTools",
     `mcp__${MCP_SERVER_NAME}`,
+    ...rules,
     "--permission-mode",
     permissionMode,
   ];
@@ -249,18 +336,20 @@ export class StreamJsonParser {
             const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
             const denied = CLASSIFIER_DENIAL.exec(text);
             if (denied) {
+              const reason = denied[1]?.trim().replace(/\.$/, "") || "denied by Claude Code's auto mode classifier";
               events.push({
                 type: "permission",
                 log: {
                   tool: name,
                   summary: summarizeInput(this.toolInputs.get(callId)),
                   decision: "deny",
-                  reason: denied[1]?.trim().replace(/\.$/, "") || "denied by Claude Code's auto mode classifier",
+                  reason,
                   source: "classifier",
                   backend: "claude-code",
                   mode: this.permission?.mode ?? "auto",
                 },
               });
+              events.push({ type: "permission_denied", callId, toolName: name, input: this.toolInputs.get(callId) ?? {}, reason });
             }
           }
         }
@@ -401,6 +490,16 @@ export class ClaudeCodeDriver implements Driver {
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {
     const state = req.state as Partial<ClaudeCodeState> | null;
     const resume = typeof state?.sessionId === "string" && state.sessionId ? state.sessionId : null;
+    const grants = planGrants(req, this.opts.settings());
+    // The exact rules go to every CLI invocation of this run; the grants are used up by it.
+    for (const g of grants.applied) yield { type: "grant_applied", toolName: g.toolName, input: g.input };
+    if (grants.prompted.length && grants.permissionMode !== cliPermissionMode(req, this.opts.settings())) {
+      const what = grants.prompted.map((g) => `${g.toolName} (${summarizeInput(g.input, 80)})`).join(", ");
+      yield {
+        type: "status",
+        text: `Claude Code can't pre-approve ${what} as an exact rule, so this turn runs in ask mode: Claude Code asks the harness, which allows the approved call once.`,
+      };
+    }
     const first = yield* this.attempt(req, resume);
     if (first === "retry-fresh") {
       // Sessions are stored per working directory; after a worktree switch (or cleanup)
@@ -446,7 +545,7 @@ export class ClaudeCodeDriver implements Driver {
 
     const priorCost = (req.state as Partial<ClaudeCodeState> | null)?.costUsd;
     const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null, {
-      requested: cliPermissionMode(req, settings),
+      requested: planGrants(req, settings).permissionMode,
       mode: req.permissionMode ?? settings.permissionMode,
     });
     const buffered: DriverEvent[] = [];

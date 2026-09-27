@@ -31,6 +31,20 @@ interface TicketRow {
   busy: number;
 }
 
+/**
+ * Identity of a tool call for one-time grants: tool name + canonical input. A Bash call's
+ * `description` is a label the model writes (and rewrites on a retry); it isn't part of what
+ * the human approved, so it's left out. Everything else (command, timeout, ...) must match.
+ */
+export function grantKey(toolName: string, input: unknown): string {
+  let i = input;
+  if (toolName === "Bash" && i && typeof i === "object" && !Array.isArray(i)) {
+    const { description: _d, ...rest } = i as Record<string, unknown>;
+    i = rest;
+  }
+  return `${toolName}\u0000${canonicalJson(i)}`;
+}
+
 /** JSON with object keys sorted, so deep-equal values serialize identically. */
 export function canonicalJson(value: unknown): string {
   const norm = (v: unknown): unknown => {
@@ -304,13 +318,25 @@ export class TicketRepo {
       .run({ ticketId, toolName, input: canonicalJson(input), t: now() });
   }
 
-  /** Consume a one-time grant matching toolName + deep-equal input. Returns true if one existed. */
+  /**
+   * Consume a one-time grant matching toolName + deep-equal input (see grantKey: a Bash call's
+   * `description` doesn't count). Returns true if one existed.
+   */
   consumeGrant(ticketId: string, toolName: string, input: unknown): boolean {
-    const row = this.db
-      .query("SELECT id FROM approval_grants WHERE ticket_id = $ticketId AND tool_name = $toolName AND input = $input ORDER BY id LIMIT 1")
-      .get({ ticketId, toolName, input: canonicalJson(input) }) as { id: number } | null;
+    const key = grantKey(toolName, input);
+    const row = this.listGrants(ticketId).find((g) => grantKey(g.toolName, g.input) === key);
     if (!row) return false;
     this.db.query("DELETE FROM approval_grants WHERE id = $id").run({ id: row.id });
     return true;
+  }
+
+  /** The ticket's unconsumed one-time grants, oldest first. */
+  listGrants(ticketId: string): { id: number; toolName: string; input: unknown }[] {
+    const rows = this.db.query("SELECT id, tool_name, input FROM approval_grants WHERE ticket_id = $ticketId ORDER BY id").all({ ticketId }) as {
+      id: number;
+      tool_name: string;
+      input: string;
+    }[];
+    return rows.map((r) => ({ id: r.id, toolName: r.tool_name, input: JSON.parse(r.input) }));
   }
 }
