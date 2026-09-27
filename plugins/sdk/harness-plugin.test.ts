@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Ticket } from "@harness/shared";
-import { connect, HarnessPluginError, isAllowedHostOrigin, pluginIdFromPath, type BridgeWindow } from "./harness-plugin";
+import { connect, HarnessPluginError, isAllowedHostOrigin, pluginIdFromPath, readThemeInfo, tokenCssVar, type BridgeWindow } from "./harness-plugin";
 
 type Listener = (e: MessageEvent) => void;
 
@@ -256,5 +256,93 @@ describe("plugin sdk bridge inside a React Native WebView", () => {
     (f.win as { ReactNativeWebView?: unknown }).ReactNativeWebView = { postMessage: "nope" };
     void connect({ window: f.win, timeoutMs: 20 }).catch(() => {});
     expect(f.parentPosted).toEqual([{ type: "harness:ready" }]);
+  });
+});
+
+describe("color themes", () => {
+  function styledWindow() {
+    const f = fakeWindow();
+    const props = new Map<string, string>();
+    const style = {
+      colorScheme: undefined as string | undefined,
+      setProperty: (k: string, v: string) => void props.set(k, v),
+      removeProperty: (k: string) => props.delete(k),
+    };
+    f.win.document = { documentElement: { dataset: {}, style } };
+    return { ...f, props, el: f.win.document.documentElement };
+  }
+  const dark = { bg: "#111214", text2: "#a4a6ae", planning: "#7c7e87", diffAdd: "#4cc38a", shadow: "0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25)" };
+  const mocha = { bg: "#181825", text2: "#afb7d3", accent: "#cba6f7" };
+
+  test("maps token names to the app's custom property names", () => {
+    expect(tokenCssVar("bg")).toBe("--harness-bg");
+    expect(tokenCssVar("text2")).toBe("--harness-text-2");
+    expect(tokenCssVar("in_progress")).toBe("--harness-c-in_progress");
+    expect(tokenCssVar("diffAdd")).toBe("--harness-diff-add");
+    expect(tokenCssVar("nonsense")).toBeNull();
+  });
+
+  test("init with a full theme exposes it and applies data-theme-id + --harness-* vars", async () => {
+    const f = styledWindow();
+    const p = connect({ window: f.win });
+    f.send({ ...init, appearance: "dark", themeId: "harness-dark", themeName: "Harness Dark", syntaxTheme: "pierre-dark", tokens: dark });
+    const h = await p;
+    expect(h).toMatchObject({ theme: "dark", appearance: "dark", themeId: "harness-dark", themeName: "Harness Dark", syntaxTheme: "pierre-dark", tokens: dark });
+    expect(f.el.dataset.themeId).toBe("harness-dark");
+    expect(f.props.get("--harness-bg")).toBe("#111214");
+    expect(f.props.get("--harness-text-2")).toBe("#a4a6ae");
+    expect(f.props.get("--harness-c-planning")).toBe("#7c7e87");
+    expect(f.props.get("--harness-shadow")).toBe(dark.shadow);
+  });
+
+  test("a dark → dark theme switch notifies with the new info and replaces stale vars", async () => {
+    const f = styledWindow();
+    const p = connect({ window: f.win });
+    f.send({ ...init, themeId: "harness-dark", tokens: dark });
+    const h = await p;
+    const seen: [string, string | null][] = [];
+    h.onTheme((t, info) => seen.push([t, info.themeId]));
+    f.send({ type: "harness:theme", theme: "dark", themeId: "catppuccin-mocha", syntaxTheme: "catppuccin-mocha", tokens: mocha });
+    f.send({ type: "harness:theme", theme: "dark", themeId: "catppuccin-mocha", syntaxTheme: "catppuccin-mocha", tokens: mocha }); // no change → no call
+    expect(seen).toEqual([["dark", "catppuccin-mocha"]]);
+    expect(h).toMatchObject({ theme: "dark", themeId: "catppuccin-mocha", syntaxTheme: "catppuccin-mocha" });
+    expect(f.props.get("--harness-bg")).toBe("#181825");
+    expect(f.props.get("--harness-accent")).toBe("#cba6f7");
+    expect(f.props.has("--harness-c-planning")).toBe(false); // not in the new theme
+    expect(f.el.dataset.themeId).toBe("catppuccin-mocha");
+    // A host that stops sending tokens clears them all.
+    f.send({ type: "harness:theme", theme: "light" });
+    expect(seen.at(-1)).toEqual(["light", null]);
+    expect([...f.props.keys()]).toEqual([]);
+    expect(f.el.dataset.themeId).toBeUndefined();
+    expect(h.tokens).toBeNull();
+  });
+
+  test("junk theme fields are dropped, not applied", async () => {
+    const f = styledWindow();
+    const p = connect({ window: f.win });
+    f.send({ ...init, themeId: 42, syntaxTheme: { x: 1 }, tokens: { bg: 7, text: "red; background: url(x)", accent: "#abcdef", bogus: "#fff" } });
+    const h = await p;
+    expect(h.themeId).toBeNull();
+    expect(h.syntaxTheme).toBeNull();
+    expect(h.tokens).toEqual({ accent: "#abcdef" });
+    expect([...f.props.entries()]).toEqual([["--harness-accent", "#abcdef"]]);
+    expect(readThemeInfo({ theme: "dark", tokens: ["#fff"] }).tokens).toBeNull();
+  });
+
+  test("an old host (light/dark only) behaves as before: no ids, no tokens, callbacks on appearance changes", async () => {
+    const f = styledWindow();
+    const p = connect({ window: f.win });
+    f.send(init);
+    const h = await p;
+    expect(h).toMatchObject({ theme: "dark", themeId: null, syntaxTheme: null, tokens: null, themeName: "" });
+    expect(f.props.size).toBe(0);
+    expect(f.el.dataset.themeId).toBeUndefined();
+    const seen: string[] = [];
+    h.onTheme((t) => seen.push(t));
+    f.send({ type: "harness:theme", theme: "light" });
+    f.send({ type: "harness:theme", theme: "dark" });
+    expect(seen).toEqual(["light", "dark"]);
+    expect(f.el.dataset.theme).toBe("dark");
   });
 });

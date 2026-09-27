@@ -3,7 +3,8 @@
 //   import { connect } from "@harness/plugin-sdk";
 //   const h = await connect();
 //   const changes = await h.api("changes?ticket=" + h.ticketKey);   // → /plugins/<id>/api/changes
-//   h.onTheme((t) => …); h.onTicket((ticket) => …);
+//   h.onTheme((t, info) => …); h.onTicket((ticket) => …);
+//   // CSS: var(--harness-bg), var(--harness-text-2), var(--harness-accent), … (the app theme's tokens)
 //
 // The UI is served by the service (/plugins/<id>/ui/), so its origin is the service origin and API
 // calls are same-origin; they just need the bearer token from harness:init. Two hosts, one API:
@@ -16,8 +17,49 @@
 // In both, after init only the origin that sent init is trusted. Don't assume window.parent exists.
 
 import type { PluginFrameMessage, PluginHostMessage, Ticket } from "@harness/shared";
+import { CSS_VAR, type ThemeTokens } from "@harness/shared/themes/types";
 
 export type Theme = "light" | "dark";
+
+/**
+ * The app's full color theme. Hosts older than color themes send only light/dark: then themeId,
+ * syntaxTheme and tokens are null and themeName is "".
+ */
+export interface ThemeInfo {
+  appearance: Theme;
+  /** e.g. "catppuccin-mocha" */
+  themeId: string | null;
+  themeName: string;
+  /** Shiki theme matching the app theme (e.g. "dracula"), or null */
+  syntaxTheme: string | null;
+  /** Semantic color tokens (bg, text, text2, accent, planning, diffAdd, …), or null */
+  tokens: Partial<ThemeTokens> | null;
+}
+
+/** Token name → the custom property the SDK sets on <html> ("bg" → "--harness-bg", "text2" → "--harness-text-2"). */
+export function tokenCssVar(token: string): string | null {
+  const v = (CSS_VAR as Record<string, string>)[token];
+  return v ? `--harness-${v.slice(2)}` : null;
+}
+
+const TOKEN_VALUE = /^[#(),.%\w\s-]{1,200}$/;
+
+/** Pull the theme fields out of a harness:init / harness:theme message, dropping anything malformed. */
+export function readThemeInfo(msg: Record<string, unknown>): ThemeInfo {
+  const appearance: Theme = msg.theme === "dark" ? "dark" : "light";
+  let tokens: Partial<ThemeTokens> | null = null;
+  if (msg.tokens && typeof msg.tokens === "object" && !Array.isArray(msg.tokens)) {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(msg.tokens as Record<string, unknown>)) {
+      if (typeof v === "string" && tokenCssVar(k) && TOKEN_VALUE.test(v)) out[k] = v;
+    }
+    tokens = Object.keys(out).length ? (out as Partial<ThemeTokens>) : null;
+  }
+  const str = (v: unknown) => (typeof v === "string" && v.length <= 100 ? v : null);
+  return { appearance, themeId: str(msg.themeId), themeName: str(msg.themeName) ?? "", syntaxTheme: str(msg.syntaxTheme), tokens };
+}
+
+const infoKey = (i: ThemeInfo) => JSON.stringify([i.appearance, i.themeId, i.themeName, i.syntaxTheme, i.tokens]);
 
 export interface HarnessPlugin {
   baseUrl: string;
@@ -27,13 +69,23 @@ export interface HarnessPlugin {
   pluginId: string;
   /** Current theme; kept up to date as harness:theme messages arrive */
   readonly theme: Theme;
+  /** Same as theme */
+  readonly appearance: Theme;
+  /** The app's color theme id ("catppuccin-mocha"), or null from hosts without color themes */
+  readonly themeId: string | null;
+  readonly themeName: string;
+  /** Shiki theme matching the app theme, or null */
+  readonly syntaxTheme: string | null;
+  /** The app theme's color tokens (also set as --harness-* custom properties on <html>), or null */
+  readonly tokens: Partial<ThemeTokens> | null;
   /**
    * Call the service. A path without a leading slash is relative to this plugin's API
    * (/plugins/<id>/api/<path>); a leading slash addresses the service root ("/tickets/X").
    * Resolves to the `data` of the `{ data }` envelope; throws HarnessPluginError otherwise.
    */
   api<T = unknown>(path: string, init?: RequestInit): Promise<T>;
-  onTheme(cb: (theme: Theme) => void): () => void;
+  /** Called when the theme changes: light/dark, or (with a newer host) the color theme / its tokens */
+  onTheme(cb: (theme: Theme, info: ThemeInfo) => void): () => void;
   onTicket(cb: (ticket: Ticket) => void): () => void;
   openExternal(url: string): void;
   navigate(ticketKey: string): void;
@@ -57,7 +109,12 @@ export interface BridgeWindow {
   ReactNativeWebView?: { postMessage(data: string): void };
   addEventListener(type: "message", listener: (e: MessageEvent) => void): void;
   removeEventListener(type: "message", listener: (e: MessageEvent) => void): void;
-  document?: { documentElement: { dataset: Record<string, string | undefined>; style: { colorScheme?: string } } };
+  document?: {
+    documentElement: {
+      dataset: Record<string, string | undefined>;
+      style: { colorScheme?: string; setProperty?(name: string, value: string): void; removeProperty?(name: string): unknown };
+    };
+  };
 }
 
 export interface ConnectOptions {
@@ -67,7 +124,10 @@ export interface ConnectOptions {
   timeoutMs?: number;
   /** Extra host origins to trust besides the Electron file:// renderer and local http(s) origins */
   allowedOrigins?: string[];
-  /** Set <html data-theme> and color-scheme on init and on every theme change (default true) */
+  /**
+   * On init and every theme change, set <html data-theme>, color-scheme, data-theme-id and the
+   * tokens as --harness-* custom properties (default true)
+   */
   applyTheme?: boolean;
 }
 
@@ -89,15 +149,35 @@ export function connect(opts: ConnectOptions = {}): Promise<HarnessPlugin> {
   const doFetch = opts.fetch ?? fetch.bind(globalThis);
   const pluginId = pluginIdFromPath(win.location.pathname) ?? "";
   const applyTheme = opts.applyTheme ?? true;
-  const themeCbs = new Set<(t: Theme) => void>();
+  const themeCbs = new Set<(t: Theme, info: ThemeInfo) => void>();
   const ticketCbs = new Set<(t: Ticket) => void>();
   let hostOrigin: string | null = null;
-  let plugin: (HarnessPlugin & { theme: Theme }) | null = null;
+  type Mutable = { -readonly [K in keyof HarnessPlugin]: HarnessPlugin[K] };
+  let plugin: Mutable | null = null;
+  let info: ThemeInfo | null = null;
+  let applied: string[] = [];
 
-  const setTheme = (t: Theme) => {
+  const setTheme = (i: ThemeInfo) => {
     if (!applyTheme || !win.document) return;
-    win.document.documentElement.dataset.theme = t;
-    win.document.documentElement.style.colorScheme = t;
+    const el = win.document.documentElement;
+    el.dataset.theme = i.appearance;
+    el.style.colorScheme = i.appearance;
+    if (i.themeId) el.dataset.themeId = i.themeId;
+    else delete el.dataset.themeId;
+    const next = Object.entries(i.tokens ?? {}).map(([k, v]) => [tokenCssVar(k)!, v as string] as const);
+    const keep = new Set(next.map(([k]) => k));
+    for (const k of applied) if (!keep.has(k)) el.style.removeProperty?.(k);
+    for (const [k, v] of next) el.style.setProperty?.(k, v);
+    applied = [...keep];
+  };
+  /** Adopt a new theme; notify only when something changed. */
+  const updateTheme = (next: ThemeInfo) => {
+    if (!plugin || !info) return;
+    if (infoKey(next) === infoKey(info)) return;
+    info = next;
+    Object.assign(plugin, { theme: next.appearance, appearance: next.appearance, themeId: next.themeId, themeName: next.themeName, syntaxTheme: next.syntaxTheme, tokens: next.tokens });
+    setTheme(next);
+    for (const cb of themeCbs) cb(next.appearance, next);
   };
   const native = typeof win.ReactNativeWebView?.postMessage === "function" ? win.ReactNativeWebView : null;
   const post = (msg: PluginFrameMessage) => {
@@ -134,23 +214,25 @@ export function connect(opts: ConnectOptions = {}): Promise<HarnessPlugin> {
           // Re-init (e.g. token rotated after a reconnect): refresh credentials in place.
           plugin.baseUrl = msg.baseUrl;
           plugin.token = msg.token;
-          if (msg.theme !== plugin.theme) {
-            plugin.theme = msg.theme;
-            setTheme(msg.theme);
-            for (const cb of themeCbs) cb(msg.theme);
-          }
+          if (msg.theme === "light" || msg.theme === "dark") updateTheme(readThemeInfo(msg as unknown as Record<string, unknown>));
           return;
         }
         if (typeof msg.baseUrl !== "string" || typeof msg.token !== "string" || typeof msg.ticketKey !== "string") return;
         hostOrigin = e.origin;
         clearTimeout(timer);
-        const self: HarnessPlugin & { theme: Theme } = {
+        info = readThemeInfo(msg as unknown as Record<string, unknown>);
+        const self: Mutable = {
           baseUrl: msg.baseUrl.replace(/\/$/, ""),
           token: msg.token,
           ticketKey: msg.ticketKey,
           tabId: msg.tabId,
           pluginId,
-          theme: msg.theme === "dark" ? "dark" : "light",
+          theme: info.appearance,
+          appearance: info.appearance,
+          themeId: info.themeId,
+          themeName: info.themeName,
+          syntaxTheme: info.syntaxTheme,
+          tokens: info.tokens,
           async api<T>(path: string, init: RequestInit = {}) {
             const url = path.startsWith("/") ? self.baseUrl + path : `${self.baseUrl}/plugins/${encodeURIComponent(pluginId)}/api/${path}`;
             const headers = new Headers(init.headers);
@@ -185,15 +267,13 @@ export function connect(opts: ConnectOptions = {}): Promise<HarnessPlugin> {
           },
         };
         plugin = self;
-        setTheme(self.theme);
+        setTheme(info);
         resolve(self);
         return;
       }
       if (!plugin) return;
       if (msg.type === "harness:theme" && (msg.theme === "light" || msg.theme === "dark")) {
-        plugin.theme = msg.theme;
-        setTheme(msg.theme);
-        for (const cb of themeCbs) cb(msg.theme);
+        updateTheme(readThemeInfo(msg as unknown as Record<string, unknown>));
       } else if (msg.type === "harness:ticket" && msg.ticket?.key === plugin.ticketKey) {
         for (const cb of ticketCbs) cb(msg.ticket);
       }
