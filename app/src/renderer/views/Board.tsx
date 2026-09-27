@@ -5,6 +5,7 @@ import { boardColumns, childrenOf, dependencyStates, isReady, latestSummary, pos
 import { Icon } from "../components/Icon";
 import { DriverBadge, KindBadge, MOD, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
 import { plainText } from "../components/Markdown";
+import { ModelBadge } from "../components/ModelSelect";
 import { TicketDetail } from "./TicketDetail";
 
 const DRAG_MIME = "application/x-harness-ticket";
@@ -262,6 +263,7 @@ const TicketCard = memo(function TicketCard({
       <div className="card-foot">
         {showProject && project && <span className="project-key sm">{project.key.slice(0, 3)}</span>}
         <DriverBadge driver={t.driver} />
+        <ModelBadge model={t.model} driver={t.driver} />
         <KindBadge ticket={t} childCount={children.length} />
         {t.kind === "conductor" && children.length > 0 && (
           <span className="card-progress" title={`${childDone}/${children.length} children done`}>

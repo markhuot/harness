@@ -10,6 +10,7 @@ import { sortedProjects } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime } from "../components/bits";
+import { ModelsSection } from "./settings/ModelSettings";
 
 const PERMISSION_MODES: Settings["claudePermissionMode"][] = ["bypassPermissions", "acceptEdits", "auto", "dontAsk"];
 
@@ -17,6 +18,7 @@ const SECTIONS = [
   ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
+  ["models", "Models"],
   ["watchers", "Watchers"],
   ["mappings", "Mappings"],
   ["projects", "Projects"],
@@ -62,6 +64,7 @@ export function SettingsView() {
               </div>
             </Section>
           )}
+          {state.settings && <ModelsSection settings={state.settings} />}
           <WatchersSection />
           <MappingsSection />
           <ProjectsSection />
@@ -268,18 +271,12 @@ function GeneralSection({ settings, drivers }: { settings: PublicSettings; drive
             ))}
           </select>
         </Row>
-        <Row title="Model" sub="Leave empty to use the CLI default.">
-          <DraftInput value={settings.claudeModel ?? ""} placeholder="Default" className="input mono" onCommit={(v) => save({ claudeModel: v.trim() || null })} />
-        </Row>
       </div>
 
       <div className="settings-section-head" style={{ marginTop: 20 }}>
         <div className="section-title">Anthropic API</div>
       </div>
       <div className="card-surface settings-card">
-        <Row title="Model">
-          <DraftInput value={settings.anthropicModel} className="input mono" onCommit={(v) => v.trim() && save({ anthropicModel: v.trim() })} />
-        </Row>
         <div className="settings-row">
           <div className="settings-row-main">
             <div className="settings-row-title">API key</div>

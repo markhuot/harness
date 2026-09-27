@@ -5,6 +5,8 @@ import { useAction, useStore } from "../state/store";
 import { childrenOf, dependencyStates } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
+import { ModelSelect } from "../components/ModelSelect";
+import { inheritedModel } from "../state/models";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const { state, client, navigate, route } = useStore();
@@ -135,6 +137,16 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
               </option>
             ))}
           </select>
+        </dd>
+        <dt>Model</dt>
+        <dd title="Applies from the next run">
+          <ModelSelect
+            driver={ticket.driver}
+            value={ticket.model}
+            disabled={!editable}
+            inherited={inheritedModel(ticket.driver, "ticket", state.projects[ticket.projectId], state.settings)}
+            onChange={(m) => void act(() => client.updateTicket(ticket.key, { model: m }))}
+          />
         </dd>
         {parent && (
           <>

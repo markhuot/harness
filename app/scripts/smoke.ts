@@ -147,6 +147,22 @@ try {
   await Bun.sleep(100);
   await js(`location.hash = "#/compose"`);
   await until("composer", () => exists(".new-session-prompt"));
+  // 5a. Model dropdown: lists the selected driver's models (default first), refetches on driver change.
+  const pick = (sel: string, value: string) =>
+    js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  const modelOpts = (scope: string) => js<string[]>(`[...document.querySelectorAll("${scope} .model-select option")].map(o => o.textContent)`);
+  const ccOpts = await until("composer model options", async () => {
+    const o = await modelOpts(".modal-foot");
+    return o.includes("Sonnet 5") && o;
+  });
+  check("composer model dropdown lists the driver's models, default first and marked", ccOpts[0] === "Default (Opus 5.5)" && ccOpts.includes("Opus 5.5 · default"), ccOpts.join(","));
+  await pick(".modal-foot select.select:not([aria-label=Model])", "dummy");
+  const dummyOpts = await until("dummy model options", async () => {
+    const o = await modelOpts(".modal-foot");
+    return o.includes("Dummy Slow") && o;
+  });
+  check("switching driver refetches the model list", !dummyOpts.includes("Sonnet 5") && dummyOpts[0] === "Default (Dummy Fast)", dummyOpts.join(","));
+  await pick(".modal-foot select[aria-label=Model]", "dummy-slow");
   await type(".new-session-prompt", "Add a print stylesheet for recipe cards");
   await cmdEnter();
   const created = await until("ticket created", async () =>
@@ -155,6 +171,25 @@ try {
   check("composer creates and starts a ticket", created.status === "in_progress", created.key);
   const opened = await until("detail opened", () => js<string>(`location.hash`).then((h) => h.includes(created.key) && h));
   check("composer opens the new ticket", !!opened, opened);
+  const withModel = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
+  check("composer sends the chosen driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
+  const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
+  check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
+  await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
+  await until("details model select", () => exists(".props .model-select select"));
+  await pick(".props .model-select select", "");
+  const cleared = await until("model cleared", async () => (await api<{ ticket: { model: string | null } }>("GET", `/tickets/${created.key}`)).ticket.model === null);
+  check("Details model select PATCHes the ticket (Default → null)", cleared);
+  check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
+  const cardBadge = await js<string>(`document.querySelector('.card[data-key="NYTIMES-1"] .model-badge')?.textContent ?? ""`);
+  check("board card shows a non-default model", cardBadge === "Sonnet 5", cardBadge);
+  await js(`location.hash = "#/settings/models"`);
+  await until("model settings", () => exists("[data-testid=model-settings-claude-code] select"));
+  await pick("[data-testid=model-settings-claude-code] select", "haiku");
+  const savedDefault = await until("settings default model", async () => (await api<{ defaultModels: Record<string, string> }>("GET", "/settings")).defaultModels["claude-code"] === "haiku");
+  check("Settings → Models saves a per-driver default", savedDefault);
+  await pick("[data-testid=model-settings-claude-code] select", "");
+  await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string> }>("GET", "/settings")).defaultModels["claude-code"]);
 
   // 6. Browser tab forwards input to the service.
   await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);

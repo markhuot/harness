@@ -11,6 +11,7 @@ import type {
   BrowserState,
   ClientMessage,
   DriverInfo,
+  DriverModels,
   HarnessEvent,
   Mapping,
   Project,
@@ -55,10 +56,34 @@ let settings: PublicSettings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   claudePermissionMode: "bypassPermissions",
-  claudeModel: null,
-  anthropicModel: "claude-sonnet-4-5",
+  defaultModels: {},
+  reviewModels: {},
   anthropicApiKeySet: false,
 };
+
+const MOCK_MODELS: Record<string, DriverModels["models"]> = {
+  "claude-code": [
+    { id: "opus", name: "Opus 5.5", description: "Most capable for ambitious work", default: true },
+    { id: "claude-fable-5-1", name: "Fable 5.1", description: "For your toughest challenges" },
+    { id: "sonnet", name: "Sonnet 5", description: "Most efficient for everyday tasks" },
+    { id: "haiku", name: "Haiku 4.5", description: "Fastest for quick answers" },
+  ],
+  "anthropic-api": [
+    { id: "claude-opus-5", name: "Claude Opus 5" },
+    { id: "claude-sonnet-5", name: "Claude Sonnet 5", default: true },
+  ],
+  dummy: [
+    { id: "dummy-fast", name: "Dummy Fast", default: true },
+    { id: "dummy-slow", name: "Dummy Slow" },
+  ],
+};
+
+/** Merge a per-driver model patch (null clears one), like the service. */
+function mergeModels(cur: Record<string, string | null>, patch: Record<string, string | null> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries({ ...cur, ...(patch ?? {}) })) if (v) out[k] = v;
+  return out;
+}
 
 const drivers: DriverInfo[] = [
   {
@@ -223,6 +248,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     path,
     nextSeq: 1,
     defaultDriver: null,
+    defaultModels: {},
     useWorktrees: true,
     requireHumanReview,
     createdAt: now() - 86400_000 * 7,
@@ -254,6 +280,7 @@ function makeSession(key: string, kind: Session["kind"], ticketId: string | null
 
 interface SeedTicket {
   project: Project;
+  model?: string | null;
   key?: string;
   title: string;
   description: string;
@@ -304,6 +331,7 @@ function seedTicket(s: SeedTicket): Ticket {
     busy: s.busy ?? false,
     pendingApproval: s.pendingApproval ?? null,
     allowedTools: s.allowedTools ?? [],
+    model: s.model ?? null,
     position: tickets.size,
     createdAt,
     updatedAt: createdAt + 60_000,
@@ -367,6 +395,7 @@ function seed() {
     description: "Articles show stale content after an editor renames the slug. Investigate the `useArticle` hook cache and fix it.",
     status: "in_progress",
     driver: "claude-code",
+    model: "sonnet",
     busy: true,
     ageMin: 42,
     summaries: [
@@ -677,6 +706,7 @@ function createTicket(body: Record<string, any>): Ticket {
     busy: false,
     pendingApproval: null,
     allowedTools: [],
+    model: typeof body.model === "string" && body.model ? body.model : null,
     position: tickets.size,
     createdAt: now(),
     updatedAt: now(),
@@ -732,6 +762,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         path: body.path,
         nextSeq: 1,
         defaultDriver: body.defaultDriver ?? null,
+        defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
         requireHumanReview: body.requireHumanReview ?? true,
         createdAt: now(),
@@ -750,6 +781,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (error) throw new HttpError(400, `Invalid project key "${key}": ${error}`);
         if (key !== p.key) renameProjectKey(p, key); // throws 409 on collisions
       }
+      if (body.defaultModels !== undefined) body.defaultModels = mergeModels(p.defaultModels, body.defaultModels);
       Object.assign(p, body, { id: p.id, key: p.key, updatedAt: now() });
       broadcast({ kind: "project.upserted", project: p });
       return ok(p);
@@ -773,9 +805,11 @@ async function route(req: Request, url: URL): Promise<Response> {
       if (method === "GET") return ok(ticketDetail(t));
       if (method === "PATCH") {
         const body = await readBody(req);
+        if (body.driver !== undefined && body.driver !== t.driver && body.model === undefined) t.model = null;
         for (const k of ["title", "description", "driver", "dependsOn", "position"] as const) {
           if (body[k] !== undefined) (t as any)[k] = body[k];
         }
+        if (body.model !== undefined) t.model = body.model || null;
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;
           if (to === "in_progress" && t.status === "planning") {
@@ -977,6 +1011,14 @@ async function route(req: Request, url: URL): Promise<Response> {
   // Drivers & settings
   if (a === "drivers") {
     if (!b && method === "GET") return ok(drivers);
+    if (b && c === "models" && method === "GET") {
+      if (!drivers.some((x) => x.id === b)) throw new HttpError(404, "Driver not found");
+      const noKey = b === "anthropic-api" && !settings.anthropicApiKeySet;
+      const data: DriverModels = noKey
+        ? { driverId: b, models: [], error: "No Anthropic API key configured. Add one in Settings or set ANTHROPIC_API_KEY.", fetchedAt: now() }
+        : { driverId: b, models: MOCK_MODELS[b] ?? [], error: null, fetchedAt: now() };
+      return ok(data);
+    }
     if (b && c === "login" && method === "POST") {
       const d = drivers.find((x) => x.id === b);
       if (!d) throw new HttpError(404, "Driver not found");
@@ -988,8 +1030,8 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, ...rest } = body;
-      settings = { ...settings, ...rest };
+      const { anthropicApiKey, defaultModels, reviewModels, ...rest } = body;
+      settings = { ...settings, ...rest, defaultModels: mergeModels(settings.defaultModels, defaultModels), reviewModels: mergeModels(settings.reviewModels, reviewModels) };
       if (anthropicApiKey !== undefined) {
         settings.anthropicApiKeySet = !!anthropicApiKey;
         const d = drivers.find((x) => x.id === "anthropic-api")!;

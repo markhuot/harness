@@ -5,6 +5,7 @@ import { childrenOf, dependencyStates, isReady } from "../state/reducer";
 import { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "../state/route";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
@@ -158,6 +159,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
       <div className="view-header detail-titlebar">
         <span className="detail-key selectable">{k}</span>
         <StatusPill status={ticket.status} />
+        <ModelBadge model={ticket.model} driver={ticket.driver} />
         {ticket.busy && (
           <span className="working">
             <span className="spinner" /> Working
