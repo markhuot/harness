@@ -30,6 +30,10 @@ for (const entry of ["main", "preload"]) {
   }
 }
 
-// 3. Renderer.
+// 3. Built-in plugin UIs (the service also builds a missing/stale one on start; doing it here
+//    means a fresh checkout's first open of a plugin tab doesn't wait for the bundle).
+await $`${process.execPath} run plugins:build`.cwd(repoRoot).quiet();
+
+// 4. Renderer.
 await $`${join(repoRoot, "node_modules/.bin/vite")} build --config ${join(appDir, "vite.config.ts")} --logLevel warn`.cwd(appDir);
 console.log(`built → ${join(appDir, "dist")}  (repoRoot ${repoRoot}, bun ${process.execPath})`);

@@ -5,5 +5,13 @@
   "description": "Shows the changes a ticket made: its branch against the base branch (including uncommitted and untracked files), or a plain workdir's uncommitted changes.",
   "server": "server.ts",
   "ui": "dist/",
-  "tabs": [{ "id": "changes", "title": "Changes", "icon": "branch", "when": "workdir" }]
+  "build": "build.ts",
+  "tabs": [
+    {
+      "id": "changes",
+      "title": "Changes",
+      "icon": "branch",
+      "when": "workdir"
+    }
+  ]
 }

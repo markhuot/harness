@@ -51,6 +51,8 @@ interface LoadedPlugin {
   ctx: PluginContext | null;
   routes: Route[];
   error: string | null;
+  /** In-flight UI build; UI requests wait for it */
+  building: Promise<void> | null;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -90,9 +92,11 @@ export function parseManifest(raw: unknown): PluginManifest {
     description: str("description", false) ?? "",
     server: str("server", false),
     ui: str("ui", false),
+    build: str("build", false),
     tabs,
   };
   if (tabs.length && !manifest.ui) throw new Error(`plugin.json: tabs need a "ui" directory`);
+  if (manifest.build && !manifest.ui) throw new Error(`plugin.json: "build" needs a "ui" directory to build into`);
   return manifest;
 }
 
@@ -112,6 +116,39 @@ export function safeJoin(root: string, rel: string): string | null {
     return null;
   }
   return target;
+}
+
+/** True when <uiRoot>/index.html is missing or older than any source file in the plugin dir. */
+export function needsBuild(dir: string, uiRoot: string): boolean {
+  let built: number;
+  try {
+    built = statSync(join(uiRoot, "index.html")).mtimeMs;
+  } catch {
+    return true;
+  }
+  const skip = new Set(["node_modules", ".git"]);
+  const walk = (d: string, depth: number): boolean => {
+    if (depth > 6) return false;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = readdirSync(d, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      const full = join(d, e.name);
+      if (e.isDirectory()) {
+        if (skip.has(e.name) || e.name.startsWith(".") || full === uiRoot) continue;
+        if (walk(full, depth + 1)) return true;
+      } else if (!/\.test\.[cm]?[jt]sx?$/.test(e.name)) {
+        try {
+          if (statSync(full).mtimeMs > built) return true;
+        } catch {}
+      }
+    }
+    return false;
+  };
+  return walk(dir, 0);
 }
 
 function compile(path: string) {
@@ -211,7 +248,7 @@ export class PluginHost {
     }
 
     for (const [id, f] of found) {
-      const p: LoadedPlugin = { id, dir: f.dir, source: f.source, manifest: f.manifest, uiRoot: null, def: null, ctx: null, routes: [], error: f.error };
+      const p: LoadedPlugin = { id, dir: f.dir, source: f.source, manifest: f.manifest, uiRoot: null, def: null, ctx: null, routes: [], error: f.error, building: null };
       this.plugins.set(id, p);
       if (!f.manifest) {
         this.log(`[plugins] ${id}: ${f.error}`);
@@ -240,6 +277,7 @@ export class PluginHost {
       const ui = resolve(p.dir, manifest.ui);
       if (relative(p.dir, ui).startsWith("..") || isAbsolute(relative(p.dir, ui))) throw new Error(`ui "${manifest.ui}" is outside the plugin directory`);
       p.uiRoot = ui;
+      if (manifest.build && needsBuild(p.dir, ui)) p.building = this.build(p, manifest.build);
     }
     const ctx = this.context(p);
     p.ctx = ctx;
@@ -258,6 +296,27 @@ export class PluginHost {
     };
     await def.routes?.(router, ctx);
     p.def = def;
+  }
+
+  private build(p: LoadedPlugin, script: string): Promise<void> {
+    const started = Date.now();
+    this.log(`[plugins] building ${p.id} UI (${script})`);
+    return execFile(process.execPath, [resolve(p.dir, script)], { cwd: p.dir, timeoutMs: 180_000 }).then((r) => {
+      p.building = null;
+      if (r.code === 0 && !r.timedOut && existsSync(join(p.uiRoot!, "index.html"))) {
+        this.log(`[plugins] built ${p.id} UI in ${Date.now() - started}ms`);
+        return;
+      }
+      const why = r.timedOut ? "timed out" : (r.stderr || r.stdout).trim().split("\n").slice(-5).join("\n") || `exit ${r.code}`;
+      this.log(`[plugins] ${p.id} UI build failed: ${why}`);
+      // A stale bundle is still better than nothing; only a missing one is an error.
+      if (!existsSync(join(p.uiRoot!, "index.html"))) p.error ??= `UI build failed: ${why}`;
+    });
+  }
+
+  /** Resolves once every in-flight UI build has finished (tests, scripts). */
+  async ready(): Promise<void> {
+    await Promise.all([...this.plugins.values()].map((p) => p.building));
   }
 
   private addRoute(p: LoadedPlugin, method: string, path: string, handler: PluginHandler) {
@@ -337,6 +396,7 @@ export class PluginHost {
   async serveUi(id: string, rest: string): Promise<Response> {
     const p = this.plugins.get(id);
     if (!p?.uiRoot) return json({ error: "Not found" }, 404);
+    if (p.building) await p.building;
     let rel: string;
     try {
       rel = decodeURIComponent(rest);

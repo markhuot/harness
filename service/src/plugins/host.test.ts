@@ -248,6 +248,44 @@ describe("plugin host over HTTP", () => {
     expect((await get("/plugins/viewer/api/x")).status).toBe(401);
   });
 
+  test("build: a missing or stale UI is built on load; UI requests wait for the build; failures surface", async () => {
+    const buildScript = `
+      import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+      await Bun.sleep(150);
+      mkdirSync("dist", { recursive: true });
+      writeFileSync("dist/index.html", "built from " + readFileSync("src.txt", "utf8"));`;
+    let builtin = "";
+    const { h, logs } = await boot((b) => {
+      builtin = b;
+      writePlugin(b, "builder", { id: "builder", ui: "dist", build: "build.ts", tabs: [{ id: "t", title: "T" }] }, { "build.ts": buildScript, "src.txt": "v1" });
+      writePlugin(b, "fresh", { id: "fresh", ui: "dist", build: "build.ts" }, { "build.ts": "process.exit(9)", "dist/index.html": "prebuilt" });
+      writePlugin(b, "failing", { id: "failing", ui: "dist", build: "build.ts" }, { "build.ts": "console.error('syntax oops'); process.exit(2)" });
+    });
+    // Load did not block on the build; the UI request waits for it.
+    const res = await fetch(`${h.url}/plugins/builder/ui/`);
+    expect(await res.text()).toBe("built from v1");
+    expect((await fetch(`${h.url}/plugins/fresh/ui/`).then((r) => r.text()))).toBe("prebuilt"); // up to date: build not run
+    await h.plugins.ready();
+    const list = await new HarnessClient({ baseUrl: h.url, token: h.token }).listPlugins();
+    expect(list.find((p) => p.id === "failing")!.error).toContain("syntax oops");
+    expect(list.find((p) => p.id === "fresh")!.error).toBeNull();
+    expect(logs.some((l) => l.includes("built builder UI"))).toBe(true);
+    // needsBuild: sources newer than the bundle trigger a rebuild; tests and node_modules don't.
+    const { needsBuild } = await import("./host");
+    const dir = join(builtin, "builder");
+    expect(needsBuild(dir, join(dir, "dist"))).toBe(false);
+    const future = new Date(Date.now() + 5000);
+    mkdirSync(join(dir, "node_modules"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", "x.js"), "");
+    writeFileSync(join(dir, "a.test.ts"), "");
+    const { utimesSync } = await import("node:fs");
+    utimesSync(join(dir, "node_modules", "x.js"), future, future);
+    utimesSync(join(dir, "a.test.ts"), future, future);
+    expect(needsBuild(dir, join(dir, "dist"))).toBe(false);
+    utimesSync(join(dir, "src.txt"), future, future);
+    expect(needsBuild(dir, join(dir, "dist"))).toBe(true);
+  });
+
   test("ticket tabs: when = always | workdir | worktree, evaluated per ticket", async () => {
     const { h, client } = await boot((builtin, user) => {
       writePlugin(builtin, "tabs", {

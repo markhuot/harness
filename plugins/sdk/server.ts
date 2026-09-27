@@ -17,6 +17,11 @@ export interface PluginManifest {
   server?: string;
   /** Static UI directory relative to the plugin dir, e.g. "dist/" (served at /plugins/<id>/ui/) */
   ui?: string;
+  /**
+   * Build script relative to the plugin dir, run with the service's bun when the ui dir has no
+   * index.html or is older than the plugin's sources (checked at service start). UI requests wait for it.
+   */
+  build?: string;
   tabs: { id: string; title: string; icon?: string; when?: TicketTabWhen }[];
 }
 
