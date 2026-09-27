@@ -5,11 +5,11 @@ import type { HarnessEvent, Ticket } from "@harness/shared";
 import { FakeDriver, makeOrchestrator, tempHome } from "../testing/fakes";
 import { HarnessError } from "./errors";
 
-function setup(opts: { requireHumanReview?: boolean; driver?: FakeDriver } = {}) {
+function setup(opts: { requireHumanReview?: boolean; autoComplete?: boolean; driver?: FakeDriver } = {}) {
   const h = makeOrchestrator({ driver: opts.driver });
   const dir = join(h.home, "proj", "acme");
   mkdirSync(dir, { recursive: true });
-  const project = h.orch.createProject({ path: dir, requireHumanReview: opts.requireHumanReview ?? true });
+  const project = h.orch.createProject({ path: dir, requireHumanReview: opts.requireHumanReview ?? true, autoComplete: opts.autoComplete });
   const events: HarnessEvent[] = [];
   h.bus.on((e) => events.push(e));
   return { ...h, project, events };
@@ -25,7 +25,7 @@ const runKinds = (h: ReturnType<typeof setup>, t: Ticket) => h.store.runs.listBy
 
 describe("ticket lifecycle", () => {
   test("start:true runs work with the brief, auto-reviews, then human approve + complete → done", async () => {
-    const h = setup();
+    const h = setup({ autoComplete: false });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
     expect(t.key).toBe("ACME-1");
     expect(t.status).toBe("in_progress");
@@ -193,12 +193,66 @@ describe("ticket lifecycle", () => {
   });
 
   test("projects without human review are ready right after the agent approves", async () => {
-    const h = setup({ requireHumanReview: false });
+    const h = setup({ requireHumanReview: false, autoComplete: false });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.agentReview, cur.humanReview]).toEqual(["approved", "approved"]);
     expect(statuses(h, t.sessionId)).toContain("Ready to complete");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
+  });
+
+  test("auto-complete is on by default: the human approval completes the ticket without pressing Complete", async () => {
+    const h = setup();
+    expect(h.project.autoComplete).toBe(true);
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    // Agent approved, human pending: nothing runs yet.
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
+
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+    const st = statuses(h, t.sessionId);
+    expect(st).toContain("Both reviews approved: completing automatically");
+    expect(st).not.toContain("Ready to complete");
+  });
+
+  test("auto-complete: the agent approval completes the ticket when the human approved first", async () => {
+    const driver = new FakeDriver();
+    driver.rejectsLeft = 1;
+    const h = setup({ driver, requireHumanReview: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    // Human review is pre-approved; the first agent review rejects, the second approves and completes.
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "work:succeeded", "review:succeeded", "complete:succeeded"]);
+  });
+
+  test("auto-complete: a second Complete while the auto-complete run is queued is refused", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await expect(h.orch.completeTicket(t.key)).rejects.toThrow(/already completing/);
+    await h.orch.idle();
+    expect(runKinds(h, t).filter((k) => k.startsWith("complete"))).toEqual(["complete:succeeded"]);
+  });
+
+  test("auto-complete: turning it off per project brings back the manual Complete step", async () => {
+    const h = setup();
+    const p = h.orch.updateProject(h.project.id, { autoComplete: false });
+    expect(p.autoComplete).toBe(false);
+    expect(h.store.projects.get(h.project.id)!.autoComplete).toBe(false);
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    expect(statuses(h, t.sessionId)).toContain("Ready to complete");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
   });
 
   test("complete requires review; skipAgent marks done without a run; drag to done runs nothing", async () => {
@@ -411,6 +465,31 @@ describe("conductor", () => {
     expect(conductorRuns[1]!.prompt).toContain(`${keys[1]} "b": planning → done`);
     // one child still open → the conductor stays in progress (no auto-submit)
     expect(h.orch.ticketDetail(c.key).ticket.status).toBe("in_progress");
+  });
+
+  test("a conductor's approval doesn't auto-complete its child: complete_ticket stays the conductor's call", async () => {
+    const h = setup();
+    const keys: string[] = [];
+    h.driver.script = async function* (req) {
+      const ops = req.toolContext.ops;
+      if (req.kind === "work") return void (await ops.submitForReview(req.toolContext, "done"));
+      if (req.kind === "review") return void (await ops.reviewDecision(req.toolContext, "approve", ""));
+      if (req.kind !== "conductor") return;
+      if (!keys.length) {
+        keys.push((await ops.createTicket(req.toolContext, { title: "only", description: "only", autoStart: true })).key);
+        return;
+      }
+      const child = (await ops.getTicket(req.toolContext, keys[0]!)).ticket;
+      if (child.status === "review" && child.agentReview === "approved" && child.humanReview === "pending") {
+        await ops.reviewTicket(req.toolContext, child.key, "approve", "");
+      }
+    };
+    await h.orch.createTicket({ projectId: h.project.id, prompt: "go", kind: "conductor" });
+    await h.orch.idle();
+    const child = h.orch.ticketDetail(keys[0]!).ticket;
+    expect([child.status, child.agentReview, child.humanReview]).toEqual(["review", "approved", "approved"]);
+    expect(runKinds(h, child)).toEqual(["work:succeeded", "review:succeeded"]);
+    expect(statuses(h, child.sessionId)).toContain("Ready to complete");
   });
 
   test("conductor auto-submits when its run ends with every child done", async () => {

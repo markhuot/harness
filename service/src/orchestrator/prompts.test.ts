@@ -42,6 +42,7 @@ const project: Project = {
   defaultDriver: null,
   useWorktrees: true,
   requireHumanReview: true,
+  autoComplete: true,
   defaultModels: {},
   permissionMode: null,
   createdAt: 0,

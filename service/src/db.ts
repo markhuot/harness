@@ -280,6 +280,11 @@ export const MIGRATIONS: string[] = [
     WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = NEW.session_id);
   END;
   `,
+  // 7: projects.auto_complete: once both reviews approve, start the complete run without a
+  //    human pressing Complete. On by default, existing projects included.
+  `
+  ALTER TABLE projects ADD COLUMN auto_complete INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 /**

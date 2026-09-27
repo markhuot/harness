@@ -27,6 +27,12 @@ export interface Project {
   useWorktrees: boolean;
   /** When false, the human review step is skipped (agent review alone gates completion) */
   requireHumanReview: boolean;
+  /**
+   * When true, a top-level ticket starts its complete run (merge + clean up) as soon as both
+   * reviews approve, instead of waiting for a human to press Complete. Conductor children are
+   * left to their conductor.
+   */
+  autoComplete: boolean;
   /** Permission mode for this project's tickets (null → settings.permissionMode) */
   permissionMode: PermissionMode | null;
   createdAt: number;
@@ -451,6 +457,7 @@ export interface CreateProjectBody {
   defaultDriver?: string | null;
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
+  autoComplete?: boolean;
   /** null → settings.permissionMode */
   permissionMode?: PermissionMode | null;
   /** Per-driver default models; PATCH merges per driver, null clears one */

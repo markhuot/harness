@@ -383,6 +383,7 @@ export class Orchestrator {
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
+      autoComplete: body.autoComplete,
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     });
@@ -795,6 +796,7 @@ export class Orchestrator {
       return this.store.tickets.get(ticket.id)!;
     }
     if (ticket.status !== "review") throw conflict(`${ticket.key} must be in review to complete`);
+    if (this.completing(ticket)) throw conflict(`${ticket.key} is already completing`);
     this.appendStatus(ticket.sessionId, null, "Completing");
     this.enqueueRun(ticket.sessionId, "complete", prompts.completePrompt(ticket, body.instructions));
     return this.store.tickets.get(ticket.id)!;
@@ -1469,10 +1471,24 @@ export class Orchestrator {
     return this.store.tickets.get(t.id)!;
   }
 
+  /**
+   * Both reviews approved: say so, and with the project's autoComplete on start the complete run
+   * right away. Conductor children wait for their conductor's complete_ticket instead.
+   */
   private noteReady(t: Ticket) {
-    if (t.status === "review" && t.agentReview === "approved" && t.humanReview === "approved") {
+    if (t.status !== "review" || t.agentReview !== "approved" || t.humanReview !== "approved") return;
+    const project = this.store.projects.get(t.projectId);
+    if (!project?.autoComplete || t.parentId || this.completing(t)) {
       this.appendStatus(t.sessionId, null, "Ready to complete");
+      return;
     }
+    this.appendStatus(t.sessionId, null, "Both reviews approved: completing automatically");
+    this.enqueueRun(t.sessionId, "complete", prompts.completePrompt(t));
+  }
+
+  /** A complete run is queued or running for the ticket. */
+  private completing(t: Ticket): boolean {
+    return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
   }
 
   private enqueueReview(t: Ticket) {
