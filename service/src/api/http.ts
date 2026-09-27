@@ -244,6 +244,9 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
     websocket: ws.websocket,
     closeSockets: () => ws.closeAll(),
     async fetch(req, server) {
+      if (opts.network?.isRetired(server)) {
+        return new Response(JSON.stringify({ error: "The service no longer listens on this address" }), { status: 503, headers: { "content-type": "application/json", connection: "close" } });
+      }
       const origin = allowedOrigin(req.headers.get("origin"));
       if (req.method === "OPTIONS") return preflight(origin);
       const res = await handle(req, server);

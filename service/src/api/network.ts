@@ -173,6 +173,8 @@ export interface NetworkManagerOptions extends NetworkDeps {
 
 export class NetworkManager {
   private listeners = new Map<string, Listener>();
+  /** Removed listeners waiting out the drain window; the fetch handler turns their requests away. */
+  private retired = new WeakMap<object, string>();
   private port: number;
   private active: ListenMode = "localhost";
   private activeHost: string | null = null;
@@ -202,6 +204,17 @@ export class NetworkManager {
   /** Loopback base URL (the desktop app, agents' MCP URLs, `harness` CLI). */
   get loopbackUrl(): string {
     return formatUrl(LOOPBACK, this.port);
+  }
+
+  /**
+   * A listener removed by a rebind that hasn't closed yet, whose address the current listeners no
+   * longer serve. (127.0.0.1 retired in favour of 0.0.0.0 is still served: the kernel keeps routing
+   * loopback to the more specific socket until it closes.)
+   */
+  isRetired(listener: object): boolean {
+    const address = this.retired.get(listener);
+    if (address === undefined) return false;
+    return !this.listeners.has(address) && !this.listeners.has(WILDCARD) && !this.listeners.has("::");
   }
 
   bound(): BoundAddress[] {
@@ -245,8 +258,10 @@ export class NetworkManager {
     for (const [address, l] of started) this.listeners.set(address, l);
     for (const [address, l] of removed) {
       this.listeners.delete(address);
-      // Stop accepting now; let in-flight requests (e.g. the PATCH that asked for this) finish.
-      l.stop(false);
+      // In-flight requests (e.g. the PATCH that asked for this) finish; new ones are refused
+      // (isRetired) until the listener and its keep-alive connections close after the drain window.
+      // (Bun ignores stop(true) after a stop(false), so there is only the one forced stop.)
+      this.retired.set(l, address);
       setTimeout(() => l.stop(true), this.opts.drainMs ?? 1000).unref?.();
     }
   }
@@ -375,6 +390,7 @@ export class NetworkManager {
     this.stopRetry();
     for (const l of this.listeners.values()) l.stop(true);
     this.listeners.clear();
+    // Retired listeners still in their drain window close on their timers.
   }
 }
 
