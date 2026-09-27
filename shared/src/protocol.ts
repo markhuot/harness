@@ -370,3 +370,50 @@ export interface ApiOk<T> {
 export interface ApiError {
   error: string;
 }
+
+// ---------------------------------------------------------------------------
+// Plugins (DESIGN.md "Plugins")
+// ---------------------------------------------------------------------------
+
+/**
+ * When a plugin tab shows on a ticket (evaluated by the service in GET /tickets/:key/tabs):
+ * - "always":   every ticket
+ * - "workdir":  ticket.workdir is set, exists on disk, and is inside a git work tree
+ * - "worktree": ticket.branch is set and ticket.workdir exists on disk (a harness worktree)
+ */
+export type TicketTabWhen = "always" | "workdir" | "worktree";
+
+export interface PluginTab {
+  pluginId: string;
+  id: string;
+  title: string;
+  /** Icon name from the app's icon set (hosts fall back to a generic icon) */
+  icon: string | null;
+  when: TicketTabWhen;
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  /** "builtin" (<repo>/plugins) or "user" ($HARNESS_HOME/plugins) */
+  source: "builtin" | "user";
+  hasServer: boolean;
+  hasUi: boolean;
+  tabs: PluginTab[];
+  /** Set when the manifest or server module failed to load; the plugin's routes and tabs are disabled */
+  error: string | null;
+}
+
+/** Host (app) → plugin iframe. Sent with targetOrigin = the service origin. */
+export type PluginHostMessage =
+  | { type: "harness:init"; baseUrl: string; token: string; ticketKey: string; tabId: string; theme: "light" | "dark" }
+  | { type: "harness:theme"; theme: "light" | "dark" }
+  | { type: "harness:ticket"; ticket: Ticket };
+
+/** Plugin iframe → host (app). The host only accepts these from its own iframe at the service origin. */
+export type PluginFrameMessage =
+  | { type: "harness:ready" }
+  | { type: "harness:openExternal"; url: string }
+  | { type: "harness:navigate"; ticketKey: string };

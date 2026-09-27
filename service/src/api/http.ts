@@ -8,6 +8,7 @@ import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
+import type { PluginHost } from "../plugins/host";
 
 export type McpHandler = (req: Request, run: ReturnType<Orchestrator["mcpRun"]>) => Promise<Response>;
 
@@ -19,6 +20,7 @@ export interface HttpServerOptions {
   port: number;
   hostname?: string;
   mcp: McpHandler;
+  plugins?: PluginHost;
 }
 
 type Params = Record<string, string>;
@@ -90,7 +92,7 @@ function bearer(req: Request): string | null {
   return m ? m[1]!.trim() : null;
 }
 
-export function buildRoutes(o: Orchestrator, browser: BrowserService): Route[] {
+export function buildRoutes(o: Orchestrator, browser: BrowserService, plugins?: PluginHost): Route[] {
   const routes: Route[] = [];
   const add = (method: string, path: string, handler: Handler) => routes.push({ method, ...compile(path), handler });
 
@@ -159,11 +161,15 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService): Route[] {
     return browser.open(o.getSession(params.sessionId!).id, b.url);
   });
 
+  // Plugins (DESIGN.md "Plugins"). /plugins/<id>/api/* and /plugins/<id>/ui/* are handled in createHttpServer.
+  add("GET", "/plugins", () => plugins?.list() ?? []);
+  add("GET", "/tickets/:key/tabs", async ({ params }) => (plugins ? plugins.ticketTabs(o.ticketDetail(params.key!).ticket) : []));
+
   return routes;
 }
 
 export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
-  const routes = buildRoutes(opts.orchestrator, opts.browser);
+  const routes = buildRoutes(opts.orchestrator, opts.browser, opts.plugins);
   const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser });
 
   return Bun.serve<WsData>({
@@ -184,6 +190,14 @@ export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
       const url = new URL(req.url);
       const path = url.pathname.replace(/\/+$/, "") || "/";
 
+      // Plugin UI bundles: static, unauthenticated (no data; API calls from the UI carry the token).
+      const ui = /^\/plugins\/([^/]+)\/ui(?:\/(.*))?$/.exec(url.pathname);
+      if (ui && opts.plugins) {
+        if (req.method !== "GET" && req.method !== "HEAD") return json({ error: "Method not allowed" }, 405);
+        if (ui[2] === undefined) return new Response(null, { status: 301, headers: { location: `${url.pathname}/${url.search}` } });
+        return opts.plugins.serveUi(decodeURIComponent(ui[1]!), ui[2]);
+      }
+
       if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid } });
 
       // MCP: authenticated by the run-scoped token in the path
@@ -203,6 +217,12 @@ export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
       }
 
       if (!tokenMatches(bearer(req), opts.token)) return json({ error: "Unauthorized" }, 401);
+
+      const pluginApi = /^\/plugins\/([^/]+)\/api(\/.*)?$/.exec(path);
+      if (pluginApi) {
+        if (!opts.plugins) return json({ error: "Not found" }, 404);
+        return opts.plugins.handleApi(decodeURIComponent(pluginApi[1]!), pluginApi[2] ?? "/", req, url);
+      }
 
       let matchedPath = false;
       for (const route of routes) {

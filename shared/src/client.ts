@@ -23,6 +23,8 @@ import type {
   UpdateTicketBody,
   Watcher,
   BrowserState,
+  PluginInfo,
+  PluginTab,
 } from "./protocol";
 
 export class HarnessApiError extends Error {
@@ -181,6 +183,15 @@ export class HarnessClient {
   }
   browserNavigate(sessionId: string, url: string) {
     return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, { url });
+  }
+
+  // Plugins
+  listPlugins() {
+    return this.request<PluginInfo[]>("GET", "/plugins");
+  }
+  /** Plugin tabs that apply to this ticket (the service evaluates each tab's `when`). */
+  ticketTabs(key: string) {
+    return this.request<PluginTab[]>("GET", `/tickets/${key}/tabs`);
   }
 
   /** Open the live event stream. Reconnects automatically until close() is called. */

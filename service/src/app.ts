@@ -12,6 +12,11 @@ import { createHttpServer, type McpHandler } from "./api/http";
 import type { WsData } from "./api/ws";
 import type { Driver } from "./drivers/types";
 import type { BrowserService } from "./browser/types";
+import { join, resolve } from "node:path";
+import { PluginHost, type PluginDir } from "./plugins/host";
+
+/** Built-in plugins shipped with the repo. */
+export const BUILTIN_PLUGINS_DIR = resolve(import.meta.dir, "..", "..", "plugins");
 
 export interface CreateHarnessOptions {
   home: string;
@@ -24,6 +29,8 @@ export interface CreateHarnessOptions {
   /** Watcher supervisor factory; null disables watchers. Defaults to WatcherRunner. */
   watchers?: OrchestratorOptions["watchers"];
   log?: (msg: string) => void;
+  /** Plugin search path; defaults to <repo>/plugins (builtin) then $HARNESS_HOME/plugins (user). [] disables plugins. */
+  pluginDirs?: PluginDir[];
 }
 
 export interface Harness {
@@ -35,6 +42,7 @@ export interface Harness {
   bus: EventBus;
   orchestrator: Orchestrator;
   server: Server<WsData>;
+  plugins: PluginHost;
   stop(): Promise<void>;
 }
 
@@ -65,7 +73,22 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   });
   orchestrator.start();
 
-  const server = createHttpServer({ orchestrator, bus, browser, token, port: opts.port, hostname: opts.hostname, mcp });
+  const plugins = new PluginHost({
+    dirs: opts.pluginDirs ?? [
+      { path: BUILTIN_PLUGINS_DIR, source: "builtin" },
+      { path: join(paths.home, "plugins"), source: "user" },
+    ],
+    getTicket: (key) => {
+      const ticket = store.tickets.getByKey(key);
+      const project = ticket ? store.projects.get(ticket.projectId) : null;
+      return ticket && project ? { ticket, project } : null;
+    },
+    bus,
+    log: opts.log ?? ((m) => console.log(m)),
+  });
+  await plugins.load();
+
+  const server = createHttpServer({ orchestrator, bus, browser, token, port: opts.port, hostname: opts.hostname, mcp, plugins });
   const port = server.port!;
   baseUrl = `http://127.0.0.1:${port}`;
 
@@ -79,10 +102,12 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     bus,
     orchestrator,
     server,
+    plugins,
     async stop() {
       if (stopped) return;
       stopped = true;
       await orchestrator.stop();
+      await plugins.stop();
       server.stop(true);
       if (ownsBrowser) await browser.shutdown().catch(() => {});
       db.close();
