@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, the keyboard no longer hides the bottom of the screen. The ticket composer now sits
+  right on top of the keyboard, and you can scroll the New session, Watcher, Connect, Request
+  changes and other sheets all the way to their last field while typing.
+
 ## [app-20260927.2240](https://github.com/markhuot/harness/releases/tag/app-20260927.2240) - 2026-09-27
 
 ### Added

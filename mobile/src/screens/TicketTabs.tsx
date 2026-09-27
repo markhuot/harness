@@ -277,7 +277,7 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
   const input = { borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 15.5 } as const;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
+    <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
       <Field label="Title">
         <TextInput style={input} value={title} editable={editable} onChangeText={setTitle} onBlur={saveTitle} onSubmitEditing={saveTitle} returnKeyType="done" />
       </Field>

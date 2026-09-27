@@ -1,12 +1,13 @@
 // New session: project, prompt, Task/Conductor, driver, model, permission mode, Start immediately.
 import { useEffect, useRef, useState } from "react";
-import { Alert, KeyboardAvoidingView, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { resolvePermissionMode, type PermissionMode, type TicketKind } from "@harness/shared";
 import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { Button, ProjectKey, Segmented } from "../ui/kit";
+import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
 import { haptic } from "../ui/haptics";
@@ -75,7 +76,7 @@ export function NewSessionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen
         options={{
           title: "New session",
@@ -123,7 +124,7 @@ export function NewSessionScreen() {
         </View>
         <Button title={start ? "Start session" : "Plan first"} variant="primary" icon={start ? "play" : "fileText"} onPress={() => void submit()} disabled={!canSubmit} loading={busy} hapticKind={null} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoider>
   );
 }
 
