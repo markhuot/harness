@@ -89,8 +89,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const result: ProbeResult = opts.skipProbe ? { ok: true, version: "" } : await probeServer(a.baseUrl, a.token);
       if (!result.ok) return result;
       const { list, server } = upsertServer(serversRef.current, a.baseUrl, Date.now(), newId);
-      await saveToken(server.id, a.token);
-      await saveServers(list);
+      try {
+        await saveToken(server.id, a.token);
+        await saveServers(list);
+      } catch (e) {
+        return { ok: false, kind: "error", message: `Couldn't save the token to the Keychain: ${(e as Error).message}` } as const;
+      }
       serversRef.current = list;
       setServers(list);
       setActive({ ...server, token: a.token });

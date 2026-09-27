@@ -91,6 +91,9 @@ export function BoardScreen() {
       <Stack.Screen
         options={{
           title: project ? project.name : "All projects",
+          headerTransparent: false,
+          headerStyle: { backgroundColor: c.bg },
+          headerShadowVisible: false,
           headerSearchBarOptions: { placeholder: "Filter by key or title", onChangeText: (e) => setFilter(e.nativeEvent.text), hideWhenScrolling: false, autoCapitalize: "none" },
           unstable_headerLeftItems: () => [buttonItem("Projects", "sidebar.left", () => router.push("/projects"))],
           unstable_headerRightItems: () => [
@@ -145,7 +148,6 @@ export function BoardScreen() {
             <FlatList
               data={shown[status]}
               keyExtractor={(t) => t.id}
-              contentInsetAdjustmentBehavior="automatic"
               contentContainerStyle={{ padding: 14, paddingBottom: 110, gap: 10 }}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text3} />}
               renderItem={({ item }) => <TicketCard ticket={item} state={state} showProject={!projectId} onMove={move} onOpenKey={openKey} />}

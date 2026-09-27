@@ -40,9 +40,13 @@
           "imageWidth": 120,
           "resizeMode": "contain",
           "backgroundColor": "#fbfbfc",
-          "dark": { "image": "./assets/splash-icon.png", "backgroundColor": "#111214" }
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#111214"
+          }
         }
-      ]
+      ],
+      "./plugins/withSceneLifecycle"
     ],
     "experiments": {
       "typedRoutes": false

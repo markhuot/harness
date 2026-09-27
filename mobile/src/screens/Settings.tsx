@@ -91,7 +91,7 @@ function ConnectionSection() {
               <Text style={{ color: c.text, fontSize: 16 }}>{s.name}</Text>
             </View>
           }
-          sub={<Text style={{ color: c.text3, fontSize: 12.5, fontFamily: MONO }}>{displayHost(s.baseUrl)}</Text>}
+          sub={s.name !== displayHost(s.baseUrl) ? <Text style={{ color: c.text3, fontSize: 12.5, fontFamily: MONO }}>{displayHost(s.baseUrl)}</Text> : undefined}
         >
           {active?.id === s.id ? <Badge tone={state.connected ? "green" : "amber"}>{state.connected ? "Connected" : "Reconnecting"}</Badge> : <Icon name="chevronRight" size={14} color={c.text3} />}
         </SRow>

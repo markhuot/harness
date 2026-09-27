@@ -80,7 +80,7 @@ export function TicketDetailScreen() {
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }} keyboardVerticalOffset={0}>
       <Header ticket={ticket} />
-      <Hero ticket={ticket} />
+      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown)} />
       <TabStrip ticket={ticket} tab={shown} onTab={setTab} pluginTabs={pluginTabs} />
       <View style={{ flex: 1 }}>
         {shown === "summaries" && <SummariesTab ticket={ticket} />}
@@ -102,6 +102,7 @@ export function TicketDetailScreen() {
 
 function Header({ ticket }: { ticket: Ticket }) {
   const { client } = useStore();
+  const c = useColors();
   const act = useAction();
   const router = useRouter();
   const k = ticket.key;
@@ -114,7 +115,7 @@ function Header({ ticket }: { ticket: Ticket }) {
     <Stack.Screen
       options={{
         title: k,
-        headerTitleStyle: { fontFamily: MONO } as never,
+        headerTitleStyle: { fontFamily: MONO, color: c.text } as never,
         unstable_headerRightItems: () => [
           menuItem("More", "ellipsis.circle", [
             action("Copy key", "number", () => void Clipboard.setStringAsync(k)),
@@ -129,7 +130,9 @@ function Header({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function Hero({ ticket }: { ticket: Ticket }) {
+function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const compact = compactTab && !expanded;
   const { state, client } = useStore();
   const act = useAction();
   const c = useColors();
@@ -145,10 +148,14 @@ function Hero({ ticket }: { ticket: Ticket }) {
 
   return (
     <ScrollView style={{ maxHeight: height * 0.45, flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }} contentContainerStyle={{ padding: 14, paddingTop: 10, gap: 10 }}>
-      {parent && <ParentCrumb parent={parent} onOpen={(key) => router.push({ pathname: "/ticket/[key]", params: { key, tab: "children" } })} />}
-      <Text selectable style={{ color: c.text, fontSize: 21, fontWeight: "700", lineHeight: 27 }}>
-        {ticket.title || "Untitled"}
-      </Text>
+      {parent && !compact && <ParentCrumb parent={parent} onOpen={(key) => router.push({ pathname: "/ticket/[key]", params: { key, tab: "children" } })} />}
+      <Pressable disabled={!compactTab} onPress={() => setExpanded(!expanded)} style={{ flexDirection: "row", alignItems: "center", gap: 8 }} accessibilityRole={compactTab ? "button" : undefined} accessibilityHint={compactTab ? "Shows the ticket's status and actions" : undefined}>
+        <Text selectable={!compactTab} numberOfLines={compact ? 1 : undefined} style={{ color: c.text, fontSize: compact ? 16 : 19, fontWeight: "700", lineHeight: compact ? 21 : 25, flex: 1 }}>
+          {ticket.title || "Untitled"}
+        </Text>
+        {compactTab && <Icon name={expanded ? "chevronDown" : "chevronRight"} size={14} color={c.text3} />}
+      </Pressable>
+      {!compact && (<>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <StatusPill status={ticket.status} />
         {ticket.busy && (
@@ -178,6 +185,7 @@ function Hero({ ticket }: { ticket: Ticket }) {
         )}
       </View>
 
+      </>)}
       {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
       {!ticket.pendingApproval && ticket.status === "blocked" && ticket.blockedReason && (
         <Callout tone="red" icon="alert" title="The agent needs your input">
@@ -185,22 +193,22 @@ function Hero({ ticket }: { ticket: Ticket }) {
         </Callout>
       )}
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {ticket.status === "planning" && <Button title="Start work" icon="play" variant="primary" hapticKind="success" onPress={() => void act(() => client.startTicket(k))} />}
+      {!compact && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {ticket.status === "planning" && <Button small title="Start work" icon="play" variant="primary" hapticKind="success" onPress={() => void act(() => client.startTicket(k))} />}
         {ticket.status === "review" && ticket.humanReview !== "approved" && (
           <>
-            <Button title="Approve" icon="check" variant="primary" hapticKind="success" onPress={() => void act(() => client.humanReview(k, { decision: "approve" }), "Approved")} />
-            <Button title="Request changes" icon="edit" onPress={() => setChanges(true)} />
+            <Button small title="Approve" icon="check" variant="primary" hapticKind="success" onPress={() => void act(() => client.humanReview(k, { decision: "approve" }), "Approved")} />
+            <Button small title="Request changes" icon="edit" onPress={() => setChanges(true)} />
           </>
         )}
         {ticket.status === "review" && (
           <>
-            <Button title="Complete" icon="checkCircle" variant={ready ? "primary" : "secondary"} disabled={!ready} onPress={() => setCompleting(true)} accessibilityLabel={ready ? "Complete" : "Complete (needs both agent and human approval)"} />
-            <Button title="Re-run agent review" icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
+            <Button small title="Complete" icon="checkCircle" variant={ready ? "primary" : "secondary"} disabled={!ready} onPress={() => setCompleting(true)} accessibilityLabel={ready ? "Complete" : "Complete (needs both agent and human approval)"} />
+            <Button small title="Re-run agent review" icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
           </>
         )}
-        {ticket.busy && <Button title="Cancel run" icon="stop" variant="danger" hapticKind="warning" onPress={() => void act(() => client.cancelTicket(k), "Run cancelled")} />}
-      </View>
+        {ticket.busy && <Button small title="Cancel run" icon="stop" variant="danger" hapticKind="warning" onPress={() => void act(() => client.cancelTicket(k), "Run cancelled")} />}
+      </View>}
       {changes && <RequestChanges ticket={ticket} onClose={() => setChanges(false)} />}
       {completing && <Complete ticket={ticket} onClose={() => setCompleting(false)} />}
     </ScrollView>
