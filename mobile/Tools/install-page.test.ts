@@ -24,8 +24,10 @@ test("page: itms-services link to the manifest on the site, Mac download, sizes,
   expect(p).toContain('href="https://github.com/markhuot/harness/releases/latest/download/Harness-mac.zip"');
   expect(p).toContain("10.0 MB");
   expect(p).toContain("120.0 MB");
-  expect(p).toContain("right-click Harness.app");
-  expect(page(info({ notarized: true }))).not.toContain("right-click");
+  expect(p).toContain("Privacy &amp; Security");
+  expect(p).toContain("Open Anyway");
+  expect(p).not.toContain("right-click"); // right-click → Open no longer bypasses Gatekeeper on macOS 15+
+  expect(page(info({ notarized: true }))).not.toContain("Open Anyway");
   expect(p).not.toMatch(/—/); // house style: no em dashes in page copy
 });
 

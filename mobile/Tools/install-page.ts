@@ -60,7 +60,7 @@ export function page(r: ReleaseInfo): string {
   const itms = `itms-services://?action=download-manifest&url=${r.site}/manifest.plist`;
   const openNote = !r.mac ? "" : r.mac.notarized
     ? "It's signed and notarized, so it opens like any other app."
-    : "It's signed with Mark's Developer ID but not notarized yet, so the first time, right-click Harness.app, choose Open, then confirm.";
+    : "It's signed with Mark's Developer ID but not notarized yet, so macOS blocks the first launch. Open it once, then go to System Settings → Privacy & Security and click Open Anyway.";
   return `<!doctype html>
 <html lang="en">
 <head>
