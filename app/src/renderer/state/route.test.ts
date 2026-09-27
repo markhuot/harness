@@ -17,6 +17,15 @@ test("round-trips every view", () => {
     { view: "inbox", sessionId: "s1" },
     { view: "inbox", sessionId: null },
     { view: "settings", section: "watchers" },
+    { view: "project", projectId: "p 1" },
   ];
   for (const r of routes) expect(parseRoute(formatRoute(r))).toEqual(r);
+});
+
+test("project settings route", () => {
+  expect(formatRoute({ view: "project", projectId: "p1" })).toBe("#/project/p1/settings");
+  expect(parseRoute("#/project/p1/settings")).toEqual({ view: "project", projectId: "p1" });
+  expect(parseRoute("#/project/p1")).toEqual({ view: "project", projectId: "p1" });
+  // No id: nothing to show, fall back to the board.
+  expect(parseRoute("#/project")).toMatchObject({ view: "board" });
 });
