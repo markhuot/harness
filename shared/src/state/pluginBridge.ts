@@ -4,9 +4,19 @@
 //   - only messages from our own iframe's window, at the service origin, are accepted
 //   - openExternal is limited to http(s)/mailto; navigate to well-formed ticket keys
 
-import type { PluginFrameMessage, PluginHostMessage, Ticket } from "../protocol";
+import type { PluginFrameMessage, PluginHostMessage, PluginThemeFields, Ticket } from "../protocol";
+import type { PluginThemeInfo } from "../themes";
 
 export type ResolvedTheme = "light" | "dark";
+
+/** What a host knows about its theme: just the appearance, or the full theme (tokens and all). */
+export type HostTheme = ResolvedTheme | PluginThemeInfo;
+
+/** The theme fields of harness:init / harness:theme: the old `theme` plus, when known, the full theme. */
+export function themeFields(t: HostTheme): { theme: ResolvedTheme } & PluginThemeFields {
+  if (typeof t === "string") return { theme: t };
+  return { theme: t.appearance, appearance: t.appearance, themeId: t.themeId, themeName: t.themeName, syntaxTheme: t.syntaxTheme, tokens: { ...t.tokens } };
+}
 
 export interface FrameWindow {
   postMessage(message: unknown, targetOrigin: string): void;
@@ -27,7 +37,8 @@ export interface PluginHostBridgeOptions {
   tabId: string;
   /** The iframe's current contentWindow (null before it exists) */
   frame: () => FrameWindow | null;
-  theme: () => ResolvedTheme;
+  /** The current theme; a PluginThemeInfo also sends themeId, tokens and syntaxTheme */
+  theme: () => HostTheme;
   onNavigate: (ticketKey: string) => void;
   onOpenExternal: (url: string) => void;
   /** First harness:ready from the frame (the plugin connected) */
@@ -47,7 +58,7 @@ export function createPluginHostBridge(opts: PluginHostBridgeOptions) {
 
   const post = (msg: PluginHostMessage) => opts.frame()?.postMessage(msg, serviceOrigin);
   const sendInit = () =>
-    post({ type: "harness:init", baseUrl: opts.baseUrl.replace(/\/$/, ""), token: opts.token, ticketKey: opts.ticketKey, tabId: opts.tabId, theme: opts.theme() });
+    post({ type: "harness:init", baseUrl: opts.baseUrl.replace(/\/$/, ""), token: opts.token, ticketKey: opts.ticketKey, tabId: opts.tabId, ...themeFields(opts.theme()) });
 
   return {
     serviceOrigin,
@@ -79,7 +90,7 @@ export function createPluginHostBridge(opts: PluginHostBridgeOptions) {
           return false;
       }
     },
-    sendTheme: (theme: ResolvedTheme) => post({ type: "harness:theme", theme }),
+    sendTheme: (theme: HostTheme) => post({ type: "harness:theme", ...themeFields(theme) }),
     sendTicket: (ticket: Ticket) => {
       if (ticket.key === opts.ticketKey) post({ type: "harness:ticket", ticket });
     },

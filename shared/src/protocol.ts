@@ -555,10 +555,26 @@ export interface PluginInfo {
   error: string | null;
 }
 
+/**
+ * The app's color theme as sent to plugins, next to the resolved `theme: "light" | "dark"` every
+ * plugin already reads. Additive: hosts older than themes omit these fields.
+ */
+export interface PluginThemeFields {
+  /** Same as `theme` (the resolved appearance) */
+  appearance?: "light" | "dark";
+  /** Theme id, e.g. "catppuccin-mocha" (see @harness/shared/themes) */
+  themeId?: string;
+  themeName?: string;
+  /** Shiki theme matching the app theme, or null when none ships */
+  syntaxTheme?: string | null;
+  /** Semantic color tokens (ThemeTokens): bg, text, accent, status colors, diff colors, … */
+  tokens?: Record<string, string>;
+}
+
 /** Host (app) → plugin iframe. Sent with targetOrigin = the service origin. */
 export type PluginHostMessage =
-  | { type: "harness:init"; baseUrl: string; token: string; ticketKey: string; tabId: string; theme: "light" | "dark" }
-  | { type: "harness:theme"; theme: "light" | "dark" }
+  | ({ type: "harness:init"; baseUrl: string; token: string; ticketKey: string; tabId: string; theme: "light" | "dark" } & PluginThemeFields)
+  | ({ type: "harness:theme"; theme: "light" | "dark" } & PluginThemeFields)
   | { type: "harness:ticket"; ticket: Ticket };
 
 /** Plugin iframe → host (app). The host only accepts these from its own iframe at the service origin. */

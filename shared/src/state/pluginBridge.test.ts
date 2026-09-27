@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import type { Ticket } from "../index";
-import { createPluginHostBridge, pluginUiUrl } from "./pluginBridge";
+import { findTheme, pluginThemeInfo } from "../themes";
+import { createPluginHostBridge, pluginUiUrl, type HostTheme } from "./pluginBridge";
 
-function setup(theme: "light" | "dark" = "light") {
+function setup(theme: HostTheme = "light") {
   const posted: { message: any; targetOrigin: string }[] = [];
   const frame = { postMessage: (message: unknown, targetOrigin: string) => void posted.push({ message, targetOrigin }) };
   const other = { postMessage() {} };
@@ -79,6 +80,23 @@ test("theme and ticket pushes; tickets for other keys are dropped", () => {
   s.setTheme("dark");
   s.bridge.onLoad();
   expect(s.posted.at(-1)!.message.theme).toBe("dark"); // init reads the theme at send time
+});
+
+test("a full theme adds appearance, id, syntax theme and tokens next to the old light/dark field", () => {
+  const mocha = pluginThemeInfo(findTheme("catppuccin-mocha")!);
+  const s = setup(mocha);
+  s.bridge.onLoad();
+  const init = s.posted[0]!.message;
+  expect(init).toMatchObject({ type: "harness:init", token: "secret", theme: "dark", appearance: "dark", themeId: "catppuccin-mocha", themeName: "Catppuccin Mocha", syntaxTheme: "catppuccin-mocha" });
+  expect(init.tokens.bg).toBe(mocha.tokens.bg);
+  s.bridge.sendTheme(pluginThemeInfo(findTheme("one-light")!));
+  expect(s.posted.at(-1)!.message).toMatchObject({ type: "harness:theme", theme: "light", appearance: "light", themeId: "one-light", syntaxTheme: "one-light" });
+  // The payload is a copy: a plugin (or a later edit) can't reach back into the registry.
+  s.posted.at(-1)!.message.tokens.bg = "#000";
+  expect(findTheme("one-light")!.tokens.bg).not.toBe("#000");
+  // A bare appearance still produces exactly the old message.
+  s.bridge.sendTheme("light");
+  expect(s.posted.at(-1)!.message).toEqual({ type: "harness:theme", theme: "light" });
 });
 
 test("helpers", () => {
