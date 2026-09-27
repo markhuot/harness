@@ -19,7 +19,12 @@
 //      swipes the Transcript and Summaries tabs and checks they follow new content at the bottom,
 //      stay put once scrolled up, and follow again after scrolling back down
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick]
+//   8. --keyboard: only the keyboard checks: with the on-screen keyboard up, the ticket composer
+//      sits right on top of it and the New session sheet scrolls to its last button above it.
+//      Needs the simulator's software keyboard (I/O → Keyboard → uncheck Connect Hardware
+//      Keyboard); keyboard-*.png
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -34,11 +39,12 @@ const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.spli
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const shots = join(here, "build", "screens");
-const appPath = join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
+const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
 const stickOnly = flag("stick");
+const keyboardOnly = flag("keyboard");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
@@ -497,12 +503,79 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   return results.every((r) => r[1]);
 }
 
+/** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
+async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>): Promise<boolean> {
+  const results: [string, boolean, string][] = [];
+  const check = async (name: string, fn: () => Promise<string | boolean>) => {
+    try {
+      const r = await fn();
+      results.push([name, r !== false, typeof r === "string" ? r : ""]);
+    } catch (e) {
+      results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    }
+  };
+  const fresh = async (url: string) => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+    await openUrl(udid, url);
+    await Bun.sleep(2500);
+  };
+  const nodes = async () => {
+    const out = await axe("describe-ui", "--udid", udid);
+    const all: AXNode[] = [];
+    const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
+    (JSON.parse(out.slice(out.indexOf("["))) as AXNode[]).forEach(walk);
+    return all;
+  };
+  // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
+  const keyboardTop = async () => {
+    const keys = (await nodes()).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
+    return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
+  };
+  const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
+
+  await check("ticket composer sits on top of the keyboard", async () => {
+    await fresh(`harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    const top = await until("keyboard up", keyboardTop, 8000);
+    await Bun.sleep(800);
+    const field = (await nodes()).find((n) => n.AXLabel?.startsWith("Message the agent"));
+    await simctl("io", udid, "screenshot", join(shots, "keyboard-composer.png"));
+    if (!field) throw new Error("the composer is gone from the screen (behind the keyboard)");
+    const gap = Math.round(top - bottomOf(field));
+    if (gap < 0) throw new Error(`the composer's field ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
+    if (gap > 40) throw new Error(`${gap}pt gap between the composer and the keyboard`);
+    return `field ends ${gap}pt above the keyboard`;
+  });
+
+  await check("New session scrolls to its last button above the keyboard", async () => {
+    await fresh("harness://new");
+    const top = await until("keyboard up", keyboardTop, 8000);
+    await Bun.sleep(800);
+    for (let i = 0; i < 3; i++) {
+      await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 30)), "--end-x", "200", "--end-y", "160", "--duration", "0.3", "--udid", udid);
+      await Bun.sleep(700);
+    }
+    await Bun.sleep(800);
+    await simctl("io", udid, "screenshot", join(shots, "keyboard-new-session.png"));
+    const button = (await nodes()).find((n) => n.AXLabel === "Start session" || n.AXLabel === "Plan first");
+    if (!button) throw new Error("no Start session / Plan first button");
+    const gap = Math.round(top - bottomOf(button));
+    if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
+    return `"${button.AXLabel}" ends ${gap}pt above the keyboard`;
+  });
+
+  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+  return results.every((r) => r[1]);
+}
+
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
   await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
   token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded, paged, sticky] = await Promise.all([pickDevice(), pagingOnly || stickOnly ? null : seed(), pagingOnly ? seedPaging() : null, stickOnly ? seedStick() : null]);
+  const [udid, seeded, paged, sticky] = await Promise.all([pickDevice(), pagingOnly || stickOnly || keyboardOnly ? null : seed(), pagingOnly ? seedPaging() : null, stickOnly || keyboardOnly ? seedStick() : null]);
   if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
@@ -524,7 +597,8 @@ try {
 
   mkdirSync(shots, { recursive: true });
   if (paged) failed = !(await pagingChecks(udid, paged));
-  if (sticky) failed = !(await stickChecks(udid, sticky));
+  if (sticky && stickOnly) failed = !(await stickChecks(udid, sticky));
+  if (sticky && keyboardOnly) failed = !(await keyboardChecks(udid, sticky));
   if (seeded) {
     const k = (t: Ticket) => encodeURIComponent(t.key);
     const screens: [string, string, number?][] = [
