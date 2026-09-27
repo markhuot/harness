@@ -106,9 +106,16 @@
   font-family: var(--mono);
   font-size: 10px;
   white-space: nowrap;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
+}
+/* A narrow card can't fit key + parent chip + review marks on one line: wrap rather than
+   truncate the chip, and keep the trailing marks right-aligned on their own line. */
+.card-top:has(.card-parent-chip) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.card-top:has(.card-parent-chip) .card-reviews {
+  margin-left: auto;
 }
 
 /* Board toolbar toggle */
@@ -219,9 +226,6 @@
 .child-row.attn-approval {
   box-shadow: inset 2px 0 0 var(--amber);
 }
-.child-row.attn-review {
-  box-shadow: inset 2px 0 0 var(--c-review);
-}
 .child-main {
   flex: 1;
   min-width: 0;
@@ -307,10 +311,6 @@
 .note-approval strong {
   font-family: var(--mono);
   font-size: 11.5px;
-}
-.note-review {
-  color: var(--violet);
-  background: var(--violet-soft);
 }
 .child-foot {
   display: flex;
