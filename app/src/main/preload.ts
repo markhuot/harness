@@ -6,6 +6,7 @@ import type { HarnessBridge, MenuCommand, ThemeState } from "./types";
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
   retryService: () => ipcRenderer.invoke("harness:retryService"),
+  reloadToken: (rotated) => ipcRenderer.invoke("harness:reloadToken", rotated),
   pickDirectory: (opts) => ipcRenderer.invoke("harness:pickDirectory", opts),
   openExternal: (url) => ipcRenderer.invoke("harness:openExternal", url),
   revealInFinder: (path) => ipcRenderer.invoke("harness:revealInFinder", path),

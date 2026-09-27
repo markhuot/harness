@@ -7,6 +7,8 @@ export interface Connection {
   baseUrl: string;
   token: string;
   source: "env" | "service";
+  /** Where the token lives (service connections); re-read after a token rotation */
+  tokenPath?: string;
   home?: string;
   pid?: number;
 }
@@ -35,6 +37,8 @@ export interface PickDirectoryOptions {
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   retryService(): Promise<ConnectionResult>;
+  /** Re-read the token file after POST /token/rotate (env connections take `rotated`). */
+  reloadToken(rotated?: string): Promise<ConnectionResult>;
   pickDirectory(opts?: PickDirectoryOptions): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   /** Reveal a file or folder in Finder */

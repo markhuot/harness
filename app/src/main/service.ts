@@ -134,14 +134,32 @@ export async function ensureService(appRoot: string, env: NodeJS.ProcessEnv = pr
   const parsed = parseEnsureOutput(out.stdout);
   if (!parsed) return fail("The harness service returned something unexpected.", transcript);
 
+  const token = readTokenFile(parsed.tokenPath);
+  if (typeof token !== "string") return token;
+  return { baseUrl: parsed.url, token, source: "service", tokenPath: parsed.tokenPath, home: parsed.home, pid: parsed.pid };
+}
+
+/** Read the bearer token file (as written by the service, trailing newline trimmed). */
+export function readTokenFile(tokenPath: string): string | ConnectionError {
   let token: string;
   try {
-    token = readFileSync(expandHome(parsed.tokenPath), "utf8").trim();
+    token = readFileSync(expandHome(tokenPath), "utf8").trim();
   } catch (e) {
-    return fail("Couldn't read the service token.", `${parsed.tokenPath}: ${(e as Error).message}`);
+    return fail("Couldn't read the service token.", `${tokenPath}: ${(e as Error).message}`);
   }
-  if (!token) return fail("The service token is empty.", parsed.tokenPath);
-  return { baseUrl: parsed.url, token, source: "service", home: parsed.home, pid: parsed.pid };
+  if (!token) return fail("The service token is empty.", tokenPath);
+  return token;
+}
+
+/**
+ * After the token was rotated (POST /token/rotate): the same connection with the token re-read from
+ * its file. Env connections have no file; they take the token the rotate call returned.
+ */
+export function reloadToken(conn: ConnectionResult | null, rotated?: string): ConnectionResult {
+  if (!conn || "error" in conn) return conn ?? fail("Not connected to the service.", "");
+  if (!conn.tokenPath) return rotated ? { ...conn, token: rotated } : conn;
+  const token = readTokenFile(conn.tokenPath);
+  return typeof token === "string" ? { ...conn, token } : token;
 }
 
 function fail(error: string, output: string): ConnectionError {

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureService, parseEnsureOutput } from "./service";
+import { ensureService, parseEnsureOutput, reloadToken } from "./service";
 
 describe("parseEnsureOutput", () => {
   test("takes the last JSON line after log noise", () => {
@@ -50,7 +50,7 @@ describe("ensureService", () => {
       console.log(JSON.stringify({ url: "http://127.0.0.1:7717", tokenPath, home: process.env.FIXTURE_ROOT, pid: 42 }));
     `);
     const res = await ensureService(app, { PATH: process.env.PATH, FIXTURE_ROOT: root });
-    expect(res).toEqual({ baseUrl: "http://127.0.0.1:7717", token: "secret-token", source: "service", home: root, pid: 42 });
+    expect(res).toEqual({ baseUrl: "http://127.0.0.1:7717", token: "secret-token", source: "service", tokenPath: join(root, "token"), home: root, pid: 42 });
   });
 
   test("a failing CLI returns an error carrying its output", async () => {
@@ -72,5 +72,36 @@ describe("ensureService", () => {
     const { app } = fixture("");
     const moved = await ensureService(app, { HARNESS_REPO_ROOT: "/nope" });
     expect("error" in moved && moved.output).toBe("Expected /nope/service/src/cli.ts");
+  });
+});
+
+describe("reloadToken", () => {
+  const dir = mkdtempSync(join(tmpdir(), "harness-token-test-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const tokenPath = join(dir, "token");
+  const conn = { baseUrl: "http://127.0.0.1:7717", token: "old", source: "service" as const, tokenPath, pid: 1 };
+
+  test("service connections re-read the rotated token file (and ignore the passed token)", () => {
+    writeFileSync(tokenPath, "new-token\n");
+    expect(reloadToken(conn, "from-response")).toEqual({ ...conn, token: "new-token" });
+  });
+
+  test("an empty or missing token file is an error, not a connection with a blank token", () => {
+    writeFileSync(tokenPath, "\n");
+    expect(reloadToken(conn)).toMatchObject({ error: "The service token is empty." });
+    rmSync(tokenPath);
+    expect(reloadToken(conn)).toMatchObject({ error: "Couldn't read the service token." });
+  });
+
+  test("env connections (no token file) take the rotated token; without one they're unchanged", () => {
+    const env = { baseUrl: "http://x", token: "old", source: "env" as const };
+    expect(reloadToken(env, "rotated")).toEqual({ ...env, token: "rotated" });
+    expect(reloadToken(env)).toEqual(env);
+  });
+
+  test("no connection or a failed one stays an error", () => {
+    expect("error" in reloadToken(null)).toBe(true);
+    const failed = { error: "down", output: "" };
+    expect(reloadToken(failed)).toBe(failed);
   });
 });

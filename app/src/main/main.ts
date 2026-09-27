@@ -4,7 +4,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { ensureService } from "./service";
+import { ensureService, reloadToken } from "./service";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePreference, ThemeState } from "./types";
 import { effectiveSource, isThemePreference, parseForcedTheme, parseStoredPreference, windowBackground } from "./theme";
 
@@ -302,6 +302,12 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
+ipcMain.handle("harness:reloadToken", async (_e, rotated: unknown) => {
+  const next = reloadToken(await getConnection(), typeof rotated === "string" ? rotated : undefined);
+  // Keep the refreshed token for later getConnection() calls (reloads, new windows).
+  if (!("error" in next)) connection = Promise.resolve(next);
+  return next;
+});
 ipcMain.handle("harness:pickDirectory", async (e, raw: PickDirectoryOptions | undefined) => {
   const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
   const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
