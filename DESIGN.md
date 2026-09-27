@@ -98,6 +98,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error |
+| Work/complete/conductor run ends after a Claude Code classifier denial | status `blocked` with a classifier `pendingApproval` (see "Permissions"), even if the agent submitted |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
@@ -218,9 +219,10 @@ settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`
 claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
 - `auto` works headless. Its classifier's denials do **not** go through the permission prompt
   tool: the model gets an is_error tool_result "Permission for this action was denied by the
-  Claude Code auto mode classifier. Reason: [Containment Escape]…" and is told to stop and
-  explain (in the harness it calls `block`). The driver logs each such denial as a permission
-  entry (`backend: "claude-code"`). Anything the CLI still asks about goes to the prompt tool.
+  Claude Code auto mode classifier. Reason: [Code from External]…". The driver logs each as a
+  permission entry (`backend: "claude-code"`) and emits `permission_denied` (callId, toolName,
+  input, reason); see "Classifier denials" below. Anything the CLI still asks about goes to the
+  prompt tool.
 - `auto` isn't available for every model (haiku): the CLI silently runs in `default`. The
   driver compares the init event's `permissionMode` with what it asked for and posts
   "Auto mode isn't available for <model>; unapproved actions will ask you instead." Those
@@ -230,6 +232,51 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
   `ExitPlanMode` through the prompt tool.
 - `cleanClaudeEnv` strips what a parent Claude Code session leaks (`CLAUDECODE`, `CLAUDE_PID`,
   `CLAUDE_EFFORT`, `AI_AGENT`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_*` except user config).
+
+**Classifier denials → approval cards.** The orchestrator collects a work/complete/conductor
+run's `permission_denied` events, dropping any whose exact call (`grantKey`) later succeeded in
+the same run. When the run succeeds and a denial is left, the last one becomes a
+`pendingApproval` (`source: "classifier"`, `reason` = the classifier's reason, tool + input of
+the denied tool_use):
+- the agent called `block` (the system prompt tells work runs to; complete/conductor runs are
+  told to stop): the approval is attached to that block, its question stays `blockedReason`;
+- the agent submitted anyway (measured: sonnet reports the denial and calls
+  `submit_for_review`): review → blocked with the card, no review run;
+- otherwise in_progress (or review, for a complete run) → blocked, as `requestApproval` does.
+- The tool is already in `ticket.allowedTools` (auto mode ignores bare `Bash`, below): no
+  card; the call gets a one-time grant and the run is resumed ("…the human allows Bash on this
+  ticket. Retry it now"), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
+  (a human answer or message resets the count).
+Not in read_only, not for review/plan/triage runs. allow_once / allow_tool / deny answer it like
+any card; allow_tool on a classifier card also adds a one-time grant for the denied call, so
+the retry passes as an exact rule.
+
+**Human grants → the CLI.** Work/complete/conductor runs get `RunRequest.grants` = `{ tools:
+ticket.allowedTools, once: the ticket's one-time grants }`; review runs don't (reviewers are
+independent and start fresh), nor plan/triage runs or read_only tickets. claude-code
+(`planGrants`) appends them to `--allowedTools` after `mcp__harness`, one argv entry per rule:
+- a tool grant → the bare name, only if it matches `^[A-Za-z][A-Za-z0-9_-]*$` (so a stored
+  name can't be a pattern like `Bash(*)` or a second rule);
+- a Bash one-time grant → `Bash(<command>)`, rule content escaped `\` → `\\`, `(` → `\(`,
+  `)` → `\)` (the CLI unescapes `\(` `\)` then `\\`). The driver emits `grant_applied` and
+  the orchestrator consumes the grant: it's for that run only;
+- anything else (other tools: `Edit(path)` or `WebFetch(domain:…)` would allow more than the
+  one call; Bash commands the rule can't match exactly) stays with the prompt tool, which
+  consumes the grant for exactly that call. In auto mode the prompt tool is never asked about a
+  classifier denial, so such a run uses `acceptEdits` instead, with the notice "Claude Code
+  can't pre-approve … so this turn runs in ask mode". A call whose exact rule was passed and
+  still denied is remembered (in memory) and its next grant goes this way (`viaPrompt`).
+
+Measured against claude 2.1.283 (`--permission-mode dontAsk` to isolate rule matching, then
+auto): `Bash(<cmd>)` with spaces, quotes, `&&`, `;`, `||`, backticks, escaped parens and
+backslashes matches exactly; an exact rule overrides auto mode's classifier. No match for
+pipelines (checked per segment), globs (`*` makes the rule a wildcard; `\*` didn't match
+either), redirections (`>`, `2>/dev/null`) or `$(…)`; multi-line commands and a trailing
+backslash aren't risked. Auto mode also strips allow rules it treats as arbitrary code
+execution before its classifier runs: bare `Bash` and `Bash(npx:*)` had no effect (they work in
+ask mode). One-time grants match on tool + canonical input; a Bash call's `description` is
+ignored (the model rewrites it on a retry). A matching one-time grant is consumed before
+`allowedTools` is checked, so it never lingers.
 
 **PermissionGate** (`service/src/permissions/gate.ts`) for bash, write_file, edit_file and
 read_file/list_files, per call:
@@ -269,7 +316,12 @@ Migration 4 maps the old `claudePermissionMode` setting: `acceptEdits`/`bypassPe
 pre-approved). PATCH /settings still accepts `claudePermissionMode` from older clients.
 
 Real checks (not `bun test`): `service/scripts/permissions-classifier-check.ts`,
-`service/scripts/claude-code-permissions-check.ts`.
+`service/scripts/claude-code-permissions-check.ts`,
+`service/scripts/claude-code-classifier-approval-check.ts` (a whole harness on a temp home and
+random port, sonnet in auto: `npx -y <missing package> init` from a README is denied
+[Code from External] → card → allow_once → the retry runs under the exact rule; `curl … | sh`
+→ card → allow_once → the retry runs in acceptEdits through the prompt tool). Run them from a
+clean `env -i HOME="$HOME" PATH="$PATH" USER="$USER"` shell.
 
 ### Models
 
