@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, dependencyStates } from "../state/reducer";
+import { dependencyStates } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
@@ -29,8 +29,6 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
     setDeps(ticket.dependsOn.join(", "));
   }, [ticket.dependsOn.join(",")]);
 
-  const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
-  const children = childrenOf(state, ticket.id);
   const dependents = useMemo(() => Object.values(state.tickets).filter((t) => t.dependsOn.includes(ticket.key)), [state.tickets, ticket.key]);
   const depStates = dependencyStates(state, ticket);
   const runs = useMemo(
@@ -159,24 +157,6 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
             onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))}
           />
         </dd>
-        {parent && (
-          <>
-            <dt>Conductor</dt>
-            <dd>
-              <TicketLink t={parent} onOpen={open} />
-            </dd>
-          </>
-        )}
-        {children.length > 0 && (
-          <>
-            <dt>Children</dt>
-            <dd className="stack">
-              {children.map((c) => (
-                <TicketLink key={c.id} t={c} onOpen={open} />
-              ))}
-            </dd>
-          </>
-        )}
         {dependents.length > 0 && (
           <>
             <dt>Blocks</dt>
