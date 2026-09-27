@@ -25,6 +25,9 @@ for (let i = 0; i < 50; i++) {
   await Bun.sleep(100);
 }
 
+const projects = (await (await fetch(base + "/projects", { headers: { authorization: `Bearer ${token}` } })).json()).data as { id: string; key: string }[];
+const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
+
 const shots: { name: string; route: string; delay?: number }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -34,6 +37,7 @@ const shots: { name: string; route: string; delay?: number }[] = [
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
   { name: "settings", route: "#/settings" },
+  { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "compose", route: "#/compose" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },

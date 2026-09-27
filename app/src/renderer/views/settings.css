@@ -317,3 +317,9 @@
 .danger-card {
   border-color: color-mix(in srgb, var(--red) 35%, var(--border));
 }
+.project-settings .settings-row-sub:not(.mono) {
+  white-space: normal;
+}
+.project-settings .settings-row-main {
+  max-width: 460px;
+}
