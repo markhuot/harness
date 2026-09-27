@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatRoute, parseRoute, type Route } from "./route";
+import { formatRoute, parsePluginTab, parseRoute, pluginTabRoute, type Route } from "./route";
 
 test("parses board routes with and without a project", () => {
   expect(parseRoute("")).toEqual({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
@@ -28,4 +28,15 @@ test("project settings route", () => {
   expect(parseRoute("#/project/p1")).toEqual({ view: "project", projectId: "p1" });
   // No id: nothing to show, fall back to the board.
   expect(parseRoute("#/project")).toMatchObject({ view: "board" });
+});
+
+test("plugin tabs round-trip as plugin:<id>:<tab>; malformed ones fall back to summaries", () => {
+  const r: Route = { view: "board", projectId: null, ticketKey: "HELLO-1", tab: pluginTabRoute("git", "changes") };
+  expect(formatRoute(r)).toBe("#/board/all/ticket/HELLO-1/plugin:git:changes");
+  expect(parseRoute(formatRoute(r))).toEqual(r);
+  expect(parsePluginTab("plugin:git:changes")).toEqual({ pluginId: "git", tabId: "changes" });
+  expect(parsePluginTab("details")).toBeNull();
+  for (const bad of ["plugin:git", "plugin::x", "plugin:Git:changes", "plugin:git:changes:extra"]) {
+    expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "summaries" });
+  }
 });

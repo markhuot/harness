@@ -4,8 +4,23 @@
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
 
-export type TicketTab = "summaries" | "transcript" | "browser" | "details";
-export const TICKET_TABS: TicketTab[] = ["summaries", "transcript", "browser", "details"];
+export type BuiltinTicketTab = "summaries" | "transcript" | "browser" | "details";
+/** Built-in tabs, or a plugin tab as "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins"). */
+export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}`;
+export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "transcript", "browser", "details"];
+
+const PLUGIN_TAB = /^plugin:([a-z0-9][a-z0-9_-]*):([a-z0-9][a-z0-9_-]*)$/;
+export function pluginTabRoute(pluginId: string, tabId: string): TicketTab {
+  return `plugin:${pluginId}:${tabId}`;
+}
+/** "plugin:git:changes" → { pluginId: "git", tabId: "changes" }; null for built-in tabs. */
+export function parsePluginTab(tab: string): { pluginId: string; tabId: string } | null {
+  const m = PLUGIN_TAB.exec(tab);
+  return m ? { pluginId: m[1]!, tabId: m[2]! } : null;
+}
+function isTicketTab(t: string | undefined): t is TicketTab {
+  return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t));
+}
 
 export type Route =
   | { view: "board"; projectId: string | null; ticketKey: string | null; tab: TicketTab }
@@ -30,7 +45,7 @@ export function parseRoute(hash: string): Route {
   if (rest[i] === "ticket" && rest[i + 1]) {
     ticketKey = rest[i + 1]!;
     const t = rest[i + 2] as TicketTab | undefined;
-    if (t && TICKET_TABS.includes(t)) tab = t;
+    if (isTicketTab(t)) tab = t;
   }
   return { view: "board", projectId, ticketKey, tab };
 }
