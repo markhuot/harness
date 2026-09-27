@@ -29,7 +29,13 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
   const openSettings = (p: Project) => navigate({ view: "project", projectId: p.id });
 
   const removeProject = async (p: Project) => {
-    const n = Object.values(state.tickets).filter((t) => t.projectId === p.id).length;
+    // Done tickets page in, so ask the service how many there are.
+    const mine = Object.values(state.tickets).filter((t) => t.projectId === p.id);
+    const done = await client
+      .ticketPage({ status: "done", projectId: p.id, limit: 1 })
+      .then((page) => page.total)
+      .catch(() => mine.filter((t) => t.status === "done").length);
+    const n = mine.filter((t) => t.status !== "done").length + done;
     const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
     if (!confirm(`Remove ${p.name} (${p.key}) from Harness?\n\nThis deletes ${what}. Files on disk, branches and worktrees are left alone.`)) return;
     const ok = await act(() => client.deleteProject(p.id), "Project removed");

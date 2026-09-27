@@ -179,6 +179,13 @@ describe("done paging", () => {
     expect(s.tickets[allDone[30]!.id]!.title).toBe("live edit");
   });
 
+  test("a project's full ticket list (project settings) loads every done ticket but doesn't flood Done", () => {
+    let s = booted();
+    s = run(s, { type: "tickets", tickets: allDone });
+    expect(Object.values(s.tickets).filter((t) => t.status === "done").length).toBe(120);
+    expect(boardColumns(s, "p1").done.length).toBe(50);
+  });
+
   test("without paging state (an older service) Done shows every loaded done ticket", () => {
     const s = run(initialState, snapshot([live, ...allDone.slice(0, 3)]));
     expect(keys(boardColumns(s, "p1").done)).toEqual(["D2", "D1", "D0"]);

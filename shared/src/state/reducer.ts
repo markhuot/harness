@@ -102,6 +102,8 @@ export type Action =
   | { type: "connected"; connected: boolean }
   /** `requestedKey`: the key the detail was fetched by (an old key records an alias) */
   | { type: "detail"; detail: TicketDetail; requestedKey?: string }
+  /** Tickets fetched outside a snapshot/page (e.g. one project's full list): merged, newer live versions win */
+  | { type: "tickets"; tickets: Ticket[] }
   /** The service has no ticket with these keys (404) */
   | { type: "missingKeys"; keys: string[] }
   | { type: "transcript"; sessionId: string; entries: TranscriptEntry[] }
@@ -316,6 +318,8 @@ export function reducer(state: State, action: Action): State {
       };
     case "drivers":
       return { ...state, drivers: action.drivers };
+    case "tickets":
+      return { ...state, tickets: mergeTickets(state.tickets, action.tickets) };
     case "missingKeys": {
       const missingKeys = { ...state.missingKeys };
       for (const k of action.keys) missingKeys[k.toUpperCase()] = true;

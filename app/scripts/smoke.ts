@@ -742,6 +742,20 @@ try {
       return n === 50 && n;
     }).catch(() => 0);
     check("reconnect resets Done paging to the first page", donePage === 50, String(donePage));
+    // Project settings loads the project's done tickets itself: the rename preview spans them
+    // even though the board hasn't paged them in (HELLOHARNESS-1 and -2 are old done tickets).
+    const hh2 = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "HELLOHARNESS")!;
+    await js(`location.hash = "#/project/${hh2.id}/settings"`);
+    await until("key input after reconnect", () => exists(".key-input"));
+    await type(".key-input", "hel");
+    const previewText = () => js<string>(`document.querySelector("[data-testid=key-preview]")?.textContent ?? ""`);
+    const pv = await until("rename preview after reconnect", async () => {
+      const t = await previewText();
+      return t.includes("HELLOHARNESS-1…3") && t;
+    }, 4000).catch(previewText);
+    check("rename preview counts done tickets the board hasn't loaded", pv.includes("existing HELLOHARNESS-1…3 become HEL-1…3"), pv);
+    await type(".key-input", "HELLOHARNESS");
+    await js(`location.hash = "#/board/all"`);
   }
 
   // 8. Settings → Network: listen modes, pairing QR, bad custom host, token rotation.

@@ -36,9 +36,21 @@ export function ProjectSettingsView() {
 }
 
 function ProjectSettings({ project }: { project: Project }) {
-  const { state, client, navigate } = useStore();
+  const { state, client, navigate, dispatch, epoch } = useStore();
   const act = useAction();
   const save = (body: Parameters<typeof client.updateProject>[1], ok?: string) => act(() => client.updateProject(project.id, body), ok);
+  // The board only pages done tickets in; renames (the key preview) and the delete confirmation
+  // need every ticket of the project, so load the full list here.
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .listTickets(project.id)
+      .then((tickets) => !cancelled && dispatch({ type: "tickets", tickets }))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client, dispatch, project.id, epoch]);
   const tickets = Object.values(state.tickets).filter((t) => t.projectId === project.id);
   const openBoard = () => navigate({ view: "board", projectId: project.id, ticketKey: null, tab: "summaries" });
 
