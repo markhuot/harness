@@ -1,1 +1,4 @@
-export { TicketDetailScreen as default } from "../../src/screens/TicketDetail";
+import { requireStore } from "../../src/screens/RequireStore";
+import { TicketDetailScreen } from "../../src/screens/TicketDetail";
+
+export default requireStore(TicketDetailScreen);

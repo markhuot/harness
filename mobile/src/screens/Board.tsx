@@ -26,6 +26,12 @@ export function BoardScreen() {
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const pager = useRef<FlatList<TicketStatus>>(null);
+  const strip = useRef<ScrollView>(null);
+  const chipX = useRef<Record<number, number>>({});
+  useEffect(() => {
+    const x = chipX.current[page];
+    if (x !== undefined) strip.current?.scrollTo({ x: Math.max(0, x - 40), animated: true });
+  }, [page]);
 
   const projectId = prefs.boardProject && state.projects[prefs.boardProject] ? prefs.boardProject : null;
   const project = projectId ? state.projects[projectId] : null;
@@ -107,13 +113,14 @@ export function BoardScreen() {
         }}
       />
       <ConnectionBanner />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.statusBar}>
+      <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.statusBar}>
         {TICKET_STATUSES.map((s, i) => {
           const on = i === page;
           return (
             <Pressable
               key={s}
               onPress={() => goTo(i)}
+              onLayout={(e) => (chipX.current[i] = e.nativeEvent.layout.x)}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
               accessibilityLabel={`${STATUS_LABEL[s]}, ${shown[s].length}`}

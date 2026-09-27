@@ -1,1 +1,4 @@
-export { TriageScreen as default } from "../../src/screens/Inbox";
+import { requireStore } from "../../src/screens/RequireStore";
+import { TriageScreen } from "../../src/screens/Inbox";
+
+export default requireStore(TriageScreen);

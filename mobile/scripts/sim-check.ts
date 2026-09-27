@@ -73,14 +73,17 @@ interface AXNode {
 async function findElement(udid: string, match: (label: string) => boolean): Promise<AXNode | null> {
   const walk = (n: AXNode): AXNode | null => (n.AXLabel && match(n.AXLabel) ? n : (n.children ?? []).map(walk).find(Boolean) ?? null);
   try {
-    return (JSON.parse(await axe("describe-ui", "--udid", udid)) as AXNode[]).map(walk).find(Boolean) ?? null;
+    const out = await axe("describe-ui", "--udid", udid);
+    return (JSON.parse(out.slice(out.indexOf("["))) as AXNode[]).map(walk).find(Boolean) ?? null;
   } catch {
     return null;
   }
 }
 async function tapWhere(udid: string, label: string | ((l: string) => boolean), opts: { longPress?: number; timeout?: number } = {}) {
   const match = typeof label === "string" ? (l: string) => l === label : label;
-  const el = await until(`element ${label}`, () => findElement(udid, match), opts.timeout ?? 8000);
+  const el = await until(`element ${label}`, () => findElement(udid, match), opts.timeout ?? 8000).catch(async (e) => {
+    throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 12).join(" | ")}`);
+  });
   const x = String(Math.round(el.frame.x + el.frame.width / 2));
   const y = String(Math.round(el.frame.y + el.frame.height / 2));
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
@@ -247,7 +250,7 @@ try {
     ["project-settings", `harness://project/${seeded.project.id}`],
     ["connect", "harness://connect"],
   ];
-  for (const theme of ["light", "dark"] as const) {
+  for (const theme of flag("interactions-only") ? [] : (["light", "dark"] as const)) {
     await simctl("ui", udid, "appearance", theme);
     for (const [name, url, wait] of screens) {
       if (only && !only.includes(name)) continue;
@@ -296,7 +299,7 @@ try {
     });
     await check("composer answers a blocked ticket", async () => {
       await fresh(`harness://ticket/${k(seeded.blocked)}`);
-      await tapWhere(udid, "Message the agent");
+      await tapWhere(udid, (l) => l.startsWith("Message the agent"));
       await axe("type", "Use Happy Cog", "--udid", udid);
       await tapWhere(udid, "Send");
       const t = await settle(seeded.blocked.key, (x) => x.status !== "blocked", 15000);
@@ -314,9 +317,7 @@ try {
       await Bun.sleep(800);
       await tapWhere(udid, (l) => l.startsWith(`${seeded.browse.key} `), { longPress: 1.2 });
       await Bun.sleep(800);
-      await tapWhere(udid, "Move to");
-      await Bun.sleep(500);
-      await tapWhere(udid, "Done");
+      await tapWhere(udid, "Move to Done");
       const t = await settle(seeded.browse.key, (x) => x.status === "done", 15000);
       return `${t.key} → ${t.status}`;
     });

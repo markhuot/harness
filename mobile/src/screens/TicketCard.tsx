@@ -1,9 +1,8 @@
 // A board card with everything the desktop card shows. Long-press opens the native context menu
-// (move between columns, reorder, copy key).
+// (move between columns, reorder, copy key); VoiceOver gets the moves as custom actions.
 
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Link } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { childrenOf, dependencyStates, dimOnBoard, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
@@ -14,14 +13,8 @@ import { ModelBadge } from "../ui/selects";
 import { ConductorRollup } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
 import { haptic } from "../ui/haptics";
+import { pick } from "../ui/pick";
 
-const STATUS_SYMBOL: Record<TicketStatus, string> = {
-  planning: "pencil.and.list.clipboard",
-  in_progress: "play.circle",
-  blocked: "exclamationmark.octagon",
-  review: "eye",
-  done: "checkmark.circle",
-};
 
 export interface CardProps {
   ticket: Ticket;
@@ -50,7 +43,6 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         dim && { backgroundColor: c.bgColumn, paddingVertical: 9, gap: 5 },
         t.kind === "conductor" && { borderLeftWidth: 3, borderLeftColor: c.violet },
       ]}
-      accessibilityLabel={`${t.key} ${t.title}`}
     >
       <View style={styles.top}>
         <Text style={[styles.key, { color: c.text3 }]}>{t.key}</Text>
@@ -124,37 +116,40 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
     </View>
   );
 
+  const menu = async () => {
+    haptic("heavy");
+    const v = await pick<string>({
+      title: `${t.key} · ${t.title}`.slice(0, 90),
+      choices: [
+        ...TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ value: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` })),
+        ...(t.status !== "done" ? [{ value: "top", label: "Move to top" }, { value: "bottom", label: "Move to bottom" }] : []),
+        ...(parent ? [{ value: "parent", label: `Open ${parent.key}` }] : []),
+        { value: "copy", label: "Copy key" },
+      ],
+    });
+    if (!v) return;
+    if (v.startsWith("move:")) {
+      haptic("success");
+      onMove(t, v.slice(5) as TicketStatus);
+    } else if (v === "top" || v === "bottom") onMove(t, t.status, v);
+    else if (v === "parent" && parent) onOpenKey(parent.key);
+    else if (v === "copy") void Clipboard.setStringAsync(t.key);
+  };
+
   return (
-    <Link href={{ pathname: "/ticket/[key]", params: { key: t.key } }} asChild>
-      <Link.Trigger>
-        <Pressable style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>{body}</Pressable>
-      </Link.Trigger>
-      <Link.Menu title={`${t.key} · ${t.title}`.slice(0, 80)}>
-        <Link.Menu title="Move to" icon="arrow.right.square">
-          {TICKET_STATUSES.map((s) => (
-            <Link.MenuAction
-              key={s}
-              title={STATUS_LABEL[s]}
-              icon={STATUS_SYMBOL[s] as never}
-              isOn={t.status === s}
-              disabled={t.status === s}
-              onPress={() => {
-                haptic("success");
-                onMove(t, s);
-              }}
-            />
-          ))}
-        </Link.Menu>
-        {t.status !== "done" ? (
-          <Link.MenuAction title="Move to top" icon="arrow.up.to.line" onPress={() => onMove(t, t.status, "top")} />
-        ) : null}
-        {t.status !== "done" ? (
-          <Link.MenuAction title="Move to bottom" icon="arrow.down.to.line" onPress={() => onMove(t, t.status, "bottom")} />
-        ) : null}
-        {parent ? <Link.MenuAction title={`Open ${parent.key}`} icon="arrow.turn.left.up" onPress={() => onOpenKey(parent.key)} /> : null}
-        <Link.MenuAction title="Copy key" icon="number" onPress={() => void Clipboard.setStringAsync(t.key)} />
-      </Link.Menu>
-    </Link>
+    <Pressable
+      onPress={() => onOpenKey(t.key)}
+      onLongPress={() => void menu()}
+      delayLongPress={350}
+      accessibilityRole="button"
+      accessibilityLabel={`${t.key} ${t.title}${t.pendingApproval ? ", needs approval" : t.status === "blocked" ? ", blocked" : ""}`}
+      accessibilityHint="Opens the ticket. Touch and hold to move it."
+      accessibilityActions={TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ name: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` }))}
+      onAccessibilityAction={(e) => e.nativeEvent.actionName.startsWith("move:") && onMove(t, e.nativeEvent.actionName.slice(5) as TicketStatus)}
+      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}
+    >
+      {body}
+    </Pressable>
   );
 }, cardPropsEqual);
 

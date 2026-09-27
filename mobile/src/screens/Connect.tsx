@@ -94,7 +94,7 @@ export function ConnectScreen() {
 /** harness://pair?url=…&token=… (from the Camera app or a link). */
 export function PairScreen() {
   const params = useLocalSearchParams<{ url?: string; token?: string }>();
-  const { pair } = useApp();
+  const { pair, loaded } = useApp();
   const c = useColors();
   const router = useRouter();
   const [status, setStatus] = useState<{ busy: boolean; error: string | null; host: string }>({ busy: true, error: null, host: "" });
@@ -112,8 +112,9 @@ export function PairScreen() {
     router.replace("/board");
   };
   useEffect(() => {
-    void run();
-  }, [params.url, params.token]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Wait for the saved servers: pairing a Mac that's already saved reuses its entry.
+    if (loaded) void run();
+  }, [params.url, params.token, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center", gap: 16 }}>
       <Stack.Screen options={{ title: "Pairing" }} />

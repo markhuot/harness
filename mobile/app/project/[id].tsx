@@ -1,1 +1,4 @@
-export { ProjectSettingsScreen as default } from "../../src/screens/ProjectSettings";
+import { requireStore } from "../../src/screens/RequireStore";
+import { ProjectSettingsScreen } from "../../src/screens/ProjectSettings";
+
+export default requireStore(ProjectSettingsScreen);

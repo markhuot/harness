@@ -1,1 +1,4 @@
-export { NewSessionScreen as default } from "../src/screens/NewSession";
+import { requireStore } from "../src/screens/RequireStore";
+import { NewSessionScreen } from "../src/screens/NewSession";
+
+export default requireStore(NewSessionScreen);

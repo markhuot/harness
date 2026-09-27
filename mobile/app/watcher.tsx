@@ -1,1 +1,4 @@
-export { WatcherFormScreen as default } from "../src/screens/WatcherForm";
+import { requireStore } from "../src/screens/RequireStore";
+import { WatcherFormScreen } from "../src/screens/WatcherForm";
+
+export default requireStore(WatcherFormScreen);

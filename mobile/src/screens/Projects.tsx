@@ -40,7 +40,7 @@ export function ProjectsScreen() {
     });
 
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={{ padding: 16, gap: 18 }}>
+    <ScrollView style={{ backgroundColor: c.bg }} contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16, gap: 18 }}>
       <Card>
         <NavRow icon="inbox" label="Inbox" badge={triaging || undefined} onPress={() => (router.dismiss(), router.navigate("/inbox"))} />
         <NavRow icon="layers" label="All projects" count={totalOpen} active={!prefs.boardProject} onPress={() => choose(null)} last />
