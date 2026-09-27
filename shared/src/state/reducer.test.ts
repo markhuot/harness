@@ -3,6 +3,7 @@ import type { Project, Run, Session, Summary, Ticket, TranscriptEntry } from "..
 import {
   boardColumns,
   dependencyStates,
+  hasCustomDriver,
   initialState,
   liveDelta,
   mergeById,
@@ -322,6 +323,28 @@ describe("board selectors", () => {
       ["A", false],
       ["ZZZ-9", false],
     ]);
+  });
+});
+
+describe("hasCustomDriver", () => {
+  const settings = { defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: "auto", classifier: "claude-cli", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false } as const;
+  const withProjects = (p1Driver: string | null) =>
+    ({ ...initialState, settings, projects: { p1: { ...project("p1", "HAR"), defaultDriver: p1Driver } } }) as State;
+
+  test("the global default counts as default when the project has none", () => {
+    const s = withProjects(null);
+    expect(hasCustomDriver(s, ticket("a", { driver: "claude-code" }))).toBe(false);
+    expect(hasCustomDriver(s, ticket("a", { driver: "codex" }))).toBe(true);
+  });
+
+  test("a project's own default overrides the global one", () => {
+    const s = withProjects("codex");
+    expect(hasCustomDriver(s, ticket("a", { driver: "codex" }))).toBe(false);
+    expect(hasCustomDriver(s, ticket("a", { driver: "claude-code" }))).toBe(true);
+  });
+
+  test("stays quiet until settings load", () => {
+    expect(hasCustomDriver(initialState, ticket("a", { driver: "codex" }))).toBe(false);
   });
 });
 

@@ -365,6 +365,17 @@ export function triageSessions(state: State): Session[] {
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
+/** The driver new tickets in a project get: the project's own default, else the global one (null until settings load). */
+export function defaultDriverOf(state: State, projectId: string): string | null {
+  return state.projects[projectId]?.defaultDriver ?? state.settings?.defaultDriver ?? null;
+}
+
+/** Whether a ticket runs on something other than its project's default driver, i.e. worth labelling. */
+export function hasCustomDriver(state: State, ticket: Ticket): boolean {
+  const d = defaultDriverOf(state, ticket.projectId);
+  return d !== null && ticket.driver !== d;
+}
+
 export function childrenOf(state: State, ticketId: string): Ticket[] {
   return Object.values(state.tickets)
     .filter((t) => t.parentId === ticketId)

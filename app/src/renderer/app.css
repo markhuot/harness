@@ -449,13 +449,6 @@
   font-size: 12px;
   font-weight: 500;
 }
-.working {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--accent-text);
-}
 .detail-hero {
   padding: 2px 20px 14px;
 }
