@@ -302,6 +302,63 @@ export interface Settings {
   reviewModels: Record<string, string | null>;
   /** Stored API key for the anthropic-api driver (never sent back to clients in full) */
   anthropicApiKey: string | null;
+  /**
+   * Which addresses the service listens on (DESIGN.md "Network"). The service always sends it
+   * (default { mode: "localhost" }); optional so clients tolerate an older service without it.
+   */
+  listen?: ListenSetting;
+}
+
+// ---------------------------------------------------------------------------
+// Network (listen addresses, pairing)
+// ---------------------------------------------------------------------------
+
+/**
+ * localhost → 127.0.0.1 · tailscale → the Tailscale IPv4 + 127.0.0.1 · any → 0.0.0.0 ·
+ * custom → `host` (must be a local interface address) + 127.0.0.1.
+ */
+export const LISTEN_MODES = ["localhost", "tailscale", "any", "custom"] as const;
+export type ListenMode = (typeof LISTEN_MODES)[number];
+
+export interface ListenSetting {
+  mode: ListenMode;
+  /** Hostname or IP for mode "custom" */
+  host?: string;
+}
+
+export interface BoundAddress {
+  /** The address a listener is bound to, e.g. "127.0.0.1", "100.107.188.66", "0.0.0.0" */
+  address: string;
+  /** http://<address>:<port> (IPv6 in brackets) */
+  url: string;
+}
+
+/** GET /network */
+export interface NetworkStatus {
+  /** The configured mode (settings.listen.mode, or HARNESS_HOST's) */
+  mode: ListenMode;
+  /** The configured custom host (mode "custom"), else null */
+  host: string | null;
+  port: number;
+  /** Listeners that are up right now. Always includes loopback (127.0.0.1 or 0.0.0.0). */
+  bound: BoundAddress[];
+  /** The mode the bound listeners serve; differs from `mode` while falling back to localhost */
+  active: ListenMode;
+  /** Tailscale on this machine, when it is running */
+  tailscale: { ip: string; dnsName: string | null } | null;
+  /** Why the configured mode isn't bound (boot fallback, failed rebind), else null */
+  error: string | null;
+  /** HARNESS_HOST when it overrides the setting (the setting can't be changed then) */
+  override: string | null;
+}
+
+/** GET /pairing: what a phone needs to connect. `pairUrl` is what the QR code encodes. */
+export interface PairingInfo {
+  /** Base URL on the best reachable non-loopback address, e.g. http://100.107.188.66:7717 */
+  url: string;
+  token: string;
+  /** harness://pair?url=<encodeURIComponent(url)>&token=<encodeURIComponent(token)> */
+  pairUrl: string;
 }
 
 // ---------------------------------------------------------------------------

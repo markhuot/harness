@@ -26,6 +26,8 @@ import type {
   BrowserState,
   PluginInfo,
   PluginTab,
+  NetworkStatus,
+  PairingInfo,
 } from "./protocol";
 
 export class HarnessApiError extends Error {
@@ -185,6 +187,23 @@ export class HarnessClient {
   }
   updateSettings(body: Partial<Settings>) {
     return this.request<PublicSettings>("PATCH", "/settings", body);
+  }
+
+  // Network & pairing
+  /** Listen mode, bound addresses and Tailscale status. */
+  network() {
+    return this.request<NetworkStatus>("GET", "/network");
+  }
+  /** The link a phone scans (409 in localhost mode: nothing off this machine can reach the service). */
+  pairing() {
+    return this.request<PairingInfo>("GET", "/pairing");
+  }
+  /**
+   * Replace the bearer token. The old one stops working immediately (open sockets on it are closed),
+   * so callers must switch to the returned token — this client keeps using the old one.
+   */
+  rotateToken() {
+    return this.request<{ token: string }>("POST", "/token/rotate");
   }
 
   // Browser
