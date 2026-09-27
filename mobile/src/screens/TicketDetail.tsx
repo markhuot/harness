@@ -8,7 +8,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Ticket } from "@harness/shared";
-import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import { childrenOf, ticketByKey, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -29,11 +29,15 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 export function TicketDetailScreen() {
   const params = useLocalSearchParams<{ key: string; tab?: string }>();
   const ticketKey = String(params.key ?? "");
-  const { state, client, dispatch, epoch } = useStore();
+  const { state, loadDetail, watchKey, epoch } = useStore();
   const router = useRouter();
   const c = useColors();
   const [missing, setMissing] = useState(false);
-  const ticket = useMemo(() => Object.values(state.tickets).find((t) => t.key === ticketKey), [state.tickets, ticketKey]);
+  const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Done tickets page in: an older one may drop out of the store on a refetch; keep it resolved.
+  useEffect(() => watchKey(ticketKey), [watchKey, ticketKey]);
+  // A snapshot clears the dependents / children the detail brought; fetch it again then.
+  const hasDetail = !!ticket && state.dependents[ticket.id] !== undefined;
   const pluginTabs = usePluginTabs(ticket);
   const [tab, setTab] = useState<TicketTab>(isTicketTab(params.tab) ? params.tab : "summaries");
   useEffect(() => {
@@ -41,12 +45,11 @@ export function TicketDetailScreen() {
   }, [params.tab]);
 
   useEffect(() => {
+    if (hasDetail) return;
     let cancelled = false;
-    client
-      .getTicket(ticketKey)
+    loadDetail(ticketKey)
       .then((detail) => {
         if (cancelled) return;
-        dispatch({ type: "detail", detail });
         // An old key (from before a project rename) resolves to the current key; follow it.
         if (detail.ticket.key !== ticketKey) router.setParams({ key: detail.ticket.key });
       })
@@ -54,7 +57,7 @@ export function TicketDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [client, dispatch, ticketKey, epoch, router]);
+  }, [loadDetail, ticketKey, epoch, router, hasDetail]);
 
   if (!ticket) {
     return (

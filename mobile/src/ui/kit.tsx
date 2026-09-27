@@ -114,12 +114,16 @@ export function KindBadge({ ticket, childCount }: { ticket: Ticket; childCount?:
   );
 }
 
-export function Chip({ label, done, onPress, prefix }: { label: string; done: boolean; onPress?: () => void; prefix?: string }) {
+/**
+ * A dependency chip. `unknown` = the ticket isn't loaded yet (done tickets page in, so it's most
+ * likely an older done one): neutral, never "waiting", until it resolves.
+ */
+export function Chip({ label, done, onPress, prefix, unknown }: { label: string; done: boolean; onPress?: () => void; prefix?: string; unknown?: boolean }) {
   const c = useColors();
   const body = (
-    <View style={[s.chip, { borderColor: done ? c.greenSoft : c.borderStrong, borderStyle: done ? "solid" : "dashed", opacity: done ? 1 : 0.75 }]}>
-      <Icon name={done ? "check" : "clock"} size={9} color={done ? c.green : c.text2} strokeWidth={done ? 3 : 2} />
-      {prefix && <Text style={[s.chipText, { color: c.text3, fontFamily: undefined }]}>{prefix}</Text>}
+    <View style={[s.chip, { borderColor: done ? c.greenSoft : c.borderStrong, borderStyle: done || unknown ? "solid" : "dashed", opacity: done ? 1 : 0.75 }]}>
+      {!unknown && <Icon name={done ? "check" : "clock"} size={9} color={done ? c.green : c.text2} strokeWidth={done ? 3 : 2} />}
+      {prefix && !unknown && <Text style={[s.chipText, { color: c.text3, fontFamily: undefined }]}>{prefix}</Text>}
       <Text style={[s.chipText, { color: done ? c.green : c.text2 }]} maxFontSizeMultiplier={1.4}>
         {label}
       </Text>

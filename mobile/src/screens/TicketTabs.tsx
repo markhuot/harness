@@ -8,7 +8,7 @@ import {
   attentionOf,
   childrenOfTicket,
   dependencyStates,
-  depStates,
+  dependentsOf,
   driverLabel,
   groupChildren,
   inheritedModel,
@@ -59,7 +59,7 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           <SectionTitle>Depends on</SectionTitle>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} done={d.done} onPress={d.ticket ? () => open(d.key) : undefined} />
+            <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
           ))}
         </View>
       )}
@@ -114,6 +114,14 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   }, [children, client, dispatch, state.summaries]);
   useEffect(() => fetched.current.clear(), [epoch]);
 
+  // Until the conductor's detail lands, only its unfinished children are known (done ones page in).
+  const complete = !!state.childrenLoaded[ticket.id];
+  if (!children.length && !complete)
+    return (
+      <View style={{ padding: 30 }}>
+        <Spinner />
+      </View>
+    );
   if (!children.length)
     return (
       <Empty icon="conductor" title="No tickets yet">
@@ -124,7 +132,10 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   return (
     <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 30 }}>
       <Card style={{ padding: 13, gap: 9 }}>
-        <Text style={{ color: c.text, fontSize: 14.5, fontWeight: "500" }}>{progressLabel(progress)}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ color: c.text, fontSize: 14.5, fontWeight: "500", flex: 1 }}>{progressLabel(progress)}</Text>
+          {!complete && <Spinner />}
+        </View>
         <View style={{ flexDirection: "row" }}>
           <ProgressBar progress={progress} />
         </View>
@@ -158,7 +169,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 function ChildRow({ child: ch, defaultDriver, onOpen, first }: { child: Ticket; defaultDriver: string; onOpen: (key: string) => void; first: boolean }) {
   const { state } = useStore();
   const c = useColors();
-  const deps = depStates(state.tickets, ch);
+  const deps = dependencyStates(state, ch);
   const summary = latestSummary(state, ch.sessionId);
   const attention = attentionOf(ch);
   const showDriver = ch.driver !== defaultDriver;
@@ -202,7 +213,7 @@ function ChildRow({ child: ch, defaultDriver, onOpen, first }: { child: Ticket; 
       {(deps.length > 0 || showDriver || ch.model) && (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} onPress={d.ticket ? () => onOpen(d.key) : undefined} />
+            <Chip key={d.key} label={d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => onOpen(d.ticket?.key ?? d.key)} />
           ))}
           <View style={{ flex: 1 }} />
           {showDriver && <DriverBadge driver={ch.driver} />}
@@ -231,7 +242,8 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
   const depKey = ticket.dependsOn.join(",");
   useEffect(() => setDeps(ticket.dependsOn.join(", ")), [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dependents = useMemo(() => Object.values(state.tickets).filter((t) => t.dependsOn.includes(ticket.key)), [state.tickets, ticket.key]);
+  // The detail's list covers done dependents that aren't loaded; the live scan covers new ones.
+  const dependents = useMemo(() => dependentsOf(state, ticket), [state.tickets, state.dependents, state.keyAliases, ticket]); // eslint-disable-line react-hooks/exhaustive-deps
   const depList = dependencyStates(state, ticket);
   const runs = useMemo(() => Object.values(state.runs).filter((r) => r.sessionId === ticket.sessionId).sort((a, b) => b.createdAt - a.createdAt), [state.runs, ticket.sessionId]);
   const editable = ticket.status !== "done";
@@ -286,7 +298,7 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
           depList.length > 0 && (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
               {depList.map((d) => (
-                <Chip key={d.key} label={d.key} done={d.done} onPress={d.ticket ? () => open(d.key) : undefined} />
+                <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
               ))}
             </View>
           )
@@ -306,10 +318,10 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         {dependents.length > 0 && (
           <Prop label="Blocks">
             <View style={{ gap: 6, alignItems: "flex-end" }}>
-              {dependents.map((t) => (
-                <Pressable key={t.id} onPress={() => open(t.key)} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-                  <StatusDot status={t.status} />
-                  <Text style={{ fontFamily: MONO, color: c.accentText, fontSize: 13.5 }}>{t.key}</Text>
+              {dependents.map((d) => (
+                <Pressable key={d.key} onPress={() => open(d.key)} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+                  {d.ticket && <StatusDot status={d.ticket.status} />}
+                  <Text style={{ fontFamily: MONO, color: c.accentText, fontSize: 13.5 }}>{d.key}</Text>
                 </Pressable>
               ))}
             </View>

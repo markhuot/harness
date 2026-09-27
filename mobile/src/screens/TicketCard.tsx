@@ -95,7 +95,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       {deps.length > 0 && (
         <View style={styles.wrap}>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} done={d.done} />
+            <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} />
           ))}
         </View>
       )}
@@ -158,7 +158,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
   if (s1.projects !== s2.projects) return false;
-  if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
+  if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
   return true;
 }
 

@@ -38,12 +38,25 @@ function ProjectSettings({ project }: { project: Project }) {
   const router = useRouter();
   const inputStyle = useInputStyle();
   const save = (body: Parameters<typeof client.updateProject>[1], ok?: string) => act(() => client.updateProject(project.id, body), ok);
-  const tickets = Object.values(state.tickets).filter((t) => t.projectId === project.id);
+  // Done tickets page in, so the count for "Remove project" asks the service for its done total.
+  const [doneTotal, setDoneTotal] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    client
+      .ticketPage({ status: "done", projectId: project.id, limit: 1 })
+      .then((p) => live && setDoneTotal(p.total))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [client, project.id]);
+  const loaded = Object.values(state.tickets).filter((t) => t.projectId === project.id);
+  const ticketCount = loaded.filter((t) => t.status !== "done").length + (doneTotal ?? loaded.filter((t) => t.status === "done").length);
   const [path, setPath] = useState(project.path);
   useEffect(() => setPath(project.path), [project.path]);
 
   const remove = async () => {
-    const n = tickets.length;
+    const n = ticketCount;
     const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
     if (!(await confirm(`Remove ${project.name} (${project.key})?`, `This deletes ${what}. Files on disk, branches and worktrees are left alone.`, "Remove"))) return;
     const ok = await act(() => client.deleteProject(project.id), "Project removed");
@@ -102,7 +115,7 @@ function ProjectSettings({ project }: { project: Project }) {
         </SRow>
       </Group>
       <Group title="Danger zone">
-        <SRow title="Remove project" sub={`Deletes ${tickets.length ? `${tickets.length} ticket${tickets.length === 1 ? "" : "s"} and their history` : "the project"} from Harness. Files on disk are left alone.`} stacked last>
+        <SRow title="Remove project" sub={`Deletes ${ticketCount ? `${ticketCount} ticket${ticketCount === 1 ? "" : "s"} and their history` : "the project"} from Harness. Files on disk are left alone.`} stacked last>
           <Button title="Remove project…" icon="trash" variant="dangerSolid" onPress={() => void remove()} hapticKind="warning" />
         </SRow>
       </Group>

@@ -3,12 +3,18 @@
 // refetch what they own when `epoch` bumps), raw event fan-out for the Browser tab, and toasts.
 // Phone-specific: iOS suspends the socket in the background, so returning to the foreground
 // rebuilds it and refetches; a 401 (token rotated on the Mac) is surfaced for re-pairing.
+// Paging: the snapshot is every non-done ticket plus the first Done page for the board's project
+// filter; BoardLoader pages Done and runs the board search, DetailFetcher fills in the tickets
+// the UI references that aren't loaded (older done dependencies, conductors' done children).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { HarnessClient, type HarnessEvent, type HarnessSocket } from "@harness/shared";
-import { initialState, reducer, type Action, type State } from "@harness/shared/state";
+import { HarnessApiError, HarnessClient, type HarnessEvent, type HarnessSocket, type TicketDetail, type TicketPage } from "@harness/shared";
+import { DONE_PAGE_SIZE, initialState, LIVE_STATUSES, reducer, scopeOf, scopeProject, type Action, type State } from "@harness/shared/state";
 import { describeError, isUnauthorized } from "../lib/connection";
+import { BoardLoader } from "../lib/boardLoader";
+import { DetailFetcher } from "../lib/details";
+import { useApp } from "./app";
 import { haptic } from "../ui/haptics";
 
 type EventListener = (e: HarnessEvent) => void;
@@ -29,6 +35,14 @@ export interface Store {
   loadError: string | null;
   toast: (message: string, kind?: ToastKind) => void;
   baseUrl: string;
+  /** Done paging + board search requests (state lives in state.donePaging / state.search) */
+  loader: BoardLoader;
+  /** The board's project filter changed: snapshots page Done for it; fetches its first page. */
+  setBoardScope: (projectId: string | null) => void;
+  /** A ticket's detail merged into the store (shared with the background fetches for that key). */
+  loadDetail: (key: string) => Promise<TicketDetail>;
+  /** Keep this key resolved while mounted (a screen showing a ticket that may not be loaded). */
+  watchKey: (key: string) => () => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -41,17 +55,21 @@ export function useStore(): Store {
 
 export const useMaybeStore = () => useContext(Ctx);
 
-async function loadSnapshot(client: HarnessClient) {
-  const [projects, tickets, sessions, watchers, mappings, settings, drivers] = await Promise.all([
+/** A service from before paging answers 404 here (and ignores ?status=, sending every ticket). */
+const legacyPage = (e: unknown) => (e instanceof HarnessApiError && e.status === 404 ? null : Promise.reject(e));
+
+async function loadSnapshot(client: HarnessClient, scope: string) {
+  const [projects, tickets, donePage, sessions, watchers, mappings, settings, drivers] = await Promise.all([
     client.listProjects(),
-    client.listTickets(),
+    client.listTickets(undefined, { status: LIVE_STATUSES }),
+    client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE }).catch(legacyPage) as Promise<TicketPage | null>,
     client.listSessions(),
     client.listWatchers().catch(() => []),
     client.listMappings().catch(() => []),
     client.getSettings().catch(() => null),
     client.listDrivers().catch(() => []),
   ]);
-  return { projects, tickets, sessions, watchers, mappings, settings, drivers };
+  return { projects, tickets, sessions, watchers, mappings, settings, drivers, ...(donePage ? { donePage: { scope, page: donePage } } : {}) };
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
@@ -73,14 +91,22 @@ export function StoreProvider({ baseUrl, token, toast, children }: { baseUrl: st
   const client = useMemo(() => new HarnessClient({ baseUrl, token }), [baseUrl, token]);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const { prefs } = useApp();
+  const scopeRef = useRef(scopeOf(prefs.boardProject));
+  const loader = useMemo(() => new BoardLoader({ client, dispatch, getState: () => stateRef.current, describe: (e) => describeError(e, baseUrl) }), [client, baseUrl]);
+  const details = useMemo(() => new DetailFetcher({ client, dispatch }), [client]);
+  useEffect(() => () => loader.dispose(), [loader]);
 
   const refresh = useCallback(async () => {
     try {
-      const snapshot = await loadSnapshot(client);
+      const snapshot = await loadSnapshot(client, scopeRef.current);
       dispatch({ type: "snapshot", snapshot });
+      loader.legacy = !snapshot.donePage;
+      loader.snapshotApplied();
+      details.reset();
       setAuthError(null);
       setLoadError(null);
-      const done = snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
+      const done = (snapshot.donePage?.page.tickets ?? snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt))).slice(0, 12);
       const wanted = [...snapshot.tickets.filter((t) => t.status !== "done"), ...done];
       void pool(wanted, 6, async (t) => {
         const summaries = await client.listSummaries(t.key);
@@ -90,7 +116,32 @@ export function StoreProvider({ baseUrl, token, toast, children }: { baseUrl: st
       if (isUnauthorized(e)) setAuthError(describeError(e));
       else setLoadError(describeError(e, baseUrl));
     }
-  }, [client, baseUrl]);
+  }, [client, baseUrl, loader, details]);
+
+  const setBoardScope = useCallback(
+    (projectId: string | null) => {
+      scopeRef.current = scopeOf(projectId);
+      void loader.ensureFirstPage(projectId);
+    },
+    [loader],
+  );
+
+  // Fill in what the UI references but the snapshot didn't carry (see DetailFetcher).
+  const [watched, setWatched] = useState<Record<string, number>>({});
+  const watchKey = useCallback((key: string) => {
+    setWatched((w) => ({ ...w, [key]: (w[key] ?? 0) + 1 }));
+    return () =>
+      setWatched((w) => {
+        const next = { ...w };
+        if ((next[key] ?? 0) <= 1) delete next[key];
+        else next[key]!--;
+        return next;
+      });
+  }, []);
+  useEffect(() => {
+    details.sync(state, Object.keys(watched));
+  }, [details, state.ready, state.tickets, state.dependents, state.sessions, state.keyAliases, state.missingKeys, state.childrenLoaded, watched]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadDetail = useCallback((key: string) => details.load(key), [details]);
 
   const socket = useMemo(() => {
     let first = true;
@@ -150,8 +201,8 @@ export function StoreProvider({ baseUrl, token, toast, children }: { baseUrl: st
   }, []);
 
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl }),
-    [state, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl],
+    () => ({ state, dispatch, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey }),
+    [state, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
