@@ -98,3 +98,15 @@
 .board-pane .search input {
   color: var(--text);
 }
+
+/* A narrow board header: the title gives way (clipped) rather than running under the toolbar,
+   and the switch drops its icon last. */
+.board-pane > .view-header .view-title {
+  overflow: hidden;
+  flex-shrink: 1;
+}
+@container board-pane (max-width: 460px) {
+  .board-pane .children-toggle > svg {
+    display: none;
+  }
+}
