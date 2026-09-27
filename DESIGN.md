@@ -161,7 +161,9 @@ Native tools (only for drivers with `hasBuiltinTools: false`): `bash {command, t
 `read_file {path, offset?, limit?}`, `write_file {path, content}`,
 `edit_file {path, old_string, new_string, replace_all?}`, `list_files {path?, pattern?}`.
 Paths resolve relative to the run cwd. Review, plan and conductor runs get read-only native
-tools (`read_file`, `list_files`, `bash`); triage gets none.
+tools (`read_file`, `list_files`, `bash`); triage gets none. Every native call first asks
+`HarnessOps.checkPermission` (the PermissionGate, see "Permissions"); a deny becomes the tool's
+error result.
 
 `toolsForRun(kind, driver)` in `service/src/tools/index.ts` is the single source of truth.
 
@@ -172,13 +174,81 @@ tools (`read_file`, `list_files`, `bash`); triage gets none.
   --include-partial-messages`), which carries your **team-plan OAuth** login
   (`claude auth login --claudeai`; status via `claude auth status --json`). Harness tools are
   injected with `--mcp-config` pointing at `POST /mcp/:runToken`. Conversation continuity via
-  `--resume <session_id>` (stored as driver state). Permission mode from settings (default
-  `acceptEdits`: org policy can disable `bypassPermissions`, which then silently falls back to
-  `default`); plan runs use `--permission-mode plan`. Every prompt the mode doesn't auto-allow
-  goes to `--permission-prompt-tool mcp__harness__permission_prompt` → `requestApproval` → a
-  human. The harness server entry sets `alwaysLoad: true` so its tools skip ToolSearch deferral.
+  `--resume <session_id>` (stored as driver state). `--permission-mode` comes from the ticket's
+  harness permission mode (see "Permissions"); plan runs use `--permission-mode plan`. Every
+  prompt the mode doesn't auto-allow goes to `--permission-prompt-tool
+  mcp__harness__permission_prompt` → `requestApproval` → a human. The harness server entry sets
+  `alwaysLoad: true` so its tools skip ToolSearch deferral.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
+
+### Permissions
+
+A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
+settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
+`auto`). Null at a level means "inherit". Plan (and triage) runs are always read-only.
+
+| Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
+| --- | --- | --- | --- |
+| `auto` | a classifier judges each unapproved action | `auto` (Claude Code's classifier) | classifier (below) |
+| `ask` | edits inside the workdir run; everything else asks a human | `acceptEdits` + prompt tool | human approval |
+| `read_only` | reads and read-only commands only | `dontAsk`, no prompt tool | deny |
+
+claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
+- `auto` works headless. Its classifier's denials do **not** go through the permission prompt
+  tool: the model gets an is_error tool_result "Permission for this action was denied by the
+  Claude Code auto mode classifier. Reason: [Containment Escape]…" and is told to stop and
+  explain (in the harness it calls `block`). The driver logs each such denial as a permission
+  entry (`backend: "claude-code"`). Anything the CLI still asks about goes to the prompt tool.
+- `auto` isn't available for every model (haiku): the CLI silently runs in `default`. The
+  driver compares the init event's `permissionMode` with what it asked for and posts
+  "Auto mode isn't available for <model>; unapproved actions will ask you instead." Those
+  prompts then reach the human through the prompt tool.
+- `read_only` uses `dontAsk`, not `plan`: dontAsk allows reads and read-only Bash and denies
+  the rest without prompting; plan writes a plan file under `~/.claude/plans` and asks to
+  `ExitPlanMode` through the prompt tool.
+- `cleanClaudeEnv` strips what a parent Claude Code session leaks (`CLAUDECODE`, `CLAUDE_PID`,
+  `CLAUDE_EFFORT`, `AI_AGENT`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_*` except user config).
+
+**PermissionGate** (`service/src/permissions/gate.ts`) for bash, write_file, edit_file and
+read_file/list_files, per call:
+1. Static policy: hard-deny patterns (`permissions/bash.ts`: recursive rm/chmod of `/`, `~`,
+   system dirs; download piped into a shell/interpreter; force-push or delete of main/master;
+   disk formatting; fork bombs) → deny in every mode. Read-only bash (a conservative allowlist:
+   ls, cat, rg, grep, find without -delete/-exec, git status/diff/log/…; any `$`, backtick,
+   subshell, redirect to a file, env prefix or unknown command falls through) → allow. Reads
+   inside the workdir → allow (not logged). Workdir checks resolve `..`, `~` and symlinks.
+2. `read_only` → deny anything else (grants don't apply).
+3. Edits inside the workdir (not `.git/`) → allow.
+4. Human grants (`ticket.allowedTools`, one-time grants) → allow.
+5. `ask` → `requestApproval` (source `policy`). `auto` → the classifier: `allow` → run;
+   `soft_deny` → `requestApproval` with the classifier's reason (source `classifier`);
+   `hard_deny` → deny with the reason. Timeout (60s), error or `classifier: "off"` →
+   `requestApproval`, never allow.
+
+Every decision on a gated call is appended as a transcript status entry with
+`content.permission` (tool, input summary, decision allow/ask/deny, reason, source,
+backend, latency, mode): "Auto-approved: git init — …". Approval cards show
+`pendingApproval.reason` / `source`. `requestApproval` refuses outright in `read_only`.
+
+**Classifier** (`permissions/classifier.ts`, `settings.classifier`): `claude-cli` (default) runs
+`claude -p --model sonnet --output-format json --json-schema {decision, reason} --tools ""
+--permission-mode dontAsk --strict-mcp-config --no-session-persistence --system-prompt-file …`
+in the workdir (dontAsk rather than plan: plan mode's context made the model reason about plan
+mode); `anthropic-api` calls the Messages API with the stored key and a forced `decide` tool;
+`off` asks a human. The system prompt carries Claude Code's auto-mode rules from `claude
+auto-mode config` (environment, allow, soft_deny, hard_deny; cached in
+`$HARNESS_HOME/auto-mode-rules.json`, refreshed daily or when `~/.claude/settings.json`
+changes; a built-in summary when the CLI is missing). The user turn has the tool call, cwd,
+run kind, ticket title + brief and the last 16 transcript lines. Measured: 4–9 s per call
+(`--effort low` is ~4 s but judged more harshly, so it isn't used).
+
+Migration 4 maps the old `claudePermissionMode` setting: `acceptEdits`/`bypassPermissions` →
+`ask`, `auto` → `auto`, `dontAsk` → `read_only` (dontAsk denied every write that wasn't
+pre-approved). PATCH /settings still accepts `claudePermissionMode` from older clients.
+
+Real checks (not `bun test`): `service/scripts/permissions-classifier-check.ts`,
+`service/scripts/claude-code-permissions-check.ts`.
 
 ### Models
 
@@ -217,7 +287,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
