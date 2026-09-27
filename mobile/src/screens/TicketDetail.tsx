@@ -8,11 +8,11 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Ticket } from "@harness/shared";
-import { childrenOf, ticketByKey, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import { childrenOf, hasCustomDriver, ticketByKey, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
-import { Badge, Button, Callout, DriverBadge, Empty, KindBadge, ProjectKey, ReviewMark, Spinner, StatusPill } from "../ui/kit";
+import { Badge, Button, Callout, DriverBadge, Empty, KindBadge, ReviewMark, Spinner, StatusPill } from "../ui/kit";
 import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
@@ -144,7 +144,6 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const [changes, setChanges] = useState(false);
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
-  const project = state.projects[ticket.projectId];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const ready = isReady(ticket);
   const k = ticket.key;
@@ -161,18 +160,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
       {!compact && (<>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <StatusPill status={ticket.status} />
-        {ticket.busy && (
-          <Badge tone="amber">
-            Working
-          </Badge>
-        )}
-        {project && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <ProjectKey k={project.key} size="sm" />
-            <Text style={{ color: c.text2, fontSize: 13 }}>{project.name}</Text>
-          </View>
-        )}
-        <DriverBadge driver={ticket.driver} />
+        {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
         <ModelBadge model={ticket.model} driver={ticket.driver} />
         <KindBadge ticket={ticket} childCount={children.length} />
         {ticket.branch && (

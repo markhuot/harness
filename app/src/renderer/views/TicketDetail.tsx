@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, depChipTitle, dependencyStates, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, ticketByKey, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, depChipTitle, dependencyStates, hasCustomDriver, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, ticketByKey, TICKET_TABS, type TicketTab } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
@@ -177,7 +177,6 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const [changes, setChanges] = useState(false);
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
-  const project = state.projects[ticket.projectId];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const ready = isReady(ticket);
   const k = ticket.key;
@@ -194,11 +193,6 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
         <span className="detail-key selectable">{k}</span>
         <StatusPill status={ticket.status} />
         <ModelBadge model={ticket.model} driver={ticket.driver} />
-        {ticket.busy && (
-          <span className="working">
-            <span className="spinner" /> Working
-          </span>
-        )}
         <div className="grow" />
         <MenuButton
           trigger={(toggle) => (
@@ -241,13 +235,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
         {parent && <ParentCrumb parent={parent} onOpen={(key) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "children" })} />}
         <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
-          {project && (
-            <span className="badge badge-outline">
-              <span className="project-key sm">{project.key.slice(0, 3)}</span>
-              {project.name}
-            </span>
-          )}
-          <DriverBadge driver={ticket.driver} />
+          {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
           <KindBadge ticket={ticket} childCount={children.length} />
           {ticket.branch && (
             <span className="badge badge-outline mono" title={ticket.workdir ?? undefined}>
