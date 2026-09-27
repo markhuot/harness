@@ -195,11 +195,14 @@ function AppearanceSection() {
 
 function ThemePicker({ appearance, prefs, systemDark, onPick }: { appearance: "light" | "dark"; prefs: Prefs; systemDark: boolean; onPick: (id: string) => void }) {
   const options = themeOptions(appearance, prefs, systemDark);
+  // Open scrolled so the picked theme is in view (swatches are 104pt wide with a 10pt gap).
+  const picked = Math.max(0, options.findIndex((o) => o.selected));
   return (
     <Group title={appearance === "light" ? "Light theme" : "Dark theme"} footer={pickerCaption(appearance, prefs, systemDark)}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        contentOffset={{ x: Math.max(0, picked * 114 - 114), y: 0 }}
         contentContainerStyle={{ padding: 12, gap: 10 }}
         accessibilityRole="radiogroup"
         accessibilityLabel={appearance === "light" ? "Light theme" : "Dark theme"}

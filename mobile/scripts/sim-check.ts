@@ -268,7 +268,7 @@ try {
     await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
     await Bun.sleep(2200);
     // Scroll down to the Appearance pickers.
-    await axe("swipe", "--start-x", "200", "--start-y", "700", "--end-x", "200", "--end-y", "150", "--duration", "0.4", "--udid", udid);
+    await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "2", "--udid", udid);
     await Bun.sleep(1200);
     await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
     await relaunch();
