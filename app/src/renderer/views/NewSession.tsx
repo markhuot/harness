@@ -15,12 +15,12 @@ function readLast(): string | null {
   }
 }
 
-export function NewSessionModal({ onClose }: { onClose: () => void }) {
+export function NewSessionModal({ onClose, initialProjectId = null }: { onClose: () => void; initialProjectId?: string | null }) {
   const { state, client, route, navigate } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
   const routeProject = route.view === "board" ? route.projectId : null;
-  const [chosen, setProjectId] = useState("");
+  const [chosen, setProjectId] = useState(initialProjectId ?? "");
   // Derived, not stored: stays valid when projects load after mount or the chosen one is deleted.
   const projectId = composerProject(state, chosen, [routeProject, readLast()]);
   const [prompt, setPrompt] = useState("");

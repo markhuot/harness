@@ -1,10 +1,11 @@
 import { useMemo } from "react";
+import type { Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import { MOD } from "../components/bits";
 
-export function Sidebar({ onNewSession }: { onNewSession: () => void }) {
+export function Sidebar({ onNewSession }: { onNewSession: (projectId?: string) => void }) {
   const { state, route, navigate, client } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
@@ -25,13 +26,43 @@ export function Sidebar({ onNewSession }: { onNewSession: () => void }) {
   };
 
   const onBoard = route.view === "board";
+  const openSettings = (p: Project) => navigate({ view: "project", projectId: p.id });
+
+  const removeProject = async (p: Project) => {
+    const n = Object.values(state.tickets).filter((t) => t.projectId === p.id).length;
+    const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
+    if (!confirm(`Remove ${p.name} (${p.key}) from Harness?\n\nThis deletes ${what}. Files on disk, branches and worktrees are left alone.`)) return;
+    const ok = await act(() => client.deleteProject(p.id), "Project removed");
+    if (ok && ((route.view === "board" && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id))) {
+      navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
+    }
+  };
+
+  const projectMenu = async (e: React.MouseEvent, p: Project) => {
+    e.preventDefault();
+    const bridge = window.harness;
+    // Outside Electron (plain browser dev) there's no native menu; settings is the useful default.
+    if (!bridge?.showContextMenu) return openSettings(p);
+    const choice = await bridge.showContextMenu([
+      { id: "settings", label: "Project settings…" },
+      { id: "new", label: `New session in ${p.name}` },
+      { type: "separator" },
+      { id: "reveal", label: "Reveal in Finder" },
+      { type: "separator" },
+      { id: "remove", label: "Remove project…" },
+    ]);
+    if (choice === "settings") openSettings(p);
+    else if (choice === "new") onNewSession(p.id);
+    else if (choice === "reveal") void bridge.revealInFinder(p.path);
+    else if (choice === "remove") void removeProject(p);
+  };
   const baseUrl = client.baseUrl.replace(/^https?:\/\//, "");
 
   return (
     <aside className="sidebar">
       <div className="sidebar-top" />
       <div className="sidebar-scroll">
-        <button className="btn new-session-btn" onClick={onNewSession}>
+        <button className="btn new-session-btn" onClick={() => onNewSession()}>
           <Icon name="plus" strokeWidth={2.25} />
           <span className="grow" style={{ textAlign: "left" }}>
             New session
@@ -64,15 +95,24 @@ export function Sidebar({ onNewSession }: { onNewSession: () => void }) {
         </div>
         <nav className="nav">
           {projects.map((p) => (
-            <NavItem
+            <div
               key={p.id}
-              label={p.name}
-              title={p.path}
-              prefix={<span className="project-key">{p.key.slice(0, 3)}</span>}
-              active={onBoard && route.projectId === p.id}
-              onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" })}
-              count={openCounts[p.id]}
-            />
+              className={`nav-row ${route.view === "project" && route.projectId === p.id ? "settings-open" : ""}`}
+              data-project-id={p.id}
+              onContextMenu={(e) => void projectMenu(e, p)}
+            >
+              <NavItem
+                label={p.name}
+                title={p.path}
+                prefix={<span className="project-key">{p.key.slice(0, 3)}</span>}
+                active={(onBoard && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id)}
+                onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" })}
+                count={openCounts[p.id]}
+              />
+              <button className="nav-gear" title={`${p.name} settings`} aria-label={`${p.name} settings`} onClick={() => openSettings(p)}>
+                <Icon name="settings" size={13} />
+              </button>
+            </div>
           ))}
           {projects.length === 0 && (
             <button className="nav-item nav-add" onClick={addProject}>

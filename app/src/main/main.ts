@@ -5,7 +5,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, sc
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ensureService } from "./service";
-import type { ConnectionResult, MenuCommand } from "./types";
+import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePreference, ThemeState } from "./types";
+import { effectiveSource, isThemePreference, parseForcedTheme, parseStoredPreference, windowBackground } from "./theme";
 
 // The app root holds package.json, resources/ and dist/ — in dev and inside the packaged .app.
 // (Not __dirname: bun build inlines it as the source directory.)
@@ -14,12 +15,13 @@ const rendererIndex = join(appRoot, "dist", "renderer", "index.html");
 
 app.setName("Harness");
 
-// Debug / screenshot hooks (used by scripts/shoot.ts):
-//   HARNESS_THEME=dark|light   force the theme
+// Debug / screenshot hooks (used by scripts/shoot.ts, scripts/smoke.ts):
+//   HARNESS_THEME=dark|light   force the theme (overrides Settings → Appearance)
+//   HARNESS_MENU_AUTOPICK=id   context menus pick this item instead of popping up (smoke tests)
 //   HARNESS_ROUTE=#/ticket/X   open the renderer at a route
 //   HARNESS_CAPTURE=/path.png  capture the window after HARNESS_CAPTURE_DELAY ms, then quit
 const debug = {
-  theme: process.env.HARNESS_THEME as "dark" | "light" | undefined,
+  theme: parseForcedTheme(process.env.HARNESS_THEME),
   route: process.env.HARNESS_ROUTE,
   capture: process.env.HARNESS_CAPTURE,
   captureDelay: Number(process.env.HARNESS_CAPTURE_DELAY ?? 2500),
@@ -76,6 +78,63 @@ function saveBounds(win: BrowserWindow) {
 }
 
 // ---------------------------------------------------------------------------
+// Appearance: preference persisted in userData/preferences.json, applied via nativeTheme
+// (window chrome, vibrancy, scrollbars, prefers-color-scheme) and pushed to renderers, which
+// mirror the resolved theme on <html data-theme>.
+// ---------------------------------------------------------------------------
+
+const prefsFile = () => join(app.getPath("userData"), "preferences.json");
+
+function readPrefs(): Record<string, unknown> {
+  try {
+    const v = JSON.parse(readFileSync(prefsFile(), "utf8"));
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+let themePreference: ThemePreference = (() => {
+  try {
+    return parseStoredPreference(readFileSync(prefsFile(), "utf8"));
+  } catch {
+    return "system";
+  }
+})();
+
+function themeState(): ThemeState {
+  return { preference: themePreference, resolved: nativeTheme.shouldUseDarkColors ? "dark" : "light", forced: debug.theme };
+}
+
+function applyTheme() {
+  nativeTheme.themeSource = effectiveSource(themePreference, debug.theme);
+}
+
+function setThemePreference(pref: ThemePreference) {
+  themePreference = pref;
+  try {
+    mkdirSync(dirname(prefsFile()), { recursive: true });
+    writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), theme: pref }, null, 2));
+  } catch (e) {
+    console.error("could not save preferences", e);
+  }
+  applyTheme(); // fires nativeTheme "updated" when the resolved theme changes
+  broadcastTheme();
+}
+
+let lastBroadcast = "";
+function broadcastTheme() {
+  const state = themeState();
+  const sig = JSON.stringify(state);
+  if (sig === lastBroadcast) return;
+  lastBroadcast = sig;
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.setBackgroundColor(windowBackground(state.resolved));
+    w.webContents.send("theme", state);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Window
 // ---------------------------------------------------------------------------
 
@@ -93,7 +152,7 @@ function createWindow() {
     title: "Harness",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#101113" : "#fbfbfc",
+    backgroundColor: windowBackground(themeState().resolved),
     show: false,
     webPreferences: {
       preload: join(appRoot, "dist", "main", "preload.cjs"),
@@ -234,11 +293,43 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
-ipcMain.handle("harness:pickDirectory", async (e) => {
+ipcMain.handle("harness:pickDirectory", async (e, raw: PickDirectoryOptions | undefined) => {
   const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
-  const opts = { title: "Add project", buttonLabel: "Add project", properties: ["openDirectory", "createDirectory"] as const };
-  const result = win ? await dialog.showOpenDialog(win, { ...opts, properties: [...opts.properties] }) : await dialog.showOpenDialog({ ...opts, properties: [...opts.properties] });
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  const opts: Electron.OpenDialogOptions = {
+    title: str(raw?.title) ?? "Add project",
+    buttonLabel: str(raw?.buttonLabel) ?? "Add project",
+    defaultPath: str(raw?.defaultPath),
+    properties: ["openDirectory", "createDirectory"],
+  };
+  const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   return result.canceled ? null : (result.filePaths[0] ?? null);
+});
+ipcMain.handle("harness:revealInFinder", (_e, path: unknown) => {
+  if (typeof path === "string" && path.startsWith("/")) shell.showItemInFolder(path);
+});
+ipcMain.handle("harness:contextMenu", (e, raw: unknown) => {
+  const items = Array.isArray(raw) ? (raw as ContextMenuItem[]) : [];
+  const autopick = process.env.HARNESS_MENU_AUTOPICK;
+  if (autopick) {
+    const hit = items.find((i) => i.type !== "separator" && i.id === autopick && i.enabled !== false);
+    return hit && hit.type !== "separator" ? hit.id : null;
+  }
+  return new Promise<string | null>((resolve) => {
+    const template: MenuItemConstructorOptions[] = items.map((i) =>
+      i.type === "separator" ? { type: "separator" } : { label: String(i.label), enabled: i.enabled !== false, click: () => resolve(String(i.id)) },
+    );
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+    // On macOS the close callback can fire before the item's click; give the click a beat to win.
+    Menu.buildFromTemplate(template).popup({ window: win, callback: () => void setTimeout(() => resolve(null), 100) });
+  });
+});
+ipcMain.on("harness:getThemeSync", (e) => {
+  e.returnValue = themeState();
+});
+ipcMain.handle("harness:setTheme", (_e, pref: unknown) => {
+  if (isThemePreference(pref)) setThemePreference(pref);
+  return themeState();
 });
 ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
   if (typeof url === "string" && /^(https?|mailto):/.test(url)) await shell.openExternal(url);
@@ -248,8 +339,8 @@ ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-if (debug.theme) nativeTheme.themeSource = debug.theme;
-else nativeTheme.themeSource = "system";
+applyTheme();
+nativeTheme.on("updated", broadcastTheme);
 
 app.whenReady().then(() => {
   // Packaged builds get the icon from the bundle; show it in the Dock during `bun run dev` too.

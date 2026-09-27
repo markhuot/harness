@@ -1,7 +1,10 @@
-// Settings: drivers, general run settings, watchers, mappings and projects.
+// Settings: appearance, drivers, general run settings, watchers, mappings, and the project list
+// (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
+import { setThemePreference, useTheme } from "../state/theme";
+import { THEME_PREFERENCES, type ThemePreference } from "../../main/theme";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "../state/reducer";
 import { Icon } from "../components/Icon";
@@ -11,6 +14,7 @@ import { relativeTime } from "../components/bits";
 const PERMISSION_MODES: Settings["claudePermissionMode"][] = ["bypassPermissions", "acceptEdits", "auto", "dontAsk"];
 
 const SECTIONS = [
+  ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
   ["watchers", "Watchers"],
@@ -46,6 +50,7 @@ export function SettingsView() {
               </button>
             ))}
           </nav>
+          <AppearanceSection />
           <DriversSection />
           {state.settings ? (
             <GeneralSection settings={state.settings} drivers={state.drivers} />
@@ -66,7 +71,7 @@ export function SettingsView() {
   );
 }
 
-function Section({ id, title, desc, actions, children }: { id: string; title: string; desc?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+export function Section({ id, title, desc, actions, children }: { id: string; title: string; desc?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
     <section className="settings-section" id={`settings-${id}`}>
       <div className="settings-section-head">
@@ -79,7 +84,7 @@ function Section({ id, title, desc, actions, children }: { id: string; title: st
   );
 }
 
-function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
+export function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
   return (
     <div className="settings-row">
       <div className="settings-row-main">
@@ -183,7 +188,7 @@ function DriversSection() {
 // ---------------------------------------------------------------------------
 
 /** Text input with a local draft that commits on blur / Enter. */
-function DraftInput({ value, onCommit, placeholder, type = "text", className = "input" }: { value: string; onCommit: (v: string) => void; placeholder?: string; type?: string; className?: string }) {
+export function DraftInput({ value, onCommit, placeholder, type = "text", className = "input" }: { value: string; onCommit: (v: string) => void; placeholder?: string; type?: string; className?: string }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => {
     setDraft(value);
@@ -627,60 +632,78 @@ function MappingsSection() {
 }
 
 // ---------------------------------------------------------------------------
-// Projects
+// Projects: a directory; per-project settings live on #/project/<id>/settings
 // ---------------------------------------------------------------------------
 
-function ProjectRow({ p, drivers }: { p: Project; drivers: DriverInfo[] }) {
-  const { client } = useStore();
-  const act = useAction();
-  return (
-    <div className="settings-row">
-      <div className="settings-row-main">
-        <div className="settings-row-title">
-          <span className="badge mono">{p.key}</span>
-          {p.name}
-        </div>
-        <div className="settings-row-sub mono" title={p.path}>
-          {p.path}
-        </div>
-        <div className="row" style={{ gap: 16, marginTop: 6 }}>
-          <Switch checked={p.useWorktrees} onChange={(v) => void act(() => client.updateProject(p.id, { useWorktrees: v }))} label="Worktree per ticket" />
-          <Switch checked={p.requireHumanReview} onChange={(v) => void act(() => client.updateProject(p.id, { requireHumanReview: v }))} label="Require human review" />
-        </div>
-      </div>
-      <div className="settings-row-actions">
-        <select className="select" style={{ width: 150, height: 28, minHeight: 28 }} value={p.defaultDriver ?? ""} onChange={(e) => void act(() => client.updateProject(p.id, { defaultDriver: e.target.value || null }))}>
-          <option value="">Default driver</option>
-          {drivers.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="btn btn-sm btn-ghost btn-icon btn-danger"
-          title="Delete project"
-          onClick={() => {
-            if (confirm(`Delete project ${p.key}? Its tickets will be removed from the board.`)) void act(() => client.deleteProject(p.id), "Project deleted");
-          }}
-        >
-          <Icon name="trash" size={13} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ProjectsSection() {
-  const { state } = useStore();
+  const { state, navigate } = useStore();
   const projects = sortedProjects(state);
+  const driverName = (p: Project) => (p.defaultDriver ? (state.drivers.find((d) => d.id === p.defaultDriver)?.name ?? p.defaultDriver) : null);
   return (
-    <Section id="projects" title="Projects">
+    <Section id="projects" title="Projects" desc="Name, identifier, folder, driver and review settings are set per project.">
       <div className="card-surface settings-card">
         {projects.length === 0 && <div className="empty">No projects yet. Add one from the sidebar.</div>}
         {projects.map((p) => (
-          <ProjectRow key={p.id} p={p} drivers={state.drivers} />
+          <button key={p.id} className="settings-row link" onClick={() => navigate({ view: "project", projectId: p.id })}>
+            <span className="project-key lg">{p.key.slice(0, 3)}</span>
+            <div className="settings-row-main">
+              <div className="settings-row-title">
+                {p.name}
+                <span className="badge mono">{p.key}</span>
+              </div>
+              <div className="settings-row-sub mono" title={p.path}>
+                {p.path.replace(/^\/Users\/[^/]+/, "~")}
+                {driverName(p) && <span className="dim"> · {driverName(p)}</span>}
+              </div>
+            </div>
+            <Icon name="chevronRight" size={14} />
+          </button>
         ))}
+      </div>
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Appearance (app-side: persisted by the main process, not the service)
+// ---------------------------------------------------------------------------
+
+const THEME_LABEL: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
+
+function AppearanceSection() {
+  const theme = useTheme();
+  return (
+    <Section id="appearance" title="Appearance">
+      <div className="card-surface settings-card">
+        <Row
+          title="Theme"
+          sub={
+            theme.forced
+              ? `Forced to ${theme.forced} by HARNESS_THEME.`
+              : theme.preference === "system"
+                ? `Follows macOS (currently ${theme.resolved}).`
+                : "Stays the same regardless of the macOS setting."
+          }
+        >
+          <div className="theme-picker" role="radiogroup" aria-label="Theme">
+            {THEME_PREFERENCES.map((pref) => (
+              <button
+                key={pref}
+                role="radio"
+                aria-checked={theme.preference === pref}
+                data-theme-option={pref}
+                className={`theme-option ${theme.preference === pref ? "on" : ""}`}
+                onClick={() => void setThemePreference(pref)}
+              >
+                <span className="theme-swatch">
+                  {pref !== "dark" && <span className="sw-light" />}
+                  {pref !== "light" && <span className="sw-dark" />}
+                </span>
+                {THEME_LABEL[pref]}
+              </button>
+            ))}
+          </div>
+        </Row>
       </div>
     </Section>
   );

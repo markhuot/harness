@@ -1203,3 +1203,40 @@
   background: var(--accent);
   flex: none;
 }
+
+/* ------------------------------------------------------------------ sidebar project rows */
+
+.nav-row {
+  position: relative;
+}
+/* The gear replaces the open-ticket count on hover (and stays while its settings are open). */
+.nav-gear {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 22px;
+  height: 22px;
+  display: none;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  padding: 0;
+}
+.nav-row:hover .nav-gear,
+.nav-row.settings-open .nav-gear,
+.nav-gear:focus-visible {
+  display: grid;
+}
+.nav-row:hover .nav-count,
+.nav-row.settings-open .nav-count {
+  visibility: hidden;
+}
+.nav-gear:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.nav-row.settings-open .nav-gear {
+  color: var(--accent-text);
+}

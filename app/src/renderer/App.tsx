@@ -7,6 +7,7 @@ import { BoardView } from "./views/Board";
 import { InboxView } from "./views/Inbox";
 import { SettingsView } from "./views/Settings";
 import { NewSessionModal } from "./views/NewSession";
+import { ProjectSettingsView } from "./views/ProjectSettings";
 
 interface Toast {
   id: number;
@@ -111,7 +112,9 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
 
 function Shell() {
   const { route, state } = useStore();
-  const [composer, setComposer] = useState(false);
+  // false = closed; otherwise open, optionally preselecting a project ("New session in X").
+  const [composer, setComposerState] = useState<false | { projectId: string | null }>(false);
+  const setComposer = useCallback((open: boolean, projectId: string | null = null) => setComposerState(open ? { projectId } : false), []);
 
   useEffect(() => {
     // #/compose opens the composer on top of the board (handy for links, tests and screenshots).
@@ -145,7 +148,7 @@ function Shell() {
 
   return (
     <div className="app">
-      <Sidebar onNewSession={() => setComposer(true)} />
+      <Sidebar onNewSession={(projectId) => setComposer(true, projectId ?? null)} />
       <main className="main">
         {!state.ready ? (
           <div className="empty" style={{ flex: 1 }}>
@@ -155,11 +158,13 @@ function Shell() {
           <InboxView />
         ) : route.view === "settings" ? (
           <SettingsView />
+        ) : route.view === "project" ? (
+          <ProjectSettingsView />
         ) : (
           <BoardView onNewSession={() => setComposer(true)} />
         )}
       </main>
-      {composer && <NewSessionModal onClose={() => setComposer(false)} />}
+      {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}
     </div>
   );
 }

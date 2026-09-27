@@ -1,5 +1,8 @@
 // Shapes shared between the main process, the preload bridge and the renderer.
 
+import type { ThemePreference, ThemeState } from "./theme";
+export type { ResolvedTheme, ThemePreference, ThemeState } from "./theme";
+
 export interface Connection {
   baseUrl: string;
   token: string;
@@ -18,11 +21,30 @@ export type ConnectionResult = Connection | ConnectionError;
 
 export type MenuCommand = "new-session" | "settings" | "inbox" | "board";
 
+/** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
+export type ContextMenuItem =
+  | { type?: "item"; id: string; label: string; enabled?: boolean; danger?: boolean }
+  | { type: "separator" };
+
+export interface PickDirectoryOptions {
+  title?: string;
+  buttonLabel?: string;
+  defaultPath?: string;
+}
+
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   retryService(): Promise<ConnectionResult>;
-  pickDirectory(): Promise<string | null>;
+  pickDirectory(opts?: PickDirectoryOptions): Promise<string | null>;
   openExternal(url: string): Promise<void>;
+  /** Reveal a file or folder in Finder */
+  revealInFinder(path: string): Promise<void>;
+  /** Pop up a native menu at the cursor; resolves with the chosen item id, or null when dismissed */
+  showContextMenu(items: ContextMenuItem[]): Promise<string | null>;
   onMenu(cb: (cmd: MenuCommand) => void): () => void;
+  /** App appearance. getTheme is synchronous so the renderer can apply it before first paint. */
+  getTheme(): ThemeState;
+  setTheme(preference: ThemePreference): Promise<ThemeState>;
+  onThemeChange(cb: (state: ThemeState) => void): () => void;
   platform: string;
 }

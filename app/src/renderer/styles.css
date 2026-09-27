@@ -48,8 +48,52 @@
   --titlebar-h: 52px;
 }
 
+/* Dark tokens. <html data-theme> always holds the RESOLVED theme (state/theme.ts; plugin
+   iframes observe it), so it decides. Until it's set, fall back to prefers-color-scheme,
+   which Electron derives from nativeTheme.themeSource, so the first paint already matches.
+   Keep the two blocks identical. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111214;
+  --bg-sidebar: #0c0d0f;
+  --bg-elev: #1a1b1e;
+  --bg-sunken: #0e0f11;
+  --bg-column: #151619;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.085);
+  --border: #26272c;
+  --border-strong: #34363c;
+  --text: #e8e8eb;
+  --text-2: #a4a6ae;
+  --text-3: #6f717a;
+  --accent: #6e79d6;
+  --accent-hover: #7f89e0;
+  --accent-soft: rgba(110, 121, 214, 0.18);
+  --accent-text: #a3abf0;
+  --focus: rgba(110, 121, 214, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --overlay: rgba(0, 0, 0, 0.5);
+  --c-planning: #7c7e87;
+  --c-in_progress: #f0b43c;
+  --c-blocked: #f2555a;
+  --c-review: #a86fe0;
+  --c-done: #3fba7d;
+  --green: #4cc38a;
+  --green-soft: rgba(76, 195, 138, 0.14);
+  --red: #f2555a;
+  --red-soft: rgba(242, 85, 90, 0.13);
+  --amber: #f0b43c;
+  --amber-soft: rgba(240, 180, 60, 0.13);
+  --violet-soft: rgba(168, 111, 224, 0.15);
+  --violet: #bf93ec;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #111214;
     --bg-sidebar: #0c0d0f;
     --bg-elev: #1a1b1e;

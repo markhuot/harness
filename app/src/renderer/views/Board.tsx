@@ -80,6 +80,11 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
               {project.path.replace(/^\/Users\/[^/]+/, "~")}
             </span>
           )}
+          {project && (
+            <button className="btn btn-ghost btn-icon btn-sm" title="Project settings" aria-label="Project settings" onClick={() => navigate({ view: "project", projectId: project.id })}>
+              <Icon name="settings" size={13} />
+            </button>
+          )}
           <div className="grow" />
           <div className="search no-drag">
             <Icon name="hash" size={12} />
