@@ -7,7 +7,7 @@ import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import "./settings.css";
-import { relativeTime } from "../components/bits";
+import { relativeTime, Switch } from "../components/bits";
 import { ModelsSection } from "./settings/ModelSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
@@ -99,16 +99,6 @@ export function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNod
       </div>
       {children && <div className="settings-control">{children}</div>}
     </div>
-  );
-}
-
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
-  return (
-    <label className="switch">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span className="switch-track" />
-      {label}
-    </label>
   );
 }
 
@@ -484,7 +474,7 @@ function WatchersSection() {
             />
           ) : (
             <div className="settings-row" key={w.id}>
-              <Switch checked={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
+              <Switch ariaLabel={`Enable ${w.name}`} checked={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
               <div className="settings-row-main">
                 <div className="settings-row-title">
                   {w.name}

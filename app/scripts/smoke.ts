@@ -412,7 +412,9 @@ try {
   check("project permission mode PATCHes the project", projMode);
   await pick("#settings-project-agents [data-testid=permission-mode]", "");
   await until("project mode cleared", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === null);
-  const autoCompleteSwitch = `[...document.querySelectorAll("#settings-project-agents .settings-row")].find(r => r.querySelector(".settings-row-title")?.textContent === "Complete when approved")?.querySelector("input")`;
+  const unnamed = await js<number>(`[...document.querySelectorAll("input[type=checkbox]")].filter(i => i.getAttribute("role") !== "switch" || !(i.getAttribute("aria-label") || i.closest("label")?.textContent.trim())).length`);
+  check("every project settings switch is a named role=switch", unnamed === 0, `${unnamed} unnamed`);
+  const autoCompleteSwitch = `document.querySelector('#settings-project-agents input[role=switch][aria-label="Complete when approved"]')`;
   check("project settings show Complete when approved, on by default", await js<boolean>(`${autoCompleteSwitch}?.checked === true`));
   await js(`${autoCompleteSwitch}.click()`);
   const autoOff = await until("autoComplete saved", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === false);

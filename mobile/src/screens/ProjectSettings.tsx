@@ -108,13 +108,13 @@ function ProjectSettings({ project }: { project: Project }) {
           <PermissionPicker value={project.permissionMode} inherited={inherited} onChange={(m) => void save({ permissionMode: m })} />
         </SRow>
         <SRow title="Worktree per ticket" sub="Each ticket works on its own branch (harness/<key>) when the folder is a git repo.">
-          <SSwitch value={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
+          <SSwitch label="Worktree per ticket" value={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
         </SRow>
         <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
-          <SSwitch value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
+          <SSwitch label="Require human review" value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
         </SRow>
         <SRow title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done." last>
-          <SSwitch value={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
+          <SSwitch label="Complete when approved" value={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
         </SRow>
       </Group>
       <Group title="Danger zone">

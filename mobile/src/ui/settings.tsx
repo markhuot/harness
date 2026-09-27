@@ -42,9 +42,10 @@ export function SRow({ title, sub, children, onPress, chevron, last, danger, sta
   );
 }
 
-export function SSwitch({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+/** Settings switch. The row title isn't read with it, so VoiceOver needs `label` for a name. */
+export function SSwitch({ value, onChange, disabled, label }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
   const c = useColors();
-  return <Switch value={value} onValueChange={onChange} disabled={disabled} trackColor={{ true: c.accent }} />;
+  return <Switch value={value} onValueChange={onChange} disabled={disabled} accessibilityLabel={label} trackColor={{ true: c.accent }} />;
 }
 
 /** Text field with a local draft committed on blur / return. */

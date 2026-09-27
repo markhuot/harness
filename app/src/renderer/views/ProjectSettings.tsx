@@ -118,13 +118,13 @@ function ProjectSettings({ project }: { project: Project }) {
               <ProjectModelRows project={project} save={save} />
               <ProjectPermissionRow project={project} save={save} />
               <Row title="Worktree per ticket" sub={<>Each ticket works on its own branch (harness/&lt;key&gt;) when the folder is a git repo.</>}>
-                <Switch checked={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
+                <Switch ariaLabel="Worktree per ticket" checked={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
               </Row>
               <Row title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
-                <Switch checked={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
+                <Switch ariaLabel="Require human review" checked={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
               </Row>
               <Row title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done.">
-                <Switch checked={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
+                <Switch ariaLabel="Complete when approved" checked={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
               </Row>
             </div>
           </Section>
