@@ -1,0 +1,331 @@
+/* Conductors: progress bar, board rollup + child dimming, the Tickets tab. */
+
+/* Segmented progress bar (segments are status colors, left→right done … planning) */
+.cond-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-active);
+  overflow: hidden;
+  flex: none;
+}
+.cond-bar-sm {
+  width: 56px;
+  height: 4px;
+  gap: 1px;
+  border-radius: 2px;
+}
+.cond-seg {
+  display: block;
+  height: 100%;
+  background: var(--seg);
+  min-width: 2px;
+}
+.cond-seg[data-status="planning"] {
+  background: color-mix(in srgb, var(--seg) 45%, transparent);
+}
+
+/* Conductor card rollup: [bar ——— grows] 4/10 done [2 need you] */
+.cond-rollup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.cond-rollup .cond-bar-sm {
+  flex: 1 1 40px;
+  width: auto;
+  min-width: 40px;
+}
+.cond-rollup-text {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cond-attn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--red);
+  background: var(--red-soft);
+  white-space: nowrap;
+}
+.card.conductor-card {
+  border-left: 2px solid var(--violet);
+}
+
+/* Child cards: downplayed unless they need the human (then .child-dim is absent). */
+.card.child-dim {
+  background: color-mix(in srgb, var(--bg-elev) 45%, var(--bg-column));
+  box-shadow: none;
+  padding: 7px 10px;
+  gap: 4px;
+}
+.card.child-dim .card-title {
+  font-size: 12.5px;
+  color: var(--text-2);
+  -webkit-line-clamp: 2;
+}
+.card.child-dim .card-summary {
+  -webkit-line-clamp: 1;
+  color: var(--text-3);
+}
+.card.child-dim .card-foot .driver-badge {
+  display: none;
+}
+.card.child-dim:hover,
+.card.child-dim.selected {
+  background: var(--bg-elev);
+}
+.card.child-dim:hover .card-title,
+.card.child-dim.selected .card-title {
+  color: var(--text);
+}
+/* Hovering a conductor highlights its children. */
+.card.related {
+  border-color: color-mix(in srgb, var(--violet) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--violet) 35%, transparent);
+}
+.card-parent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Board toolbar toggle */
+.toggle-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* "Part of HEL-1 …" breadcrumb on a child's detail */
+.cond-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0 0 6px -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cond-crumb:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.cond-crumb > svg:first-child {
+  color: var(--violet);
+  flex: none;
+}
+.cond-crumb .mono {
+  font-size: 11.5px;
+  color: var(--violet);
+  flex: none;
+}
+.cond-crumb .muted {
+  flex: none;
+}
+.cond-crumb > svg:last-child {
+  flex: none;
+  color: var(--text-3);
+}
+
+/* Tickets tab */
+.children-tab {
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.children-progress {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.children-progress-text {
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.children-attn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--red);
+}
+.children-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.children-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.children-list {
+  overflow: hidden;
+}
+.child-row {
+  display: flex;
+  gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  outline: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.child-row:first-child {
+  border-top: 0;
+}
+.child-row:hover,
+.child-row:focus-visible {
+  background: var(--bg-hover);
+}
+.child-row.attn {
+  box-shadow: inset 2px 0 0 var(--c-blocked);
+}
+.child-row.attn-approval {
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+.child-row.attn-review {
+  box-shadow: inset 2px 0 0 var(--c-review);
+}
+.child-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.child-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.child-key {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  flex: none;
+}
+.child-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.child-row.is-done .child-title {
+  color: var(--text-2);
+}
+.child-top .status-pill {
+  height: 20px;
+  font-size: 11px;
+  padding: 0 7px;
+  gap: 5px;
+  flex: none;
+  color: var(--text-2);
+}
+.child-top .spinner,
+.child-top .card-reviews {
+  flex: none;
+}
+.child-summary {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.child-row.is-done .child-summary {
+  -webkit-line-clamp: 1;
+  color: var(--text-3);
+}
+.child-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+}
+.child-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+.child-note span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-blocked {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.note-approval {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+.note-approval strong {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.note-review {
+  color: var(--violet);
+  background: var(--violet-soft);
+}
+.child-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.child-foot .chip-label {
+  font-family: var(--font);
+  font-size: 10.5px;
+}
+.child-foot .link-chip {
+  background: transparent;
+  cursor: pointer;
+}
+.child-foot .link-chip:disabled {
+  cursor: default;
+}

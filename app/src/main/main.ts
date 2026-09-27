@@ -20,11 +20,14 @@ app.setName("Harness");
 //   HARNESS_MENU_AUTOPICK=id   context menus pick this item instead of popping up (smoke tests)
 //   HARNESS_ROUTE=#/ticket/X   open the renderer at a route
 //   HARNESS_CAPTURE=/path.png  capture the window after HARNESS_CAPTURE_DELAY ms, then quit
+//   HARNESS_CAPTURE_SETUP=js   run this in the renderer just before the capture (e.g. click a
+//                              toggle); the capture profile's localStorage is cleared afterwards
 const debug = {
   theme: parseForcedTheme(process.env.HARNESS_THEME),
   route: process.env.HARNESS_ROUTE,
   capture: process.env.HARNESS_CAPTURE,
   captureDelay: Number(process.env.HARNESS_CAPTURE_DELAY ?? 2500),
+  captureSetup: process.env.HARNESS_CAPTURE_SETUP,
 };
 if (process.env.HARNESS_USER_DATA) app.setPath("userData", process.env.HARNESS_USER_DATA);
 else if (debug.capture) app.setPath("userData", join(app.getPath("temp"), "harness-capture-profile"));
@@ -210,10 +213,16 @@ function createWindow() {
     win.webContents.once("did-finish-load", () => {
       setTimeout(async () => {
         try {
+          if (debug.captureSetup) {
+            await win.webContents.executeJavaScript(debug.captureSetup);
+            await new Promise((r) => setTimeout(r, 400));
+          }
           const image = await win.webContents.capturePage();
           mkdirSync(dirname(debug.capture!), { recursive: true });
           writeFileSync(debug.capture!, image.toPNG());
           console.log(`captured ${debug.capture}`);
+          // Shots share one profile: don't let one shot's UI preferences leak into the next.
+          await win.webContents.executeJavaScript("try { localStorage.clear() } catch {}");
         } catch (e) {
           console.error("capture failed", e);
         }

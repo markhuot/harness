@@ -27,8 +27,10 @@ for (let i = 0; i < 50; i++) {
 
 const projects = (await (await fetch(base + "/projects", { headers: { authorization: `Bearer ${token}` } })).json()).data as { id: string; key: string }[];
 const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
+const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
 
-const shots: { name: string; route: string; delay?: number }[] = [
+const hideChildren = `document.querySelector("[data-testid=hide-children]")?.click()`;
+const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
@@ -42,6 +44,10 @@ const shots: { name: string; route: string; delay?: number }[] = [
   { name: "compose", route: "#/compose" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },
   { name: "error", route: "#/board/all" },
+  { name: "children", route: "#/board/all/ticket/HARNESS-1/children" },
+  { name: "child", route: "#/board/all/ticket/HARNESS-6" },
+  { name: "board-conductor", route: `#/board/${harness}` },
+  { name: "board-hidden", route: `#/board/${harness}`, setup: hideChildren },
 ];
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");
@@ -59,6 +65,7 @@ try {
         HARNESS_ROUTE: s.route,
         HARNESS_CAPTURE: file,
         HARNESS_CAPTURE_DELAY: String(s.delay ?? 2500),
+        ...(s.setup ? { HARNESS_CAPTURE_SETUP: s.setup } : {}),
       };
       if (s.name === "error") {
         // Exercise the real ensure path against a repo root with no service in it.
