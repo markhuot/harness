@@ -286,7 +286,8 @@ export function reducer(state: State, action: Action): State {
     }
     case "detail": {
       const d = action.detail;
-      const tickets = mergeTickets(state.tickets, [d.ticket, ...d.children]);
+      // The parent rides along so a child's "Part of …" breadcrumb works when the conductor isn't loaded.
+      const tickets = mergeTickets(state.tickets, [d.ticket, ...d.children, ...(d.parent ? [d.parent] : [])]);
       const asked = (d.resolvedFrom ?? action.requestedKey)?.toUpperCase();
       const keyAliases = asked && asked !== d.ticket.key.toUpperCase() ? { ...state.keyAliases, [asked]: d.ticket.id } : state.keyAliases;
       const runs = { ...state.runs };

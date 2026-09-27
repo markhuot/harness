@@ -524,6 +524,7 @@ export class Orchestrator {
       runs: this.store.runs.listBySession(ticket.sessionId),
       dependents: this.store.tickets.dependents(ticket.key).map((t) => t.key),
       children: this.store.tickets.list({ parentId: ticket.id }),
+      parent: ticket.parentId ? this.store.tickets.get(ticket.parentId) : null,
     };
   }
 

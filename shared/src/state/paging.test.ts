@@ -318,3 +318,14 @@ describe("tickets that aren't loaded", () => {
     expect(dependentsOf(s, t).map((d) => d.key)).toEqual(["OLD-DONE-3"]);
   });
 });
+
+describe("parent conductor from the detail", () => {
+  test("a child's detail brings its unloaded (done, off-page) conductor into the store for the breadcrumb", () => {
+    const conductor = done("cond", 5, { kind: "conductor", title: "Old conductor" });
+    const child = tk("kid", { parentId: "cond", status: "in_progress" });
+    let s = run(initialState, snapshot([child], { scope: "p1", page: page([], null, 1) }));
+    expect(s.tickets.cond).toBeUndefined();
+    s = run(s, { type: "detail", detail: detail(child, { parent: conductor }) });
+    expect(s.tickets.cond?.title).toBe("Old conductor");
+  });
+});

@@ -528,6 +528,9 @@ export interface TicketDetail {
   runs: Run[];
   dependents: string[];
   children: Ticket[];
+  /** The conductor this ticket belongs to (when parentId is set), so clients can show the
+   *  "Part of …" breadcrumb even when the parent isn't loaded (e.g. a done conductor off-page). */
+  parent?: Ticket | null;
 }
 
 export interface ApiOk<T> {
