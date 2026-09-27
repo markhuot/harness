@@ -72,14 +72,23 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   const repo = await seedRepo();
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true });
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/bash ${AGENT_SCRIPT}`, driver: "dummy", start: true });
-  const settled = await until(
-    "changes ticket reaches review",
-    async () => {
-      const t = (await api<TicketDetail>("GET", `/tickets/${ticket.key}`)).ticket;
-      return (t.status === "review" || t.status === "blocked") && !t.busy ? t : null;
-    },
-    120000,
-  );
+  // The default permission mode asks a human before the dummy agent's /bash: approve it (for the
+  // tool) the way a person would, then wait for the run to finish.
+  let settled: Ticket | null = null;
+  for (let round = 0; round < 3; round++) {
+    settled = await until(
+      "changes ticket reaches review",
+      async () => {
+        const t = (await api<TicketDetail>("GET", `/tickets/${ticket.key}`)).ticket;
+        return (t.status === "review" || t.status === "blocked") && !t.busy ? t : null;
+      },
+      120000,
+    );
+    if (settled.status !== "blocked" || settled.pendingApproval?.toolName !== "bash") break;
+    await api("POST", `/tickets/${ticket.key}/approval`, { decision: "allow_tool" });
+    await Bun.sleep(300);
+  }
+  settled = settled!;
   if (settled.status === "blocked") throw new Error(`changes ticket blocked: ${settled.blockedReason ?? JSON.stringify(settled.pendingApproval)}`);
   const transcript = await api<TranscriptEntry[]>("GET", `/sessions/${settled.sessionId}/transcript?after=0`);
   const bash = transcript.find((e) => e.content.type === "tool_result" && e.content.name === "bash")?.content;
@@ -139,6 +148,23 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
     check("theme change reaches the plugin iframe (harness:theme)", t === "dark");
     await Bun.sleep(700);
     await shot("8-changes-wide-dark");
+    // A dark → dark switch (Harness Dark → Catppuccin Mocha) must still reach the plugin: the SDK
+    // mirrors data-theme-id and the tokens (--harness-*), and the diffs pick the Mocha Shiki theme.
+    await app.js(`window.harness.setTheme({ darkTheme: "catppuccin-mocha" })`);
+    const mocha = await until(
+      "plugin gets Mocha",
+      async () => {
+        const m = await frame.js<{ id?: string; bg: string; body: string }>(`({ id: document.documentElement.dataset.themeId,
+          bg: getComputedStyle(document.documentElement).getPropertyValue("--harness-bg").trim(), body: getComputedStyle(document.body).backgroundColor })`);
+        return m.id === "catppuccin-mocha" && m;
+      },
+      5000,
+    ).catch(() => null);
+    check("color theme reaches the plugin (data-theme-id + --harness-* tokens)", !!mocha && mocha.bg === "#181825" && mocha.body === "rgb(24, 24, 37)", JSON.stringify(mocha));
+    await Bun.sleep(900);
+    await shot("8-changes-wide-mocha");
+    await app.js(`window.harness.setTheme({ darkTheme: "harness-dark" })`);
+    await until("plugin back to Harness Dark", () => frame.js<boolean>(`document.documentElement.dataset.themeId === "harness-dark"`), 5000).catch(() => false);
     await app.js(`document.querySelector('.detail-titlebar button[title="Show the board"]')?.click()`);
     await Bun.sleep(700);
     await shot("8-changes-dark");

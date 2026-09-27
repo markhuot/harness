@@ -324,6 +324,43 @@ try {
   });
   check("theme preference survives a reload", afterReload.attr === "dark" && afterReload.pref === "dark", JSON.stringify(afterReload));
   await until("picker after reload", () => exists("[data-theme-option=system]"));
+
+  // 6c'. Color themes: switching the dark theme to Catppuccin Mocha recolors the live UI (computed
+  // styles, not just the variables), keeps data-theme="dark" for plugins, and survives a reload.
+  const colors = () =>
+    js<{ attr: string; id: string; bg: string; body: string; card: string; accent: string; dark: string }>(`(() => {
+      const cs = getComputedStyle(document.documentElement);
+      const btn = document.querySelector(".btn-primary");
+      return { attr: document.documentElement.dataset.theme, id: document.documentElement.dataset.themeId,
+        bg: cs.getPropertyValue("--bg").trim(), body: getComputedStyle(document.body).backgroundColor,
+        card: getComputedStyle(document.querySelector(".card-surface")).backgroundColor,
+        accent: btn ? getComputedStyle(btn).backgroundColor : "", dark: window.harness.getTheme().darkTheme };
+    })()`);
+  const harnessDark = await colors();
+  check("Harness Dark is the default dark theme", harnessDark.id === "harness-dark" && harnessDark.body === "rgb(17, 18, 20)", JSON.stringify(harnessDark));
+  await until("dark theme grid", () => exists('[data-theme-pick="dark:catppuccin-mocha"]'));
+  await js(`document.querySelector('[data-theme-pick="dark:catppuccin-mocha"]').click()`);
+  const mocha = await until("mocha applied", async () => {
+    const c = await colors();
+    // Buttons transition their background for 120ms; wait for the primary button to land too.
+    return c.id === "catppuccin-mocha" && c.accent === "rgb(203, 166, 247)" && c;
+  });
+  check(
+    "Catppuccin Mocha changes computed colors live",
+    mocha.attr === "dark" && mocha.bg === "#181825" && mocha.body === "rgb(24, 24, 37)" && mocha.card !== harnessDark.card && mocha.accent !== harnessDark.accent && mocha.dark === "catppuccin-mocha",
+    JSON.stringify(mocha),
+  );
+  check("the picker marks Mocha as chosen", await js<boolean>(`document.querySelector('[data-theme-pick="dark:catppuccin-mocha"]').getAttribute("aria-checked") === "true"`));
+  await js(`location.reload()`);
+  await Bun.sleep(300);
+  const mochaReload = await until("mocha after reload", async () => {
+    const c = await js<{ id?: string; body: string }>(`({ id: document.documentElement.dataset.themeId, body: getComputedStyle(document.body).backgroundColor })`);
+    return c.id ? c : null;
+  });
+  check("the dark theme pick survives a reload", mochaReload.id === "catppuccin-mocha" && mochaReload.body === "rgb(24, 24, 37)", JSON.stringify(mochaReload));
+  await until("picker after mocha reload", () => exists('[data-theme-pick="dark:harness-dark"]'));
+  await js(`document.querySelector('[data-theme-pick="dark:harness-dark"]').click()`);
+  await until("back to harness dark", async () => (await colors()).id === "harness-dark");
   await js(`document.querySelector("[data-theme-option=system]").click()`);
 
   // 6d. Conductor: Tickets tab (live), child breadcrumb, board dimming, rollup, hide-children toggle.
