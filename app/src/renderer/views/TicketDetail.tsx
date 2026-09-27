@@ -54,7 +54,12 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     let cancelled = false;
     client
       .getTicket(ticketKey)
-      .then((detail) => !cancelled && dispatch({ type: "detail", detail }))
+      .then((detail) => {
+        if (cancelled) return;
+        dispatch({ type: "detail", detail });
+        // An old key (from before a project rename) resolves to the ticket's current key; follow it.
+        if (detail.ticket.key !== ticketKey && route.view === "board") navigate({ ...route, ticketKey: detail.ticket.key });
+      })
       .catch(() => !cancelled && setMissing(true));
     return () => {
       cancelled = true;
