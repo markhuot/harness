@@ -2,6 +2,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type { HarnessBridge, MenuCommand, ThemeState } from "./types";
+import { stampTheme } from "./theme";
 
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
@@ -17,7 +18,7 @@ const bridge: HarnessBridge = {
     return () => ipcRenderer.removeListener("menu", listener);
   },
   getTheme: () => ipcRenderer.sendSync("harness:getThemeSync") as ThemeState,
-  setTheme: (preference) => ipcRenderer.invoke("harness:setTheme", preference),
+  setTheme: (patch) => ipcRenderer.invoke("harness:setTheme", patch),
   onThemeChange: (cb) => {
     const listener = (_e: IpcRendererEvent, state: ThemeState) => cb(state);
     ipcRenderer.on("theme", listener);
@@ -29,9 +30,10 @@ const bridge: HarnessBridge = {
 
 contextBridge.exposeInMainWorld("harness", bridge);
 
-// Stamp the resolved theme on <html> as early as possible (the renderer keeps it current).
+// Stamp the theme on <html> as early as possible (the renderer keeps it current): data-theme,
+// data-theme-id and the tokens as custom properties, so the first paint is already in the theme.
 try {
-  const { resolved } = bridge.getTheme();
-  const stamp = () => document.documentElement && (document.documentElement.dataset.theme = resolved);
+  const state = bridge.getTheme();
+  const stamp = () => !!document.documentElement && (stampTheme(document.documentElement, state), true);
   if (!stamp()) document.addEventListener("readystatechange", stamp, { once: true });
 } catch {}

@@ -1,7 +1,7 @@
 // Shapes shared between the main process, the preload bridge and the renderer.
 
-import type { ThemePreference, ThemeState } from "./theme";
-export type { ResolvedTheme, ThemePreference, ThemeState } from "./theme";
+import type { ThemePatch, ThemePreference, ThemeState } from "./theme";
+export type { ResolvedTheme, ThemePatch, ThemePreference, ThemeState } from "./theme";
 
 export interface Connection {
   baseUrl: string;
@@ -48,7 +48,8 @@ export interface HarnessBridge {
   onMenu(cb: (cmd: MenuCommand) => void): () => void;
   /** App appearance. getTheme is synchronous so the renderer can apply it before first paint. */
   getTheme(): ThemeState;
-  setTheme(preference: ThemePreference): Promise<ThemeState>;
+  /** Change the appearance and/or the light / dark theme picks (a bare preference still works) */
+  setTheme(patch: ThemePreference | ThemePatch): Promise<ThemeState>;
   onThemeChange(cb: (state: ThemeState) => void): () => void;
   /** Keep View → Show Sidebar's checkmark in step with the renderer's sidebar */
   setSidebarVisible(visible: boolean): void;

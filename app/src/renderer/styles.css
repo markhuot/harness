@@ -5,41 +5,10 @@
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
   --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
 
-  --bg: #fbfbfc;
-  --bg-sidebar: #f3f3f5;
-  --bg-elev: #ffffff;
-  --bg-sunken: #f5f5f7;
-  --bg-column: #f4f4f6;
-  --bg-hover: rgba(15, 17, 22, 0.045);
-  --bg-active: rgba(15, 17, 22, 0.075);
-  --border: #e4e4e8;
-  --border-strong: #d4d4da;
-  --text: #1a1b1f;
-  --text-2: #55575f;
-  --text-3: #8a8c94;
-  --accent: #5e6ad2;
-  --accent-hover: #515cc4;
-  --accent-soft: rgba(94, 106, 210, 0.12);
-  --accent-text: #4b56c0;
-  --focus: rgba(94, 106, 210, 0.35);
-  --shadow-sm: 0 1px 2px rgba(15, 17, 22, 0.06);
-  --shadow: 0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05);
-  --shadow-lg: 0 8px 30px rgba(15, 17, 22, 0.14), 0 2px 6px rgba(15, 17, 22, 0.06);
-  --overlay: rgba(20, 21, 26, 0.28);
-
-  --c-planning: #8a8c94;
-  --c-in_progress: #d99a1e;
-  --c-blocked: #e5484d;
-  --c-review: #8e4ec6;
-  --c-done: #30a46c;
-  --green: #2f9a63;
-  --green-soft: rgba(48, 164, 108, 0.12);
-  --red: #d93d42;
-  --red-soft: rgba(229, 72, 77, 0.1);
-  --amber: #b7791f;
-  --amber-soft: rgba(217, 154, 30, 0.13);
-  --violet-soft: rgba(142, 78, 198, 0.11);
-  --violet: #7d45b3;
+  /* Color tokens (--bg, --text, --accent, --c-<status>, …) are not defined here: they come from
+     the active theme in @harness/shared/themes, written onto <html style> by the preload before
+     first paint and by state/theme.ts on every change. <html data-theme> holds the RESOLVED
+     appearance (plugins observe it) and <html data-theme-id> the theme. */
 
   --radius-sm: 5px;
   --radius: 7px;
@@ -48,87 +17,11 @@
   --titlebar-h: 52px;
 }
 
-/* Dark tokens. <html data-theme> always holds the RESOLVED theme (state/theme.ts; plugin
-   iframes observe it), so it decides. Until it's set, fall back to prefers-color-scheme,
-   which Electron derives from nativeTheme.themeSource, so the first paint already matches.
-   Keep the two blocks identical. */
 :root[data-theme="light"] {
   color-scheme: light;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #111214;
-  --bg-sidebar: #0c0d0f;
-  --bg-elev: #1a1b1e;
-  --bg-sunken: #0e0f11;
-  --bg-column: #151619;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.085);
-  --border: #26272c;
-  --border-strong: #34363c;
-  --text: #e8e8eb;
-  --text-2: #a4a6ae;
-  --text-3: #6f717a;
-  --accent: #6e79d6;
-  --accent-hover: #7f89e0;
-  --accent-soft: rgba(110, 121, 214, 0.18);
-  --accent-text: #a3abf0;
-  --focus: rgba(110, 121, 214, 0.45);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --overlay: rgba(0, 0, 0, 0.5);
-  --c-planning: #7c7e87;
-  --c-in_progress: #f0b43c;
-  --c-blocked: #f2555a;
-  --c-review: #a86fe0;
-  --c-done: #3fba7d;
-  --green: #4cc38a;
-  --green-soft: rgba(76, 195, 138, 0.14);
-  --red: #f2555a;
-  --red-soft: rgba(242, 85, 90, 0.13);
-  --amber: #f0b43c;
-  --amber-soft: rgba(240, 180, 60, 0.13);
-  --violet-soft: rgba(168, 111, 224, 0.15);
-  --violet: #bf93ec;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg: #111214;
-    --bg-sidebar: #0c0d0f;
-    --bg-elev: #1a1b1e;
-    --bg-sunken: #0e0f11;
-    --bg-column: #151619;
-    --bg-hover: rgba(255, 255, 255, 0.05);
-    --bg-active: rgba(255, 255, 255, 0.085);
-    --border: #26272c;
-    --border-strong: #34363c;
-    --text: #e8e8eb;
-    --text-2: #a4a6ae;
-    --text-3: #6f717a;
-    --accent: #6e79d6;
-    --accent-hover: #7f89e0;
-    --accent-soft: rgba(110, 121, 214, 0.18);
-    --accent-text: #a3abf0;
-    --focus: rgba(110, 121, 214, 0.45);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-    --overlay: rgba(0, 0, 0, 0.5);
-    --c-planning: #7c7e87;
-    --c-in_progress: #f0b43c;
-    --c-blocked: #f2555a;
-    --c-review: #a86fe0;
-    --c-done: #3fba7d;
-    --green: #4cc38a;
-    --green-soft: rgba(76, 195, 138, 0.14);
-    --red: #f2555a;
-    --red-soft: rgba(242, 85, 90, 0.13);
-    --amber: #f0b43c;
-    --amber-soft: rgba(240, 180, 60, 0.13);
-    --violet-soft: rgba(168, 111, 224, 0.15);
-    --violet: #bf93ec;
-  }
 }
 
 * {
@@ -178,7 +71,7 @@ kbd {
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--selection);
 }
 
 .selectable,
@@ -245,7 +138,7 @@ kbd {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -498,9 +391,9 @@ kbd {
   color: var(--text-3);
 }
 .btn-primary .kbd {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--on-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--on-accent) 20%, transparent);
+  color: color-mix(in srgb, var(--on-accent) 85%, transparent);
 }
 
 .status-dot {

@@ -5,8 +5,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, sc
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ensureService, reloadToken } from "./service";
-import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePreference, ThemeState } from "./types";
-import { effectiveSource, isThemePreference, parseForcedTheme, parseStoredPreference, windowBackground } from "./theme";
+import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
+import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
 
 // The app root holds package.json, resources/ and dist/ — in dev and inside the packaged .app.
 // (Not __dirname: bun build inlines it as the source directory.)
@@ -17,13 +17,14 @@ app.setName("Harness");
 
 // Debug / screenshot hooks (used by scripts/shoot.ts, scripts/smoke.ts):
 //   HARNESS_THEME=dark|light   force the theme (overrides Settings → Appearance)
+//   HARNESS_THEME_ID=<id>      force one color theme, e.g. catppuccin-mocha (and its appearance)
 //   HARNESS_MENU_AUTOPICK=id   context menus pick this item instead of popping up (smoke tests)
 //   HARNESS_ROUTE=#/ticket/X   open the renderer at a route
 //   HARNESS_CAPTURE=/path.png  capture the window after HARNESS_CAPTURE_DELAY ms, then quit
 //   HARNESS_CAPTURE_SETUP=js   run this in the renderer just before the capture (e.g. click a
 //                              toggle); the capture profile's localStorage is cleared afterwards
 const debug = {
-  theme: parseForcedTheme(process.env.HARNESS_THEME),
+  theme: { appearance: parseForcedTheme(process.env.HARNESS_THEME), theme: parseForcedThemeId(process.env.HARNESS_THEME_ID) },
   route: process.env.HARNESS_ROUTE,
   capture: process.env.HARNESS_CAPTURE,
   captureDelay: Number(process.env.HARNESS_CAPTURE_DELAY ?? 2500),
@@ -97,27 +98,27 @@ function readPrefs(): Record<string, unknown> {
   }
 }
 
-let themePreference: ThemePreference = (() => {
+let themeChoice = (() => {
   try {
-    return parseStoredPreference(readFileSync(prefsFile(), "utf8"));
+    return parseStoredChoice(readFileSync(prefsFile(), "utf8"));
   } catch {
-    return "system";
+    return parseStoredChoice(null);
   }
 })();
 
 function themeState(): ThemeState {
-  return { preference: themePreference, resolved: nativeTheme.shouldUseDarkColors ? "dark" : "light", forced: debug.theme };
+  return themeStateFor(themeChoice, nativeTheme.shouldUseDarkColors, debug.theme);
 }
 
 function applyTheme() {
-  nativeTheme.themeSource = effectiveSource(themePreference, debug.theme);
+  nativeTheme.themeSource = effectiveSource(themeChoice.appearance, forcedAppearance(debug.theme));
 }
 
-function setThemePreference(pref: ThemePreference) {
-  themePreference = pref;
+function setThemeChoice(patch: ThemePatch) {
+  themeChoice = applyPatch(themeChoice, patch);
   try {
     mkdirSync(dirname(prefsFile()), { recursive: true });
-    writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), theme: pref }, null, 2));
+    writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), ...storedChoiceFields(themeChoice) }, null, 2));
   } catch (e) {
     console.error("could not save preferences", e);
   }
@@ -132,7 +133,7 @@ function broadcastTheme() {
   if (sig === lastBroadcast) return;
   lastBroadcast = sig;
   for (const w of BrowserWindow.getAllWindows()) {
-    w.setBackgroundColor(windowBackground(state.resolved));
+    w.setBackgroundColor(windowBackground(state));
     w.webContents.send("theme", state);
   }
 }
@@ -155,7 +156,7 @@ function createWindow() {
     title: "Harness",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: windowBackground(themeState().resolved),
+    backgroundColor: windowBackground(themeState()),
     show: false,
     webPreferences: {
       preload: join(appRoot, "dist", "main", "preload.cjs"),
@@ -346,8 +347,9 @@ ipcMain.handle("harness:contextMenu", (e, raw: unknown) => {
 ipcMain.on("harness:getThemeSync", (e) => {
   e.returnValue = themeState();
 });
-ipcMain.handle("harness:setTheme", (_e, pref: unknown) => {
-  if (isThemePreference(pref)) setThemePreference(pref);
+ipcMain.handle("harness:setTheme", (_e, patch: unknown) => {
+  // Older renderers send the bare preference string.
+  setThemeChoice(typeof patch === "string" ? { preference: patch as ThemePatch["preference"] } : (patch as ThemePatch));
   return themeState();
 });
 ipcMain.on("harness:sidebarVisible", (_e, visible: unknown) => {

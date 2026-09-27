@@ -118,7 +118,7 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
             Check with <code>harness service status</code>
           </span>
           <button className="btn btn-primary" onClick={onRetry} disabled={retrying}>
-            {retrying ? <span className="spinner" style={{ borderTopColor: "#fff" }} /> : <Icon name="refresh" />}
+            {retrying ? <span className="spinner" style={{ borderTopColor: "var(--on-accent)" }} /> : <Icon name="refresh" />}
             Retry
           </button>
         </div>

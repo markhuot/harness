@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PluginTab, Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import { createPluginHostBridge, pluginUiUrl } from "@harness/shared/state";
-import { currentTheme } from "../state/theme";
+import { currentPluginTheme } from "../state/theme";
 import "./plugin.css";
 
 /** Plugin tabs for this ticket; null while loading. Refetched when the workdir/branch changes or on reconnect. */
@@ -41,7 +41,7 @@ export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab })
         ticketKey: ticket.key,
         tabId: tab.id,
         frame: () => frameRef.current?.contentWindow ?? null,
-        theme: () => currentTheme(),
+        theme: () => currentPluginTheme(),
         onReady: () => setReady(true),
         onOpenExternal: (url) => void window.harness?.openExternal(url),
         onNavigate: (key) => {
@@ -58,14 +58,18 @@ export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab })
     return () => removeEventListener("message", on);
   }, [bridge]);
 
-  // Theme contract: <html data-theme> always holds the resolved theme.
+  // Theme contract: <html data-theme> always holds the resolved appearance and data-theme-id the
+  // color theme; either changing (Harness Dark → Catppuccin Mocha included) pushes the full theme.
   useEffect(() => {
-    let last = currentTheme();
+    let last = currentPluginTheme().themeId;
     const mo = new MutationObserver(() => {
-      const t = currentTheme();
-      if (t !== last) bridge.sendTheme((last = t));
+      const t = currentPluginTheme();
+      if (t.themeId !== last) {
+        last = t.themeId;
+        bridge.sendTheme(t);
+      }
     });
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-theme-id"] });
     return () => mo.disconnect();
   }, [bridge]);
 

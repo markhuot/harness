@@ -139,7 +139,7 @@
   padding: 0 4px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: inline-grid;
   place-items: center;
 }
@@ -1107,7 +1107,7 @@
   display: grid;
   place-items: center;
   background: var(--amber);
-  color: #fff;
+  color: var(--on-amber);
   flex: none;
 }
 .approval-title {
@@ -1158,12 +1158,12 @@
   align-items: center;
 }
 .btn-danger-solid {
-  background: var(--red);
-  border-color: var(--red);
-  color: #fff;
+  background: var(--red-solid);
+  border-color: var(--red-solid);
+  color: var(--on-danger);
 }
 .btn-danger-solid:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--red) 88%, #000);
+  background: color-mix(in srgb, var(--red-solid) 88%, #000);
   border-color: transparent;
 }
 .card-approval {
