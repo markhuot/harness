@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, ModelInfo, Settings, ToolResultContent } from "@harness/shared";
+import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
 import { queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunRequest } from "./types";
 
@@ -40,7 +40,8 @@ export function resolveClaudeBin(env: Record<string, string | undefined> = proce
 
 // Variables Claude Code sets for its own children. Passing them on makes the child
 // believe it is nested inside another session (and talk to the parent's sockets).
-const NESTING_VARS = new Set(["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "CLAUDE_AGENT_SDK_VERSION"]);
+// AI_AGENT names the parent agent (claude-code_<version>_agent).
+const NESTING_VARS = new Set(["CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "CLAUDE_AGENT_SDK_VERSION", "AI_AGENT"]);
 // CLAUDE_CODE_* variables that are genuine user configuration and should pass through.
 const USER_CONFIG = /^CLAUDE_CODE_(USE_|OAUTH_TOKEN|MAX_|DISABLE_|ENABLE_|SKIP_|API_KEY_HELPER|SUBAGENT_MODEL)/;
 
@@ -62,15 +63,40 @@ export function displayToolName(name: string): string {
 /** Build the CLI argv (without the binary). The prompt is written to stdin. */
 export const PERMISSION_PROMPT_TOOL = `${MCP_PREFIX}permission_prompt`;
 
+/**
+ * Harness permission mode → CLI --permission-mode (verified against claude 2.1.283):
+ *  - auto → "auto": Claude Code's classifier. Its denials go straight back to the model as an
+ *    is_error tool_result ("…denied by the Claude Code auto mode classifier. Reason: […]");
+ *    the permission prompt tool is NOT consulted for them. Not available for every model
+ *    (haiku): the CLI then silently runs in "default" (see the downgrade notice).
+ *  - ask → "acceptEdits": edits in the workdir run; everything else → permission prompt tool.
+ *  - read_only → "dontAsk": reads and read-only Bash run, anything else is denied without a
+ *    prompt. ("plan" would allow reads too, but writes a plan file under ~/.claude/plans and
+ *    asks to ExitPlanMode through the prompt tool.)
+ */
+export const CLI_PERMISSION_MODES: Record<PermissionMode, string> = { auto: "auto", ask: "acceptEdits", read_only: "dontAsk" };
+
+/** The --permission-mode a run gets: plan runs always "plan", else the mapped harness mode. */
+export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode">, settings: Pick<Settings, "permissionMode">): string {
+  if (req.kind === "plan") return "plan";
+  return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
+}
+
+const CLASSIFIER_DENIAL = /denied by the Claude Code auto mode classifier\.?\s*(?:Reason:\s*([^\n]*?)(?:\.\s+If you|\n|$))?/i;
+
 export function buildClaudeArgs(
-  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & { model?: string | null; tools?: Pick<RunRequest["tools"][number], "name">[] },
+  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & {
+    model?: string | null;
+    permissionMode?: PermissionMode;
+    tools?: Pick<RunRequest["tools"][number], "name">[];
+  },
   settings: Settings,
   resumeSessionId: string | null,
 ): string[] {
   // alwaysLoad: opt the harness server out of Claude Code's tool deferral, so its tools are in
   // the prompt from the first turn instead of being discovered through ToolSearch.
   const mcpConfig = { mcpServers: { [MCP_SERVER_NAME]: { type: "http", url: req.mcp.url, headers: req.mcp.headers, alwaysLoad: true } } };
-  const permissionMode = req.kind === "plan" ? "plan" : settings.claudePermissionMode;
+  const permissionMode = cliPermissionMode(req, settings);
   const args = [
     "-p",
     "--output-format",
@@ -88,8 +114,8 @@ export function buildClaudeArgs(
   ];
   // Anything the permission mode doesn't auto-allow is asked of the harness (and so a human)
   // instead of being denied silently. Only when the run actually serves the tool: the CLI
-  // fails a prompt that names a tool it can't find.
-  if (!req.tools || req.tools.some((t) => t.name === "permission_prompt")) {
+  // fails a prompt that names a tool it can't find. Read-only runs never ask: dontAsk denies.
+  if (permissionMode !== "dontAsk" && (!req.tools || req.tools.some((t) => t.name === "permission_prompt"))) {
     args.push("--permission-prompt-tool", PERMISSION_PROMPT_TOOL);
   }
   if (req.systemPrompt) args.push("--append-system-prompt", req.systemPrompt);
@@ -97,6 +123,13 @@ export function buildClaudeArgs(
   if (req.model) args.push("--model", req.model);
   if (resumeSessionId) args.push("--resume", resumeSessionId);
   return args;
+}
+
+function summarizeInput(input: unknown, max = 160): string {
+  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const pick = ["command", "file_path", "path", "url", "pattern"].find((k) => typeof o[k] === "string" && o[k]);
+  const text = (pick ? String(o[pick]) : JSON.stringify(input ?? null)).replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 function toolResultContent(content: unknown): ToolResultContent[] {
@@ -129,10 +162,20 @@ export class StreamJsonParser {
   sessionId: string | null = null;
   result: ClaudeResultInfo | null = null;
   sawInit = false;
+  /** permissionMode the CLI reported in its init event */
+  initPermissionMode: string | null = null;
   private toolNames = new Map<string, string>();
+  private toolInputs = new Map<string, unknown>();
 
-  /** @param baseline the resumed session and its cumulative cost before this run (from state) */
-  constructor(private readonly baseline: { sessionId: string; costUsd: number } | null = null) {}
+  /**
+   * @param baseline the resumed session and its cumulative cost before this run (from state)
+   * @param permission the --permission-mode asked for and the harness mode it came from, to
+   *   report a downgrade (auto isn't available for every model) and log classifier denials
+   */
+  constructor(
+    private readonly baseline: { sessionId: string; costUsd: number } | null = null,
+    private readonly permission: { requested: string; mode: PermissionMode } | null = null,
+  ) {}
 
   /** Prior cumulative cost of the current session (0 unless it is the resumed one). */
   private priorCost(): number {
@@ -155,6 +198,18 @@ export class StreamJsonParser {
         if (msg.subtype === "init") {
           this.sawInit = true;
           noteSession(msg.session_id);
+          if (typeof msg.permissionMode === "string") this.initPermissionMode = msg.permissionMode;
+          const requested = this.permission?.requested;
+          if (requested && typeof msg.permissionMode === "string" && msg.permissionMode !== requested) {
+            const model = typeof msg.model === "string" && msg.model ? msg.model : "this model";
+            events.push({
+              type: "status",
+              text:
+                requested === "auto"
+                  ? `Auto mode isn't available for ${model}; unapproved actions will ask you instead.`
+                  : `Claude Code is running in ${msg.permissionMode} mode instead of ${requested}.`,
+            });
+          }
         }
         break;
       case "stream_event": {
@@ -175,6 +230,7 @@ export class StreamJsonParser {
           } else if (block?.type === "tool_use") {
             const name = displayToolName(String(block.name));
             this.toolNames.set(block.id, name);
+            this.toolInputs.set(block.id, block.input ?? {});
             events.push({ type: "tool_call", callId: String(block.id), name, input: block.input ?? {} });
           }
         }
@@ -186,12 +242,27 @@ export class StreamJsonParser {
         for (const block of content) {
           if (block?.type !== "tool_result") continue;
           const callId = String(block.tool_use_id);
-          events.push({
-            type: "tool_result",
-            callId,
-            name: this.toolNames.get(callId) ?? "unknown",
-            result: { content: toolResultContent(block.content), ...(block.is_error ? { isError: true } : {}) },
-          });
+          const content = toolResultContent(block.content);
+          const name = this.toolNames.get(callId) ?? "unknown";
+          events.push({ type: "tool_result", callId, name, result: { content, ...(block.is_error ? { isError: true } : {}) } });
+          if (block.is_error) {
+            const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+            const denied = CLASSIFIER_DENIAL.exec(text);
+            if (denied) {
+              events.push({
+                type: "permission",
+                log: {
+                  tool: name,
+                  summary: summarizeInput(this.toolInputs.get(callId)),
+                  decision: "deny",
+                  reason: denied[1]?.trim().replace(/\.$/, "") || "denied by Claude Code's auto mode classifier",
+                  source: "classifier",
+                  backend: "claude-code",
+                  mode: this.permission?.mode ?? "auto",
+                },
+              });
+            }
+          }
         }
         break;
       }
@@ -374,7 +445,10 @@ export class ClaudeCodeDriver implements Driver {
     }
 
     const priorCost = (req.state as Partial<ClaudeCodeState> | null)?.costUsd;
-    const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null);
+    const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null, {
+      requested: cliPermissionMode(req, settings),
+      mode: req.permissionMode ?? settings.permissionMode,
+    });
     const buffered: DriverEvent[] = [];
     try {
       for await (const line of readLines(proc.stdout)) {

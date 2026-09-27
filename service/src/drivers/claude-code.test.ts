@@ -23,7 +23,8 @@ function tmp(): string {
 const baseSettings: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
-  claudePermissionMode: "bypassPermissions",
+  permissionMode: "ask",
+  classifier: "off",
   defaultModels: {},
   reviewModels: {},
   anthropicApiKey: null,
@@ -122,8 +123,8 @@ const success = (extra: Record<string, unknown> = {}) => ({
 describe("buildClaudeArgs", () => {
   const req = { kind: "work" as RunKind, systemPrompt: "SYS", mcp: { url: "http://h/mcp/t", headers: { authorization: "Bearer x" } } };
 
-  test("work run: settings permission mode, mcp config, allowed tools, system prompt, no model/resume", () => {
-    const args = buildClaudeArgs(req, { ...baseSettings, claudePermissionMode: "acceptEdits" }, null);
+  test("work run: settings permission mode (ask → acceptEdits), mcp config, allowed tools, system prompt, no model/resume", () => {
+    const args = buildClaudeArgs(req, { ...baseSettings, permissionMode: "ask" }, null);
     expect(args.slice(0, 5)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     expect(argValue(args, "--permission-mode")).toBe("acceptEdits");
     expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
@@ -137,7 +138,7 @@ describe("buildClaudeArgs", () => {
   });
 
   test("plan run forces plan mode regardless of settings", () => {
-    const args = buildClaudeArgs({ ...req, kind: "plan" }, { ...baseSettings, claudePermissionMode: "bypassPermissions" }, null);
+    const args = buildClaudeArgs({ ...req, kind: "plan", permissionMode: "auto" }, { ...baseSettings, permissionMode: "auto" }, null);
     expect(argValue(args, "--permission-mode")).toBe("plan");
   });
 
@@ -263,7 +264,7 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
         success(),
       ],
       env: { CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_USE_BEDROCK: "0", HARNESS_MARKER: "yes" },
-      settings: { claudePermissionMode: "dontAsk" },
+      settings: { permissionMode: "auto" },
     });
     const req = request({ prompt: "Line one\nLine \"two\"", model: "sonnet", tools: toolsForRun("work", s.driver) });
     const { events, error } = await collect(s.driver.run(req));
@@ -279,7 +280,7 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(inv!.stdin).toBe("Line one\nLine \"two\"");
     // macOS tmp dirs resolve through /private
     expect(inv!.cwd.replace(/^\/private/, "")).toBe(req.cwd.replace(/^\/private/, ""));
-    expect(inv!.argv).toEqual(buildClaudeArgs(req, { ...baseSettings, claudePermissionMode: "dontAsk" }, null));
+    expect(inv!.argv).toEqual(buildClaudeArgs(req, { ...baseSettings, permissionMode: "auto" }, null));
     expect(argValue(inv!.argv, "--model")).toBe("sonnet");
     expect(argValue(inv!.argv, "--permission-prompt-tool")).toBe("mcp__harness__permission_prompt");
     expect(inv!.env.CLAUDECODE).toBeUndefined();

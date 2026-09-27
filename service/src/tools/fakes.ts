@@ -25,6 +25,7 @@ export function fakeTicket(overrides: Partial<Ticket> = {}): Ticket {
     workdir: null,
     branch: null,
     blockedReason: null,
+    permissionMode: null,
     busy: false,
     pendingApproval: null,
     allowedTools: [],
@@ -110,6 +111,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       fakeTicket({ key: input.key ?? "WEB-1", kind: input.conductor ? "conductor" : "task", status: input.start ? "in_progress" : "planning", title: input.title }),
     declineWork: async () => {},
     requestApproval: async (_ctx: ToolContext, _tool: string, input: unknown) => ({ behavior: "allow", updatedInput: input }),
+    checkPermission: async () => ({ behavior: "allow" }),
   };
   const ops = {} as HarnessOps & { calls: RecordedCall[]; children: Ticket[] };
   for (const name of Object.keys(defaults) as (keyof HarnessOps)[]) {

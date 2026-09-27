@@ -2,12 +2,14 @@
 // notifications and triage. Implements HarnessOps for tools.
 
 import { existsSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
   ApprovalBody,
   CompleteBody,
   PendingApproval,
+  PermissionDecisionLog,
+  PermissionMode,
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
@@ -30,7 +32,7 @@ import type {
   Watcher,
   WorkItem,
 } from "@harness/shared";
-import { checkProjectKey, isTicketKey, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import type { TicketPatch } from "../store/tickets";
 import type { WatcherInput } from "../store/watchers";
@@ -48,6 +50,11 @@ import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
 import { resolveRunModel } from "./models";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
+import { PermissionGate } from "../permissions/gate";
+import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
+import { AutoModeRulesProvider } from "../permissions/rules";
+import { cleanClaudeEnv, resolveClaudeBin } from "../drivers/claude-code";
+import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 
 export interface ConductorChange {
   key: string;
@@ -79,6 +86,14 @@ export interface OrchestratorOptions {
   log?: (msg: string) => void;
   /** Model-list cache tuning (tests) */
   modelCatalog?: ModelCatalogOptions;
+  /**
+   * Auto-mode classifier for native-tool drivers. Default: built from settings.classifier
+   * (claude-cli / anthropic-api / off). null → none: auto mode asks a human instead.
+   */
+  classifier?: Classifier | null;
+  /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
+  autoModeRules?: AutoModeRulesProvider;
+  classifierTimeoutMs?: number;
 }
 
 interface ActiveRun {
@@ -123,6 +138,13 @@ export function endsWithQuestion(text: string | null | undefined): boolean {
   return stripped.endsWith("?") || stripped.endsWith("？");
 }
 
+/** Validate a permission-mode field from a request body (null / "" → inherit). */
+function validPermissionMode(value: unknown): PermissionMode | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
+  return value as PermissionMode;
+}
+
 function errMsg(err: unknown) {
   return err instanceof Error ? err.message : String(err);
 }
@@ -156,9 +178,25 @@ export class Orchestrator {
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
+  private gate: PermissionGate;
+  private autoModeRules: AutoModeRulesProvider;
+  private classifierOption: Classifier | null | undefined;
+  private classifierCache: { key: string; classifier: Classifier } | null = null;
 
   constructor(opts: OrchestratorOptions) {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
+    this.classifierOption = opts.classifier;
+    this.autoModeRules =
+      opts.autoModeRules ??
+      new AutoModeRulesProvider({
+        bin: () => {
+          const bin = resolveClaudeBin(process.env);
+          return existsSync(bin) ? bin : null;
+        },
+        env: () => cleanClaudeEnv(process.env),
+        cachePath: join(opts.paths.home, "auto-mode-rules.json"),
+      });
+    this.gate = new PermissionGate({ classifier: () => this.classifier(), timeoutMs: opts.classifierTimeoutMs });
     this.store = opts.store;
     this.bus = opts.bus;
     this.browser = opts.browser;
@@ -325,8 +363,11 @@ export class Orchestrator {
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     });
-    this.bus.emit({ kind: "project.upserted", project });
-    return project;
+    const mode = validPermissionMode(body.permissionMode);
+    if (mode) this.store.projects.setPermissionMode(project.id, mode);
+    const created = this.store.projects.get(project.id)!;
+    this.bus.emit({ kind: "project.upserted", project: created });
+    return created;
   }
 
   /** Resolve (and ~-expand) a project directory, which must exist. */
@@ -369,11 +410,13 @@ export class Orchestrator {
         newKey = key;
       }
     }
-    const { key: _key, defaultModels: modelPatch, ...rest } = body;
+    const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
+    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, ...rest } = body;
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
     const renamed = this.store.transaction(() => {
       this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, defaultModels });
+      if (permissionMode !== undefined) this.store.projects.setPermissionMode(id, permissionMode);
       return newKey ? this.store.projects.rekey(id, newKey) : null;
     });
     const project = this.store.projects.get(id)!;
@@ -451,6 +494,7 @@ export class Orchestrator {
     const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
     const model = validateModelId("model", body.model);
+    const permissionMode = validPermissionMode(body.permissionMode);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -488,7 +532,7 @@ export class Orchestrator {
         model,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
-      return t;
+      return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
     });
     const p2 = this.store.projects.get(project.id);
     if (p2) this.bus.emit({ kind: "project.upserted", project: p2 });
@@ -534,6 +578,7 @@ export class Orchestrator {
       if (body.driver !== ticket.driver && body.model === undefined) patch.model = null;
     }
     if (body.model !== undefined) patch.model = validateModelId("model", body.model);
+    if (body.permissionMode !== undefined) patch.permissionMode = validPermissionMode(body.permissionMode);
     if (body.dependsOn !== undefined) {
       const deps = this.validateDeps(body.dependsOn);
       if (deps.includes(ticket.key)) throw badRequest("A ticket cannot depend on itself");
@@ -1104,6 +1149,7 @@ export class Orchestrator {
     ctx: ToolContext,
     toolName: string,
     input: unknown,
+    meta: { reason?: string; source?: "classifier" | "policy" } = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
     if (!APPROVABLE_RUNS.includes(ctx.runKind) || !ctx.ticket) {
       return {
@@ -1112,14 +1158,98 @@ export class Orchestrator {
       };
     }
     const t = this.ctxTicket(ctx);
+    if (this.permissionModeFor(t) === "read_only") {
+      // Nothing in read-only mode goes to a human: the answer would always be no.
+      return { behavior: "deny", message: `${toolName} isn't allowed: this ticket is in read-only mode. Don't retry it; report what you would change instead.` };
+    }
     if (t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
     if (this.store.tickets.consumeGrant(t.id, toolName, input)) return { behavior: "allow", updatedInput: input };
     if (t.pendingApproval) return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE }; // one request at a time
     const pending: PendingApproval = { id: crypto.randomUUID(), runId: ctx.runId, toolName, input, requestedAt: Date.now() };
+    if (meta.reason) pending.reason = meta.reason;
+    if (meta.source) pending.source = meta.source;
     const reason = `Permission needed: ${toolName} — ${summarizeToolInput(input)}`;
-    this.addSummary(t.sessionId, t.id, "system", reason);
+    this.addSummary(t.sessionId, t.id, "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
     this.transition(t, "blocked", { pendingApproval: pending, blockedReason: reason }, reason, reason);
     return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
+  }
+
+  // =========================================================================
+  // Permission modes (DESIGN.md "Permissions")
+  // =========================================================================
+
+  /** Effective mode for a ticket: ticket → project → settings. */
+  permissionModeFor(ticket: Ticket | null, project?: Project | null): PermissionMode {
+    const fresh = ticket ? (this.store.tickets.get(ticket.id) ?? ticket) : null;
+    const p = project !== undefined ? project : fresh ? this.store.projects.get(fresh.projectId) : null;
+    return resolvePermissionMode(fresh, p, this.settings()).mode;
+  }
+
+  /** The classifier for settings.classifier (or the injected one); null → "off". */
+  private classifier(): Classifier | null {
+    if (this.classifierOption !== undefined) return this.classifierOption;
+    const settings = this.settings();
+    if (settings.classifier === "off") return null;
+    if (process.env.NODE_ENV === "test") {
+      // Tests must never reach a real model; inject a classifier to exercise auto mode.
+      return { backend: settings.classifier, classify: async () => Promise.reject(new Error("no real classifier under bun test")) };
+    }
+    const key = `${settings.classifier}|${settings.defaultModels["anthropic-api"] ?? ""}`;
+    if (this.classifierCache?.key === key) return this.classifierCache.classifier;
+    const rules = () => this.autoModeRules.get();
+    const classifier: Classifier =
+      settings.classifier === "anthropic-api"
+        ? new AnthropicApiClassifier({
+            apiKey: () => this.settings().anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? null,
+            model: () => this.settings().defaultModels["anthropic-api"] || DEFAULT_ANTHROPIC_MODEL,
+            rules,
+          })
+        : new ClaudeCliClassifier({ bin: () => resolveClaudeBin(process.env), env: () => cleanClaudeEnv(process.env), rules });
+    this.classifierCache = { key, classifier };
+    return classifier;
+  }
+
+  /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
+  async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
+    const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
+    // Plan runs are read-only for every driver (claude-code runs them in --permission-mode plan).
+    const mode: PermissionMode = ctx.runKind === "plan" || ctx.runKind === "triage" ? "read_only" : this.permissionModeFor(ticket);
+    return this.gate.check(toolName, input, {
+      mode,
+      runKind: ctx.runKind,
+      cwd: ctx.cwd,
+      signal: ctx.signal,
+      isGranted: (tool, i) => !!ticket && (ticket.allowedTools.includes(tool) || this.store.tickets.consumeGrant(ticket.id, tool, i)),
+      requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
+      log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
+      context: () => ({
+        ticket: ticket ? { key: ticket.key, title: ticket.title, brief: ticket.description } : null,
+        transcript: this.recentTranscript(ctx.session.id),
+      }),
+    });
+  }
+
+  /** Transcript status entry for a permission decision (rendered as an audit row). */
+  private logPermission(sessionId: string, runId: string | null, entry: PermissionDecisionLog) {
+    const verb = entry.decision === "allow" ? (entry.source === "classifier" ? "Auto-approved" : "Allowed") : entry.decision === "ask" ? "Asked you" : "Denied";
+    const took = entry.latencyMs !== undefined ? ` (${entry.backend ?? "classifier"}, ${(entry.latencyMs / 1000).toFixed(1)}s)` : "";
+    this.append(sessionId, runId, "system", { type: "status", text: `${verb}: ${entry.summary} — ${entry.reason}${took}`, permission: entry });
+  }
+
+  /** The last few transcript entries as short lines, for the classifier's sense of intent. */
+  private recentTranscript(sessionId: string, max = 16): string[] {
+    const entries = this.store.transcript.list(sessionId).slice(-60);
+    const lines: string[] = [];
+    for (const e of entries) {
+      const c = e.content;
+      if (c.type === "text") lines.push(`[${e.role === "user" ? "human" : e.role}] ${c.text}`);
+      else if (c.type === "tool_call") lines.push(`[tool_call ${c.name}] ${summarizeToolInput(c.input, 300)}`);
+      else if (c.type === "tool_result") {
+        const text = c.output.map((o) => (o.type === "text" ? o.text : `[${o.type}]`)).join(" ");
+        lines.push(`[tool_result ${c.name}${c.isError ? " error" : ""}] ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+      }
+    }
+    return lines.slice(-max);
   }
 
   async declineWork(ctx: ToolContext, reason: string): Promise<void> {
@@ -1342,6 +1472,7 @@ export class Orchestrator {
           systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children }),
           cwd,
           model,
+          permissionMode: this.permissionModeFor(ticket, project),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
           toolContext: ctx,
@@ -1427,6 +1558,12 @@ export class Orchestrator {
         return null;
       case "usage":
         return null;
+      case "status":
+        this.appendStatus(run.sessionId, run.id, ev.text);
+        return null;
+      case "permission":
+        this.logPermission(run.sessionId, run.id, ev.log);
+        return null;
       case "error":
         this.append(run.sessionId, run.id, "system", { type: "error", text: ev.message });
         return ev.message || "Driver error";
@@ -1509,7 +1646,8 @@ export class Orchestrator {
       listProjects: (c) => this.listProjects_(c),
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
       declineWork: (c, r) => this.declineWork(c, r),
-      requestApproval: (c, n, i) => this.requestApproval(c, n, i),
+      requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
+      checkPermission: (c, n, i) => this.checkPermission(c, n, i),
     };
   }
 

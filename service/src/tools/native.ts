@@ -4,7 +4,7 @@
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
-import type { ToolContext } from "./types";
+import type { ToolContext, ToolResult } from "./types";
 import { defineTool, errorResult, schema, truncateMiddle } from "./util";
 
 export const BASH_DEFAULT_TIMEOUT_MS = 120_000;
@@ -27,6 +27,15 @@ export function resolvePath(ctx: Pick<ToolContext, "cwd">, p: string): string {
   if (p === "~") return homedir();
   if (p.startsWith("~/")) return resolve(homedir(), p.slice(2));
   return isAbsolute(p) ? resolve(p) : resolve(ctx.cwd, p);
+}
+
+/**
+ * Ask the PermissionGate (via ops.checkPermission) whether this call may run under the
+ * ticket's permission mode. Returns an error result to hand back to the model when denied.
+ */
+async function gated(ctx: ToolContext, tool: string, input: unknown): Promise<ToolResult | null> {
+  const decision = await ctx.ops.checkPermission(ctx, tool, input);
+  return decision.behavior === "allow" ? null : errorResult(decision.message);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +88,9 @@ export const bash = defineTool<{ command: string; timeout_ms?: number }>({
     ["command"],
   ),
   async run({ command, timeout_ms }, ctx) {
+    if (ctx.signal.aborted) return errorResult("Run was cancelled before the command started.");
+    const denied = await gated(ctx, "bash", timeout_ms === undefined ? { command } : { command, timeout_ms });
+    if (denied) return denied;
     if (ctx.signal.aborted) return errorResult("Run was cancelled before the command started.");
     const timeout = Math.min(timeout_ms ?? BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS);
     const proc = Bun.spawn(["bash", "-c", command], {
@@ -140,6 +152,8 @@ export const readFile = defineTool<{ path: string; offset?: number; limit?: numb
     ["path"],
   ),
   async run({ path, offset, limit }, ctx) {
+    const denied = await gated(ctx, "read_file", { path });
+    if (denied) return denied;
     const abs = resolvePath(ctx, path);
     const file = Bun.file(abs);
     let info;
@@ -195,6 +209,8 @@ export const writeFile = defineTool<{ path: string; content: string }>({
     ["path", "content"],
   ),
   async run({ path, content }, ctx) {
+    const denied = await gated(ctx, "write_file", { path, content });
+    if (denied) return denied;
     const abs = resolvePath(ctx, path);
     try {
       if ((await stat(abs)).isDirectory()) return errorResult(`${abs} is a directory.`);
@@ -236,6 +252,8 @@ export const editFile = defineTool<{ path: string; old_string: string; new_strin
     ["path", "old_string", "new_string"],
   ),
   async run({ path, old_string, new_string, replace_all }, ctx) {
+    const denied = await gated(ctx, "edit_file", replace_all === undefined ? { path, old_string, new_string } : { path, old_string, new_string, replace_all });
+    if (denied) return denied;
     const abs = resolvePath(ctx, path);
     if (old_string === "") return errorResult("old_string must not be empty. Use write_file to create a file.");
     if (old_string === new_string) return errorResult("old_string and new_string are identical; nothing to change.");
@@ -273,6 +291,8 @@ export const listFiles = defineTool<{ path?: string; pattern?: string }>({
     pattern: { type: "string", description: "Glob pattern relative to path, e.g. \"**/*.ts\"." },
   }),
   async run({ path, pattern }, ctx) {
+    const denied = await gated(ctx, "list_files", { path: path ?? "." });
+    if (denied) return denied;
     const dir = resolvePath(ctx, path ?? ".");
     try {
       if (!(await stat(dir)).isDirectory()) return errorResult(`${dir} is not a directory.`);

@@ -1,16 +1,25 @@
 import type { PublicSettings, Settings } from "@harness/shared";
+import { CLASSIFIER_BACKENDS, PERMISSION_MODES } from "@harness/shared";
 import { badRequest } from "./errors";
 
 export const DEFAULT_SETTINGS: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
-  claudePermissionMode: "acceptEdits",
+  permissionMode: "auto",
+  classifier: "claude-cli",
   defaultModels: {},
   reviewModels: {},
   anthropicApiKey: null,
 };
 
-const PERMISSION_MODES: Settings["claudePermissionMode"][] = ["bypassPermissions", "acceptEdits", "auto", "dontAsk"];
+/**
+ * The pre-PermissionMode setting (claude-code CLI modes), still accepted from older clients.
+ * Same mapping as migration 4: auto → auto, dontAsk → read_only (it denies anything not
+ * pre-approved, i.e. every write), acceptEdits / bypassPermissions / anything else → ask.
+ */
+export function legacyPermissionMode(value: unknown): Settings["permissionMode"] {
+  return value === "auto" ? "auto" : value === "dontAsk" ? "read_only" : "ask";
+}
 
 export function toPublicSettings(s: Settings): PublicSettings {
   const { anthropicApiKey, ...rest } = s;
@@ -55,10 +64,17 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
           throw badRequest("maxConcurrentRuns must be an integer between 1 and 64");
         out.maxConcurrentRuns = value;
         break;
+      case "permissionMode":
+        if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")}`);
+        out.permissionMode = value as Settings["permissionMode"];
+        break;
       case "claudePermissionMode":
-        if (!PERMISSION_MODES.includes(value as Settings["claudePermissionMode"]))
-          throw badRequest(`claudePermissionMode must be one of ${PERMISSION_MODES.join(", ")}`);
-        out.claudePermissionMode = value as Settings["claudePermissionMode"];
+        // Older app builds; an explicit permissionMode in the same body wins.
+        if (!("permissionMode" in (body as object))) out.permissionMode = legacyPermissionMode(value);
+        break;
+      case "classifier":
+        if (!(CLASSIFIER_BACKENDS as readonly unknown[]).includes(value)) throw badRequest(`classifier must be one of ${CLASSIFIER_BACKENDS.join(", ")}`);
+        out.classifier = value as Settings["classifier"];
         break;
       case "defaultModels":
       case "reviewModels":

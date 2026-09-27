@@ -27,8 +27,41 @@ export interface Project {
   useWorktrees: boolean;
   /** When false, the human review step is skipped (agent review alone gates completion) */
   requireHumanReview: boolean;
+  /** Permission mode for this project's tickets (null → settings.permissionMode) */
+  permissionMode: PermissionMode | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * How much an agent may do without asking (DESIGN.md "Permissions"):
+ * - "auto":      a classifier judges each unapproved action (Claude Code's auto mode for
+ *                claude-code; the harness PermissionGate + classifier for native-tool drivers)
+ * - "ask":       edits inside the workdir are allowed, everything else asks a human
+ * - "read_only": reads only; writes and non-read-only commands are denied
+ */
+export const PERMISSION_MODES = ["auto", "ask", "read_only"] as const;
+export type PermissionMode = (typeof PERMISSION_MODES)[number];
+
+/** Who judges actions in auto mode for native-tool drivers ("off": ask a human instead). */
+export const CLASSIFIER_BACKENDS = ["claude-cli", "anthropic-api", "off"] as const;
+export type ClassifierBackend = (typeof CLASSIFIER_BACKENDS)[number];
+
+/** One permission decision, logged on the transcript as a status entry (content.permission). */
+export interface PermissionDecisionLog {
+  /** Tool as the driver names it: "bash", "write_file", "Bash", ... */
+  tool: string;
+  /** One-line summary of the input (command / path) */
+  summary: string;
+  /** allow: ran without asking · ask: sent to a human · deny: refused (the agent sees the reason) */
+  decision: "allow" | "ask" | "deny";
+  reason: string;
+  /** classifier: a model judged it · policy: a static rule (allowlist, mode, hard-deny, grant) */
+  source: "classifier" | "policy";
+  /** Classifier backend ("claude-cli", "anthropic-api", "claude-code" for the CLI's own auto mode) */
+  backend?: string;
+  latencyMs?: number;
+  mode: PermissionMode;
 }
 
 export const TICKET_STATUSES = ["planning", "in_progress", "blocked", "review", "done"] as const;
@@ -73,6 +106,8 @@ export interface Ticket {
   pendingApproval: PendingApproval | null;
   /** Tools the human has allowed for every future call on this ticket ("Bash", "WebFetch", ...) */
   allowedTools: string[];
+  /** Permission mode override for this ticket (null → project → settings) */
+  permissionMode: PermissionMode | null;
   /** Model for this ticket's runs (driver-specific id). null → project / settings / driver default. */
   model: string | null;
   /** Sort order within a column */
@@ -89,6 +124,10 @@ export interface PendingApproval {
   /** The tool input, e.g. { command: "npm install" } */
   input: unknown;
   requestedAt: number;
+  /** Why a human is being asked (e.g. the classifier's judgement) */
+  reason?: string;
+  /** What sent it to the human: the auto-mode classifier or a static policy (ask mode, ...) */
+  source?: "classifier" | "policy";
 }
 
 export interface ExternalRef {
@@ -144,7 +183,8 @@ export type TranscriptContent =
   | { type: "thinking"; text: string }
   | { type: "tool_call"; callId: string; name: string; input: unknown }
   | { type: "tool_result"; callId: string; name: string; output: ToolResultContent[]; isError: boolean }
-  | { type: "status"; text: string } // e.g. "Moved to review", "Run started (work)"
+  /** e.g. "Moved to review", "Run started (work)"; `permission` marks a permission decision (auto-approved, sent to a human, denied) */
+  | { type: "status"; text: string; permission?: PermissionDecisionLog }
   | { type: "error"; text: string };
 
 export interface TranscriptEntry {
@@ -249,8 +289,10 @@ export interface DriverModels {
 export interface Settings {
   defaultDriver: string;
   maxConcurrentRuns: number;
-  /** claude-code driver: permission mode passed to the CLI */
-  claudePermissionMode: "bypassPermissions" | "acceptEdits" | "auto" | "dontAsk";
+  /** Default permission mode (projects and tickets may override it). Default "auto". */
+  permissionMode: PermissionMode;
+  /** Who judges actions in auto mode for drivers without their own permission system */
+  classifier: ClassifierBackend;
   /**
    * Model per driver id used when neither the ticket nor its project picks one.
    * Missing / null → the driver's own default. PATCH merges per driver; null clears.
@@ -335,6 +377,8 @@ export interface CreateProjectBody {
   defaultDriver?: string | null;
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
+  /** null → settings.permissionMode */
+  permissionMode?: PermissionMode | null;
   /** Per-driver default models; PATCH merges per driver, null clears one */
   defaultModels?: Record<string, string | null>;
 }
@@ -348,6 +392,8 @@ export interface CreateTicketBody {
   driver?: string;
   /** Model for this ticket's runs (null / omitted → defaults) */
   model?: string | null;
+  /** Permission mode override (null / omitted → project → settings) */
+  permissionMode?: PermissionMode | null;
   /** Skip planning and start work right away (default true for quick sessions) */
   start?: boolean;
   dependsOn?: string[];
@@ -366,6 +412,8 @@ export interface UpdateTicketBody {
   driver?: string;
   /** Applies from the next run (claude-code resumes the conversation with the new --model) */
   model?: string | null;
+  /** Applies from the next tool call / run; null → inherit from the project / settings */
+  permissionMode?: PermissionMode | null;
   dependsOn?: string[];
   position?: number;
 }

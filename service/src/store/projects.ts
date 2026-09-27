@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Project } from "@harness/shared";
+import type { PermissionMode, Project } from "@harness/shared";
 import { projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
 
@@ -12,6 +12,7 @@ interface ProjectRow {
   default_driver: string | null;
   use_worktrees: number;
   require_human_review: number;
+  permission_mode?: string | null;
   default_models: string;
   created_at: number;
   updated_at: number;
@@ -26,6 +27,7 @@ const toProject = (r: ProjectRow): Project => ({
   defaultDriver: r.default_driver,
   useWorktrees: bool(r.use_worktrees),
   requireHumanReview: bool(r.require_human_review),
+  permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
   defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -196,6 +198,11 @@ export class ProjectRepo {
       this.db.query("UPDATE projects SET key = $key, updated_at = $t WHERE id = $id").run({ id, key: newKey, t });
       return { renames, depTicketIds: [...touched] };
     })();
+  }
+
+  /** Set (or clear, with null) the project's permission-mode override. */
+  setPermissionMode(id: string, mode: PermissionMode | null) {
+    this.db.query("UPDATE projects SET permission_mode = $mode, updated_at = $t WHERE id = $id").run({ id, mode, t: now() });
   }
 
   delete(id: string) {

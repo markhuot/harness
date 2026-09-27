@@ -1,7 +1,7 @@
 // Driver contract. A driver turns one "run" (a prompt in the context of a session)
 // into a stream of events. Drivers never touch the DB; the orchestrator persists events.
 
-import type { DriverInfo, ModelInfo, RunKind } from "@harness/shared";
+import type { DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 
 export type DriverEvent =
@@ -15,6 +15,10 @@ export type DriverEvent =
   /** Driver-specific state to persist for resuming the conversation next run */
   | { type: "state"; state: unknown }
   | { type: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number }
+  /** A notice for the human, persisted as a transcript status entry (e.g. a mode downgrade) */
+  | { type: "status"; text: string }
+  /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
+  | { type: "permission"; log: PermissionDecisionLog }
   | { type: "error"; message: string };
 
 export interface RunRequest {
@@ -30,6 +34,13 @@ export interface RunRequest {
    * may use settings.reviewModels). null → the driver's own default.
    */
   model: string | null;
+  /**
+   * Effective permission mode for the ticket (ticket → project → settings). Drivers with their
+   * own permission system map it (claude-code: auto → auto, ask → acceptEdits, read_only →
+   * dontAsk; plan runs always use plan). Native tools enforce it through ops.checkPermission.
+   * Absent → settings.permissionMode.
+   */
+  permissionMode?: PermissionMode;
   /** Previously persisted driver state for this session (null on first run) */
   state: unknown;
   /** Tools available in this run. Native-loop drivers call tool.execute(input, toolContext). */

@@ -14,7 +14,8 @@ import { toolsForRun } from "../src/tools/index";
 const settings: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 1,
-  claudePermissionMode: "acceptEdits",
+  permissionMode: "ask",
+  classifier: "off",
   defaultModels: {},
   reviewModels: {},
   anthropicApiKey: null,

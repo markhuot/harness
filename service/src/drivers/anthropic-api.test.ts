@@ -10,7 +10,8 @@ import type { DriverEvent, RunRequest } from "./types";
 const baseSettings: Settings = {
   defaultDriver: "anthropic-api",
   maxConcurrentRuns: 4,
-  claudePermissionMode: "bypassPermissions",
+  permissionMode: "auto",
+  classifier: "off",
   defaultModels: {},
   reviewModels: {},
   anthropicApiKey: "sk-settings",

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ExternalRef, PendingApproval, ReviewState, Ticket, TicketKind, TicketStatus } from "@harness/shared";
+import type { ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketStatus } from "@harness/shared";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
 
 interface TicketRow {
@@ -20,6 +20,7 @@ interface TicketRow {
   workdir: string | null;
   branch: string | null;
   blocked_reason: string | null;
+  permission_mode: string | null;
   position: number;
   created_at: number;
   updated_at: number;
@@ -77,6 +78,7 @@ export type TicketPatch = Partial<{
   workdir: string | null;
   branch: string | null;
   blockedReason: string | null;
+  permissionMode: PermissionMode | null;
   position: number;
   dependsOn: string[];
   pendingApproval: PendingApproval | null;
@@ -96,6 +98,7 @@ const COLUMNS: Record<string, string> = {
   workdir: "workdir",
   branch: "branch",
   blockedReason: "blocked_reason",
+  permissionMode: "permission_mode",
   position: "position",
   pendingApproval: "pending_approval",
   allowedTools: "allowed_tools",
@@ -143,6 +146,7 @@ export class TicketRepo {
       workdir: r.workdir,
       branch: r.branch,
       blockedReason: r.blocked_reason,
+      permissionMode: (r.permission_mode as PermissionMode | null) ?? null,
       busy: bool(r.busy),
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),

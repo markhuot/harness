@@ -43,6 +43,7 @@ const project: Project = {
   useWorktrees: true,
   requireHumanReview: true,
   defaultModels: {},
+  permissionMode: null,
   createdAt: 0,
   updatedAt: 0,
 };
@@ -67,6 +68,7 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
     workdir: null,
     branch: null,
     blockedReason: null,
+    permissionMode: null,
     busy: false,
     pendingApproval: null,
     allowedTools: [],

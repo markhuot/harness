@@ -178,6 +178,18 @@ export const MIGRATIONS: string[] = [
   WHERE EXISTS (SELECT 1 FROM settings WHERE key IN ('claudeModel', 'anthropicModel'));
   DELETE FROM settings WHERE key IN ('claudeModel', 'anthropicModel');
   `,
+  // 4: harness permission modes (auto | ask | read_only) replace settings.claudePermissionMode;
+  //    per-project and per-ticket overrides. acceptEdits (and bypassPermissions) → ask,
+  //    auto → auto, dontAsk → read_only (dontAsk denied every write that wasn't pre-approved).
+  `
+  ALTER TABLE projects ADD COLUMN permission_mode TEXT;
+  ALTER TABLE tickets ADD COLUMN permission_mode TEXT;
+
+  INSERT OR REPLACE INTO settings (key, value)
+  SELECT 'permissionMode', CASE value WHEN '"auto"' THEN '"auto"' WHEN '"dontAsk"' THEN '"read_only"' ELSE '"ask"' END
+  FROM settings WHERE key = 'claudePermissionMode';
+  DELETE FROM settings WHERE key = 'claudePermissionMode';
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

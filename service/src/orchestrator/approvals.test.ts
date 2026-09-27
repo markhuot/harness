@@ -6,7 +6,7 @@ import type { HarnessEvent } from "@harness/shared";
 import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 import { migrate, MIGRATIONS } from "../db";
 import { APPROVAL_PENDING_MESSAGE, endsWithQuestion, summarizeToolInput } from "./orchestrator";
-import { DEFAULT_SETTINGS } from "./settings";
+import { DEFAULT_SETTINGS, resolveSettings } from "./settings";
 
 function setup(driver?: FakeDriver) {
   const h = makeOrchestrator({ driver });
@@ -192,14 +192,33 @@ describe("work run ending with a question", () => {
 });
 
 describe("migrations and events", () => {
-  test("v1 → v2 migrates bypassPermissions to acceptEdits and defaults are acceptEdits", () => {
+  test("v1 → latest: bypassPermissions → acceptEdits (v2) → ask (v4); the default mode is auto", () => {
     const db = new Database(":memory:");
     db.exec(MIGRATIONS[0]!);
     db.exec("PRAGMA user_version = 1");
     db.query("INSERT INTO settings (key, value) VALUES ('claudePermissionMode', '\"bypassPermissions\"')").run();
     migrate(db);
-    expect((db.query("SELECT value FROM settings WHERE key = 'claudePermissionMode'").get() as any).value).toBe('"acceptEdits"');
-    expect(DEFAULT_SETTINGS.claudePermissionMode).toBe("acceptEdits");
+    expect(db.query("SELECT value FROM settings WHERE key = 'claudePermissionMode'").get()).toBeNull();
+    expect((db.query("SELECT value FROM settings WHERE key = 'permissionMode'").get() as any).value).toBe('"ask"');
+    expect(DEFAULT_SETTINGS.permissionMode).toBe("auto");
+  });
+
+  test("v3 → v4 maps each claude-code mode onto a harness mode and adds nullable overrides", () => {
+    for (const [legacy, mode] of [["acceptEdits", "ask"], ["auto", "auto"], ["dontAsk", "read_only"], ["bypassPermissions", "ask"]] as const) {
+      const db = new Database(":memory:");
+      for (const m of MIGRATIONS.slice(0, 3)) db.exec(m);
+      db.exec("PRAGMA user_version = 3");
+      db.query("INSERT INTO settings (key, value) VALUES ('claudePermissionMode', $v)").run({ $v: JSON.stringify(legacy) });
+      migrate(db);
+      expect(resolveSettings({ permissionMode: JSON.parse((db.query("SELECT value FROM settings WHERE key = 'permissionMode'").get() as any).value) }).permissionMode).toBe(mode);
+      const cols = (t: string) => (db.query(`PRAGMA table_info(${t})`).all() as { name: string; notnull: number }[]).find((c) => c.name === "permission_mode");
+      expect(cols("tickets")?.notnull).toBe(0);
+      expect(cols("projects")?.notnull).toBe(0);
+    }
+    // No stored mode (the old default acceptEdits was never written) → the new default, auto.
+    const db = new Database(":memory:");
+    migrate(db);
+    expect(db.query("SELECT value FROM settings WHERE key = 'permissionMode'").get()).toBeNull();
   });
 
   test("deleting a ticket emits session.deleted", async () => {

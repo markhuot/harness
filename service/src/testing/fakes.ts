@@ -285,6 +285,10 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     watchers: opts.watchers === undefined ? null : opts.watchers,
     log: opts.log ?? (() => {}),
     modelCatalog: opts.modelCatalog,
+    // Tests never reach a real classifier: auto mode asks a human unless one is injected.
+    classifier: opts.classifier === undefined ? null : opts.classifier,
+    autoModeRules: opts.autoModeRules,
+    classifierTimeoutMs: opts.classifierTimeoutMs,
   });
   store.settings.set({ defaultDriver: driver.id });
   return { orch, store, bus, driver, browser, paths, home };

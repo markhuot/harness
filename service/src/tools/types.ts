@@ -108,5 +108,15 @@ export interface HarnessOps {
     ctx: ToolContext,
     toolName: string,
     input: unknown,
+    /** Shown on the approval card: why a human is asked, and by whom (classifier / static policy) */
+    meta?: { reason?: string; source?: "classifier" | "policy" },
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }>;
+
+  // --- native tool permissions (PermissionGate; DESIGN.md "Permissions") ---
+  /**
+   * May this native tool call (bash, write_file, edit_file, read_file, list_files) run under the
+   * ticket's permission mode? Deny messages are for the model. May block the ticket for a human
+   * (soft deny / ask mode), exactly like requestApproval.
+   */
+  checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }>;
 }

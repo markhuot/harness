@@ -187,7 +187,7 @@ describe("http api", () => {
   test("settings never expose the API key; PATCH merges", async () => {
     const { client, h } = await boot();
     const before = await client.getSettings();
-    expect(before).toMatchObject({ defaultDriver: "dummy", maxConcurrentRuns: 4, claudePermissionMode: "acceptEdits", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false });
+    expect(before).toMatchObject({ defaultDriver: "dummy", maxConcurrentRuns: 4, permissionMode: "auto", classifier: "claude-cli", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false });
     const after = await client.updateSettings({ anthropicApiKey: "sk-secret", maxConcurrentRuns: 2 });
     expect(after.anthropicApiKeySet).toBe(true);
     expect(JSON.stringify(after)).not.toContain("sk-secret");
