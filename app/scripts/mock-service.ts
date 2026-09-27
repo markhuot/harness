@@ -46,6 +46,8 @@ const QUIET = process.env.MOCK_QUIET === "1";
 
 const projects = new Map<string, Project>();
 const tickets = new Map<string, Ticket>(); // by id
+/** Old ticket keys (from before a project rename) → ticket id, like the service's ticket_key_aliases */
+const keyAliases = new Map<string, string>();
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
 const summaries: Summary[] = [];
@@ -377,6 +379,7 @@ function seedTicket(s: SeedTicket): Ticket {
     allowedTools: s.allowedTools ?? [],
     model: s.model ?? null,
     position: tickets.size,
+    completedAt: s.status === "done" ? createdAt + 60_000 : null,
     createdAt,
     updatedAt: createdAt + 60_000,
   };
@@ -659,6 +662,31 @@ function seed() {
     ageMin: 20,
   });
 
+  // A long-lived project with a deep Done column (paging, search): 130 done tickets, completed
+  // over the last ~65 minutes (so they fill the first Done pages, newest first), renumbered from
+  // an old WWW key (WWW-n → SITE-n resolve as aliases).
+  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site");
+  const verbs = ["Fix", "Refactor", "Polish", "Document", "Speed up", "Test", "Localize", "Harden"];
+  const nouns = ["hero banner", "pricing table", "footer links", "blog index", "contact form", "sitemap", "RSS feed", "404 page", "cookie notice", "search page", "case studies grid", "team page", "careers list"];
+  for (let i = 1; i <= 130; i++) {
+    const title = i === 42 ? "Retire the legacy jQuery carousel" : `${verbs[i % verbs.length]} the ${nouns[i % nouns.length]} (#${i})`;
+    const t = seedTicket({
+      project: site,
+      key: `SITE-${i}`,
+      title,
+      description: i === 42 ? "Swap the carousel for a CSS scroll-snap strip; drop jquery.slick." : `Routine maintenance ${i}.`,
+      status: "done",
+      driver: "dummy",
+      agentReview: "approved",
+      humanReview: "approved",
+      ageMin: 600 + i,
+    });
+    // SITE-130 finished most recently; SITE-1 about 65 minutes ago.
+    t.completedAt = t.updatedAt = now() - (131 - i) * 30_000;
+    keyAliases.set(`WWW-${i}`, t.id);
+  }
+  site.nextSeq = 131;
+
   // Triage sessions
   const t1 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Paywall meter counts AMP pageviews twice", now() - 95 * 60_000);
   t1.triageStatus = "dispatched";
@@ -715,10 +743,48 @@ class HttpError extends Error {
   }
 }
 
+/** By current key, else by an old key (resolvedFrom = the alias it came through). */
+function lookupTicket(key: string): { ticket: Ticket; alias: string | null } | null {
+  const k = decodeURIComponent(key).toUpperCase();
+  const direct = byKey(k);
+  if (direct) return { ticket: direct, alias: null };
+  const viaAlias = keyAliases.get(k);
+  const t = viaAlias ? tickets.get(viaAlias) : undefined;
+  return t ? { ticket: t, alias: k } : null;
+}
+
 function ticketByKey(key: string): Ticket {
-  const t = byKey(decodeURIComponent(key).toUpperCase());
+  const t = lookupTicket(key)?.ticket;
   if (!t) throw new HttpError(404, `Ticket ${key} not found`);
   return t;
+}
+
+const completedAtOf = (t: Ticket) => t.completedAt ?? t.updatedAt;
+/** Page order: done newest-completed first, other columns by position. */
+function columnOrder(a: Ticket, b: Ticket) {
+  if (a.status === "done" && b.status === "done") return completedAtOf(b) - completedAtOf(a) || (a.id < b.id ? -1 : 1);
+  return a.position - b.position || a.createdAt - b.createdAt;
+}
+
+/** Search rank like the service: key (current or old, exact/prefix) 0, title 1, the rest 2; null = no match. */
+function searchRank(t: Ticket, q: string): number | null {
+  const needle = q.toLowerCase();
+  const keys = [t.key, ...[...keyAliases].filter(([, id]) => id === t.id).map(([k]) => k)].map((k) => k.toLowerCase());
+  if (keys.some((k) => k === needle || k.startsWith(needle))) return 0;
+  if (t.title.toLowerCase().includes(needle)) return 1;
+  const latest = summaries.filter((s) => s.ticketId === t.id).at(-1)?.body ?? "";
+  if (t.description.toLowerCase().includes(needle) || latest.toLowerCase().includes(needle)) return 2;
+  return null;
+}
+
+/** Offset cursors ("o:50"): opaque to clients. */
+function paginate(list: Ticket[], url: URL) {
+  const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? 50) || 50));
+  const cursor = url.searchParams.get("cursor");
+  const offset = cursor ? Number(cursor.replace(/^o:/, "")) : 0;
+  if (!Number.isInteger(offset) || offset < 0) throw new HttpError(400, "Invalid cursor");
+  const page = list.slice(offset, offset + limit);
+  return { tickets: page, nextCursor: offset + limit < list.length ? `o:${offset + limit}` : null, total: list.length };
 }
 
 /** Same rules as the service: native OLD-n → NEW-n, external mirrors keep their keys. */
@@ -735,6 +801,7 @@ function renameProjectKey(p: Project, key: string) {
   if (clash.length) throw new HttpError(409, `Can't rename to ${key}: ${clash.join(", ")} already exist${clash.length === 1 ? "s" : ""}`);
   p.key = key;
   for (const t of native) {
+    keyAliases.set(t.key, t.id);
     t.key = map.get(t.key)!;
     const s = sessions.get(t.sessionId);
     if (s) {
@@ -751,8 +818,9 @@ function renameProjectKey(p: Project, key: string) {
   }
 }
 
-function ticketDetail(t: Ticket): TicketDetail {
+function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDetail {
   return {
+    ...(resolvedFrom ? { resolvedFrom } : {}),
     ticket: t,
     session: sessions.get(t.sessionId)!,
     summaries: summaries.filter((s) => s.ticketId === t.id),
@@ -765,6 +833,7 @@ function ticketDetail(t: Ticket): TicketDetail {
 function setStatus(t: Ticket, status: TicketStatus) {
   if (t.status === status) return;
   t.status = status;
+  t.completedAt = status === "done" ? now() : null;
   appendEntry(t.sessionId, null, "system", { type: "status", text: `Moved to ${status.replace("_", " ")}` });
 }
 
@@ -912,14 +981,35 @@ async function route(req: Request, url: URL): Promise<Response> {
 
   // Tickets
   if (a === "tickets") {
+    const pid = url.searchParams.get("projectId");
+    const statuses = url.searchParams.get("status")?.split(",").filter(Boolean) ?? [];
+    const inProject = (t: Ticket) => !pid || t.projectId === pid;
     if (!b && method === "GET") {
-      const pid = url.searchParams.get("projectId");
-      return ok([...tickets.values()].filter((t) => !pid || t.projectId === pid));
+      return ok([...tickets.values()].filter((t) => inProject(t) && (!statuses.length || statuses.includes(t.status))));
+    }
+    if (b === "page" && !c && method === "GET") {
+      const status = url.searchParams.get("status") as TicketStatus | null;
+      if (!status) throw new HttpError(400, "status is required");
+      const q = url.searchParams.get("q")?.trim();
+      const list = [...tickets.values()].filter((t) => t.status === status && inProject(t) && (!q || searchRank(t, q) !== null)).sort(columnOrder);
+      return ok(paginate(list, url));
+    }
+    if (b === "search" && !c && method === "GET") {
+      const q = url.searchParams.get("q")?.trim();
+      if (!q) throw new HttpError(400, "q is required");
+      const ranked = [...tickets.values()]
+        .filter(inProject)
+        .map((t) => ({ t, rank: searchRank(t, q) }))
+        .filter((x): x is { t: Ticket; rank: number } => x.rank !== null)
+        .sort((x, y) => x.rank - y.rank || y.t.updatedAt - x.t.updatedAt || (x.t.id < y.t.id ? -1 : 1));
+      return ok(paginate(ranked.map((x) => x.t), url));
     }
     if (!b && method === "POST") return ok(createTicket(await readBody(req)), 201);
-    const t = ticketByKey(b!);
+    const found = lookupTicket(b!);
+    if (!found) throw new HttpError(404, `Ticket ${b} not found`);
+    const t = found.ticket;
     if (!c) {
-      if (method === "GET") return ok(ticketDetail(t));
+      if (method === "GET") return ok(ticketDetail(t, found.alias));
       if (method === "PATCH") {
         const body = await readBody(req);
         if (body.driver !== undefined && body.driver !== t.driver && body.model === undefined) t.model = null;

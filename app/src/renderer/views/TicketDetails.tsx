@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { dependencyStates, inheritedModel } from "@harness/shared/state";
+import { depChipTitle, dependencyStates, dependentsOf, inheritedModel } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
@@ -28,7 +28,8 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
     setDeps(ticket.dependsOn.join(", "));
   }, [ticket.dependsOn.join(",")]);
 
-  const dependents = useMemo(() => Object.values(state.tickets).filter((t) => t.dependsOn.includes(ticket.key)), [state.tickets, ticket.key]);
+  // The detail's dependents (done ones may not be loaded) merged with live ones.
+  const dependents = useMemo(() => dependentsOf(state, ticket), [state.tickets, state.dependents, state.keyAliases, ticket]);
   const depStates = dependencyStates(state, ticket);
   const runs = useMemo(
     () => Object.values(state.runs).filter((r) => r.sessionId === ticket.sessionId).sort((a, b) => b.createdAt - a.createdAt),
@@ -109,9 +110,9 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
           depStates.length > 0 && (
             <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
               {depStates.map((d) => (
-                <button key={d.key} className={`chip link-chip ${d.done ? "done" : "pending"}`} onClick={() => d.ticket && open(d.key)} disabled={!d.ticket}>
+                <button key={d.key} className={`chip link-chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)} onClick={() => d.ticket && open(d.ticket.key)} disabled={!d.ticket}>
                   {d.ticket && <StatusDot status={d.ticket.status} />}
-                  {d.key}
+                  {d.ticket?.key ?? d.key}
                 </button>
               ))}
             </div>
@@ -160,9 +161,15 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
           <>
             <dt>Blocks</dt>
             <dd className="stack">
-              {dependents.map((c) => (
-                <TicketLink key={c.id} t={c} onOpen={open} />
-              ))}
+              {dependents.map((c) =>
+                c.ticket ? (
+                  <TicketLink key={c.key} t={c.ticket} onOpen={open} />
+                ) : (
+                  <span key={c.key} className="ticket-link muted mono" title={`Looking up ${c.key}…`}>
+                    {c.key}
+                  </span>
+                ),
+              )}
             </dd>
           </>
         )}

@@ -37,7 +37,10 @@ const projects = (await (await fetch(base + "/projects", { headers: { authorizat
 const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
 const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
 
-const hideChildren = `document.querySelector("[data-testid=hide-children]")?.click()`;
+// Child tickets are hidden by default; this flips the toolbar switch to show them.
+const showChildren = `document.querySelector("[data-testid=show-children]")?.click()`;
+const search = (q: string) =>
+  `(() => { const el = document.querySelector("[data-testid=board-search]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(q)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
 const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
@@ -61,8 +64,9 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "error", route: "#/board/all" },
   { name: "children", route: "#/board/all/ticket/HARNESS-1/children" },
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
-  { name: "board-conductor", route: `#/board/${harness}` },
-  { name: "board-hidden", route: `#/board/${harness}`, setup: hideChildren },
+  { name: "board-conductor", route: `#/board/${harness}`, setup: showChildren },
+  { name: "board-hidden", route: `#/board/${harness}` },
+  { name: "board-search", route: "#/board/all", setup: search("the") },
   { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
   { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
   { name: "panel-resized", route: "#/board/all/ticket/HARNESS-1/children", setup: layout({ sidebarCollapsed: false, sidebarWidth: 280, detailWidth: 860 }) },

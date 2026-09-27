@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depStates, groupChildren, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -83,7 +83,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 
 function ChildRow({ child: c, defaultDriver, onOpen }: { child: Ticket; defaultDriver: string; onOpen: (key: string) => void }) {
   const { state } = useStore();
-  const deps = depStates(state.tickets, c);
+  const deps = depStates(state.tickets, c, state.keyAliases);
   const summary = latestSummary(state, c.sessionId);
   const attention = attentionOf(c);
   const model = modelOf(c);
@@ -134,17 +134,18 @@ function ChildRow({ child: c, defaultDriver, onOpen }: { child: Ticket; defaultD
             {deps.map((d) => (
               <button
                 key={d.key}
-                className={`chip link-chip ${d.done ? "done" : "pending"}`}
-                title={d.done ? `${d.key} is done` : `Waiting on ${d.key}${d.ticket ? ` (${STATUS_LABEL[d.ticket.status].toLowerCase()})` : ""}`}
+                className={`chip link-chip ${d.state}`}
+                data-dep-state={d.state}
+                title={d.state === "pending" && d.ticket ? `Waiting on ${d.key} (${STATUS_LABEL[d.ticket.status].toLowerCase()})` : depChipTitle(d)}
                 disabled={!d.ticket}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (d.ticket) onOpen(d.key);
+                  if (d.ticket) onOpen(d.ticket.key);
                 }}
               >
-                {d.done ? <Icon name="check" size={9} strokeWidth={3} /> : <Icon name="clock" size={9} />}
-                <span className="chip-label">{d.done ? "after" : "waiting on"}</span>
-                {d.key}
+                {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
+                <span className="chip-label">{d.state === "done" ? "after" : d.state === "pending" ? "waiting on" : "depends on"}</span>
+                {d.ticket?.key ?? d.key}
               </button>
             ))}
             <div className="grow" />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, dependencyStates, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, depChipTitle, dependencyStates, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, ticketByKey, TICKET_TABS, type TicketTab } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
@@ -46,7 +46,8 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
       return !w;
     });
   };
-  const ticket = useMemo(() => Object.values(state.tickets).find((t) => t.key === ticketKey), [state.tickets, ticketKey]);
+  // By key, or by an old key the service already resolved (the effect below redirects to the new one).
+  const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]);
   const pluginTabs = usePluginTabs(ticket);
 
   // Detail (summaries, runs, session) — refetch on reconnect.
@@ -56,7 +57,7 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
       .getTicket(ticketKey)
       .then((detail) => {
         if (cancelled) return;
-        dispatch({ type: "detail", detail });
+        dispatch({ type: "detail", detail, requestedKey: ticketKey });
         // An old key (from before a project rename) resolves to the ticket's current key; follow it.
         if (detail.ticket.key !== ticketKey && route.view === "board") navigate({ ...route, ticketKey: detail.ticket.key });
       })
@@ -430,9 +431,9 @@ function Summaries({ ticket }: { ticket: Ticket }) {
         <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
           <span className="section-title">Depends on</span>
           {deps.map((d) => (
-            <span key={d.key} className={`chip ${d.done ? "done" : "pending"}`}>
+            <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
               {d.done && <Icon name="check" size={9} strokeWidth={3} />}
-              {d.key}
+              {d.ticket?.key ?? d.key}
             </span>
           ))}
         </div>

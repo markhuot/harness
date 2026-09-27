@@ -97,6 +97,13 @@ export function depStates(tickets: Record<string, Ticket>, t: Ticket, aliases: R
   });
 }
 
+/** Chip tooltip: done, waiting, or not loaded / not found (never "waiting" for an unloaded key). */
+export function depChipTitle(d: DepState): string {
+  if (d.state === "done") return `${d.key} is done`;
+  if (d.state === "pending") return `Waiting on ${d.key}`;
+  return d.missing ? `${d.key} wasn't found` : `Looking up ${d.key}…`;
+}
+
 /** Keys still holding this ticket back (unknown keys count: gating must be conservative). */
 export const waitingOn = (deps: DepState[]) => deps.filter((d) => !d.done).map((d) => d.key);
 
