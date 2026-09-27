@@ -720,6 +720,73 @@ try {
     await js(`location.hash = "#/board/all"`);
   }
 
+  // 6d. Transcript and summaries stay scrolled to the bottom until the user scrolls up, and pick
+  // it back up when they return. A short window makes a few messages overflow.
+  {
+    const { go } = app;
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 560, deviceScaleFactor: 1, mobile: false });
+    const say = (n: number) => api("POST", "/tickets/NYTIMES-1/messages", { text: `Stick check ${n}. ` + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10) });
+    const metrics = (sel: string) =>
+      js<{ top: number; gap: number; overflow: boolean }>(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
+        return { top: Math.round(el.scrollTop), gap: Math.round(el.scrollHeight - el.scrollTop - el.clientHeight), overflow: el.scrollHeight > el.clientHeight + 100 }; })()`);
+    const scrollTo = (sel: string, top: string) => js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.scrollTop = ${top}; })()`);
+    const shows = (sel: string, text: string) => js<boolean>(`!!document.querySelector(${JSON.stringify(sel)})?.textContent.includes(${JSON.stringify(text)})`);
+    const summaryCount = () => js<number>(`document.querySelectorAll(".summaries .summary").length`);
+
+    await go("#/board/all/ticket/NYTIMES-1/transcript");
+    await until("transcript", () => exists(".transcript"));
+    for (let i = 1; i <= 4; i++) await say(i);
+    await until("messages in the transcript", () => shows(".transcript", "Stick check 4."));
+    await Bun.sleep(150);
+    const filled = await metrics(".transcript");
+    check("transcript follows new messages to the bottom", filled.overflow && filled.gap <= 1, JSON.stringify(filled));
+
+    await scrollTo(".transcript", "40");
+    await Bun.sleep(150);
+    await say(5);
+    await until("message 5", () => shows(".transcript", "Stick check 5."));
+    await Bun.sleep(2800); // the mock's replies to messages 1–5 land meanwhile
+    const away = await metrics(".transcript");
+    check("transcript stays put while the user is scrolled up", away.top === 40, JSON.stringify(away));
+
+    await scrollTo(".transcript", "el.scrollHeight");
+    await Bun.sleep(150);
+    await say(6);
+    await until("message 6", () => shows(".transcript", "Stick check 6."));
+    await Bun.sleep(150);
+    const back = await metrics(".transcript");
+    check("scrolling back to the bottom resumes following", back.gap <= 1, JSON.stringify(back));
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 460, deviceScaleFactor: 1, mobile: false });
+    await Bun.sleep(300);
+    const shrunk = await metrics(".transcript");
+    check("a shorter window keeps a pinned transcript at the bottom", shrunk.gap <= 1, JSON.stringify(shrunk));
+
+    await go("#/board/all/ticket/NYTIMES-1/summaries");
+    await until("summaries", () => exists(".summaries .summary"));
+    await Bun.sleep(3000); // message 6's summary
+    const opened = await metrics(".summaries");
+    check("summaries open scrolled to the newest", opened.overflow && opened.gap <= 1, JSON.stringify(opened));
+    await scrollTo(".summaries", "20");
+    await Bun.sleep(150);
+    let before = await summaryCount();
+    await say(7);
+    await until("summary 7", async () => (await summaryCount()) > before, 6000);
+    await Bun.sleep(150);
+    const sAway = await metrics(".summaries");
+    check("summaries stay put while the user is scrolled up", sAway.top === 20, JSON.stringify(sAway));
+    await scrollTo(".summaries", "el.scrollHeight");
+    await Bun.sleep(150);
+    before = await summaryCount();
+    await say(8);
+    await until("summary 8", async () => (await summaryCount()) > before, 6000);
+    await Bun.sleep(150);
+    const sBack = await metrics(".summaries");
+    check("summaries follow a new summary once back at the bottom", sBack.gap <= 1, JSON.stringify(sBack));
+
+    await cdp("Emulation.clearDeviceMetricsOverride");
+    await go("#/board/all");
+  }
+
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.
   mock.kill();
   await mock.exited;

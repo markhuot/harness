@@ -1,10 +1,11 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
 import { formatMaybeJson, groupTranscript, liveDelta, shortToolName, toolIcon, toolPreview } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
+import { useStickToBottom } from "../components/stickToBottom";
 
 export { groupTranscript, toolPreview } from "@harness/shared/state";
 
@@ -30,22 +31,12 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
   const items = useMemo(() => groupTranscript(transcript?.entries ?? []), [transcript?.entries]);
 
   // Stick to the bottom while the user is there; leave them alone when they scroll up.
-  const scroller = useRef<HTMLDivElement>(null);
-  const pinned = useRef(true);
-  const deltaText = deltas.map((d) => d.text).join("");
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [items, deltaText]);
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-  };
+  const scroller = useStickToBottom<HTMLDivElement>();
 
   const loading = !transcript?.loaded && !error;
 
   return (
-    <div className="transcript" ref={scroller} onScroll={onScroll}>
+    <div className="transcript" ref={scroller}>
       <div className="transcript-inner">
         {error && (
           <div className="t-error">
