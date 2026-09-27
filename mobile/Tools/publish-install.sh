@@ -23,6 +23,7 @@ BUNDLE_ID=com.markhuot.harness
 TEAM_ID=47P4ZSALX4
 SITE=https://harness-install.vercel.app
 REPO=markhuot/harness
+VERCEL_PROJECT=harness-install
 SKIP_IOS=0; SKIP_MAC=0; PUBLISH=1
 for a in "$@"; do
   case "$a" in
@@ -58,6 +59,14 @@ else
 fi
 OUT="$MOBILE/build/release"
 mkdir -p "$OUT"
+
+# Install/.vercel is gitignored, so a fresh checkout or worktree isn't linked; unlinked, `vercel
+# deploy` tries to create a new project. Link the existing one now, before spending time on builds.
+if [[ $PUBLISH -eq 1 && ! -f Install/.vercel/project.json ]]; then
+  echo "==> Linking Install/ to the Vercel project $VERCEL_PROJECT"
+  (cd Install && vercel link --yes --project "$VERCEL_PROJECT" >/dev/null) || { echo "error: couldn't link Install/ to $VERCEL_PROJECT" >&2; exit 1; }
+  rm -f Install/.env.local # `vercel link` pulls the project's env vars; the page needs none
+fi
 
 # Refuse to publish anything that contains a token we can read (never printed).
 check_no_token() {
