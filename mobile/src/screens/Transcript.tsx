@@ -2,8 +2,8 @@
 // streaming delta of the current run, tool calls paired with their results as collapsible rows,
 // and permission audit rows. Sticks to the bottom while you're there.
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { memo, useEffect, useMemo, useState } from "react";
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { PermissionDecisionLog, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { decisionSource, formatMaybeJson, groupTranscript, liveDelta, permissionVerb, shortToolName, toolIcon, toolPreview, type ToolCallEntry, type ToolResultEntry, type TranscriptItem } from "@harness/shared/state";
 import { useColors } from "../state/app";
@@ -12,6 +12,7 @@ import { MONO, RADIUS } from "../theme/tokens";
 import { Empty, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
+import { useStickToBottom } from "../ui/stickToBottom";
 
 const timeOf = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -44,25 +45,17 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
     return r;
   }, [items, deltas, session?.busy]);
 
-  const list = useRef<FlatList<Row>>(null);
-  const pinned = useRef(true);
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    pinned.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 60;
-  };
+  const stick = useStickToBottom<FlatList<Row>>();
   const loading = !transcript?.loaded && !error;
 
   return (
     <FlatList
-      ref={list}
+      {...stick}
       data={rows}
       keyExtractor={(r, i) => (r.kind === "tool" ? r.call.id : r.kind === "entry" ? r.entry.id : r.kind === "delta" ? `delta-${r.runId}` : `working-${i}`)}
       renderItem={({ item }) => <RowView row={item} />}
       contentContainerStyle={{ padding: 14, gap: 10, paddingBottom: 24 }}
-      onScroll={onScroll}
-      scrollEventThrottle={64}
       keyboardDismissMode="interactive"
-      onContentSizeChange={() => pinned.current && list.current?.scrollToEnd({ animated: false })}
       ListHeaderComponent={
         error ? (
           <View style={{ flexDirection: "row", gap: 6, padding: 10, borderRadius: 8, backgroundColor: c.redSoft }}>

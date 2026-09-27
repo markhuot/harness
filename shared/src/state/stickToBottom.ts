@@ -6,6 +6,9 @@
 // user moves the view *up*, away from the bottom, so that's the one signal that unpins. Content
 // growing or the viewport shrinking (keyboard, a taller composer) leaves the offset alone or
 // moves it down, which keeps the current state. Getting back near the bottom re-pins.
+//
+// On iOS that isn't enough: UIScrollView also nudges the offset up by itself while a list lays
+// out, so the mobile hook only asks this during a drag or its momentum.
 
 export interface ScrollMetrics {
   /** Distance scrolled from the top (scrollTop / contentOffset.y). */

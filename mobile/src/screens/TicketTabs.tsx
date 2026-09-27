@@ -29,6 +29,7 @@ import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
 import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
+import { useStickToBottom } from "../ui/stickToBottom";
 
 export function useOpenTicket() {
   const router = useRouter();
@@ -46,9 +47,10 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
   const open = useOpenTicket();
   const list = state.summaries[ticket.sessionId] ?? [];
   const deps = dependencyStates(state, ticket);
-  const scroller = useRef<ScrollView>(null);
+  // Newest is last; open scrolled to it and follow new summaries until the user scrolls up.
+  const stick = useStickToBottom<ScrollView>();
   return (
-    <ScrollView ref={scroller} contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 30 }} onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })} keyboardDismissMode="interactive">
+    <ScrollView {...stick} contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 30 }} keyboardDismissMode="interactive">
       {!!ticket.description && (
         <Card style={{ padding: 13, gap: 8 }}>
           <SectionTitle>{ticket.status === "planning" ? "Plan" : "Brief"}</SectionTitle>
