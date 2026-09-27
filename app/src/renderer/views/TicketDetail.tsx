@@ -14,6 +14,7 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ResizeHandle } from "../components/ResizeHandle";
+import { useStickToBottom } from "../components/stickToBottom";
 import { detailBounds, updateLayout, useLayout } from "../state/layout";
 
 
@@ -412,12 +413,8 @@ function Summaries({ ticket }: { ticket: Ticket }) {
   const now = useNow();
   const list = state.summaries[ticket.sessionId] ?? [];
   const deps = dependencyStates(state, ticket);
-  const box = useRef<HTMLDivElement>(null);
-  // Newest is last; open scrolled to it and follow new summaries.
-  useEffect(() => {
-    const el = box.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [list.length]);
+  // Newest is last; open scrolled to it and follow new summaries until the user scrolls up.
+  const box = useStickToBottom<HTMLDivElement>();
 
   return (
     <div className="summaries" ref={box}>

@@ -15,7 +15,11 @@
 //      scrolls into older pages, and search finds the unloaded done ticket; paging-*.png in light
 //      and dark
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging]
+//   7. --stick: only the stick-to-bottom checks: a ticket with a long brief and a long transcript;
+//      swipes the Transcript and Summaries tabs and checks they follow new content at the bottom,
+//      stay put once scrolled up, and follow again after scrolling back down
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -34,6 +38,7 @@ const appPath = join(here, "build", "dd", "Build", "Products", "Release-iphonesi
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
+const stickOnly = flag("stick");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
@@ -366,12 +371,138 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   return results.every((r) => r[1]);
 }
 
+/** --stick: one ticket whose brief and transcript are both taller than the screen. */
+const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
+const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
+async function sayStick(key: string, n: number) {
+  await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
+  return settle(key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+}
+async function seedStick() {
+  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+  mkdirSync(join(scratch, "sticky"), { recursive: true });
+  const project = await api<Project>("POST", "/projects", { path: join(scratch, "sticky"), name: "sticky", key: "STICK", defaultDriver: "dummy" });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: stickText(0, 14), driver: "dummy", start: true });
+  await settle(ticket.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+  for (let n = 1; n <= 5; n++) await sayStick(ticket.key, n);
+  return { project, ticket };
+}
+
+/** --stick: real swipes on the Transcript and Summaries tabs. Returns false when a check failed. */
+async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>): Promise<boolean> {
+  const results: [string, boolean, string][] = [];
+  const check = async (name: string, fn: () => Promise<string | boolean>) => {
+    try {
+      const r = await fn();
+      results.push([name, r !== false, typeof r === "string" ? r : ""]);
+    } catch (e) {
+      results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    }
+  };
+  const key = p.ticket.key;
+  const fresh = async (tab: string) => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+    await openUrl(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
+    await Bun.sleep(3000);
+  };
+  const H = (await tree())[0]!.frame.height;
+  async function tree() {
+    const out = await axe("describe-ui", "--udid", udid);
+    return JSON.parse(out.slice(out.indexOf("["))) as AXNode[];
+  }
+  // The list's viewport: below the tab strip, above the composer.
+  async function listView() {
+    const all: AXNode[] = [];
+    const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
+    (await tree()).forEach(walk);
+    const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Summaries"));
+    const composer = all.find((n) => n.AXLabel?.startsWith("Message the agent"));
+    const top = tab ? tab.frame.y + tab.frame.height : 100;
+    const bottom = composer ? composer.frame.y : H - 60;
+    // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
+    // viewport). Starting below it leaves out the app window and the header.
+    const rows = all.filter((n) => n.AXLabel && n !== composer && n.AXLabel !== "Send" && n.frame.y >= top);
+    return { rows, top, bottom };
+  }
+  /** At the bottom: the lowest rendered row is the list's last row and ends just above the composer. */
+  const atBottom = async (last: (l: string) => boolean) => {
+    const { rows, bottom } = await listView();
+    const lowest = rows.reduce<AXNode | null>((a, n) => (!a || n.frame.y + n.frame.height > a.frame.y + a.frame.height ? n : a), null);
+    const end = lowest ? lowest.frame.y + lowest.frame.height : 0;
+    const ok = !!lowest && last(lowest.AXLabel!) && end <= bottom + 2 && end >= bottom - 70;
+    return ok ? `last row "${lowest!.AXLabel!.slice(0, 32)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}` : null;
+  };
+  /** A uniquely labelled row inside the viewport, to check that the view doesn't move. */
+  const anchor = async () => {
+    const { rows, top, bottom } = await listView();
+    const count = new Map<string, number>();
+    for (const n of rows) count.set(n.AXLabel!, (count.get(n.AXLabel!) ?? 0) + 1);
+    const n = rows.find((r) => count.get(r.AXLabel!) === 1 && r.frame.y > top + 20 && r.frame.y + r.frame.height < bottom - 20);
+    return n ? { label: n.AXLabel!, y: Math.round(n.frame.y) } : null;
+  };
+  const yOf = async (label: string) => {
+    const n = (await listView()).rows.find((r) => r.AXLabel === label);
+    return n ? Math.round(n.frame.y) : null;
+  };
+  const swipe = async (dir: "up" | "down", times = 4) => {
+    // Finger moving down scrolls toward the top.
+    const [from, to] = dir === "down" ? [H * 0.45, H * 0.8] : [H * 0.8, H * 0.45];
+    for (let i = 0; i < times; i++) {
+      await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(from)), "--end-x", "200", "--end-y", String(Math.round(to)), "--duration", "0.25", "--udid", udid);
+      await Bun.sleep(700);
+    }
+    await Bun.sleep(800);
+  };
+
+  let n = 5;
+  // Every message ends with the reviewer's run: its last transcript row and its last summary.
+  const tabs: [string, string, (l: string) => boolean][] = [
+    ["transcript", "transcript", (l) => l.startsWith("Run finished (review)")],
+    ["summaries", "summaries", (l) => l.startsWith("Review approved")],
+  ];
+  for (const [name, tab, last] of tabs) {
+    await check(`${name} opens at the bottom`, async () => {
+      await fresh(tab);
+      return until("at the bottom", () => atBottom(last), 10000);
+    });
+    await check(`${name} follows new content while at the bottom`, async () => {
+      await sayStick(key, ++n);
+      await Bun.sleep(1500);
+      return until("at the bottom", () => atBottom(last), 10000);
+    });
+    await check(`${name} stays put after the user scrolls up`, async () => {
+      await swipe("down");
+      const ref = await until("a row to watch", anchor, 5000);
+      await sayStick(key, ++n);
+      await Bun.sleep(2000);
+      const y = await yOf(ref.label);
+      if (y === null || Math.abs(y - ref.y) > 2) throw new Error(`"${ref.label.slice(0, 32)}" ${ref.y}→${y}`);
+      if (await atBottom(last)) throw new Error("jumped to the bottom");
+      return `"${ref.label.slice(0, 32)}" stayed at y=${y}`;
+    });
+    await check(`${name} follows again after scrolling back to the bottom`, async () => {
+      // Swipe back down until the user has reached the end (the list grew a lot meanwhile).
+      for (let i = 0; i < 25 && !(await atBottom(last)); i++) await swipe("up", 1);
+      if (!(await atBottom(last))) throw new Error("couldn't swipe back to the bottom");
+      await sayStick(key, ++n);
+      await Bun.sleep(1500);
+      return until("at the bottom", () => atBottom(last), 10000);
+    });
+  }
+
+  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+  await simctl("io", udid, "screenshot", join(shots, "stick-summaries.png"));
+  return results.every((r) => r[1]);
+}
+
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
   await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
   token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded, paged] = await Promise.all([pickDevice(), pagingOnly ? null : seed(), pagingOnly ? seedPaging() : null]);
+  const [udid, seeded, paged, sticky] = await Promise.all([pickDevice(), pagingOnly || stickOnly ? null : seed(), pagingOnly ? seedPaging() : null, stickOnly ? seedStick() : null]);
   if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
@@ -393,6 +524,7 @@ try {
 
   mkdirSync(shots, { recursive: true });
   if (paged) failed = !(await pagingChecks(udid, paged));
+  if (sticky) failed = !(await stickChecks(udid, sticky));
   if (seeded) {
     const k = (t: Ticket) => encodeURIComponent(t.key);
     const screens: [string, string, number?][] = [
