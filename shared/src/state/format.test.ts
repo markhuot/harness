@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import type { TranscriptEntry } from "@harness/shared";
-import { parseBlocks, plainText } from "./Markdown";
-import { groupTranscript, toolPreview } from "../views/Transcript";
+import type { TranscriptEntry } from "../protocol";
+import { inlineTokens, parseBlocks, plainText } from "./markdown";
+import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolPreview } from "./index";
 
 test("fenced code keeps list- and heading-looking lines verbatim", () => {
   const blocks = parseBlocks("Intro\n```ts\n- not a list\n# not a heading\n```\n- real item");
@@ -60,7 +60,6 @@ test("toolPreview picks the meaningful field", () => {
   expect(toolPreview("x", { n: 1 })).toBe('{"n":1}');
 });
 
-import { describeApprovalInput } from "../views/Approval";
 
 test("approval input: Bash shows the command as code, keeps description and extra fields apart", () => {
   const d = describeApprovalInput("Bash", { command: "npm i", description: "Install deps", timeout: 5 });
@@ -78,4 +77,50 @@ test("approval input: unknown tools fall back to JSON, non-objects are shown raw
   expect(describeApprovalInput("mcp__x__thing", { a: 1 })).toEqual({ primary: null, description: null, rest: { a: 1 } });
   expect(describeApprovalInput("Odd", "raw")).toMatchObject({ primary: { label: "Input", value: '"raw"' } });
   expect(describeApprovalInput("Odd", null).primary).toBeNull();
+});
+
+test("inline tokens: code, bold, italic, http links; non-http link targets keep only the label", () => {
+  expect(inlineTokens("run `bun test` **now** _please_ [docs](https://x.y) or https://a.b/c and [x](javascript:void)")).toEqual([
+    { t: "text", text: "run " },
+    { t: "code", text: "bun test" },
+    { t: "text", text: " " },
+    { t: "strong", text: "now" },
+    { t: "text", text: " " },
+    { t: "em", text: "please" },
+    { t: "text", text: " " },
+    { t: "link", text: "docs", url: "https://x.y" },
+    { t: "text", text: " or " },
+    { t: "link", text: "https://a.b/c", url: "https://a.b/c" },
+    { t: "text", text: " and " },
+    { t: "text", text: "x" },
+  ]);
+});
+
+test("tabs: plugin tab ids; the Tickets tab only on conductors; plugin tabs that don't apply fall back", () => {
+  expect(parsePluginTab(pluginTabRoute("git", "changes"))).toEqual({ pluginId: "git", tabId: "changes" });
+  expect(parsePluginTab("details")).toBeNull();
+  expect(parsePluginTab("plugin:Git:changes")).toBeNull();
+  const tabs = [{ pluginId: "git", id: "changes" }];
+  expect(effectiveTab("children", { conductor: false, pluginTabs: tabs })).toBe("summaries");
+  expect(effectiveTab("children", { conductor: true, pluginTabs: tabs })).toBe("children");
+  expect(effectiveTab("plugin:git:changes", { conductor: false, pluginTabs: tabs })).toBe("plugin:git:changes");
+  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: tabs })).toBe("summaries");
+  // Tabs still loading: keep the plugin tab so the UI can show a spinner rather than flash Summaries.
+  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: null })).toBe("plugin:git:log");
+});
+
+test("browser: URL normalization and letterboxed touch → page mapping", () => {
+  expect(normalizeUrl("  example.com/x ")).toBe("https://example.com/x");
+  expect(normalizeUrl("http://a.b")).toBe("http://a.b");
+  expect(normalizeUrl("about:blank")).toBe("about:blank");
+  expect(normalizeUrl("   ")).toBe("");
+  // A 1280×800 page in a 400×400 box: scaled to 400×250, centred vertically at y=75.
+  const r = fitRect(400, 400, 1280, 800);
+  expect(r).toEqual({ x: 0, y: 75, w: 400, h: 250 });
+  expect(toPagePoint({ x: 200, y: 200 }, r, { width: 1280, height: 800 })).toEqual({ x: 640, y: 400 });
+  expect(toPagePoint({ x: 0, y: 75 }, r, { width: 1280, height: 800 })).toEqual({ x: 0, y: 0 });
+  expect(toPagePoint({ x: 400, y: 325 }, r, { width: 1280, height: 800 })).toEqual({ x: 1280, y: 800 });
+  expect(toPagePoint({ x: 200, y: 74 }, r, { width: 1280, height: 800 })).toBeNull(); // in the letterbox bar
+  expect(toPagePoint({ x: 200, y: 326 }, r, { width: 1280, height: 800 })).toBeNull();
+  expect(toPagePoint({ x: 1, y: 1 }, fitRect(0, 0, 1, 1), { width: 1, height: 1 })).toBeNull();
 });

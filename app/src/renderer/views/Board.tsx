@@ -1,14 +1,12 @@
 import { memo, useMemo, useRef, useState } from "react";
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { boardColumns, childrenOf, dependencyStates, isReady, latestSummary, positionForDrop, type State } from "../state/reducer";
+import { boardColumns, childrenOf, COLUMN_EMPTY_TEXT, dependencyStates, dimOnBoard, hideOnBoard, isChild, isReady, latestSummary, plainText, positionForDrop, progressOf, type State } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, KindBadge, MOD, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
-import { plainText } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
 import { TicketDetail } from "./TicketDetail";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
-import { dimOnBoard, hideOnBoard, isChild, progressOf } from "../state/conductor";
 
 const DRAG_MIME = "application/x-harness-ticket";
 
@@ -170,7 +168,7 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
                       onOpen={open}
                     />
                   ))}
-                  {tickets.length === 0 && <div className="column-empty">{q ? "No matches" : emptyText[status]}</div>}
+                  {tickets.length === 0 && <div className="column-empty">{q ? "No matches" : COLUMN_EMPTY_TEXT[status]}</div>}
                 </div>
               </section>
             );
@@ -182,13 +180,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   );
 }
 
-const emptyText: Record<TicketStatus, string> = {
-  planning: "Sessions you want to plan first",
-  in_progress: "Agents at work show up here",
-  blocked: "Nothing waiting on you",
-  review: "Nothing to review",
-  done: "Finished work",
-};
 
 // Cards re-render only when their own inputs change (the store updates many times a second
 // while text streams).

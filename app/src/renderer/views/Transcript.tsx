@@ -1,32 +1,12 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { liveDelta } from "../state/reducer";
+import { formatMaybeJson, groupTranscript, liveDelta, shortToolName, toolIcon, toolPreview } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
 
-type Item =
-  | { kind: "entry"; entry: TranscriptEntry }
-  | { kind: "tool"; call: TranscriptEntry & { content: { type: "tool_call" } }; result?: TranscriptEntry & { content: { type: "tool_result" } } };
-
-/** Pair each tool_call with its tool_result (by callId) so they render as one collapsible row. */
-export function groupTranscript(entries: TranscriptEntry[]): Item[] {
-  const items: Item[] = [];
-  const calls = new Map<string, Extract<Item, { kind: "tool" }>>();
-  for (const e of entries) {
-    if (e.content.type === "tool_call") {
-      const item = { kind: "tool" as const, call: e as Extract<Item, { kind: "tool" }>["call"] };
-      calls.set(e.content.callId, item);
-      items.push(item);
-    } else if (e.content.type === "tool_result" && calls.has(e.content.callId)) {
-      calls.get(e.content.callId)!.result = e as Extract<Item, { kind: "tool" }>["result"];
-    } else {
-      items.push({ kind: "entry", entry: e });
-    }
-  }
-  return items;
-}
+export { groupTranscript, toolPreview } from "@harness/shared/state";
 
 export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyHint?: string }) {
   const { state, client, dispatch, epoch } = useStore();
@@ -183,24 +163,6 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
-/** One-line preview of a tool input, e.g. the bash command or file path. */
-export function toolPreview(name: string, input: unknown): string {
-  if (input && typeof input === "object") {
-    const o = input as Record<string, unknown>;
-    for (const k of ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "summary", "expression", "text"]) {
-      if (typeof o[k] === "string" && o[k]) return String(o[k]).split("\n")[0]!;
-    }
-    const s = JSON.stringify(o);
-    return s === "{}" ? "" : s;
-  }
-  return input === undefined || input === null ? "" : String(input);
-}
-
-function prettyName(name: string) {
-  // mcp__harness__post_summary → post_summary
-  return name.replace(/^mcp__[^_]+__/, "");
-}
-
 const ToolRow = memo(function ToolRow({
   call,
   result,
@@ -209,14 +171,14 @@ const ToolRow = memo(function ToolRow({
   result?: TranscriptEntry & { content: { type: "tool_result" } };
 }) {
   const [open, setOpen] = useState(false);
-  const name = prettyName(call?.content.name ?? result?.content.name ?? "tool");
+  const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
   const preview = call ? toolPreview(name, call.content.input) : "";
   const isError = result?.content.isError;
   return (
     <div className={`t-tool ${open ? "open" : ""} ${isError ? "error" : ""}`}>
       <button className="t-tool-head" onClick={() => setOpen(!open)}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
-        <Icon name={name === "bash" || name === "Bash" ? "terminal" : name.startsWith("browser") ? "globe" : "tool"} size={12} />
+        <Icon name={toolIcon(name)} size={12} />
         <span className="t-tool-name">{name}</span>
         <span className="t-tool-preview truncate">{preview}</span>
         {!result ? <span className="spinner" /> : isError ? <Icon name="x" size={12} className="t-bad" /> : <Icon name="check" size={12} className="t-ok" />}
@@ -255,14 +217,4 @@ function ToolOutput({ output }: { output: ToolResultContent[] }) {
       )}
     </>
   );
-}
-
-function formatMaybeJson(text: string) {
-  const t = text.trim();
-  if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
-    try {
-      return JSON.stringify(JSON.parse(t), null, 2);
-    } catch {}
-  }
-  return text.length > 20000 ? text.slice(0, 20000) + `\n… (${text.length - 20000} more characters)` : text;
 }

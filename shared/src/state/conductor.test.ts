@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Ticket } from "@harness/shared";
+import type { Ticket } from "../index";
 import {
   attentionOf,
   childrenOfTicket,

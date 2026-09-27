@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { dependencyStates } from "../state/reducer";
+import { dependencyStates, inheritedModel } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
-import { inheritedModel } from "../state/models";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { resolvePermissionMode } from "@harness/shared";
 

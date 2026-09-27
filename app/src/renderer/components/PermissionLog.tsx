@@ -2,28 +2,19 @@
 // classifier / policy reason on an approval card.
 
 import type { PendingApproval, PermissionDecisionLog } from "@harness/shared";
+import { decisionSource, permissionVerb } from "@harness/shared/state";
 import { Icon } from "./Icon";
+
+export { decisionSource } from "@harness/shared/state";
 import "./permissions.css";
 
-const VERB: Record<PermissionDecisionLog["decision"], (source: PermissionDecisionLog["source"]) => string> = {
-  allow: (source) => (source === "classifier" ? "Auto-approved" : "Allowed"),
-  ask: () => "Asked you",
-  deny: () => "Denied",
-};
 
-/** "classifier · claude-cli · 2.4s" / "policy" */
-export function decisionSource(log: Pick<PermissionDecisionLog, "source" | "backend" | "latencyMs">): string {
-  const parts: string[] = [log.source];
-  if (log.backend) parts.push(log.backend);
-  if (log.latencyMs !== undefined) parts.push(`${(log.latencyMs / 1000).toFixed(1)}s`);
-  return parts.join(" · ");
-}
 
 export function PermissionStatusRow({ log, time }: { log: PermissionDecisionLog; time?: string }) {
   return (
-    <div className={`t-permission t-permission-${log.decision}`} data-testid="permission-row" title={`${VERB[log.decision](log.source)}: ${log.summary}\n${log.reason}\n(${decisionSource(log)}, ${log.mode} mode)`}>
+    <div className={`t-permission t-permission-${log.decision}`} data-testid="permission-row" title={`${permissionVerb(log)}: ${log.summary}\n${log.reason}\n(${decisionSource(log)}, ${log.mode} mode)`}>
       <Icon name="shield" size={11} />
-      <span className="t-permission-verb">{VERB[log.decision](log.source)}</span>
+      <span className="t-permission-verb">{permissionVerb(log)}</span>
       <code className="t-permission-what">{log.summary}</code>
       <span className="t-permission-reason">{log.reason}</span>
       <span className="t-permission-source">{decisionSource(log)}</span>

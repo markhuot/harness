@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, dependencyStates, isReady } from "../state/reducer";
-import { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "../state/route";
+import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, dependencyStates, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
@@ -15,15 +14,7 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { ParentCrumb } from "../components/Conductor";
 
-const TAB_LABEL: Record<BuiltinTicketTab, string> = { summaries: "Summaries", children: "Tickets", transcript: "Transcript", browser: "Browser", details: "Details" };
 
-const PLACEHOLDER: Record<TicketStatus, string> = {
-  planning: "Refine the plan…",
-  in_progress: "Send a follow-up…",
-  blocked: "Answer the agent…",
-  review: "Send a follow-up…",
-  done: "",
-};
 
 const WIDE_KEY = "harness.detailWide";
 function readWide() {
@@ -483,7 +474,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         ref={ref}
         rows={1}
         className="composer-input"
-        placeholder={PLACEHOLDER[ticket.status]}
+        placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -494,7 +485,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         }}
       />
       <div className="composer-bar">
-        <span className="muted">{ticket.busy ? "Queued behind the current run" : ticket.status === "planning" ? "The planning agent will revise" : ""}</span>
+        <span className="muted">{composerHint(ticket)}</span>
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">

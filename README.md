@@ -72,9 +72,9 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 ## Tests
 
 ```sh
-cd shared && bun test     # key helpers
+cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
-cd app && bun test        # reducer, routes, rendering, plugin bridge
+cd app && bun test        # routes, theme
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service

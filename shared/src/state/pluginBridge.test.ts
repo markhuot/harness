@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Ticket } from "@harness/shared";
-import { createPluginHostBridge, currentTheme, pluginUiUrl } from "./pluginBridge";
+import type { Ticket } from "../index";
+import { createPluginHostBridge, pluginUiUrl } from "./pluginBridge";
 
 function setup(theme: "light" | "dark" = "light") {
   const posted: { message: any; targetOrigin: string }[] = [];
@@ -83,8 +83,4 @@ test("theme and ticket pushes; tickets for other keys are dropped", () => {
 
 test("helpers", () => {
   expect(pluginUiUrl("http://127.0.0.1:7717/", "git", "changes")).toBe("http://127.0.0.1:7717/plugins/git/ui/index.html?tab=changes");
-  const doc = (theme?: string) => ({ documentElement: { dataset: theme ? { theme } : {} } }) as unknown as Document;
-  expect(currentTheme(doc("dark"))).toBe("dark");
-  expect(currentTheme(doc("light"))).toBe("light");
-  expect(["light", "dark"]).toContain(currentTheme(doc()));
 });

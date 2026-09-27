@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Project, Ticket } from "@harness/shared";
+import type { Project, Ticket } from "../index";
 import { formatRuns, previewProjectKey } from "./projectKey";
 
 const project = (over: Partial<Project> = {}): Project =>

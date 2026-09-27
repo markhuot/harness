@@ -4,7 +4,7 @@
 import { useEffect, useRef } from "react";
 import type { Project, PublicSettings } from "@harness/shared";
 import { useAction, useStore } from "../../state/store";
-import { inheritedModel, modelCacheFor } from "../../state/models";
+import { inheritedModel, modelCacheFor } from "@harness/shared/state";
 import { ModelSelect } from "../../components/ModelSelect";
 import { Row, Section } from "../Settings";
 

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { sortedProjects, triageSessions } from "../state/reducer";
+import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MOD } from "../components/bits";
 

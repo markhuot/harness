@@ -15,7 +15,7 @@ import type {
   TicketStatus,
   TranscriptEntry,
   Watcher,
-} from "@harness/shared";
+} from "../index";
 
 export interface TranscriptState {
   entries: TranscriptEntry[];

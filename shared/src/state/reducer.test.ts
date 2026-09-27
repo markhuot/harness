@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Project, Run, Session, Summary, Ticket, TranscriptEntry } from "@harness/shared";
+import type { Project, Run, Session, Summary, Ticket, TranscriptEntry } from "../index";
 import {
   boardColumns,
   dependencyStates,

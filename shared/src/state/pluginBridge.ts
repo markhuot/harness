@@ -1,15 +1,22 @@
-// Host side of the plugin iframe bridge (DESIGN.md "Plugins"). Pure logic, no React/Electron, so a
-// future iOS host can follow the same rules:
+// Host side of the plugin bridge (DESIGN.md "Plugins"). Pure logic, no React/Electron/DOM, shared by the
+// desktop iframe host and the iOS WebView host, which both follow the same rules:
 //   - the token only ever goes to the service origin (postMessage targetOrigin = serviceOrigin)
 //   - only messages from our own iframe's window, at the service origin, are accepted
 //   - openExternal is limited to http(s)/mailto; navigate to well-formed ticket keys
 
-import type { PluginFrameMessage, PluginHostMessage, Ticket } from "@harness/shared";
+import type { PluginFrameMessage, PluginHostMessage, Ticket } from "../protocol";
 
 export type ResolvedTheme = "light" | "dark";
 
 export interface FrameWindow {
   postMessage(message: unknown, targetOrigin: string): void;
+}
+
+/** What the bridge reads from a message event (a DOM MessageEvent, or a WebView message adapted to it). */
+export interface HostMessageEvent {
+  data: unknown;
+  origin: string;
+  source: unknown;
 }
 
 export interface PluginHostBridgeOptions {
@@ -34,13 +41,6 @@ export function pluginUiUrl(baseUrl: string, pluginId: string, tabId: string): s
   return `${baseUrl.replace(/\/$/, "")}/plugins/${encodeURIComponent(pluginId)}/ui/index.html?tab=${encodeURIComponent(tabId)}`;
 }
 
-/** The resolved theme per the app's contract (<html data-theme>), falling back to the OS preference. */
-export function currentTheme(doc: Document = document): ResolvedTheme {
-  const t = doc.documentElement.dataset.theme;
-  if (t === "light" || t === "dark") return t;
-  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export function createPluginHostBridge(opts: PluginHostBridgeOptions) {
   const serviceOrigin = new URL(opts.baseUrl).origin;
   let ready = false;
@@ -54,7 +54,7 @@ export function createPluginHostBridge(opts: PluginHostBridgeOptions) {
     /** iframe load event: offer init right away (plugins not using the SDK never send ready). */
     onLoad: sendInit,
     /** window "message" listener. Returns true when the message was accepted. */
-    onMessage(e: Pick<MessageEvent, "data" | "origin" | "source">): boolean {
+    onMessage(e: HostMessageEvent): boolean {
       const frame = opts.frame();
       if (!frame || e.source !== frame || e.origin !== serviceOrigin) return false;
       const msg = e.data as PluginFrameMessage;

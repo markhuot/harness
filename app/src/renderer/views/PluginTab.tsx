@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PluginTab, Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { createPluginHostBridge, currentTheme, pluginUiUrl } from "../state/pluginBridge";
+import { createPluginHostBridge, pluginUiUrl } from "@harness/shared/state";
+import { currentTheme } from "../state/theme";
 import "./plugin.css";
 
 /** Plugin tabs for this ticket; null while loading. Refetched when the workdir/branch changes or on reconnect. */

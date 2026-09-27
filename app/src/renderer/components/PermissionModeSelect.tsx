@@ -3,10 +3,10 @@
 
 import type { PermissionMode } from "@harness/shared";
 import { PERMISSION_MODE_LABELS, PERMISSION_MODES } from "@harness/shared";
+import { permissionModeLabel } from "@harness/shared/state";
 
-export function permissionModeLabel(mode: PermissionMode): string {
-  return PERMISSION_MODE_LABELS[mode]?.label ?? mode;
-}
+export { permissionModeLabel } from "@harness/shared/state";
+
 
 export function PermissionModeSelect({
   value,

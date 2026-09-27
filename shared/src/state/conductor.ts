@@ -1,7 +1,7 @@
 // Pure derivations for conductor tickets and their children (Children tab, board rollup,
 // board dimming / hiding). No React, no I/O.
 
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+import { TICKET_STATUSES, type Ticket, type TicketStatus } from "../index";
 
 export const isChild = (t: Ticket) => t.parentId !== null;
 
@@ -142,13 +142,17 @@ export function groupChildren(children: Ticket[]): ChildGroup[] {
 }
 
 // ---------------------------------------------------------------------------
-// Board preference: "Hide child tickets" (per machine, localStorage)
+// Board preference: "Hide child tickets" (per machine: localStorage on desktop, injected storage elsewhere)
 // ---------------------------------------------------------------------------
 
 export const HIDE_CHILDREN_KEY = "harness.board.hideChildren";
 
-type KV = Pick<Storage, "getItem" | "setItem">;
-const defaultStorage = (): KV | undefined => (typeof localStorage === "undefined" ? undefined : localStorage);
+/** The slice of Web Storage the preference needs (localStorage on desktop; any sync KV elsewhere). */
+export interface KV {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+const defaultStorage = (): KV | undefined => (globalThis as { localStorage?: KV }).localStorage;
 
 export function readHideChildren(storage: KV | undefined = defaultStorage()): boolean {
   try {

@@ -1,16 +1,11 @@
 // Small presentational pieces shared across views.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { DriverInfo, ReviewState, Ticket, TicketStatus } from "@harness/shared";
+import type { ReviewState, Ticket, TicketStatus } from "@harness/shared";
+import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { Icon } from "./Icon";
 
-export const STATUS_LABEL: Record<TicketStatus, string> = {
-  planning: "Planning",
-  in_progress: "In progress",
-  blocked: "Blocked",
-  review: "Review",
-  done: "Done",
-};
+export { driverLabel, relativeTime, STATUS_LABEL } from "@harness/shared/state";
 
 export function StatusDot({ status }: { status: TicketStatus }) {
   return <span className="status-dot" data-status={status} style={{ ["--dot" as string]: `var(--c-${status})` }} />;
@@ -25,15 +20,10 @@ export function StatusPill({ status }: { status: TicketStatus }) {
   );
 }
 
-const DRIVER_SHORT: Record<string, string> = { "claude-code": "Claude Code", "anthropic-api": "API", dummy: "Dummy" };
-export function driverLabel(id: string, drivers?: DriverInfo[]) {
-  return DRIVER_SHORT[id] ?? drivers?.find((d) => d.id === id)?.name ?? id;
-}
-
 export function DriverBadge({ driver }: { driver: string }) {
   return (
     <span className="badge badge-outline driver-badge" data-driver={driver} title={`Driver: ${driver}`}>
-      <Icon name={driver === "dummy" ? "bot" : driver === "anthropic-api" ? "key" : "sparkle"} />
+      <Icon name={driverIcon(driver)} />
       {driverLabel(driver)}
     </span>
   );
@@ -58,20 +48,6 @@ export function KindBadge({ ticket, childCount }: { ticket: Ticket; childCount?:
       Conductor{childCount ? ` · ${childCount}` : ""}
     </span>
   );
-}
-
-export function relativeTime(ts: number | null | undefined, now = Date.now()): string {
-  if (!ts) return "never";
-  const s = Math.round((now - ts) / 1000);
-  if (s < 10) return "just now";
-  if (s < 60) return `${s}s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return new Date(ts).toLocaleDateString();
 }
 
 /** Re-render periodically so relative timestamps stay fresh. */

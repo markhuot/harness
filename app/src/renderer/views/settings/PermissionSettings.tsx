@@ -3,15 +3,11 @@
 
 import type { ClassifierBackend, PermissionMode, Project, PublicSettings } from "@harness/shared";
 import { CLASSIFIER_BACKENDS, PERMISSION_MODE_LABELS } from "@harness/shared";
+import { CLASSIFIER_LABELS } from "@harness/shared/state";
 import { useAction, useStore } from "../../state/store";
 import { PermissionModeSelect } from "../../components/PermissionModeSelect";
 import { Row, Section } from "../Settings";
 
-const CLASSIFIER_LABELS: Record<ClassifierBackend, string> = {
-  "claude-cli": "Claude CLI (your Claude plan)",
-  "anthropic-api": "Anthropic API (API key)",
-  off: "Off (ask me instead)",
-};
 
 export function PermissionsSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();

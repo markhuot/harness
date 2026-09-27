@@ -4,15 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DriverInfo, Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { previewProjectKey } from "../state/projectKey";
+import { previewProjectKey, tildify } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRows } from "./settings/ModelSettings";
 import { ProjectPermissionRow } from "./settings/PermissionSettings";
-
-const tildify = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
 export function ProjectSettingsView() {
   const { state, route, navigate } = useStore();

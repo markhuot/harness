@@ -2,7 +2,8 @@
 
 import type { ModelInfo } from "@harness/shared";
 import { useStore } from "../state/store";
-import { modelName, modelOptions, useDriverModels } from "../state/models";
+import { modelName, modelOptions } from "@harness/shared/state";
+import { useDriverModels } from "../state/models";
 import { Icon } from "./Icon";
 
 export function ModelSelect({

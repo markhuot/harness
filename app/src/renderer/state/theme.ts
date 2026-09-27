@@ -4,6 +4,7 @@
 // (dev / ?url=&token=) it falls back to localStorage + prefers-color-scheme.
 
 import { useEffect, useState } from "react";
+import type { ResolvedTheme } from "@harness/shared/state";
 import { isThemePreference, resolveTheme, type ThemePreference, type ThemeState } from "../../main/theme";
 
 const LS_KEY = "harness.theme";
@@ -63,4 +64,11 @@ export function useTheme(): ThemeState {
     return () => void listeners.delete(set);
   }, []);
   return s;
+}
+
+/** The resolved theme per the app's contract (<html data-theme>), falling back to the OS preference. */
+export function currentTheme(doc: Document = document): ResolvedTheme {
+  const t = doc.documentElement.dataset.theme;
+  if (t === "light" || t === "dark") return t;
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }

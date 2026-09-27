@@ -7,5 +7,9 @@
   "types": "src/index.ts",
   "scripts": {
     "test": "bun test"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./state": "./src/state/index.ts"
   }
 }

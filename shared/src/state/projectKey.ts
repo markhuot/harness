@@ -2,7 +2,7 @@
 // Mirrors the service's rules (checkProjectKey + Orchestrator.updateProject collisions) so the
 // field can explain a rename before it's saved; the service stays the authority.
 
-import { checkProjectKey, type Project, type Ticket } from "@harness/shared";
+import { checkProjectKey, type Project, type Ticket } from "../index";
 
 export interface KeyPreview {
   /** Normalized (trimmed, upper-cased) draft */

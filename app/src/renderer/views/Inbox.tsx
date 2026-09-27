@@ -1,20 +1,16 @@
-import type { Session, TriageStatus } from "@harness/shared";
+import type { Session } from "@harness/shared";
 import { useStore } from "../state/store";
-import { ticketByKey, triageSessions } from "../state/reducer";
+import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { relativeTime, useNow } from "../components/bits";
 import { Transcript } from "./Transcript";
 
-const TRIAGE: Record<TriageStatus, { label: string; cls: string }> = {
-  triaging: { label: "Triaging", cls: "badge-amber" },
-  dispatched: { label: "Dispatched", cls: "badge-green" },
-  declined: { label: "Declined", cls: "" },
-  failed: { label: "Failed", cls: "badge-red" },
-};
+const TONE_CLASS = { amber: "badge-amber", green: "badge-green", neutral: "", red: "badge-red" } as const;
 
 export function TriageBadge({ session }: { session: Session }) {
-  const s = TRIAGE[session.triageStatus ?? "triaging"];
+  const t = TRIAGE_LABEL[session.triageStatus ?? "triaging"];
+  const s = { label: t.label, cls: TONE_CLASS[t.tone] };
   return (
     <span className={`badge ${s.cls}`}>
       {session.busy && <span className="spinner" style={{ width: 9, height: 9 }} />}
@@ -86,7 +82,7 @@ export function InboxView() {
 function TriageSession({ session }: { session: Session }) {
   const { state, navigate } = useStore();
   // "Dispatched to FOO-123" → link the ticket when it exists locally.
-  const dispatchedKey = session.outcome?.match(/\b[A-Z][A-Z0-9_]*-\d+\b/)?.[0];
+  const dispatchedKey = outcomeKey(session);
   const dispatched = dispatchedKey ? ticketByKey(state, dispatchedKey) : undefined;
   return (
     <>

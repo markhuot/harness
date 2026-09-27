@@ -7,40 +7,11 @@ import { useAction, useStore } from "../state/store";
 import { Icon } from "../components/Icon";
 import { relativeTime, useNow } from "../components/bits";
 import { ApprovalReason } from "../components/PermissionLog";
+import { approvalToast, describeApprovalInput, shortToolName, type ShownInput } from "@harness/shared/state";
 
-type Shown = { label: string; value: string; code: boolean };
+type Shown = ShownInput;
 
-/** Pick the part of a tool input a human needs to judge the request. */
-export function describeApprovalInput(toolName: string, input: unknown): { primary: Shown | null; description: string | null; rest: Record<string, unknown> | null } {
-  const o = input && typeof input === "object" && !Array.isArray(input) ? { ...(input as Record<string, unknown>) } : null;
-  if (!o) return { primary: input === undefined || input === null ? null : { label: "Input", value: JSON.stringify(input, null, 2), code: true }, description: null, rest: null };
-  const take = (k: string) => {
-    const v = o[k];
-    delete o[k];
-    return typeof v === "string" ? v : null;
-  };
-  const description = take("description");
-  const tool = toolName.replace(/^mcp__[^_]+__/, "");
-  let primary: Shown | null = null;
-  const pick = (k: string, label: string, code: boolean) => {
-    if (primary || typeof o[k] !== "string") return;
-    primary = { label, value: take(k)!, code };
-  };
-  if (/^bash$/i.test(tool)) pick("command", "Command", true);
-  if (/^(write|edit|multiedit|read|notebookedit)$/i.test(tool)) {
-    pick("file_path", "File", true);
-    pick("notebook_path", "File", true);
-  }
-  if (/^(webfetch|websearch)$/i.test(tool)) {
-    pick("url", "URL", false);
-    pick("query", "Query", false);
-  }
-  pick("command", "Command", true);
-  pick("url", "URL", false);
-  pick("file_path", "File", true);
-  pick("path", "Path", true);
-  return { primary, description, rest: Object.keys(o).length ? o : null };
-}
+export { describeApprovalInput } from "@harness/shared/state";
 
 export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: PendingApproval }) {
   const { client } = useStore();
@@ -49,14 +20,14 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const tool = approval.toolName.replace(/^mcp__[^_]+__/, "");
+  const tool = shortToolName(approval.toolName);
   const { primary, description, rest } = describeApprovalInput(approval.toolName, approval.input);
 
   const answer = async (decision: "allow_once" | "allow_tool" | "deny") => {
     setBusy(decision);
     await act(
       () => client.answerApproval(ticket.key, { decision, message: message.trim() || undefined }),
-      decision === "deny" ? `Denied ${tool}` : decision === "allow_tool" ? `${tool} allowed on ${ticket.key}` : `Allowed ${tool} once`,
+      approvalToast(decision, tool, ticket.key),
     );
     setBusy(null);
   };

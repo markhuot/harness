@@ -4,7 +4,7 @@
 
 import { useCallback, useState } from "react";
 import type { Ticket } from "@harness/shared";
-import { progressLabel, progressSegments, readHideChildren, writeHideChildren, type Progress } from "../state/conductor";
+import { progressLabel, progressSegments, readHideChildren, writeHideChildren, type Progress } from "@harness/shared/state";
 import { STATUS_LABEL } from "./bits";
 import { Icon } from "./Icon";
 import "./conductor.css";

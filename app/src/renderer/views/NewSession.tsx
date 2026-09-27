@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { PermissionMode, TicketKind } from "@harness/shared";
 import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { composerProject, sortedProjects } from "../state/reducer";
+import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
-import { inheritedModel } from "../state/models";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 
 const LAST_PROJECT = "harness.lastProject";
@@ -96,13 +95,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
           ref={ref}
           autoFocus
           className="new-session-prompt"
-          placeholder={
-            kind === "conductor"
-              ? "Describe a larger job. The conductor splits it into tickets and steers them…"
-              : start
-                ? "What should the agent do?"
-                : "What do you want to plan? The agent drafts a plan for you to refine…"
-          }
+          placeholder={newSessionPlaceholder(kind, start)}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {

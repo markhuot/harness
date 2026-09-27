@@ -4,24 +4,10 @@
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
 
-/** "children" is the conductor-only Tickets tab (listed right after Summaries). */
-export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "browser" | "details";
-/** Built-in tabs, or a plugin tab as "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins"). */
-export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}`;
-export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "children", "transcript", "browser", "details"];
+import { isTicketTab, type TicketTab } from "@harness/shared/state";
 
-const PLUGIN_TAB = /^plugin:([a-z0-9][a-z0-9_-]*):([a-z0-9][a-z0-9_-]*)$/;
-export function pluginTabRoute(pluginId: string, tabId: string): TicketTab {
-  return `plugin:${pluginId}:${tabId}`;
-}
-/** "plugin:git:changes" → { pluginId: "git", tabId: "changes" }; null for built-in tabs. */
-export function parsePluginTab(tab: string): { pluginId: string; tabId: string } | null {
-  const m = PLUGIN_TAB.exec(tab);
-  return m ? { pluginId: m[1]!, tabId: m[2]! } : null;
-}
-function isTicketTab(t: string | undefined): t is TicketTab {
-  return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t));
-}
+// Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
+export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
 
 export type Route =
   | { view: "board"; projectId: string | null; ticketKey: string | null; tab: TicketTab }
@@ -45,7 +31,7 @@ export function parseRoute(hash: string): Route {
   let tab: TicketTab = "summaries";
   if (rest[i] === "ticket" && rest[i + 1]) {
     ticketKey = rest[i + 1]!;
-    const t = rest[i + 2] as TicketTab | undefined;
+    const t = rest[i + 2];
     if (isTicketTab(t)) tab = t;
   }
   return { view: "board", projectId, ticketKey, tab };

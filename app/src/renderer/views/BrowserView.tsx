@@ -4,24 +4,9 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { BrowserInput, BrowserState } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
+import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import "./browser.css";
-
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-/** Letterbox a w×h image into a box, preserving aspect ratio. */
-function fitRect(boxW: number, boxH: number, w: number, h: number): Rect {
-  if (!w || !h || !boxW || !boxH) return { x: 0, y: 0, w: 0, h: 0 };
-  const scale = Math.min(boxW / w, boxH / h);
-  const dw = w * scale;
-  const dh = h * scale;
-  return { x: (boxW - dw) / 2, y: (boxH - dh) / 2, w: dw, h: dh };
-}
 
 function modifiersOf(e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
   return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
@@ -34,12 +19,6 @@ const debugStats = { frames: 0, drawn: 0, errors: 0 };
 (window as unknown as { __harnessBrowser: typeof debugStats }).__harnessBrowser = debugStats;
 const PAGE_META_KEYS = new Set(["a", "c", "x", "z"]);
 
-function normalizeUrl(raw: string) {
-  const t = raw.trim();
-  if (!t) return "";
-  if (/^[a-z][a-z0-9+.-]*:/i.test(t)) return t;
-  return "https://" + t;
-}
 
 export function BrowserView({ sessionId }: { sessionId: string }) {
   const { socket, client, onEvent, epoch } = useStore();
@@ -234,10 +213,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     const r = drawn.current;
     if (!canvas || !r.w || !r.h || !width || !height) return null;
     const box = canvas.getBoundingClientRect();
-    const lx = clientX - box.left - r.x;
-    const ly = clientY - box.top - r.y;
-    if (lx < 0 || ly < 0 || lx > r.w || ly > r.h) return null;
-    return { x: Math.round((lx / r.w) * width), y: Math.round((ly / r.h) * height) };
+    return toPagePoint({ x: clientX - box.left, y: clientY - box.top }, r, { width, height });
   }, []);
 
   useEffect(() => {

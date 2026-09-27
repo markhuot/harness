@@ -4,10 +4,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depStates, groupChildren, progressLabel, progressOf } from "../state/conductor";
-import { latestSummary } from "../state/reducer";
+import { attentionOf, childrenOfTicket, depStates, groupChildren, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { plainText } from "../components/Markdown";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
 

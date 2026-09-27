@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { DriverModels, ModelInfo } from "@harness/shared";
+import type { DriverModels, ModelInfo } from "../index";
 import { inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
 
 const MODELS: ModelInfo[] = [

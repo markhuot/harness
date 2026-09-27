@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { HarnessClient, type HarnessEvent, type HarnessSocket } from "@harness/shared";
-import { initialState, reducer, type Action, type State } from "./reducer";
+import { initialState, reducer, type Action, type State } from "@harness/shared/state";
 import { formatRoute, parseRoute, type Route } from "./route";
 import type { HarnessBridge } from "../../main/types";
 

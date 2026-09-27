@@ -22,6 +22,7 @@ Closing the app never stops agents: runs live in the service, which launchd keep
 | --- | --- |
 | `shared/src/protocol.ts` | Entities, events, WS messages, request bodies — **the wire contract** |
 | `shared/src/client.ts` | Typed REST/WS client (routes below are defined by it) |
+| `shared/src/state/*` | Client state shared by the desktop and iOS apps (`@harness/shared/state`): reducer + selectors, conductor, model, project-key, tab, markdown and label helpers, icon paths, the plugin host bridge. No React, DOM or native APIs |
 | `service/src/config.ts` | Paths (`HARNESS_HOME`, default `~/.harness`), port (`HARNESS_PORT`, default 7717), token |
 | `service/src/db.ts`, `service/src/store/*` | SQLite schema + repositories |
 | `service/src/events.ts` | In-process event bus (`HarnessEvent`) |

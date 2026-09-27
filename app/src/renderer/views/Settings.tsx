@@ -6,7 +6,7 @@ import type { DriverInfo, Project, PublicSettings, Settings, Watcher } from "@ha
 import { setThemePreference, useTheme } from "../state/theme";
 import { THEME_PREFERENCES, type ThemePreference } from "../../main/theme";
 import { useAction, useStore } from "../state/store";
-import { sortedProjects } from "../state/reducer";
+import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime } from "../components/bits";
