@@ -1,7 +1,7 @@
 // Git plumbing for the Changes tab. Never touches the user's index or worktree: untracked and
 // unstaged files are staged into a throwaway copy of the index (GIT_INDEX_FILE) and diffed from there.
 
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import type { PluginExecOptions, PluginExecResult } from "@harness/plugin-sdk/server";
@@ -104,7 +104,14 @@ export class Repo {
       const indexFile = join(tmp, "index");
       const real = (await this.ok(["rev-parse", "--git-path", "index"])).trim();
       const realPath = isAbsolute(real) ? real : resolve(this.root, real);
-      if (existsSync(realPath)) copyFileSync(realPath, indexFile); // keeps the stat cache: no full rehash
+      if (existsSync(realPath)) {
+        // Copying keeps the stat cache (no full rehash). Keep the index's own mtime too: git compares
+        // it with each entry's mtime to spot "racily clean" files, and a fresh mtime would hide
+        // same-size edits made in the same timestamp tick as the last index write.
+        copyFileSync(realPath, indexFile);
+        const st = statSync(realPath);
+        utimesSync(indexFile, st.atime, st.mtime);
+      }
       const env = { GIT_INDEX_FILE: indexFile, GIT_OPTIONAL_LOCKS: "0" };
       await this.ok(["add", "-A", "--", "."], { env });
       return await fn(env);
