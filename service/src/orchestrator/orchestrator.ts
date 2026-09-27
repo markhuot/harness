@@ -30,7 +30,7 @@ import type {
   Watcher,
   WorkItem,
 } from "@harness/shared";
-import { isTicketKey, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isTicketKey, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import type { TicketPatch } from "../store/tickets";
 import type { WatcherInput } from "../store/watchers";
@@ -293,13 +293,17 @@ export class Orchestrator {
 
   createProject(body: CreateProjectBody): Project {
     if (!body || typeof body.path !== "string" || !body.path.trim()) throw badRequest("path is required");
-    const path = resolve(body.path.trim().replace(/^~(?=$|\/)/, process.env.HOME ?? "~"));
-    if (!existsSync(path) || !statSync(path).isDirectory()) throw badRequest(`Not a directory: ${path}`);
+    const path = this.projectDir(body.path);
     if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
+    // An explicit key is taken as given (or refused); a derived one de-duplicates to KEY2, KEY3…
+    const key = body.key !== undefined && body.key !== null && String(body.key).trim() !== "" ? this.validProjectKey(String(body.key)) : undefined;
+    if (key) {
+      if (this.store.projects.getByKey(key)) throw conflict(`Project key ${key} is already used by another project`);
+    }
     const project = this.store.projects.create({
       path,
       name: body.name?.trim() || basename(path),
-      key: body.key,
+      key,
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
@@ -308,16 +312,71 @@ export class Orchestrator {
     return project;
   }
 
+  /** Resolve (and ~-expand) a project directory, which must exist. */
+  private projectDir(raw: string): string {
+    const path = resolve(raw.trim().replace(/^~(?=$|\/)/, process.env.HOME ?? "~"));
+    if (!existsSync(path) || !statSync(path).isDirectory()) throw badRequest(`Not a directory: ${path}`);
+    return path;
+  }
+
+  private validProjectKey(raw: string): string {
+    const { key, error } = checkProjectKey(raw);
+    if (error) throw badRequest(`Invalid project key "${key}": ${error}`);
+    return key;
+  }
+
+  /**
+   * Patch a project. Changing `key` renames the project's native tickets OLD-n → NEW-n
+   * (sessions and dependencies follow, numbers and nextSeq are kept). Tickets mirrored from an
+   * external system keep their keys, and existing branches / worktree directories keep the
+   * old name: they're stored on the ticket, so work in progress isn't disturbed.
+   */
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
-    if (!this.store.projects.get(id)) throw notFound(`Unknown project: ${id}`);
+    const existing = this.store.projects.get(id);
+    if (!existing) throw notFound(`Unknown project: ${id}`);
+    if (!body || typeof body !== "object") throw badRequest("body is required");
     if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
-    let path: string | undefined;
-    if (body.path !== undefined) {
-      path = resolve(body.path);
-      if (!existsSync(path) || !statSync(path).isDirectory()) throw badRequest(`Not a directory: ${path}`);
+    if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) throw badRequest("name cannot be empty");
+    const path = body.path !== undefined ? this.projectDir(String(body.path)) : undefined;
+    let newKey: string | null = null;
+    if (body.key !== undefined) {
+      const key = this.validProjectKey(String(body.key));
+      if (key !== existing.key) {
+        const other = this.store.projects.getByKey(key);
+        if (other && other.id !== id) throw conflict(`Project key ${key} is already used by ${other.name}`);
+        const collisions = this.store.projects.rekeyConflicts(id, key);
+        if (collisions.length) {
+          const list = collisions.slice(0, 3).join(", ") + (collisions.length > 3 ? ` and ${collisions.length - 3} more` : "");
+          throw conflict(`Can't rename to ${key}: ${list} already exist${collisions.length === 1 ? "s" : ""}`);
+        }
+        newKey = key;
+      }
     }
-    const project = this.store.projects.update(id, { ...body, path })!;
+    const { key: _key, ...rest } = body;
+    const renamed = this.store.transaction(() => {
+      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path });
+      return newKey ? this.store.projects.rekey(id, newKey) : null;
+    });
+    const project = this.store.projects.get(id)!;
     this.bus.emit({ kind: "project.upserted", project });
+    if (renamed && renamed.renames.size) {
+      const ticketIds = new Set(renamed.depTicketIds);
+      for (const [from, to] of renamed.renames) {
+        const t = this.store.tickets.getByKey(to);
+        if (!t) continue;
+        ticketIds.add(t.id);
+        const session = this.store.sessions.get(t.sessionId);
+        if (session) this.bus.emit({ kind: "session.upserted", session });
+        this.appendStatus(t.sessionId, null, `Renamed ${from} → ${to}`);
+      }
+      for (const tid of ticketIds) {
+        const t = this.store.tickets.get(tid);
+        if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
+      }
+      // Pending conductor notifications mention children by key.
+      for (const buf of this.conductorBuffer.values()) for (const c of buf) c.key = renamed.renames.get(c.key) ?? c.key;
+      this.log(`project ${existing.key} → ${project.key}: renamed ${renamed.renames.size} ticket(s)`);
+    }
     return project;
   }
 

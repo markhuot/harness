@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { migrate, openDb, SCHEMA_VERSION } from "../db";
+import type { ExternalRef } from "@harness/shared";
 import { Store } from "./index";
 
 const mk = () => new Store(openDb(":memory:"));
 
-function ticketFor(store: Store, projectId: string, key: string, deps: string[] = []) {
+function ticketFor(store: Store, projectId: string, key: string, deps: string[] = [], externalRef: ExternalRef | null = null) {
   const session = store.sessions.create({ key, kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: key });
   return store.tickets.create({
     key,
@@ -22,10 +23,12 @@ function ticketFor(store: Store, projectId: string, key: string, deps: string[] 
     parentId: null,
     dependsOn: deps,
     autoStart: false,
-    externalRef: null,
+    externalRef,
     workdir: null,
   });
 }
+
+const ext = (key: string): ExternalRef => ({ source: "jira", key, url: null, raw: {} });
 
 describe("db", () => {
   test("migrations set user_version and are idempotent; WAL on file dbs", () => {
@@ -57,10 +60,18 @@ describe("projects", () => {
     expect(custom.key).toBe("MYAPP");
   });
 
-  test("update keeps its own key without bumping to KEY2", () => {
+  test("update patches settings but never the key", () => {
     const s = mk();
     const a = s.projects.create({ path: "/a/foo", name: "foo" });
-    expect(s.projects.update(a.id, { key: "foo" })!.key).toBe("FOO");
+    const u = s.projects.update(a.id, { name: "Foo", useWorktrees: false, key: "BAR" } as any)!;
+    expect(u.key).toBe("FOO");
+    expect(u.name).toBe("Foo");
+    expect(u.useWorktrees).toBe(false);
+  });
+
+  test("derived keys skip the reserved TRIAGE prefix", () => {
+    const s = mk();
+    expect(s.projects.create({ path: "/x/triage", name: "t" }).key).toBe("TRIAGE2");
   });
 
   test("native keys come from nextSeq and skip keys already taken", () => {
@@ -73,6 +84,74 @@ describe("projects", () => {
     expect(k1).toBe("FOO-1");
     expect(k2).toBe("FOO-3");
     expect(s.projects.get(p.id)!.nextSeq).toBe(4);
+  });
+});
+
+describe("project rekey", () => {
+  function seed() {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/helloharness", name: "hello" });
+    const other = s.projects.create({ path: "/a/other", name: "other" });
+    const take = () => s.transaction(() => s.projects.takeNextKey(p.id, (k) => s.tickets.keyExists(k)));
+    const t1 = ticketFor(s, p.id, take());
+    const t2 = ticketFor(s, p.id, take(), [t1.key]);
+    const t3 = ticketFor(s, p.id, take(), [t2.key, "FOO-123"]);
+    const mirror = ticketFor(s, p.id, "FOO-123", [], ext("FOO-123"));
+    // An external mirror that happens to share the native prefix is still external.
+    const lookalike = ticketFor(s, p.id, "HELLOHARNESS-40", [], ext("HELLOHARNESS-40"));
+    const crossDep = ticketFor(s, other.id, "OTHER-1", [t3.key]);
+    return { s, p, other, t1, t2, t3, mirror, lookalike, crossDep, take };
+  }
+
+  test("renames native tickets, their sessions and every dependency; external keys stay", () => {
+    const { s, p, t1, t2, t3, mirror, lookalike, crossDep } = seed();
+    expect(s.projects.nativeTicketKeys(p.id).map((n) => n.key)).toEqual(["HELLOHARNESS-1", "HELLOHARNESS-2", "HELLOHARNESS-3"]);
+    const { renames, depTicketIds } = s.projects.rekey(p.id, "HEL");
+    expect([...renames]).toEqual([
+      ["HELLOHARNESS-1", "HEL-1"],
+      ["HELLOHARNESS-2", "HEL-2"],
+      ["HELLOHARNESS-3", "HEL-3"],
+    ]);
+    expect(depTicketIds.sort()).toEqual([t2.id, t3.id, crossDep.id].sort());
+    expect(s.projects.get(p.id)!.key).toBe("HEL");
+    expect(s.tickets.get(t1.id)!.key).toBe("HEL-1");
+    expect(s.sessions.get(t1.sessionId)!.key).toBe("HEL-1");
+    expect(s.tickets.get(t2.id)!.dependsOn).toEqual(["HEL-1"]);
+    expect(s.tickets.get(t3.id)!.dependsOn).toEqual(["HEL-2", "FOO-123"]);
+    expect(s.tickets.get(crossDep.id)!.dependsOn).toEqual(["HEL-3"]);
+    expect(s.tickets.dependents("HEL-3").map((t) => t.key)).toEqual(["OTHER-1"]);
+    expect(s.tickets.get(mirror.id)!.key).toBe("FOO-123");
+    expect(s.tickets.get(lookalike.id)!.key).toBe("HELLOHARNESS-40");
+    expect(s.sessions.get(lookalike.sessionId)!.key).toBe("HELLOHARNESS-40");
+    expect(s.tickets.getByKey("HELLOHARNESS-1")).toBeNull();
+  });
+
+  test("nextSeq continues under the new key", () => {
+    const { s, p, take } = seed();
+    s.projects.rekey(p.id, "HEL");
+    expect(s.projects.get(p.id)!.nextSeq).toBe(4);
+    expect(take()).toBe("HEL-4");
+  });
+
+  test("collisions are reported and abort the whole rename", () => {
+    const { s, p, other, t1 } = seed();
+    ticketFor(s, other.id, "HEL-2", [], ext("HEL-2"));
+    expect(s.projects.rekeyConflicts(p.id, "HEL")).toEqual(["HEL-2"]);
+    expect(() => s.projects.rekey(p.id, "HEL")).toThrow(/HEL-2/);
+    expect(s.projects.get(p.id)!.key).toBe("HELLOHARNESS");
+    expect(s.tickets.get(t1.id)!.key).toBe("HELLOHARNESS-1");
+    expect(s.sessions.get(t1.sessionId)!.key).toBe("HELLOHARNESS-1");
+  });
+
+  test("a session key collision counts too (triage sessions are keyed TRIAGE-n)", () => {
+    const { s, p } = seed();
+    s.sessions.create({ key: "HX-1", kind: "triage", ticketId: null, driver: "dummy", cwd: "/", title: "" });
+    expect(s.projects.rekeyConflicts(p.id, "HX")).toEqual(["HX-1"]);
+  });
+
+  test("renaming to the current key is a no-op", () => {
+    const { s, p } = seed();
+    expect(s.projects.rekey(p.id, "HELLOHARNESS").renames.size).toBe(0);
   });
 });
 
