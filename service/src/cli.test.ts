@@ -48,6 +48,8 @@ describe("buildPlist", () => {
     const j = JSON.parse(new TextDecoder().decode(Bun.spawnSync(["plutil", "-convert", "json", "-o", "-", file]).stdout));
     expect(j.EnvironmentVariables.HARNESS_HOME).toBe("/tmp/a&b");
     expect(j.KeepAlive).toBe(true);
+    // launchd SIGKILLs after ExitTimeOut (default 20s); the daemon needs up to 25s to close Chrome cleanly.
+    expect(j.ExitTimeOut).toBeGreaterThan(25);
   });
 });
 

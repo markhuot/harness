@@ -74,6 +74,8 @@ ${envXml}
     <true/>
     <key>ThrottleInterval</key>
     <integer>5</integer>
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
     <key>StandardOutPath</key>
     <string>${esc(o.logPath)}</string>
     <key>StandardErrorPath</key>
