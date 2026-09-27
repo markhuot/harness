@@ -48,6 +48,7 @@ const paths = {
 } as const;
 
 export type IconName = keyof typeof paths;
+export const isIconName = (name: string): name is IconName => Object.hasOwn(paths, name);
 
 export function Icon({ name, size = 14, className, strokeWidth = 1.75 }: { name: IconName; size?: number; className?: string; strokeWidth?: number }) {
   return (

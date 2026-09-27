@@ -7,6 +7,7 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
+  DriverModels,
   HarnessEvent,
   HumanReviewBody,
   ApprovalBody,
@@ -46,6 +47,11 @@ export class HarnessClient {
 
   get baseUrl() {
     return this.opts.baseUrl.replace(/\/$/, "");
+  }
+
+  /** The bearer token (hosts hand it to plugin iframes in harness:init). */
+  get token() {
+    return this.opts.token;
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -166,6 +172,10 @@ export class HarnessClient {
   // Drivers & settings
   listDrivers() {
     return this.request<DriverInfo[]>("GET", "/drivers");
+  }
+  /** Models the driver offers (cached by the service; refresh re-queries the driver). */
+  listModels(driverId: string, opts: { refresh?: boolean } = {}) {
+    return this.request<DriverModels>("GET", `/drivers/${encodeURIComponent(driverId)}/models${opts.refresh ? "?refresh=1" : ""}`);
   }
   loginDriver(id: string) {
     return this.request<{ url: string | null; message: string }>("POST", `/drivers/${id}/login`);

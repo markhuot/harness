@@ -2,16 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { childrenOf, dependencyStates, isReady } from "../state/reducer";
-import { TICKET_TABS, type TicketTab } from "../state/route";
-import { Icon } from "../components/Icon";
+import { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "../state/route";
+import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { ApprovalCard } from "./Approval";
+import { PluginFrame, usePluginTabs } from "./PluginTab";
 
-const TAB_LABEL: Record<TicketTab, string> = { summaries: "Summaries", transcript: "Transcript", browser: "Browser", details: "Details" };
+const TAB_LABEL: Record<BuiltinTicketTab, string> = { summaries: "Summaries", transcript: "Transcript", browser: "Browser", details: "Details" };
 
 const PLACEHOLDER: Record<TicketStatus, string> = {
   planning: "Refine the plan…",
@@ -43,6 +44,7 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     });
   };
   const ticket = useMemo(() => Object.values(state.tickets).find((t) => t.key === ticketKey), [state.tickets, ticketKey]);
+  const pluginTabs = usePluginTabs(ticket);
 
   // Detail (summaries, runs, session) — refetch on reconnect.
   useEffect(() => {
@@ -90,7 +92,11 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     );
   }
 
-  const tab = route.view === "board" ? route.tab : "summaries";
+  const routeTab = route.view === "board" ? route.tab : "summaries";
+  const wantPlugin = parsePluginTab(routeTab);
+  const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
+  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
+  const tab: TicketTab = wantPlugin && !activePlugin && pluginTabs ? "summaries" : routeTab;
   const setTab = (t: TicketTab) => route.view === "board" && navigate({ ...route, tab: t });
 
   return (
@@ -104,12 +110,27 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
+        {pluginTabs?.map((p) => {
+          const t = pluginTabRoute(p.pluginId, p.id);
+          return (
+            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} title={`${p.title} (plugin: ${p.pluginId})`} data-plugin-tab={t}>
+              {p.icon && isIconName(p.icon) && <Icon name={p.icon} size={12} />}
+              {p.title}
+            </button>
+          );
+        })}
       </nav>
       <div className="detail-body">
         {tab === "summaries" && <Summaries ticket={ticket} />}
         {tab === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
         {tab === "details" && <TicketDetails ticket={ticket} />}
+        {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
+        {wantPlugin && !pluginTabs && (
+          <div className="empty" style={{ flex: 1 }}>
+            <div className="spinner" />
+          </div>
+        )}
       </div>
       {ticket.status !== "done" && <MessageComposer ticket={ticket} key={ticket.id} />}
     </aside>
