@@ -55,6 +55,24 @@ dependency holders) and `session.upserted` events, and each renamed ticket's tra
 directories (`worktrees/OLD-n`) keep their names: they're stored on the ticket, so work in
 progress isn't disturbed. Transcript and summary text isn't rewritten.
 
+Old keys keep working. Each rename records `OLD-n → ticket id` in `ticket_key_aliases`
+(migration 5), so bookmarks (`#/…/ticket/OLD-2`), conductors calling `get_ticket` /
+`start_ticket` / `message_ticket` / `review_ticket` / `complete_ticket` with a key they
+learned earlier, `dependsOn` inputs, triage dispatch and the CLI all still find the ticket.
+Aliases point at the ticket rather than at a key, so chained renames (`A → B → C`) resolve
+`A-n` and `B-n` alike. Resolution lives in one place, `TicketRepo.lookup` / `getByKey`: the
+current key first, then an alias, so a real ticket holding a key always wins. Rules:
+
+- `GET /tickets/:key` with an old key returns the ticket (current key in `ticket.key`) and
+  sets `resolvedFrom` to the key that was asked for; clients should switch to `ticket.key`.
+- `dependsOn` given an old key stores the current key.
+- Aliases never make a key taken: new tickets, explicit keys and renames can use an aliased
+  key. When a ticket is created with (or renamed into) a key an alias holds, the alias is
+  deleted, and the key belongs to the new ticket from then on (deleting that ticket later
+  doesn't hand the key back). Renaming a project back to an earlier key makes those keys real
+  again and drops their aliases.
+- Deleting a ticket (or its project) deletes its aliases.
+
 ## Runtime paths
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
