@@ -346,6 +346,28 @@ export class Cli {
         const t = await this.newTicket(dir, words.join(" "), { driver, plan });
         print(`${t.key} ${t.title} [${t.status}]`, t);
         return 0;
+      } else if (cmd === "network") {
+        const n = await this.client().network();
+        const ts = n.tailscale ? `tailscale ${n.tailscale.ip}${n.tailscale.dnsName ? ` (${n.tailscale.dnsName})` : ""}` : "tailscale not running";
+        print(
+          [`mode ${n.mode}${n.host ? ` ${n.host}` : ""}${n.active !== n.mode ? ` (serving ${n.active})` : ""}${n.override ? ` · HARNESS_HOST=${n.override}` : ""}`, ...n.bound.map((b) => `  ${b.url}`), ts, ...(n.error ? [`error: ${n.error}`] : [])].join("\n"),
+          n,
+        );
+        return 0;
+      } else if (cmd === "listen") {
+        if (!sub || (sub === "custom" && !rest[0])) return this.usage();
+        const s = await this.client().updateSettings({ listen: sub === "custom" ? { mode: "custom", host: rest[0] } : { mode: sub as never } });
+        const n = await this.client().network();
+        print(`listen ${s.listen?.mode}: ${n.bound.map((b) => b.url).join(", ")}`, n);
+        return 0;
+      } else if (cmd === "pair") {
+        const p = await this.client().pairing();
+        print(`${p.url}\n${p.pairUrl}`, p);
+        return 0;
+      } else if (cmd === "token" && sub === "rotate") {
+        await this.client().rotateToken();
+        print(`Rotated the token (${harnessPaths(this.home).tokenPath}); the old one no longer works`, { ok: true, tokenPath: harnessPaths(this.home).tokenPath });
+        return 0;
       } else if (cmd === "tickets") {
         const tickets = await this.client().listTickets();
         print(tickets.map((t) => `${t.key.padEnd(14)} ${t.status.padEnd(12)} ${t.busy ? "●" : " "} ${t.title}`).join("\n") || "(no tickets)", tickets);
@@ -367,6 +389,10 @@ export class Cli {
         "  harness service install|uninstall|start|stop|restart|status|ensure [--json]",
         '  harness new <dir> "<prompt>" [--driver <id>] [--plan] [--json]',
         "  harness tickets [--json]",
+        "  harness network [--json]",
+        "  harness listen localhost|tailscale|any|custom <host> [--json]",
+        "  harness pair [--json]",
+        "  harness token rotate [--json]",
       ].join("\n"),
     );
     return 2;

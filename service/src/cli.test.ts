@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { HarnessClient } from "@harness/shared";
 import { buildPlist, Cli, LAUNCHD_LABEL, type CliDeps, type Exec } from "./cli";
 import { createHarness, type Harness } from "./app";
 import { DummyDriver } from "./drivers/dummy";
@@ -189,5 +190,30 @@ describe("Cli new / tickets", () => {
     out.length = 0;
     expect(await cli.run(["tickets"])).toBe(0);
     expect(out[0]).toMatch(/MYAPP-1\s+review/);
+  });
+});
+
+describe("Cli network / listen / pair / token", () => {
+  test("listen rejects a non-local host, pair refuses in localhost mode, token rotate invalidates the old token", async () => {
+    const home = tempHome();
+    const port = await freePort();
+    running = await createHarness({ home, port, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
+    const out: string[] = [];
+    const err: string[] = [];
+    const cli = new Cli(deps({ env: { HARNESS_HOME: home, HARNESS_PORT: String(port) }, out: (s) => out.push(s), err: (s) => err.push(s) }));
+    expect(await cli.run(["network", "--json"])).toBe(0);
+    expect(JSON.parse(out[0]!)).toMatchObject({ mode: "localhost", active: "localhost", bound: [{ address: "127.0.0.1", url: `http://127.0.0.1:${port}` }] });
+    expect(await cli.run(["listen", "custom", "10.254.254.254"])).toBe(1);
+    expect(err.at(-1)).toContain("isn't an address of this machine");
+    expect(await cli.run(["listen", "custom"])).toBe(2);
+    expect(await cli.run(["pair"])).toBe(1);
+    expect(err.at(-1)).toContain("only listens on localhost");
+
+    const old = running.token;
+    expect(await cli.run(["token", "rotate"])).toBe(0);
+    expect(running.token).not.toBe(old);
+    await expect(new HarnessClient({ baseUrl: running.url, token: old }).listProjects()).rejects.toMatchObject({ status: 401 });
+    // The CLI re-reads the token file on every command, so it keeps working.
+    expect(await cli.run(["network"])).toBe(0);
   });
 });
