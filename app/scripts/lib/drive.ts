@@ -126,5 +126,35 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
     } catch {}
     proc.kill();
   };
-  return { proc, cdp, on, js, exists, type, key, cmdEnter, clickText, go, screenshot, close };
+  /** Evaluate in a child frame's own target (plugin iframes are out-of-process: a separate CDP target). */
+  const frame = async (urlPart: string) => {
+    const t = await until(
+      `frame target ${urlPart}`,
+      async () => ((await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[]).find((x) => x.type === "iframe" && x.url.includes(urlPart)),
+      15000,
+    );
+    const fws = new WebSocket(t.webSocketDebuggerUrl);
+    await new Promise((r) => (fws.onopen = r));
+    let n = 0;
+    const waiting = new Map<number, (v: any) => void>();
+    const events: { method: string; params: any }[] = [];
+    fws.onmessage = (m) => {
+      const msg = JSON.parse(String(m.data));
+      if (msg.id && waiting.has(msg.id)) waiting.get(msg.id)!(msg);
+      else if (msg.method) events.push(msg);
+    };
+    const fcdp = (method: string, params: object = {}) =>
+      new Promise<any>((r) => {
+        const i = ++n;
+        waiting.set(i, r);
+        fws.send(JSON.stringify({ id: i, method, params }));
+      });
+    const fjs = async <T = unknown>(expression: string): Promise<T> => {
+      const res = await fcdp("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+      if (res.result?.exceptionDetails) throw new Error(res.result.exceptionDetails.exception?.description ?? "eval failed");
+      return res.result?.result?.value as T;
+    };
+    return { url: t.url, js: fjs, cdp: fcdp, events, close: () => fws.close() };
+  };
+  return { proc, cdpPort, cdp, on, js, exists, type, key, cmdEnter, clickText, go, screenshot, frame, close };
 }

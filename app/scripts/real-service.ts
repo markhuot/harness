@@ -1,6 +1,7 @@
 // Integration against the REAL service: boots service/src/daemon.ts with a throwaway
 // HARNESS_HOME (never ~/.harness), launches the built app against it, and walks a dummy-driver
-// ticket through the whole lifecycle in the UI, plus a /browse ticket for the live browser tab.
+// ticket through the whole lifecycle in the UI, plus a /browse ticket for the live browser tab and a
+// worktree ticket for the git plugin's Changes tab.
 //
 //   bun run build && bun scripts/real-service.ts [screenshotDir] [--theme=dark]
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -8,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { checkChangesTab } from "./lib/changes-check";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "real"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -26,6 +28,7 @@ const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
+let changesRepo: string | null = null;
 const shot = async (name: string) => {
   await Bun.sleep(350); // let fade-in animations settle
   await app!.screenshot(join(shots, `${name}-${theme}.png`));
@@ -119,6 +122,9 @@ try {
   const transcript = await api<TranscriptEntry[]>("GET", `/sessions/${browse.sessionId}/transcript?after=0`);
   check("agent's browser tools ran", transcript.some((e) => e.content.type === "tool_call" && e.content.name.includes("browser_open")));
 
+  // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
+  changesRepo = (await checkChangesTab({ api, app, check, shot })).repo;
+
   await go(`#/board/${project.id}`);
   await Bun.sleep(600);
   await shot("7-board");
@@ -132,6 +138,7 @@ try {
   await daemon.exited;
   rmSync(home, { recursive: true, force: true });
   rmSync(projectDir, { recursive: true, force: true });
+  if (changesRepo) rmSync(changesRepo, { recursive: true, force: true });
 }
 console.log(c.failures ? `${c.failures} check(s) failed` : "all checks passed");
 process.exit(c.failures ? 1 : 0);

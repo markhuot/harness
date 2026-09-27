@@ -15,6 +15,7 @@
     "smoke": "bun run build && bun scripts/smoke.ts",
     "shoot": "bun run build && bun scripts/shoot.ts",
     "real": "bun run build && bun scripts/real-service.ts",
+    "changes": "bun run build && bun scripts/changes.ts",
     "icon": "bun scripts/icon.ts",
     "typecheck": "tsc --noEmit -p ."
   },
