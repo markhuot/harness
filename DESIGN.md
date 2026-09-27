@@ -34,6 +34,24 @@ Closing the app never stops agents: runs live in the service, which launchd keep
 | `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...` |
 | `app/` | Electron main + React renderer |
 
+## Project keys
+
+A project key (`HEL`) prefixes its native ticket keys (`HEL-4`). Keys match
+`^[A-Z][A-Z0-9]{0,15}$` after upper-casing, and `TRIAGE` is reserved for triage sessions. An
+explicit key on `POST /projects` must be free (409 otherwise); a key derived from the folder
+name de-duplicates to `KEY2`, `KEY3`, ...
+
+`PATCH /projects/:id { key }` renames the project's **native** tickets `OLD-n` → `NEW-n` in one
+transaction, keeping the numbers: ticket keys, their session keys, and every `dependsOn` that
+points at them (in any project). `nextSeq` continues. Tickets mirrored from an external system
+(`externalRef` set, e.g. `FOO-123`) keep their keys. The rename is refused with 409 when
+another project uses the key or any `NEW-n` already exists as a ticket or session key, and
+nothing changes. Clients get `project.upserted`, `ticket.upserted` (renamed tickets and
+dependency holders) and `session.upserted` events, and each renamed ticket's transcript gets a
+`Renamed OLD-n → NEW-n` status line. Existing branches (`harness/old-n`) and worktree
+directories (`worktrees/OLD-n`) keep their names: they're stored on the ticket, so work in
+progress isn't disturbed. Transcript and summary text isn't rewritten.
+
 ## Runtime paths
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
