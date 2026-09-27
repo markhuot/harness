@@ -378,7 +378,9 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 ```
 GET    /health
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
-GET    /tickets?projectId=       POST /tickets
+GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
+GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
+GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 POST   /tickets/:key/start | /messages | /review | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries
@@ -400,6 +402,30 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+**Paging and search.** Big projects make the Done column long, so boards load
+`GET /tickets?status=` with every status except done and page done separately. `TicketPage` is
+`{ tickets, nextCursor, total }`: `total` counts everything matching the filter, and
+`nextCursor` (opaque, null on the last page) goes back as `cursor`. `limit` is clamped to
+1..200. Paging is keyset, not OFFSET: the cursor holds the last row's sort key and id, so tickets
+completed, moved or deleted between fetches never duplicate or skip a row.
+
+- `/tickets/page` takes exactly one `status`. done sorts by `completedAt` desc; other statuses by
+  `position`, then `createdAt`. `q` narrows the page to search hits (an empty `q` is a 400).
+- `Ticket.completedAt` is when the ticket last entered done, and null outside done. SQLite
+  triggers maintain it (migration 6 backfilled existing done tickets from `updatedAt`), so every
+  write path gets it right.
+- `/tickets/search` spans every status. It matches the ticket key, exact or prefix and
+  case-insensitive, including old keys from `ticket_key_aliases`. It also matches title,
+  description and the latest summary. Every term has to match, as a prefix. Ranking puts an exact
+  key first, then a key prefix, then hits with every term in the title, then the rest, and
+  newest-created first within each rank. An empty or whitespace `q` is a 400.
+- The index is `ticket_search` (one row per ticket, kept current by triggers on tickets, aliases
+  and summaries) plus an external-content FTS5 table `ticket_fts` over it. User input never
+  reaches FTS syntax: each term becomes a quoted string with `"` doubled and a trailing `*`, and
+  punctuation-only terms are dropped. `ticket_fts` is derived data, created and rebuilt on open
+  when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
+  ranking.
 
 ## Network
 
