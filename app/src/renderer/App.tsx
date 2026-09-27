@@ -41,6 +41,21 @@ export function Root() {
     void resolveConnection().then(setConn);
   }, []);
 
+  // Token rotation: Electron re-reads the token file; a plain browser takes the rotated token.
+  const onTokenRotated = useCallback(async (rotated: string) => {
+    const next: ConnectionResult = window.harness
+      ? await window.harness.reloadToken(rotated)
+      : { baseUrl: new URLSearchParams(location.search).get("url") ?? "", token: rotated, source: "env" };
+    if ("error" in next) throw new Error(`${next.error} ${next.output}`.trim());
+    if (!window.harness) {
+      // Keep ?token= current so a reload still connects.
+      const q = new URLSearchParams(location.search);
+      q.set("token", rotated);
+      history.replaceState(null, "", `${location.pathname}?${q}${location.hash}`);
+    }
+    setConn(next);
+  }, []);
+
   const retry = async () => {
     setRetrying(true);
     setConn(await resolveConnection(true));
@@ -54,7 +69,7 @@ export function Root() {
       ) : "error" in conn ? (
         <ErrorScreen error={conn} onRetry={retry} retrying={retrying} />
       ) : (
-        <StoreProvider baseUrl={conn.baseUrl} token={conn.token} toast={toast}>
+        <StoreProvider baseUrl={conn.baseUrl} token={conn.token} toast={toast} onTokenRotated={onTokenRotated}>
           <Shell />
         </StoreProvider>
       )}

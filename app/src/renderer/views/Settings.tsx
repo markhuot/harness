@@ -12,6 +12,7 @@ import "./settings.css";
 import { relativeTime } from "../components/bits";
 import { ModelsSection } from "./settings/ModelSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
+import { NetworkSection } from "./settings/NetworkSettings";
 
 const SECTIONS = [
   ["appearance", "Appearance"],
@@ -19,6 +20,7 @@ const SECTIONS = [
   ["general", "General"],
   ["models", "Models"],
   ["permissions", "Permissions"],
+  ["network", "Network"],
   ["watchers", "Watchers"],
   ["mappings", "Mappings"],
   ["projects", "Projects"],
@@ -66,6 +68,7 @@ export function SettingsView() {
           )}
           {state.settings && <ModelsSection settings={state.settings} />}
           {state.settings && <PermissionsSection settings={state.settings} />}
+          {state.settings && <NetworkSection settings={state.settings} />}
           <WatchersSection />
           <MappingsSection />
           <ProjectsSection />

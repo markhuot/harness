@@ -27,6 +27,8 @@ export interface Store {
   navigate: (r: Route) => void;
   refresh: () => Promise<void>;
   toast: (message: string, kind?: "error" | "info") => void;
+  /** After POST /token/rotate: switch to the new token (the client and socket are rebuilt). */
+  reconnect: (rotatedToken: string) => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -72,7 +74,20 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
-export function StoreProvider({ baseUrl, token, children, toast }: { baseUrl: string; token: string; children: ReactNode; toast: Store["toast"] }) {
+export function StoreProvider({
+  baseUrl,
+  token,
+  children,
+  toast,
+  onTokenRotated,
+}: {
+  baseUrl: string;
+  token: string;
+  children: ReactNode;
+  toast: Store["toast"];
+  /** Resolves once the connection carries the new token (Root re-reads the token file in Electron). */
+  onTokenRotated?: (rotatedToken: string) => Promise<void>;
+}) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [epoch, setEpoch] = useState(0);
   const [route, navigate] = useRoute();
@@ -132,9 +147,14 @@ export function StoreProvider({ baseUrl, token, children, toast }: { baseUrl: st
     return () => void listeners.current.delete(fn);
   }, []);
 
+  const reconnect = useCallback(async (rotated: string) => {
+    if (!onTokenRotated) throw new Error("This window can't switch tokens; reload it.");
+    await onTokenRotated(rotated);
+  }, [onTokenRotated]);
+
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast],
+    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect }),
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
