@@ -9,11 +9,17 @@
 //   5. --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
 //      (harness://settings?darkTheme=…) and saves board-<id>.png + settings-<id>.png
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id]
+//   6. --paging: only the paging checks: seeds 125+ done tickets (one old "haystack" ticket deep in
+//      the history), a conductor with done children and a ticket depending on the old one; checks
+//      child tickets are hidden by default, the Done count is the server total, the Done column
+//      scrolls into older pages, and search finds the unloaded done ticket; paging-*.png in light
+//      and dark
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
+import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 
 const here = resolve(import.meta.dir, "..");
@@ -27,6 +33,7 @@ const shots = join(here, "build", "screens");
 const appPath = join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
+const pagingOnly = flag("paging");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
@@ -212,13 +219,161 @@ async function seed() {
   return { project, other, hello, changes, conductor, browse, approval, blocked, plan };
 }
 
+/** --paging: a long Done history on its own project, a conductor with done children, and a dependency on an old done ticket. */
+async function seedPaging() {
+  mkdirSync(join(scratch, "archive"), { recursive: true });
+  const project = await api<Project>("POST", "/projects", { path: join(scratch, "archive"), name: "archive", key: "ARCH", defaultDriver: "dummy" });
+  const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: false, ...extra });
+  const finish = (t: Ticket) => api<Ticket>("PATCH", `/tickets/${t.key}`, { status: "done" });
+  // Oldest first: the haystack ticket finishes before everything else, so it sits pages deep.
+  const needle = await create("Needle in the haystack: rotate the signing certificate");
+  await finish(needle);
+  const history: Ticket[] = [];
+  for (let i = 1; i <= 125; i += 8) {
+    const batch = await Promise.all(Array.from({ length: Math.min(8, 126 - i) }, (_, j) => create(`Archived chore ${String(i + j).padStart(3, "0")}`)));
+    for (const t of batch) {
+      await finish(t);
+      history.push(t);
+    }
+  }
+  const conductor = await create("Release train: ship 2.0", { kind: "conductor" });
+  const kids: Ticket[] = [];
+  for (const title of ["Cut the release branch", "Write the changelog", "Tag the build", "Announce the release"]) kids.push(await create(title, { parentId: conductor.id }));
+  // The newest completions are children: if they weren't hidden they'd top the Done column.
+  for (const k of kids.slice(0, 3)) await finish(k);
+  const dependent = await create("Renew the provisioning profile", { dependsOn: [needle.key] });
+  return { project, needle, history, conductor, kids, dependent };
+}
+
+/** --paging: real taps against the seeded Done history. Returns false when a check failed. */
+async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPaging>>): Promise<boolean> {
+  const results: [string, boolean, string][] = [];
+  const check = async (name: string, fn: () => Promise<string | boolean>) => {
+    try {
+      const r = await fn();
+      results.push([name, r !== false, typeof r === "string" ? r : ""]);
+    } catch (e) {
+      results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    }
+  };
+  const fresh = async (url = "") => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+    if (url) await openUrl(udid, url);
+    else await until("board loaded", async () => (await labels(udid)).some((l) => /^ARCH-\d+ /.test(l)), 20000);
+    await Bun.sleep(url ? 1500 : 800);
+  };
+  const has = async (prefix: string) => (await labels(udid)).some((l) => l.startsWith(prefix));
+  const shot = async (name: string, theme: string) => {
+    const file = join(shots, `paging-${name}-${theme}.png`);
+    await simctl("io", udid, "screenshot", file);
+    console.log(`  ${file}`);
+  };
+  const swipeUp = () => axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "220", "--duration", "0.25", "--udid", udid);
+  // The strip scrolls to follow the page, so a tap can land on a neighbour: tap until a Done card is on screen.
+  const openDone = async () => {
+    const top = p.history.at(-1)!.key;
+    for (let i = 0; i < 4; i++) {
+      await tapWhere(udid, (l) => l.startsWith("Done,"));
+      await Bun.sleep(1200);
+      const card = await findElement(udid, (l) => l.startsWith(`${top} `));
+      if (card && card.frame.x >= 0 && card.frame.x < 440) return;
+    }
+    throw new Error("couldn't open the Done column");
+  };
+  // The native search field lives in the header, which AXe doesn't descend into: tap where it sits.
+  const tapSearch = async () => {
+    await axe("tap", "-x", "200", "-y", "139", "--udid", udid);
+    await Bun.sleep(700);
+  };
+  const total = (await api<TicketPage>("GET", "/tickets/page?status=done&limit=1")).total;
+  const k = (t: Ticket) => encodeURIComponent(t.key);
+  const deep = p.history[10]!; // ~118th newest: two pages down
+
+  await check("child tickets are hidden by default (Done's newest completions are children)", async () => {
+    await fresh();
+    await openDone();
+    const newest = p.history.at(-1)!;
+    await until(`${newest.key} on the board`, () => has(`${newest.key} `), 8000);
+    const leaked = p.kids.slice(0, 3);
+    const shown = (await labels(udid)).filter((l) => leaked.some((kid) => l.startsWith(`${kid.key} `)));
+    if (shown.length) throw new Error(`children visible: ${shown.join(" | ")}`);
+    return `newest non-child ${newest.key} on top`;
+  });
+  await check("Show child tickets (header menu) shows them; toggling back hides them", async () => {
+    await axe("tap", "-x", "342", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await Bun.sleep(900);
+    await tapWhere(udid, "Show child tickets");
+    await until("children visible", () => has(`${p.kids[2]!.key} `), 6000);
+    await axe("tap", "-x", "342", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await Bun.sleep(900);
+    await tapWhere(udid, "Show child tickets");
+    await until("children hidden", async () => !(await has(`${p.kids[2]!.key} `)), 6000);
+    return true;
+  });
+  await check("the Done count is the server's total", async () => {
+    await until(`Done, ${total}`, () => has(`Done, ${total}`), 6000);
+    return `Done, ${total}`;
+  });
+  await check("the Done column scrolls into older pages", async () => {
+    for (let i = 0; i < 45; i++) {
+      if (await has(`${deep.key} `)) return `${deep.key} after ${i} swipes`;
+      await swipeUp();
+      await Bun.sleep(350);
+    }
+    throw new Error(`${deep.key} never appeared`);
+  });
+  await simctl("io", udid, "screenshot", join(shots, "paging-done-scrolled-light.png"));
+  await check("search finds a done ticket that isn't loaded", async () => {
+    await fresh();
+    await tapSearch();
+    await axe("type", "haystack", "--udid", udid);
+    await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);
+    return p.needle.key;
+  });
+  await check("a dependency on an unloaded done ticket resolves", async () => {
+    await fresh(`harness://ticket/${k(p.dependent)}?tab=summaries`);
+    await until("dependency chip", () => has(p.needle.key), 8000);
+    return true;
+  });
+  await check("the conductor's Tickets tab lists its done children", async () => {
+    await fresh(`harness://ticket/${k(p.conductor)}?tab=children`);
+    await until("done children", async () => (await Promise.all(p.kids.slice(0, 3).map((kid) => has(kid.key)))).every(Boolean), 8000);
+    return true;
+  });
+
+  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+  for (const theme of ["light", "dark"] as const) {
+    await simctl("ui", udid, "appearance", theme);
+    await fresh();
+    await shot("board", theme);
+    await openDone();
+    await shot("done", theme);
+    await tapSearch();
+    await axe("type", "haystack", "--udid", udid);
+    await until("results", () => has(`${p.needle.key} `), 10000).catch(() => {});
+    await Bun.sleep(600);
+    await shot("search", theme);
+    await fresh(`harness://ticket/${k(p.conductor)}?tab=children`);
+    await Bun.sleep(1200);
+    await shot("conductor", theme);
+    await fresh(`harness://ticket/${k(p.dependent)}?tab=summaries`);
+    await Bun.sleep(1200);
+    await shot("dependency", theme);
+  }
+  await simctl("ui", udid, "appearance", "light");
+  return results.every((r) => r[1]);
+}
+
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
   await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
   token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded] = await Promise.all([pickDevice(), seed()]);
-  console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
+  const [udid, seeded, paged] = await Promise.all([pickDevice(), pagingOnly ? null : seed(), pagingOnly ? seedPaging() : null]);
+  if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
+  if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
   if (!flag("no-build") || !existsSync(appPath)) {
     console.log("building Release (simulator)…");
@@ -237,128 +392,131 @@ try {
   await Bun.sleep(4000);
 
   mkdirSync(shots, { recursive: true });
-  const k = (t: Ticket) => encodeURIComponent(t.key);
-  const screens: [string, string, number?][] = [
-    ["board", "harness://board"],
-    ["projects", "harness://projects"],
-    ["ticket-summaries", `harness://ticket/${k(seeded.hello)}?tab=summaries`],
-    ["ticket-transcript", `harness://ticket/${k(seeded.hello)}?tab=transcript`],
-    ["ticket-details", `harness://ticket/${k(seeded.hello)}?tab=details`],
-    ["conductor-tickets", `harness://ticket/${k(seeded.conductor)}?tab=children`],
-    ["approval", `harness://ticket/${k(seeded.approval)}`],
-    ["blocked", `harness://ticket/${k(seeded.blocked)}`],
-    ["planning", `harness://ticket/${k(seeded.plan)}`],
-    ["browser", `harness://ticket/${k(seeded.browse)}?tab=browser`, 6000],
-    ["changes", `harness://ticket/${k(seeded.changes)}?tab=plugin:git:changes`, 7000],
-    ["new-session", "harness://new"],
-    ["inbox", "harness://inbox"],
-    ["settings", "harness://settings"],
-    ["project-settings", `harness://project/${seeded.project.id}`],
-    ["connect", "harness://connect"],
-  ];
-  const relaunch = async () => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-  };
-  for (const id of themeShots) {
-    const theme = findTheme(id)!;
-    await simctl("ui", udid, "appearance", theme.appearance);
-    await relaunch();
-    await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
-    await Bun.sleep(2200);
-    // Scroll down to the Appearance pickers.
-    await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "2", "--udid", udid);
-    await Bun.sleep(1200);
-    await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
-    await relaunch();
-    // The board needs the connection and the first ticket list, not just the first frame.
-    await until("board loaded", async () => (await labels(udid)).some((l) => /^[A-Z]+-\d+ /.test(l)), 20000).catch(() => {});
-    await Bun.sleep(1500);
-    const file = join(shots, `board-${id}.png`);
-    await simctl("io", udid, "screenshot", file);
-    console.log(`  ${file}`);
-  }
-  if (themeShots.length) {
-    // Back to the defaults for the light/dark pass.
-    await relaunch();
-    await openUrl(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
-    await Bun.sleep(1500);
-  }
-  for (const theme of flag("interactions-only") ? [] : (["light", "dark"] as const)) {
-    await simctl("ui", udid, "appearance", theme);
-    for (const [name, url, wait] of screens) {
-      if (only && !only.includes(name)) continue;
-      // A fresh launch per screen, so a modal from the previous one never frames the next.
+  if (paged) failed = !(await pagingChecks(udid, paged));
+  if (seeded) {
+    const k = (t: Ticket) => encodeURIComponent(t.key);
+    const screens: [string, string, number?][] = [
+      ["board", "harness://board"],
+      ["projects", "harness://projects"],
+      ["ticket-summaries", `harness://ticket/${k(seeded.hello)}?tab=summaries`],
+      ["ticket-transcript", `harness://ticket/${k(seeded.hello)}?tab=transcript`],
+      ["ticket-details", `harness://ticket/${k(seeded.hello)}?tab=details`],
+      ["conductor-tickets", `harness://ticket/${k(seeded.conductor)}?tab=children`],
+      ["approval", `harness://ticket/${k(seeded.approval)}`],
+      ["blocked", `harness://ticket/${k(seeded.blocked)}`],
+      ["planning", `harness://ticket/${k(seeded.plan)}`],
+      ["browser", `harness://ticket/${k(seeded.browse)}?tab=browser`, 6000],
+      ["changes", `harness://ticket/${k(seeded.changes)}?tab=plugin:git:changes`, 7000],
+      ["new-session", "harness://new"],
+      ["inbox", "harness://inbox"],
+      ["settings", "harness://settings"],
+      ["project-settings", `harness://project/${seeded.project.id}`],
+      ["connect", "harness://connect"],
+    ];
+    const relaunch = async () => {
       await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
       await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
       await Bun.sleep(2000);
-      if (url !== "harness://board") await openUrl(udid, url);
-      await Bun.sleep(wait ?? 2200);
-      const file = join(shots, `${name}-${theme}.png`);
+    };
+    for (const id of themeShots) {
+      const theme = findTheme(id)!;
+      await simctl("ui", udid, "appearance", theme.appearance);
+      await relaunch();
+      await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
+      await Bun.sleep(2200);
+      // Scroll down to the Appearance pickers.
+      await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "2", "--udid", udid);
+      await Bun.sleep(1200);
+      await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
+      await relaunch();
+      // The board needs the connection and the first ticket list, not just the first frame.
+      await until("board loaded", async () => (await labels(udid)).some((l) => /^[A-Z]+-\d+ /.test(l)), 20000).catch(() => {});
+      await Bun.sleep(1500);
+      const file = join(shots, `board-${id}.png`);
       await simctl("io", udid, "screenshot", file);
       console.log(`  ${file}`);
     }
-  }
-  await simctl("ui", udid, "appearance", "light");
-
-  // ---------------------------------------------------------------- interactions (real taps)
-  if (hasAxe && !only) {
-    const results: [string, boolean, string][] = [];
-    const check = async (name: string, fn: () => Promise<string | boolean>) => {
-      try {
-        const r = await fn();
-        results.push([name, r !== false, typeof r === "string" ? r : ""]);
-      } catch (e) {
-        results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    if (themeShots.length) {
+      // Back to the defaults for the light/dark pass.
+      await relaunch();
+      await openUrl(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
+      await Bun.sleep(1500);
+    }
+    for (const theme of flag("interactions-only") ? [] : (["light", "dark"] as const)) {
+      await simctl("ui", udid, "appearance", theme);
+      for (const [name, url, wait] of screens) {
+        if (only && !only.includes(name)) continue;
+        // A fresh launch per screen, so a modal from the previous one never frames the next.
+        await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+        await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+        await Bun.sleep(2000);
+        if (url !== "harness://board") await openUrl(udid, url);
+        await Bun.sleep(wait ?? 2200);
+        const file = join(shots, `${name}-${theme}.png`);
+        await simctl("io", udid, "screenshot", file);
+        console.log(`  ${file}`);
       }
-    };
-    const fresh = async (url: string) => {
-      await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-      await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-      await Bun.sleep(2000);
-      if (url) await openUrl(udid, url);
-      await Bun.sleep(2000);
-    };
-    await check("approval card: Allow once resumes the agent", async () => {
-      await fresh(`harness://ticket/${k(seeded.approval)}`);
-      await tapWhere(udid, "Allow once");
-      const t = await settle(seeded.approval.key, (x) => !x.pendingApproval, 15000);
-      return `${t.key} → ${t.status}`;
-    });
-    await check("Approve records the human review", async () => {
-      await fresh(`harness://ticket/${k(seeded.hello)}`);
-      await tapWhere(udid, "Approve");
-      const t = await settle(seeded.hello.key, (x) => x.humanReview === "approved", 15000);
-      return `${t.key} human=${t.humanReview}`;
-    });
-    await check("composer answers a blocked ticket", async () => {
-      await fresh(`harness://ticket/${k(seeded.blocked)}`);
-      await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-      await axe("type", "Use Happy Cog", "--udid", udid);
-      await tapWhere(udid, "Send");
-      const t = await settle(seeded.blocked.key, (x) => x.status !== "blocked", 15000);
-      return `${t.key} → ${t.status}`;
-    });
-    await check("Start work moves a planning ticket to In progress", async () => {
-      await fresh(`harness://ticket/${k(seeded.plan)}`);
-      await tapWhere(udid, "Start work");
-      const t = await settle(seeded.plan.key, (x) => x.status !== "planning", 15000);
-      return `${t.key} → ${t.status}`;
-    });
-    await check("board context menu moves a card to Done", async () => {
-      await fresh("");
-      await tapWhere(udid, (l) => l.startsWith("Review,"));
-      await Bun.sleep(800);
-      await tapWhere(udid, (l) => l.startsWith(`${seeded.browse.key} `), { longPress: 1.2 });
-      await Bun.sleep(800);
-      await tapWhere(udid, "Move to Done");
-      const t = await settle(seeded.browse.key, (x) => x.status === "done", 15000);
-      return `${t.key} → ${t.status}`;
-    });
-    await simctl("io", udid, "screenshot", join(shots, "after-interactions-light.png"));
-    for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-    if (results.some((r) => !r[1])) failed = true;
+    }
+    await simctl("ui", udid, "appearance", "light");
+
+    // ---------------------------------------------------------------- interactions (real taps)
+    if (hasAxe && !only) {
+      const results: [string, boolean, string][] = [];
+      const check = async (name: string, fn: () => Promise<string | boolean>) => {
+        try {
+          const r = await fn();
+          results.push([name, r !== false, typeof r === "string" ? r : ""]);
+        } catch (e) {
+          results.push([name, false, (e as Error).message.split("\n")[0]!]);
+        }
+      };
+      const fresh = async (url: string) => {
+        await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+        await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+        await Bun.sleep(2000);
+        if (url) await openUrl(udid, url);
+        await Bun.sleep(2000);
+      };
+      await check("approval card: Allow once resumes the agent", async () => {
+        await fresh(`harness://ticket/${k(seeded.approval)}`);
+        await tapWhere(udid, "Allow once");
+        const t = await settle(seeded.approval.key, (x) => !x.pendingApproval, 15000);
+        return `${t.key} → ${t.status}`;
+      });
+      await check("Approve records the human review", async () => {
+        await fresh(`harness://ticket/${k(seeded.hello)}`);
+        await tapWhere(udid, "Approve");
+        const t = await settle(seeded.hello.key, (x) => x.humanReview === "approved", 15000);
+        return `${t.key} human=${t.humanReview}`;
+      });
+      await check("composer answers a blocked ticket", async () => {
+        await fresh(`harness://ticket/${k(seeded.blocked)}`);
+        await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+        await axe("type", "Use Happy Cog", "--udid", udid);
+        await tapWhere(udid, "Send");
+        const t = await settle(seeded.blocked.key, (x) => x.status !== "blocked", 15000);
+        return `${t.key} → ${t.status}`;
+      });
+      await check("Start work moves a planning ticket to In progress", async () => {
+        await fresh(`harness://ticket/${k(seeded.plan)}`);
+        await tapWhere(udid, "Start work");
+        const t = await settle(seeded.plan.key, (x) => x.status !== "planning", 15000);
+        return `${t.key} → ${t.status}`;
+      });
+      await check("board context menu moves a card to Done", async () => {
+        await fresh("");
+        await tapWhere(udid, (l) => l.startsWith("Review,"));
+        await Bun.sleep(800);
+        await tapWhere(udid, (l) => l.startsWith(`${seeded.browse.key} `), { longPress: 1.2 });
+        await Bun.sleep(800);
+        await tapWhere(udid, "Move to Done");
+        const t = await settle(seeded.browse.key, (x) => x.status === "done", 15000);
+        return `${t.key} → ${t.status}`;
+      });
+      await simctl("io", udid, "screenshot", join(shots, "after-interactions-light.png"));
+      for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+      if (results.some((r) => !r[1])) failed = true;
+    }
   }
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
 } catch (e) {
