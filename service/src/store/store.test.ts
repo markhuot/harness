@@ -123,7 +123,9 @@ describe("project rekey", () => {
     expect(s.tickets.get(mirror.id)!.key).toBe("FOO-123");
     expect(s.tickets.get(lookalike.id)!.key).toBe("HELLOHARNESS-40");
     expect(s.sessions.get(lookalike.sessionId)!.key).toBe("HELLOHARNESS-40");
-    expect(s.tickets.getByKey("HELLOHARNESS-1")).toBeNull();
+    // The old keys stay as aliases of the renamed tickets (see "ticket key aliases").
+    expect(s.tickets.getByKey("HELLOHARNESS-1")!.id).toBe(t1.id);
+    expect(s.tickets.aliases(mirror.id)).toEqual([]);
   });
 
   test("nextSeq continues under the new key", () => {
@@ -152,6 +154,94 @@ describe("project rekey", () => {
   test("renaming to the current key is a no-op", () => {
     const { s, p } = seed();
     expect(s.projects.rekey(p.id, "HELLOHARNESS").renames.size).toBe(0);
+  });
+});
+
+describe("ticket key aliases", () => {
+  function seed() {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/alpha", name: "alpha", key: "A" });
+    const take = () => s.transaction(() => s.projects.takeNextKey(p.id, (k) => s.tickets.keyExists(k)));
+    const t1 = ticketFor(s, p.id, take());
+    const t2 = ticketFor(s, p.id, take());
+    return { s, p, t1, t2, take };
+  }
+
+  test("an old key resolves to the renamed ticket, case-insensitively, reporting the alias", () => {
+    const { s, p, t1, t2 } = seed();
+    s.projects.rekey(p.id, "B");
+    const hit = s.tickets.lookup(" a-2 ")!;
+    expect(hit.ticket.id).toBe(t2.id);
+    expect(hit.ticket.key).toBe("B-2");
+    expect(hit.alias).toBe("A-2");
+    expect(s.tickets.lookup("B-2")!.alias).toBeNull();
+    expect(s.tickets.resolveKey("A-1")).toBe("B-1");
+    expect(s.tickets.resolveKey("A-3")).toBeNull();
+    // Aliases never make a key "exist": they don't block new tickets or renames.
+    expect(s.tickets.keyExists("A-1")).toBe(false);
+    expect(s.tickets.aliases(t1.id)).toEqual(["A-1"]);
+  });
+
+  test("chained renames A → B → C keep every earlier key; renaming back makes the key real again", () => {
+    const { s, p, t1 } = seed();
+    s.projects.rekey(p.id, "B");
+    s.projects.rekey(p.id, "C");
+    expect(s.tickets.getByKey("A-1")!.id).toBe(t1.id);
+    expect(s.tickets.getByKey("B-1")!.id).toBe(t1.id);
+    expect(s.tickets.getByKey("C-1")!.key).toBe("C-1");
+    expect(s.tickets.aliases(t1.id)).toEqual(["A-1", "B-1"]);
+    s.projects.rekey(p.id, "A");
+    expect(s.tickets.lookup("A-1")).toMatchObject({ alias: null, ticket: { id: t1.id, key: "A-1" } });
+    expect(s.tickets.aliases(t1.id).sort()).toEqual(["B-1", "C-1"]);
+    expect(s.tickets.getByKey("C-1")!.key).toBe("A-1");
+  });
+
+  test("a real ticket holding the key wins over an alias", () => {
+    const { s, p, t1 } = seed();
+    s.projects.rekey(p.id, "B");
+    // A stale alias row for a key a real ticket holds (inserted directly, bypassing create's cleanup).
+    const q = s.projects.create({ path: "/a/other", name: "other", key: "Q" });
+    const real = ticketFor(s, q.id, "Q-1");
+    s.db.query("INSERT INTO ticket_key_aliases (key, ticket_id, created_at) VALUES ('Q-1', $id, 0)").run({ id: t1.id });
+    expect(s.tickets.lookup("Q-1")).toMatchObject({ alias: null, ticket: { id: real.id } });
+    expect(s.tickets.resolveKey("Q-1")).toBe("Q-1");
+  });
+
+  test("creating a ticket with an aliased key takes the key back: the alias is deleted", () => {
+    const { s, p, t1 } = seed();
+    s.projects.rekey(p.id, "B");
+    const q = s.projects.create({ path: "/a/new-a", name: "new a", key: "A" });
+    const fresh = ticketFor(s, q.id, s.transaction(() => s.projects.takeNextKey(q.id, (k) => s.tickets.keyExists(k))));
+    expect(fresh.key).toBe("A-1");
+    expect(s.tickets.getByKey("A-1")!.id).toBe(fresh.id);
+    expect(s.tickets.aliases(t1.id)).toEqual([]);
+    // Deleting the new ticket doesn't hand A-1 back to the old one.
+    s.tickets.delete(fresh.id);
+    expect(s.tickets.getByKey("A-1")).toBeNull();
+  });
+
+  test("a rename into a key another ticket's alias holds drops that alias", () => {
+    const { s, p, t1 } = seed();
+    s.projects.rekey(p.id, "B"); // alias A-1 → t1
+    const q = s.projects.create({ path: "/a/q", name: "q", key: "Q" });
+    const other = ticketFor(s, q.id, s.transaction(() => s.projects.takeNextKey(q.id, (k) => s.tickets.keyExists(k))));
+    s.projects.rekey(q.id, "A"); // Q-1 → A-1: the key is now real for `other`
+    expect(s.tickets.getByKey("A-1")!.id).toBe(other.id);
+    expect(s.tickets.aliases(t1.id)).toEqual([]);
+    expect(s.tickets.getByKey("Q-1")!.id).toBe(other.id);
+  });
+
+  test("deleting a ticket (or its project) removes its aliases", () => {
+    const { s, p, t1, t2 } = seed();
+    s.projects.rekey(p.id, "B");
+    s.projects.rekey(p.id, "C");
+    s.tickets.delete(t1.id);
+    expect(s.tickets.getByKey("A-1")).toBeNull();
+    expect(s.tickets.getByKey("B-1")).toBeNull();
+    expect(s.tickets.getByKey("A-2")!.id).toBe(t2.id);
+    s.projects.delete(p.id);
+    expect(s.tickets.getByKey("A-2")).toBeNull();
+    expect((s.db.query("SELECT COUNT(*) AS n FROM ticket_key_aliases").get() as { n: number }).n).toBe(0);
   });
 });
 

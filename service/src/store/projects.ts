@@ -184,11 +184,16 @@ export class ProjectRepo {
       );
       const renameDep = this.db.query("UPDATE ticket_deps SET depends_on_key = $to WHERE depends_on_key = $from");
       const depHolders = this.db.query("SELECT DISTINCT ticket_id FROM ticket_deps WHERE depends_on_key = $from");
+      // Old key → ticket, so anything that learned OLD-n keeps resolving (see TicketRepo.lookup).
+      const addAlias = this.db.query("INSERT OR REPLACE INTO ticket_key_aliases (key, ticket_id, created_at) VALUES ($from, $id, $t)");
+      const dropAlias = this.db.query("DELETE FROM ticket_key_aliases WHERE key = $to");
       const touched = new Set<string>();
       for (const n of native) {
         const to = `${newKey}-${n.suffix}`;
         renames.set(n.key, to);
         renameTicket.run({ id: n.ticketId, to, t });
+        dropAlias.run({ to }); // the key is real again (e.g. renamed back): no alias for it
+        addAlias.run({ from: n.key, id: n.ticketId, t });
         renameSession.run({ id: n.ticketId, from: n.key, to, t });
         for (const r of depHolders.all({ from: n.key }) as { ticket_id: string }[]) touched.add(r.ticket_id);
         renameDep.run({ from: n.key, to });

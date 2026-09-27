@@ -75,7 +75,11 @@ describe("project key", () => {
       expect(byId(cross.id).dependsOn).toEqual(["HEL-3", "FOO-123"]);
       expect((await client.getSession(t1.sessionId)).key).toBe("HEL-1");
       expect((await client.getTicket("HEL-3")).dependents).toEqual([cross.key]);
-      await expect(client.getTicket("HELLOHARNESS-1")).rejects.toMatchObject({ status: 404 });
+      // Old keys (bookmarks, agents that learned them earlier) still resolve, to the current key.
+      const viaOld = await client.getTicket("HELLOHARNESS-1");
+      expect([viaOld.ticket.id, viaOld.ticket.key, viaOld.resolvedFrom]).toEqual([t1.id, "HEL-1", "HELLOHARNESS-1"]);
+      expect((await client.getTicket("HEL-1")).resolvedFrom).toBeUndefined();
+      await expect(client.getTicket("HELLOHARNESS-9")).rejects.toMatchObject({ status: 404 });
       // Worktree branch names aren't touched by a rename (none were created for planning tickets).
       expect(byId(t1.id).branch).toBeNull();
 

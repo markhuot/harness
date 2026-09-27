@@ -468,8 +468,11 @@ export class Orchestrator {
   }
 
   ticketDetail(key: string): TicketDetail {
-    const ticket = this.requireTicket(key);
+    const found = this.store.tickets.lookup(key);
+    if (!found) throw notFound(`Unknown ticket: ${key}`);
+    const { ticket } = found;
     return {
+      ...(found.alias ? { resolvedFrom: found.alias } : {}),
       ticket,
       session: this.store.sessions.get(ticket.sessionId)!,
       summaries: this.store.summaries.listBySession(ticket.sessionId),
@@ -554,8 +557,9 @@ export class Orchestrator {
     if (!Array.isArray(keys)) throw badRequest("dependsOn must be an array of ticket keys");
     const out: string[] = [];
     for (const raw of keys) {
-      const key = String(raw).trim().toUpperCase();
-      if (!this.store.tickets.keyExists(key)) throw badRequest(`Unknown dependency: ${raw}`);
+      // Old keys (from before a project rename) are stored as the ticket's current key.
+      const key = this.store.tickets.resolveKey(String(raw));
+      if (!key) throw badRequest(`Unknown dependency: ${raw}`);
       if (!out.includes(key)) out.push(key);
     }
     return out;

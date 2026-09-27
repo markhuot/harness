@@ -442,6 +442,12 @@ export interface CompleteBody {
 }
 
 export interface TicketDetail {
+  /**
+   * Set when the requested key is an old key of this ticket (from before a project rename):
+   * the key that was asked for. `ticket.key` is the current key; clients should show and
+   * link that one instead (e.g. replace the URL).
+   */
+  resolvedFrom?: string;
   ticket: Ticket;
   session: Session;
   summaries: Summary[];

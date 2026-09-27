@@ -176,14 +176,44 @@ export class TicketRepo {
     return this.map(this.db.query(`${SELECT} WHERE t.id = $id`).all({ id }) as TicketRow[])[0] ?? null;
   }
 
+  /**
+   * Look a ticket up by key: its current key first, then an old key it had before a project
+   * rename (ticket_key_aliases). A real ticket holding the key always wins over an alias.
+   * This is the one place key lookups resolve aliases, so every route, tool and HarnessOps
+   * method that goes through getByKey accepts old keys.
+   */
   getByKey(key: string): Ticket | null {
-    return this.map(this.db.query(`${SELECT} WHERE t.key = $key`).all({ key: key.trim().toUpperCase() }) as TicketRow[])[0] ?? null;
+    return this.lookup(key)?.ticket ?? null;
+  }
+
+  /** getByKey, plus the alias the lookup went through (null when `key` is the current key). */
+  lookup(key: string): { ticket: Ticket; alias: string | null } | null {
+    const k = key.trim().toUpperCase();
+    const direct = this.map(this.db.query(`${SELECT} WHERE t.key = $key`).all({ key: k }) as TicketRow[])[0];
+    if (direct) return { ticket: direct, alias: null };
+    const viaAlias = this.map(
+      this.db.query(`${SELECT} JOIN ticket_key_aliases a ON a.ticket_id = t.id WHERE a.key = $key`).all({ key: k }) as TicketRow[],
+    )[0];
+    return viaAlias ? { ticket: viaAlias, alias: k } : null;
+  }
+
+  /** The current key for `key` (itself, or the ticket an alias points at), or null if unknown. */
+  resolveKey(key: string): string | null {
+    return this.lookup(key)?.ticket.key ?? null;
+  }
+
+  /** Old keys that resolve to this ticket, oldest first. */
+  aliases(ticketId: string): string[] {
+    return (
+      this.db.query("SELECT key FROM ticket_key_aliases WHERE ticket_id = $ticketId ORDER BY created_at, rowid").all({ ticketId }) as { key: string }[]
+    ).map((r) => r.key);
   }
 
   getBySession(sessionId: string): Ticket | null {
     return this.map(this.db.query(`${SELECT} WHERE t.session_id = $sessionId`).all({ sessionId }) as TicketRow[])[0] ?? null;
   }
 
+  /** Whether a ticket currently holds exactly this key. Aliases don't count: they never block a key. */
   keyExists(key: string): boolean {
     return !!this.db.query("SELECT 1 FROM tickets WHERE key = $key").get({ key: key.toUpperCase() });
   }
@@ -204,6 +234,9 @@ export class TicketRepo {
   create(input: NewTicket): Ticket {
     const id = newId();
     const t = now();
+    // A new ticket takes its key back from any alias: the real key would shadow it anyway, and
+    // leaving the row would make the key resolve to the old ticket again if this one is deleted.
+    this.db.query("DELETE FROM ticket_key_aliases WHERE key = $key").run({ key: input.key.toUpperCase() });
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,

@@ -190,6 +190,18 @@ export const MIGRATIONS: string[] = [
   FROM settings WHERE key = 'claudePermissionMode';
   DELETE FROM settings WHERE key = 'claudePermissionMode';
   `,
+  // 5: ticket key aliases. A project rename (HEL → FOO) records each old native key → ticket id,
+  //    so bookmarks, agents and dependsOn inputs that still say HEL-2 keep resolving. Aliases
+  //    point at the ticket, not at a key, so chained renames (A → B → C) all resolve. A real
+  //    ticket key always wins; deleting the ticket drops its aliases.
+  `
+  CREATE TABLE ticket_key_aliases (
+    key TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX ticket_key_aliases_ticket ON ticket_key_aliases(ticket_id);
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
