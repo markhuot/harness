@@ -39,8 +39,9 @@ board, ticket tabs (including the live browser and plugin tabs), approvals, Inbo
 It shares its state logic with the desktop through `@harness/shared/state`.
 
 - **Install:** open https://harness-install.vercel.app in Safari on a registered iPhone. The page
-  also has the signed Mac build. `mobile/Tools/publish-install.sh` rebuilds both, publishes them
-  as a GitHub release and redeploys the page.
+  also has the signed Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
+  CLAUDE.md → Releases and CHANGELOG.md); `bun run release:publish` builds the tagged commit,
+  publishes both apps as a GitHub release and redeploys the page.
 - **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone
   camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
 - **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,

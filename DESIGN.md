@@ -666,6 +666,8 @@ child tickets, rollups, key-rename preview, model and permission options) match 
 - **iOS 27.** UIKit now requires the scene life cycle; `mobile/plugins/withSceneLifecycle.js`
   wires Expo's `EXExpoAppSceneDelegate` into the generated project.
 - **Builds.** `mobile/Tools/publish-install.sh` archives the Release app (JS bundle embedded),
-  exports a development IPA, packages and Developer ID signs the Mac app, uploads both to a GitHub
-  release, and deploys the install page plus `manifest.plist` to Vercel. The OTA manifest points at
+  exports a development IPA, packages and Developer ID signs the Mac app, uploads both to the GitHub
+  release of the annotated `app-YYYYMMDD.HHMM` tag on HEAD (it refuses untagged, dirty or unpushed
+  commits; the tag's digits are the build number and its CHANGELOG.md section is the notes; see
+  CLAUDE.md → Releases), and deploys the install page plus `manifest.plist` to Vercel. The OTA manifest points at
   `releases/latest/download/Harness.ipa` on GitHub.

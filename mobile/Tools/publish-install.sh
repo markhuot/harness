@@ -4,11 +4,16 @@
 #     exported as a development-signed IPA (method "debugging")
 #   - Mac: the Electron app packaged, Developer ID signed with the hardened runtime, notarized
 #     when NOTARY_PROFILE names a notarytool keychain profile, zipped with ditto
-# Both files go to a GitHub release on markhuot/harness (tag app-YYYYMMDD.HHMM, UTC); the install
-# page and the OTA manifest.plist (HTTPS, text/xml) are regenerated and deployed to
-# https://harness-install.vercel.app. Neither artifact carries a token: pairing provides it.
+# A release is controlled by its git tag (CLAUDE.md → Releases): HEAD must be a commit with an
+# annotated app-YYYYMMDD.HHMM tag that is pushed and on origin/main, the tree must be clean, and
+# CHANGELOG.md must have that tag's section. Both files go to the GitHub release of that tag with
+# the section as its notes; the iOS build number is the tag's digits. The install page and the OTA
+# manifest.plist (HTTPS, text/xml) are regenerated and deployed to https://harness-install.vercel.app.
+# Neither artifact carries a token: pairing provides it.
 #
 #   mobile/Tools/publish-install.sh [--skip-ios] [--skip-mac] [--no-publish]
+#
+# --no-publish builds without the tag checks (untagged builds number themselves by the clock).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -33,8 +38,24 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode-27.0.0.app/Contents/Deve
   export DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer
 fi
 
-TAG="app-$(date -u +%Y%m%d.%H%M)"
-BUILD_NUMBER="$(date -u +%Y%m%d%H%M)"
+# The release tag on HEAD (annotated only: `git describe` without --tags skips lightweight tags).
+TAG=$(git -C "$ROOT" describe --exact-match --match 'app-*' HEAD 2>/dev/null || true)
+if [[ $PUBLISH -eq 1 ]]; then
+  fail() { echo "error: $1" >&2; exit 1; }
+  [[ -n "$TAG" ]] || fail "HEAD has no annotated app-* release tag; see CLAUDE.md → Releases (bun run release:prepare, then git tag -a)"
+  [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || fail "the working tree has uncommitted changes; a release builds exactly what $TAG points at"
+  BUILD_NUMBER=$(bun Tools/release.ts check "$TAG") || exit 1
+  REMOTE_COMMIT=$(git -C "$ROOT" ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
+  [[ -n "$REMOTE_COMMIT" ]] || fail "$TAG is not on origin; push it first: git push origin main $TAG"
+  [[ "$REMOTE_COMMIT" == "$(git -C "$ROOT" rev-parse HEAD)" ]] || fail "origin's $TAG doesn't point at HEAD"
+  git -C "$ROOT" fetch --quiet origin main
+  git -C "$ROOT" merge-base --is-ancestor HEAD origin/main || fail "$TAG isn't on origin/main yet; merge and push main first"
+  ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || fail "GitHub already has a release for $TAG; tag a new release instead of republishing"
+  echo "==> Releasing $TAG (build $BUILD_NUMBER, commit $(git -C "$ROOT" rev-parse --short HEAD))"
+else
+  BUILD_NUMBER=${TAG:+$(bun Tools/release.ts check "$TAG" 2>/dev/null)}
+  BUILD_NUMBER=${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}
+fi
 OUT="$MOBILE/build/release"
 mkdir -p "$OUT"
 
@@ -119,10 +140,15 @@ fi
 
 # ------------------------------------------------------------------ GitHub release
 echo "==> Creating GitHub release $TAG"
-NOTES="iPhone: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), development build for registered devices. Install from $SITE
-Mac (Apple silicon): Harness ${MAC_VERSION:-?}, Developer ID signed$([[ "${MAC_NOTARIZED:-false}" == true ]] && echo ' and notarized' || echo ', not notarized (right-click → Open the first time)').
+NOTES="$(bun Tools/release.ts notes "$TAG")
+
+---
+
+iPhone: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), development build for registered devices. Install from $SITE
+Mac (Apple silicon): Harness ${MAC_VERSION:-?}, Developer ID signed$([[ "${MAC_NOTARIZED:-false}" == true ]] && echo ' and notarized' || echo ', not notarized (System Settings → Privacy & Security → Open Anyway the first time)').
 Commit $(git -C "$ROOT" rev-parse --short HEAD)."
-gh release create "$TAG" "$OUT/Harness.ipa" "$OUT/Harness-mac.zip" --repo "$REPO" --title "Harness $TAG" --notes "$NOTES" --latest
+# --verify-tag: never let gh invent the tag on the remote's main tip; the release is the pushed tag.
+gh release create "$TAG" "$OUT/Harness.ipa" "$OUT/Harness-mac.zip" --repo "$REPO" --verify-tag --title "Harness $TAG" --notes "$NOTES" --latest
 IPA_URL="https://github.com/$REPO/releases/latest/download/Harness.ipa"
 MAC_URL="https://github.com/$REPO/releases/latest/download/Harness-mac.zip"
 
@@ -155,3 +181,4 @@ done
 echo
 echo "Release: https://github.com/$REPO/releases/tag/$TAG"
 echo "Install from: $SITE"
+echo "Commit the regenerated install page on main: git add mobile/Install && git commit -m \"Install page: release $TAG\""
