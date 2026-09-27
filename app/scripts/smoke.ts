@@ -42,7 +42,8 @@ const { check, fail } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 
 try {
-  app = await launchApp({ baseUrl: base, token });
+  // Native context menus can't be clicked over CDP; this makes them pick "Project settings…".
+  app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "settings" } });
   const { cdp, js, exists, type, cmdEnter, clickText } = app;
 
   // 1. Board renders every column and the seeded cards.
@@ -174,6 +175,87 @@ try {
   check("browser mouse input forwarded", parsed.button === "left" && parsed.clickCount === 1, down.trim());
   check("browser key input forwarded", inputs.some((l) => l.includes('"key":"a"')));
   check("browser resize sent", inputs.some((l) => l.includes('"type":"resize"')));
+
+  // 6b. Project settings: right-click → settings, rename the identifier, live preview + validation.
+  type P = { id: string; key: string; name: string };
+  const hh = (await api<P[]>("GET", "/projects")).find((p) => p.key === "HELLOHARNESS")!;
+  await js(`location.hash = "#/board/all"`);
+  await until("sidebar project row", () => exists(`.nav-row[data-project-id="${hh.id}"]`));
+  await js(`document.querySelector('.nav-row[data-project-id="${hh.id}"] .nav-item').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 60, clientY: 200 }))`);
+  const onSettings = await until("project settings route", () => js<string>(`location.hash`).then((h) => h === `#/project/${hh.id}/settings` && h));
+  check("right-click → Project settings… opens the project settings route", !!onSettings, onSettings);
+  await until("key input", () => exists(".key-input"));
+  const hint = () => js<string>(`document.querySelector("[data-testid=key-preview]").textContent`);
+  check("identifier shows current numbering", (await hint()) === "New tickets are numbered HELLOHARNESS-4, HELLOHARNESS-5…", await hint());
+  await type(".key-input", "1x");
+  const invalid = await until("invalid preview", async () => (await js<boolean>(`document.querySelector("[data-testid=key-preview]").classList.contains("error")`)) && (await hint()));
+  const renameDisabled = await js<boolean>(`[...document.querySelectorAll(".key-control button")].find(b => b.textContent.includes("Rename"))?.disabled ?? false`);
+  check("invalid identifier is flagged and can't be saved", invalid === "Must start with a letter" && renameDisabled, invalid);
+  await type(".key-input", "other");
+  await type(".key-input", "nytimes");
+  check("identifier used by another project is flagged", (await until("dup preview", async () => (await hint()).startsWith("Already used by") && (await hint()))) === "Already used by nytimes");
+  await type(".key-input", "hel");
+  const preview = await until("rename preview", async () => (await hint()).startsWith("Tickets will be numbered") && (await hint()));
+  check(
+    "rename preview explains the renumbering",
+    preview === "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1…3 become HEL-1…3. ACME-12 keeps its key",
+    preview,
+  );
+  await clickText(".key-control button", "Rename");
+  const renamed = await until("rename saved", async () => {
+    const all = await api<{ key: string; projectId: string }[]>("GET", "/tickets");
+    const keys = all.filter((t) => t.projectId === hh.id).map((t) => t.key).sort();
+    return keys.join(",") === "ACME-12,HEL-1,HEL-2,HEL-3" && keys;
+  });
+  check("rename renumbers native tickets and keeps the mirrored one", !!renamed, renamed.join(","));
+  const sidebarKey = await until("sidebar key updated", () =>
+    js<string>(`document.querySelector('.nav-row[data-project-id="${hh.id}"] .project-key')?.textContent ?? ""`).then((k) => k === "HEL" && k),
+  );
+  check("sidebar picks up the new key live", sidebarKey === "HEL");
+  check("hint returns to numbering after save", (await until("hint reset", async () => (await hint()).startsWith("New tickets") && (await hint()))) === "New tickets are numbered HEL-4, HEL-5…");
+  await js(`location.hash = "#/board/${hh.id}"`);
+  const boardKeys = await until("board shows renamed cards", async () => {
+    const k = await js<string[]>(`[...document.querySelectorAll(".card-key")].map(e => e.textContent)`);
+    return k.includes("HEL-3") && !k.some((x) => x.startsWith("HELLOHARNESS")) && k;
+  });
+  check("board cards show the new keys", !!boardKeys, boardKeys.join(","));
+
+  // 6c. Appearance: the picker drives nativeTheme (prefers-color-scheme) and <html data-theme>.
+  await js(`location.hash = "#/settings/appearance"`);
+  await until("theme picker", () => exists("[data-theme-option=dark]"));
+  const themeNow = () =>
+    js<{ attr: string; mq: boolean; bg: string; pref: string }>(`({ attr: document.documentElement.dataset.theme, mq: matchMedia("(prefers-color-scheme: dark)").matches,
+      bg: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(), pref: window.harness.getTheme().preference })`);
+  await js(`document.querySelector("[data-theme-option=dark]").click()`);
+  const dark = await until("dark applied", async () => {
+    const t = await themeNow();
+    return t.attr === "dark" && t.mq && t;
+  });
+  check("Dark sets data-theme, nativeTheme and the tokens", dark.bg === "#111214" && dark.pref === "dark", JSON.stringify(dark));
+  await js(`document.querySelector("[data-theme-option=light]").click()`);
+  const light = await until("light applied", async () => {
+    const t = await themeNow();
+    return t.attr === "light" && !t.mq && t;
+  });
+  check("Light sets data-theme, nativeTheme and the tokens", light.bg === "#fbfbfc" && light.pref === "light", JSON.stringify(light));
+  await js(`document.querySelector("[data-theme-option=system]").click()`);
+  const sys = await until("system applied", async () => {
+    const t = await themeNow();
+    return t.pref === "system" && t;
+  });
+  check("System resolves to the OS appearance", sys.attr === (sys.mq ? "dark" : "light"), JSON.stringify(sys));
+  // The attribute is the contract plugins observe: it must survive a reload.
+  await js(`document.querySelector("[data-theme-option=dark]").click()`);
+  await until("dark again", async () => (await themeNow()).attr === "dark");
+  await js(`location.reload()`);
+  await Bun.sleep(300);
+  const afterReload = await until("theme after reload", async () => {
+    const t = await themeNow();
+    return t.attr && t;
+  });
+  check("theme preference survives a reload", afterReload.attr === "dark" && afterReload.pref === "dark", JSON.stringify(afterReload));
+  await until("picker after reload", () => exists("[data-theme-option=system]"));
+  await js(`document.querySelector("[data-theme-option=system]").click()`);
 
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.
   mock.kill();

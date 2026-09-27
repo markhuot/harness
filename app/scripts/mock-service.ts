@@ -29,6 +29,7 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
+import { checkProjectKey } from "@harness/shared";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 const TOKEN = process.env.MOCK_TOKEN ?? "mock-token";
@@ -494,6 +495,26 @@ function seed() {
     summaries: [["agent", "Docs written in `DESIGN.md` under Runtime paths."]],
   }); // HARNESS-4
 
+  // A project whose key was derived from a long folder name (Project settings → Identifier).
+  const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness");
+  for (const [title, status, ageMin] of [
+    ["Scaffold the hello world page", "done", 3000],
+    ["Add a greeting API route", "done", 2400],
+    ["Localize the greeting", "planning", 30],
+  ] as const) {
+    seedTicket({ project: hh, title, description: title, status, driver: "claude-code", agentReview: status === "done" ? "approved" : "pending", humanReview: status === "done" ? "approved" : "pending", ageMin });
+  }
+  seedTicket({
+    project: hh,
+    key: "ACME-12",
+    title: "Greeting typo on the landing page",
+    description: "Reported in Jira.",
+    status: "planning",
+    driver: "claude-code",
+    externalRef: { source: "jira", key: "ACME-12", url: "https://example.atlassian.net/browse/ACME-12", raw: {} },
+    ageMin: 20,
+  });
+
   // Triage sessions
   const t1 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Paywall meter counts AMP pageviews twice", now() - 95 * 60_000);
   t1.triageStatus = "dispatched";
@@ -554,6 +575,36 @@ function ticketByKey(key: string): Ticket {
   const t = byKey(decodeURIComponent(key).toUpperCase());
   if (!t) throw new HttpError(404, `Ticket ${key} not found`);
   return t;
+}
+
+/** Same rules as the service: native OLD-n → NEW-n, external mirrors keep their keys. */
+function renameProjectKey(p: Project, key: string) {
+  const other = [...projects.values()].find((o) => o.id !== p.id && o.key === key);
+  if (other) throw new HttpError(409, `Project key ${key} is already used by ${other.name}`);
+  const prefix = `${p.key}-`;
+  const native = [...tickets.values()].filter((t) => t.projectId === p.id && !t.externalRef && t.key.startsWith(prefix) && /^\d+$/.test(t.key.slice(prefix.length)));
+  const map = new Map(native.map((t) => [t.key, `${key}-${t.key.slice(prefix.length)}`]));
+  const clash = [...map.values()].filter((k) => {
+    const hit = byKey(k);
+    return hit && !map.has(hit.key);
+  });
+  if (clash.length) throw new HttpError(409, `Can't rename to ${key}: ${clash.join(", ")} already exist${clash.length === 1 ? "s" : ""}`);
+  p.key = key;
+  for (const t of native) {
+    t.key = map.get(t.key)!;
+    const s = sessions.get(t.sessionId);
+    if (s) {
+      s.key = t.key;
+      s.updatedAt = now();
+      broadcast({ kind: "session.upserted", session: s });
+    }
+  }
+  for (const t of tickets.values()) {
+    const deps = t.dependsOn.map((d) => map.get(d) ?? d);
+    const touched = native.includes(t) || deps.some((d, i) => d !== t.dependsOn[i]);
+    t.dependsOn = deps;
+    if (touched) upsertTicket(t);
+  }
 }
 
 function ticketDetail(t: Ticket): TicketDetail {
@@ -693,7 +744,13 @@ async function route(req: Request, url: URL): Promise<Response> {
     const p = b ? projects.get(b) : undefined;
     if (!p) throw new HttpError(404, "Project not found");
     if (method === "PATCH") {
-      Object.assign(p, await readBody(req), { id: p.id, updatedAt: now() });
+      const { key: rawKey, nextSeq: _n, ...body } = await readBody(req);
+      if (rawKey !== undefined) {
+        const { key, error } = checkProjectKey(String(rawKey));
+        if (error) throw new HttpError(400, `Invalid project key "${key}": ${error}`);
+        if (key !== p.key) renameProjectKey(p, key); // throws 409 on collisions
+      }
+      Object.assign(p, body, { id: p.id, key: p.key, updatedAt: now() });
       broadcast({ kind: "project.upserted", project: p });
       return ok(p);
     }
