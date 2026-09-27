@@ -215,7 +215,7 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dropBefore ? "drop-before" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${t.kind === "conductor" ? "conductor-card" : ""}`}
+      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dropBefore ? "drop-before" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}

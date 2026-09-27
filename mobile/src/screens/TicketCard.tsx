@@ -41,7 +41,6 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         styles.card,
         { backgroundColor: c.bgElev, borderColor: c.border },
         dim && { backgroundColor: c.bgColumn, paddingVertical: 9, gap: 5 },
-        t.kind === "conductor" && { borderLeftWidth: 3, borderLeftColor: c.violet },
       ]}
     >
       <View style={styles.top}>

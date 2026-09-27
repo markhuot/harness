@@ -58,9 +58,6 @@
   background: var(--red-soft);
   white-space: nowrap;
 }
-.card.conductor-card {
-  border-left: 2px solid var(--violet);
-}
 
 /* Child cards: downplayed unless they need the human (then .child-dim is absent). */
 .card.child-dim {
