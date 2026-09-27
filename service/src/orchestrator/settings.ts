@@ -5,8 +5,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   claudePermissionMode: "acceptEdits",
-  claudeModel: null,
-  anthropicModel: "claude-sonnet-5",
+  defaultModels: {},
+  reviewModels: {},
   anthropicApiKey: null,
 };
 
@@ -30,6 +30,8 @@ export function resolveSettings(stored: Record<string, unknown>): Settings {
       } catch {}
     }
   }
+  out.defaultModels = mergeModelMap({}, out.defaultModels);
+  out.reviewModels = mergeModelMap({}, out.reviewModels);
   return out;
 }
 
@@ -58,13 +60,9 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
           throw badRequest(`claudePermissionMode must be one of ${PERMISSION_MODES.join(", ")}`);
         out.claudePermissionMode = value as Settings["claudePermissionMode"];
         break;
-      case "claudeModel":
-        if (value !== null && typeof value !== "string") throw badRequest("claudeModel must be a string or null");
-        out.claudeModel = value ? (value as string) : null;
-        break;
-      case "anthropicModel":
-        if (typeof value !== "string" || !value) throw badRequest("anthropicModel must be a non-empty string");
-        out.anthropicModel = value;
+      case "defaultModels":
+      case "reviewModels":
+        out[key] = validateModelMap(key, value, knownDrivers);
         break;
       case "anthropicApiKey":
         if (value !== null && typeof value !== "string") throw badRequest("anthropicApiKey must be a string or null");
@@ -76,5 +74,43 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
         throw badRequest(`Unknown setting: ${key}`);
     }
   }
+  return out;
+}
+
+const MODEL_ID = /^[^\s]{1,200}$/;
+
+/** A model id as accepted from clients: trimmed, non-empty, no whitespace. null / "" → null. */
+export function validateModelId(field: string, value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw badRequest(`${field} must be a string or null`);
+  const id = value.trim();
+  if (!id) return null;
+  if (!MODEL_ID.test(id)) throw badRequest(`${field} must be a model id without spaces`);
+  return id;
+}
+
+/** { driverId: modelId | null }. Keys must be known drivers when the list is given. */
+export function validateModelMap(field: string, value: unknown, knownDrivers?: string[]): Record<string, string | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest(`${field} must be an object of driver id → model id`);
+  const out: Record<string, string | null> = {};
+  for (const [driver, model] of Object.entries(value as Record<string, unknown>)) {
+    if (knownDrivers && !knownDrivers.includes(driver)) throw badRequest(`Unknown driver in ${field}: ${driver}`);
+    out[driver] = validateModelId(`${field}.${driver}`, model);
+  }
+  return out;
+}
+
+/** Merge a per-driver model patch over the current map; null entries remove a driver. */
+export function mergeModelMap(current: Record<string, string | null>, patch: Record<string, string | null>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [driver, model] of Object.entries({ ...current, ...patch })) if (model) out[driver] = model;
+  return out;
+}
+
+/** Apply a validated PATCH /settings over the current settings (model maps merge per driver). */
+export function applySettingsPatch(current: Settings, patch: Partial<Settings>): Partial<Settings> {
+  const out: Partial<Settings> = { ...patch };
+  if (patch.defaultModels) out.defaultModels = mergeModelMap(current.defaultModels, patch.defaultModels);
+  if (patch.reviewModels) out.reviewModels = mergeModelMap(current.reviewModels, patch.reviewModels);
   return out;
 }

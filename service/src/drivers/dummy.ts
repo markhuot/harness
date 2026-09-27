@@ -1,7 +1,7 @@
 // Dummy driver: deterministic, no network. Follows the "Dummy driver script" in DESIGN.md.
 // Tools are called through executeTool, exactly like a real native-loop driver would.
 
-import type { DriverInfo } from "@harness/shared";
+import type { DriverInfo, ModelInfo } from "@harness/shared";
 import type { ToolResult } from "../tools/types";
 import { executeTool, type Driver, type DriverEvent, type RunRequest } from "./types";
 
@@ -9,7 +9,21 @@ export interface DummyState {
   turns: number;
   /** Conductor runs: keys of the children created on the first run */
   children?: string[];
+  /** Model of the latest run (as resolved by the orchestrator) */
+  model?: string;
 }
+
+/**
+ * The dummy "models" differ only in streaming speed. dummy-fast is the default (null model);
+ * dummy-slow streams DUMMY_SLOW_FACTOR× slower, handy for watching live deltas / cancelling.
+ * Any other model id fails the run, the way a real API rejects an unknown model.
+ */
+export const DUMMY_MODELS: ModelInfo[] = [
+  { id: "dummy-fast", name: "Dummy Fast", description: "Streams at the normal dummy speed", default: true },
+  { id: "dummy-slow", name: "Dummy Slow", description: "Streams 10× slower (at least 50 ms per word)" },
+];
+export const DUMMY_SLOW_FACTOR = 10;
+const DUMMY_SLOW_MIN_MS = 50;
 
 export interface DummyDriverOptions {
   /** Per-word streaming delay; default HARNESS_DUMMY_DELAY_MS or 15 */
@@ -81,12 +95,31 @@ export class DummyDriver implements Driver {
     };
   }
 
+  async listModels(): Promise<ModelInfo[]> {
+    return DUMMY_MODELS.map((m) => ({ ...m }));
+  }
+
+  /** Per-word delay for a model; throws for a model the dummy doesn't have. */
+  delayFor(model: string | null): number {
+    const id = model ?? "dummy-fast";
+    if (!DUMMY_MODELS.some((m) => m.id === id)) throw new Error(`Unknown dummy model: ${id} (use ${DUMMY_MODELS.map((m) => m.id).join(" or ")})`);
+    return id === "dummy-slow" ? Math.max(this.delay * DUMMY_SLOW_FACTOR, DUMMY_SLOW_MIN_MS) : this.delay;
+  }
+
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {
+    let delay: number;
+    try {
+      delay = this.delayFor(req.model);
+    } catch (err) {
+      const message = (err as Error).message;
+      yield { type: "error", message };
+      throw err;
+    }
     const prev = (req.state ?? {}) as Partial<DummyState>;
     const state: DummyState = { turns: (typeof prev.turns === "number" ? prev.turns : 0) + 1 };
+    if (req.model) state.model = req.model;
     if (Array.isArray(prev.children)) state.children = [...prev.children];
     let callSeq = 0;
-    const self = this;
 
     const check = () => {
       if (req.signal.aborted) throw abortError();
@@ -97,7 +130,7 @@ export class DummyDriver implements Driver {
       for (const word of words) {
         check();
         yield { type: "text_delta", text: word };
-        if (/\S/.test(word)) await sleep(self.delay, req.signal);
+        if (/\S/.test(word)) await sleep(delay, req.signal);
       }
       check();
       yield { type: "text", text };

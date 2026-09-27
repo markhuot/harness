@@ -15,8 +15,8 @@ const settings: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 1,
   claudePermissionMode: "acceptEdits",
-  claudeModel: "haiku",
-  anthropicModel: "claude-opus-5",
+  defaultModels: {},
+  reviewModels: {},
   anthropicApiKey: null,
 };
 const driver = new ClaudeCodeDriver({ settings: () => settings });
@@ -43,13 +43,14 @@ function compact(ev: DriverEvent): string {
   }
 }
 
-async function run(prompt: string, state: unknown): Promise<DriverEvent[]> {
+async function run(prompt: string, state: unknown, model = "haiku"): Promise<DriverEvent[]> {
   const req: RunRequest = {
     runId: "smoke",
     kind: "work",
     prompt,
     systemPrompt: "You are running inside a ticket harness. Harness tools are exposed as mcp__harness__*.",
     cwd,
+    model,
     state,
     tools,
     toolContext: ctx,
@@ -88,8 +89,8 @@ try {
   check(!!state?.state.sessionId, `state event with sessionId (${state?.state.sessionId})`);
   check(first.some((e) => e.type === "usage" && typeof e.costUsd === "number"), "usage event with cost");
 
-  console.log("run 2 (resume)");
-  const second = await run("What summary did you just submit for review? Answer in one short sentence.", state?.state);
+  console.log("run 2 (resume, switched to sonnet)");
+  const second = await run("What summary did you just submit for review? Answer in one short sentence.", state?.state, "sonnet");
   const state2 = second.filter((e) => e.type === "state").at(-1) as { state: { sessionId: string } } | undefined;
   check(state2?.state.sessionId === state?.state.sessionId, `resume reused session id (${state2?.state.sessionId})`);
   const answer = second.filter((e) => e.type === "text").map((e) => (e as { text: string }).text).join(" ");

@@ -187,7 +187,7 @@ describe("http api", () => {
   test("settings never expose the API key; PATCH merges", async () => {
     const { client, h } = await boot();
     const before = await client.getSettings();
-    expect(before).toMatchObject({ defaultDriver: "dummy", maxConcurrentRuns: 4, claudePermissionMode: "acceptEdits", anthropicModel: "claude-sonnet-5", anthropicApiKeySet: false });
+    expect(before).toMatchObject({ defaultDriver: "dummy", maxConcurrentRuns: 4, claudePermissionMode: "acceptEdits", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false });
     const after = await client.updateSettings({ anthropicApiKey: "sk-secret", maxConcurrentRuns: 2 });
     expect(after.anthropicApiKeySet).toBe(true);
     expect(JSON.stringify(after)).not.toContain("sk-secret");
@@ -203,6 +203,46 @@ describe("http api", () => {
     expect(drivers.map((d) => d.id).sort()).toEqual(["dummy", "fake"]);
     await expect(client.loginDriver("fake")).rejects.toMatchObject({ status: 400 });
     await expect(client.loginDriver("missing")).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("GET /drivers/:id/models: cached, ?refresh=1 re-queries, failures are data, unknown driver 404", async () => {
+    const { client, fake } = await boot();
+    const dummy = await client.listModels("dummy");
+    expect(dummy).toMatchObject({ driverId: "dummy", error: null });
+    expect(dummy.models.map((m) => m.id)).toEqual(["dummy-fast", "dummy-slow"]);
+    await client.listModels("fake");
+    fake.models = [{ id: "changed", name: "Changed" }];
+    expect((await client.listModels("fake")).models[0]!.id).toBe("fake-model");
+    expect((await client.listModels("fake", { refresh: true })).models[0]!.id).toBe("changed");
+    expect(fake.listModelsCalls).toBe(2);
+    fake.models = async () => {
+      throw new Error("login expired");
+    };
+    const failed = await client.listModels("fake", { refresh: true });
+    expect(failed).toMatchObject({ driverId: "fake", models: [], error: "login expired" });
+    // the drivers list is unaffected by a failing model lookup
+    expect((await client.listDrivers()).map((d) => d.id).sort()).toEqual(["dummy", "fake"]);
+    await expect(client.listModels("missing")).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("model selection over HTTP: create/patch ticket model, project + settings defaults reach the run", async () => {
+    const { client, dir, h, fake } = await boot();
+    const p = await client.createProject({ path: dir, defaultModels: { fake: "proj-model" } });
+    expect(p.defaultModels).toEqual({ fake: "proj-model" });
+    const t = await client.createTicket({ projectId: p.id, prompt: "x", driver: "fake", model: "ticket-model" });
+    expect(t.model).toBe("ticket-model");
+    await h.orchestrator.idle();
+    expect(fake.calls[0]!.model).toBe("ticket-model");
+    const patched = await client.updateTicket(t.key, { model: null });
+    expect(patched.model).toBeNull();
+    await client.sendMessage(t.key, "more");
+    await h.orchestrator.idle();
+    expect(fake.calls.at(-1)!.model).toBe("proj-model");
+    await expect(client.updateTicket(t.key, { model: 42 as unknown as string })).rejects.toMatchObject({ status: 400 });
+    const s = await client.updateSettings({ defaultModels: { dummy: "dummy-slow" } });
+    expect(s.defaultModels).toEqual({ dummy: "dummy-slow" });
+    await expect(client.updateSettings({ defaultModels: { nope: "x" } })).rejects.toMatchObject({ status: 400 });
+    await expect(client.updateProject(p.id, { defaultModels: { nope: "x" } })).rejects.toMatchObject({ status: 400 });
   });
 
   test("MCP endpoint serves the run's tools only while the run is active", async () => {

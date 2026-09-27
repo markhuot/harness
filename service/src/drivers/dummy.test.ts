@@ -9,7 +9,7 @@ import type { ToolContext, ToolDefinition } from "../tools/types";
 import { DummyDriver } from "./dummy";
 import type { DriverEvent, RunRequest } from "./types";
 
-function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?: ToolDefinition[]; ctx?: Partial<ToolContext>; signal?: AbortSignal } = {}) {
+function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?: ToolDefinition[]; ctx?: Partial<ToolContext>; signal?: AbortSignal; model?: string | null } = {}) {
   const ops = fakeOps();
   const browser = fakeBrowser();
   const signal = opts.signal ?? new AbortController().signal;
@@ -20,6 +20,7 @@ function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?:
     prompt,
     systemPrompt: "sys",
     cwd: ctx.cwd,
+    model: opts.model ?? null,
     state: opts.state ?? null,
     tools: opts.tools ?? toolsForRun(kind, { hasBuiltinTools: false }),
     toolContext: ctx,
@@ -347,5 +348,42 @@ describe("dummy /approve directive", () => {
     const { events } = await collect(driver, req);
     expect(results(events)[0]!.result.isError).toBe(true);
     expect(ops.calls.some((c) => c.method === "submitForReview")).toBe(false);
+  });
+});
+
+describe("dummy models", () => {
+  test("lists dummy-fast (default) and dummy-slow", async () => {
+    const models = await driver.listModels();
+    expect(models.map((m) => [m.id, !!m.default])).toEqual([
+      ["dummy-fast", true],
+      ["dummy-slow", false],
+    ]);
+  });
+
+  test("dummy-slow streams slower than dummy-fast / the default", () => {
+    const d = new DummyDriver({ delayMs: 20 });
+    expect(d.delayFor(null)).toBe(20);
+    expect(d.delayFor("dummy-fast")).toBe(20);
+    expect(d.delayFor("dummy-slow")).toBe(200);
+    expect(new DummyDriver({ delayMs: 0 }).delayFor("dummy-slow")).toBe(50); // still visibly slow in tests
+  });
+
+  test("dummy-slow actually takes longer end to end", async () => {
+    const d = new DummyDriver({ delayMs: 5 });
+    const timed = async (model: string | null) => {
+      const started = Date.now();
+      await collect(d, makeReq("complete", "x", { model }).req); // 3 words
+      return Date.now() - started;
+    };
+    expect(await timed("dummy-slow")).toBeGreaterThanOrEqual(140);
+    expect(await timed(null)).toBeLessThan(140);
+  });
+
+  test("an unknown model fails the run before any output; the model is recorded in state", async () => {
+    const bad = await collect(driver, makeReq("work", "hi", { model: "gpt-9" }).req);
+    expect(bad.events).toEqual([{ type: "error", message: expect.stringContaining("Unknown dummy model: gpt-9") }]);
+    expect((bad.error as Error).message).toContain("gpt-9");
+    const ok = await collect(driver, makeReq("complete", "x", { model: "dummy-slow" }).req);
+    expect(lastState(ok.events)!.state.model).toBe("dummy-slow");
   });
 });

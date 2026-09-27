@@ -28,6 +28,7 @@ export function fakeTicket(overrides: Partial<Ticket> = {}): Ticket {
     busy: false,
     pendingApproval: null,
     allowedTools: [],
+    model: null,
     position: 0,
     createdAt: 0,
     updatedAt: 0,

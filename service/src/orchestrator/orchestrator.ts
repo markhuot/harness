@@ -45,7 +45,9 @@ import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { ensureWorktree, isGitRepo } from "./worktree";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
-import { resolveSettings, toPublicSettings, validateSettingsPatch } from "./settings";
+import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
+import { resolveRunModel } from "./models";
+import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 
 export interface ConductorChange {
   key: string;
@@ -75,6 +77,8 @@ export interface OrchestratorOptions {
   /** Build the watcher supervisor (defaults to WatcherRunner); null disables watchers */
   watchers?: ((handlers: ConstructorParameters<typeof WatcherRunner>[0]) => WatcherSupervisor) | null;
   log?: (msg: string) => void;
+  /** Model-list cache tuning (tests) */
+  modelCatalog?: ModelCatalogOptions;
 }
 
 interface ActiveRun {
@@ -151,8 +155,10 @@ export class Orchestrator {
   private stopping = false;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
+  private modelCatalog: ModelCatalog;
 
   constructor(opts: OrchestratorOptions) {
+    this.modelCatalog = new ModelCatalog(opts.modelCatalog);
     this.store = opts.store;
     this.bus = opts.bus;
     this.browser = opts.browser;
@@ -245,7 +251,8 @@ export class Orchestrator {
 
   updateSettings(body: unknown): PublicSettings {
     const patch = validateSettingsPatch(body, [...this.drivers.keys()]);
-    this.store.settings.set(patch);
+    this.store.settings.set(applySettingsPatch(this.settings(), patch));
+    if (patch.anthropicApiKey !== undefined) this.modelCatalog.invalidate("anthropic-api");
     const pub = this.publicSettings();
     this.bus.emit({ kind: "settings.updated", settings: pub });
     this.queue.pump();
@@ -280,7 +287,15 @@ export class Orchestrator {
     const d = this.drivers.get(id);
     if (!d) throw notFound(`Unknown driver: ${id}`);
     if (!d.login) throw badRequest(`Driver ${id} does not support login`);
+    this.modelCatalog.invalidate(id);
     return d.login();
+  }
+
+  /** The driver's models (cached with a TTL; refresh re-queries). Never throws for driver failures. */
+  async listModels(id: string, opts: { refresh?: boolean } = {}) {
+    const d = this.drivers.get(id);
+    if (!d) throw notFound(`Unknown driver: ${id}`);
+    return this.modelCatalog.get(d, opts);
   }
 
   // =========================================================================
@@ -307,6 +322,8 @@ export class Orchestrator {
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
+      defaultModels:
+        body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     });
     this.bus.emit({ kind: "project.upserted", project });
     return project;
@@ -352,9 +369,11 @@ export class Orchestrator {
         newKey = key;
       }
     }
-    const { key: _key, ...rest } = body;
+    const { key: _key, defaultModels: modelPatch, ...rest } = body;
+    const defaultModels =
+      modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
     const renamed = this.store.transaction(() => {
-      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path });
+      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, defaultModels });
       return newKey ? this.store.projects.rekey(id, newKey) : null;
     });
     const project = this.store.projects.get(id)!;
@@ -431,6 +450,7 @@ export class Orchestrator {
     if (kind !== "task" && kind !== "conductor") throw badRequest(`Invalid kind: ${kind}`);
     const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
+    const model = validateModelId("model", body.model);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -465,6 +485,7 @@ export class Orchestrator {
         autoStart: autoStart || (start && dependsOn.length > 0),
         externalRef: body.externalRef ?? null,
         workdir: null,
+        model,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return t;
@@ -509,7 +530,10 @@ export class Orchestrator {
       if (!this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
       patch.driver = body.driver;
       this.store.sessions.update(ticket.sessionId, { driver: body.driver });
+      // Model ids are per driver; a model picked for the old driver means nothing to the new one.
+      if (body.driver !== ticket.driver && body.model === undefined) patch.model = null;
     }
+    if (body.model !== undefined) patch.model = validateModelId("model", body.model);
     if (body.dependsOn !== undefined) {
       const deps = this.validateDeps(body.dependsOn);
       if (deps.includes(ticket.key)) throw badRequest("A ticket cannot depend on itself");
@@ -990,6 +1014,7 @@ export class Orchestrator {
       parentId: c.id,
       start: false,
       driver: c.driver,
+      model: c.model,
     });
   }
 
@@ -1285,7 +1310,8 @@ export class Orchestrator {
     run = this.store.runs.markRunning(run.id);
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
-    this.appendStatus(session.id, run.id, `Run started (${run.kind})`);
+    const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
+    this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
     const cwd = (run.kind === "plan" ? null : ticket?.workdir) ?? session.cwd ?? project?.path ?? this.paths.home;
@@ -1315,6 +1341,7 @@ export class Orchestrator {
           prompt: run.prompt,
           systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children }),
           cwd,
+          model,
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
           toolContext: ctx,

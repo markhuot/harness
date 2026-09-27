@@ -42,6 +42,7 @@ const project: Project = {
   defaultDriver: null,
   useWorktrees: true,
   requireHumanReview: true,
+  defaultModels: {},
   createdAt: 0,
   updatedAt: 0,
 };
@@ -69,6 +70,7 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
     busy: false,
     pendingApproval: null,
     allowedTools: [],
+    model: null,
     position: 0,
     createdAt: 0,
     updatedAt: 0,

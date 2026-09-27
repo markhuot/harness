@@ -3,7 +3,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrowserState, DriverInfo } from "@harness/shared";
+import type { BrowserState, DriverInfo, ModelInfo } from "@harness/shared";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
@@ -65,6 +65,7 @@ export interface RecordedCall {
   cwd: string;
   mcpUrl: string;
   toolNames: string[];
+  model: string | null;
 }
 
 /**
@@ -88,6 +89,9 @@ export class FakeDriver implements Driver {
   lastTool: { name: string; input: unknown } | null = null;
   approvals: { name: string; behavior: string }[] = [];
   private holds: (() => void)[] = [];
+  /** What listModels() returns (or throws, when a function throws) */
+  models: ModelInfo[] | (() => Promise<ModelInfo[]>) = [{ id: "fake-model", name: "Fake Model", default: true }];
+  listModelsCalls = 0;
   /** Optional per-run override */
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
 
@@ -97,6 +101,11 @@ export class FakeDriver implements Driver {
 
   async info(): Promise<DriverInfo> {
     return { id: this.id, name: this.name, description: this.description, available: true, authenticated: true, detail: "fake", supportsLogin: false };
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    this.listModelsCalls++;
+    return typeof this.models === "function" ? this.models() : this.models;
   }
 
   /** Release every run currently waiting on /hold. */
@@ -118,6 +127,7 @@ export class FakeDriver implements Driver {
       cwd: req.cwd,
       mcpUrl: req.mcp.url,
       toolNames: req.tools.map((t) => t.name),
+      model: req.model,
     });
     this.running++;
     this.maxRunning = Math.max(this.maxRunning, this.running);
@@ -274,6 +284,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     baseUrl: opts.baseUrl ?? (() => "http://127.0.0.1:9"),
     watchers: opts.watchers === undefined ? null : opts.watchers,
     log: opts.log ?? (() => {}),
+    modelCatalog: opts.modelCatalog,
   });
   store.settings.set({ defaultDriver: driver.id });
   return { orch, store, bus, driver, browser, paths, home };

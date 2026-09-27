@@ -24,8 +24,8 @@ const baseSettings: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   claudePermissionMode: "bypassPermissions",
-  claudeModel: null,
-  anthropicModel: "claude-opus-5",
+  defaultModels: {},
+  reviewModels: {},
   anthropicApiKey: null,
 };
 
@@ -37,6 +37,7 @@ function request(over: Partial<RunRequest> = {}): RunRequest {
     prompt: "Do the work please",
     systemPrompt: "You are in a harness.",
     cwd: tmp(),
+    model: null,
     state: null,
     tools: [],
     toolContext: fakeContext(),
@@ -141,7 +142,7 @@ describe("buildClaudeArgs", () => {
   });
 
   test("model and resume are passed only when set", () => {
-    const args = buildClaudeArgs(req, { ...baseSettings, claudeModel: "haiku" }, "abc-123");
+    const args = buildClaudeArgs({ ...req, model: "haiku" }, baseSettings, "abc-123");
     expect(argValue(args, "--model")).toBe("haiku");
     expect(argValue(args, "--resume")).toBe("abc-123");
   });
@@ -262,9 +263,9 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
         success(),
       ],
       env: { CLAUDECODE: "1", CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_USE_BEDROCK: "0", HARNESS_MARKER: "yes" },
-      settings: { claudeModel: "sonnet", claudePermissionMode: "dontAsk" },
+      settings: { claudePermissionMode: "dontAsk" },
     });
-    const req = request({ prompt: "Line one\nLine \"two\"", tools: toolsForRun("work", s.driver) });
+    const req = request({ prompt: "Line one\nLine \"two\"", model: "sonnet", tools: toolsForRun("work", s.driver) });
     const { events, error } = await collect(s.driver.run(req));
     expect(error).toBeNull();
     expect(events).toEqual([
@@ -278,7 +279,8 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(inv!.stdin).toBe("Line one\nLine \"two\"");
     // macOS tmp dirs resolve through /private
     expect(inv!.cwd.replace(/^\/private/, "")).toBe(req.cwd.replace(/^\/private/, ""));
-    expect(inv!.argv).toEqual(buildClaudeArgs(req, { ...baseSettings, claudeModel: "sonnet", claudePermissionMode: "dontAsk" }, null));
+    expect(inv!.argv).toEqual(buildClaudeArgs(req, { ...baseSettings, claudePermissionMode: "dontAsk" }, null));
+    expect(argValue(inv!.argv, "--model")).toBe("sonnet");
     expect(argValue(inv!.argv, "--permission-prompt-tool")).toBe("mcp__harness__permission_prompt");
     expect(inv!.env.CLAUDECODE).toBeUndefined();
     expect(inv!.env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();

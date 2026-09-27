@@ -150,6 +150,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, plugins?: 
   // Drivers & settings
   add("GET", "/drivers", () => o.driverInfos());
   add("POST", "/drivers/:id/login", ({ params }) => o.loginDriver(params.id!));
+  add("GET", "/drivers/:id/models", ({ params, url }) => o.listModels(params.id!, { refresh: /^(1|true)$/.test(url.searchParams.get("refresh") ?? "") }));
   add("GET", "/settings", () => o.publicSettings());
   add("PATCH", "/settings", async ({ body }) => o.updateSettings(await body()));
 

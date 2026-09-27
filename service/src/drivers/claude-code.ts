@@ -4,7 +4,8 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, Settings, ToolResultContent } from "@harness/shared";
+import type { DriverInfo, ModelInfo, Settings, ToolResultContent } from "@harness/shared";
+import { queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
@@ -62,7 +63,7 @@ export function displayToolName(name: string): string {
 export const PERMISSION_PROMPT_TOOL = `${MCP_PREFIX}permission_prompt`;
 
 export function buildClaudeArgs(
-  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & { tools?: Pick<RunRequest["tools"][number], "name">[] },
+  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & { model?: string | null; tools?: Pick<RunRequest["tools"][number], "name">[] },
   settings: Settings,
   resumeSessionId: string | null,
 ): string[] {
@@ -92,7 +93,8 @@ export function buildClaudeArgs(
     args.push("--permission-prompt-tool", PERMISSION_PROMPT_TOOL);
   }
   if (req.systemPrompt) args.push("--append-system-prompt", req.systemPrompt);
-  if (settings.claudeModel) args.push("--model", settings.claudeModel);
+  // A resumed conversation continues under whatever --model this run asks for.
+  if (req.model) args.push("--model", req.model);
   if (resumeSessionId) args.push("--resume", resumeSessionId);
   return args;
 }
@@ -288,6 +290,11 @@ export class ClaudeCodeDriver implements Driver {
     } catch (err) {
       return { ...base, available: true, authenticated: false, detail: `Could not read claude auth status: ${err instanceof Error ? err.message : String(err)}` };
     }
+  }
+
+  /** The models the CLI offers this account (org availableModels applied), via `initialize`. */
+  async listModels(): Promise<ModelInfo[]> {
+    return queryClaudeModels({ bin: this.bin(), env: cleanClaudeEnv(this.env) });
   }
 
   async login(): Promise<{ url: string | null; message: string }> {

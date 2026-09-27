@@ -2,11 +2,13 @@
 // Message history is the driver state, so later runs continue the same conversation.
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { DriverInfo, Settings } from "@harness/shared";
+import type { DriverInfo, ModelInfo, Settings } from "@harness/shared";
 import type { ToolDefinition, ToolResult } from "../tools/types";
 import { executeTool, type Driver, type DriverEvent, type RunRequest } from "./types";
 
 export const MAX_ITERATIONS = 50;
+/** Used when no model is chosen for a run (ticket, project and settings all unset). */
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 32_000;
 
 export interface AnthropicApiState {
@@ -22,6 +24,10 @@ export interface MessageStreamLike extends AsyncIterable<Anthropic.MessageStream
 export interface MessagesClientLike {
   messages: {
     stream(params: Anthropic.MessageStreamParams, options?: { signal?: AbortSignal }): MessageStreamLike;
+  };
+  /** GET /v1/models; the SDK's list() auto-paginates when iterated. */
+  models?: {
+    list(params?: { limit?: number }): AsyncIterable<Pick<Anthropic.ModelInfo, "id" | "display_name">>;
   };
 }
 
@@ -101,7 +107,7 @@ export class AnthropicApiDriver implements Driver {
 
   async info(): Promise<DriverInfo> {
     const key = this.apiKey();
-    const model = this.opts.settings().anthropicModel;
+    const model = this.opts.settings().defaultModels[this.id] || DEFAULT_ANTHROPIC_MODEL;
     return {
       id: this.id,
       name: this.name,
@@ -115,6 +121,22 @@ export class AnthropicApiDriver implements Driver {
     };
   }
 
+  /** Models the API key can use (GET /v1/models, every page). */
+  async listModels(): Promise<ModelInfo[]> {
+    const key = this.apiKey();
+    if (!key) throw new Error("No Anthropic API key configured. Add one in Settings or set ANTHROPIC_API_KEY.");
+    const client = this.client(key.key);
+    if (!client.models) throw new Error("This Anthropic client cannot list models");
+    const out: ModelInfo[] = [];
+    const seen = new Set<string>();
+    for await (const m of client.models.list({ limit: 100 })) {
+      if (!m?.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push({ id: m.id, name: m.display_name || m.id, ...(m.id === DEFAULT_ANTHROPIC_MODEL ? { default: true } : {}) });
+    }
+    return out;
+  }
+
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {
     const key = this.apiKey();
     if (!key) {
@@ -122,7 +144,7 @@ export class AnthropicApiDriver implements Driver {
       yield { type: "error", message };
       throw new Error(message);
     }
-    const settings = this.opts.settings();
+    const model = req.model || DEFAULT_ANTHROPIC_MODEL;
     const client = this.client(key.key);
     const tools = toAnthropicTools(req.tools);
 
@@ -144,7 +166,7 @@ export class AnthropicApiDriver implements Driver {
       }
 
       const params: Anthropic.MessageStreamParams = {
-        model: settings.anthropicModel,
+        model,
         max_tokens: MAX_TOKENS,
         messages,
         ...(req.systemPrompt ? { system: req.systemPrompt } : {}),

@@ -18,6 +18,11 @@ export interface Project {
   nextSeq: number;
   /** Default driver id for new tickets in this project (falls back to settings.defaultDriver) */
   defaultDriver: string | null;
+  /**
+   * Default model per driver id for new runs of this project's tickets (overrides
+   * settings.defaultModels; a ticket's own model overrides this). Absent → settings default.
+   */
+  defaultModels: Record<string, string>;
   /** When the project path is a git repo, give each ticket its own worktree + branch */
   useWorktrees: boolean;
   /** When false, the human review step is skipped (agent review alone gates completion) */
@@ -68,6 +73,8 @@ export interface Ticket {
   pendingApproval: PendingApproval | null;
   /** Tools the human has allowed for every future call on this ticket ("Bash", "WebFetch", ...) */
   allowedTools: string[];
+  /** Model for this ticket's runs (driver-specific id). null → project / settings / driver default. */
+  model: string | null;
   /** Sort order within a column */
   position: number;
   createdAt: number;
@@ -220,13 +227,37 @@ export interface DriverInfo {
   supportsLogin: boolean;
 }
 
+/** A model a driver can run with (GET /drivers/:id/models). */
+export interface ModelInfo {
+  /** Value passed to the driver (claude-code: --model alias or id; anthropic-api: model id) */
+  id: string;
+  name: string;
+  description?: string;
+  /** The model the driver uses when no model is chosen */
+  default?: boolean;
+}
+
+/** GET /drivers/:id/models. Failures give models: [] (or a fallback list) plus error. */
+export interface DriverModels {
+  driverId: string;
+  models: ModelInfo[];
+  error: string | null;
+  /** When the list was fetched (cached per driver) */
+  fetchedAt: number;
+}
+
 export interface Settings {
   defaultDriver: string;
   maxConcurrentRuns: number;
   /** claude-code driver: permission mode passed to the CLI */
   claudePermissionMode: "bypassPermissions" | "acceptEdits" | "auto" | "dontAsk";
-  claudeModel: string | null;
-  anthropicModel: string;
+  /**
+   * Model per driver id used when neither the ticket nor its project picks one.
+   * Missing / null → the driver's own default. PATCH merges per driver; null clears.
+   */
+  defaultModels: Record<string, string | null>;
+  /** Model per driver id for agent review runs. Missing / null → the same model as the work runs. */
+  reviewModels: Record<string, string | null>;
   /** Stored API key for the anthropic-api driver (never sent back to clients in full) */
   anthropicApiKey: string | null;
 }
@@ -304,6 +335,8 @@ export interface CreateProjectBody {
   defaultDriver?: string | null;
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
+  /** Per-driver default models; PATCH merges per driver, null clears one */
+  defaultModels?: Record<string, string | null>;
 }
 
 export interface CreateTicketBody {
@@ -313,6 +346,8 @@ export interface CreateTicketBody {
   title?: string;
   kind?: TicketKind;
   driver?: string;
+  /** Model for this ticket's runs (null / omitted → defaults) */
+  model?: string | null;
   /** Skip planning and start work right away (default true for quick sessions) */
   start?: boolean;
   dependsOn?: string[];
@@ -327,7 +362,10 @@ export interface UpdateTicketBody {
   title?: string;
   description?: string;
   status?: TicketStatus; // manual moves from the board
+  /** Changing the driver clears the model unless `model` is given too */
   driver?: string;
+  /** Applies from the next run (claude-code resumes the conversation with the new --model) */
+  model?: string | null;
   dependsOn?: string[];
   position?: number;
 }

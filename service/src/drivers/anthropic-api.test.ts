@@ -4,15 +4,15 @@ import type { RunKind, Settings } from "@harness/shared";
 import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
 import { toolsForRun } from "../tools/index";
 import type { ToolDefinition } from "../tools/types";
-import { AnthropicApiDriver, MAX_ITERATIONS, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
+import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
 import type { DriverEvent, RunRequest } from "./types";
 
 const baseSettings: Settings = {
   defaultDriver: "anthropic-api",
   maxConcurrentRuns: 4,
   claudePermissionMode: "bypassPermissions",
-  claudeModel: null,
-  anthropicModel: "claude-test-model",
+  defaultModels: {},
+  reviewModels: {},
   anthropicApiKey: "sk-settings",
 };
 
@@ -80,7 +80,7 @@ function fakeClient(turns: Turn[]) {
   };
 }
 
-function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?: ToolDefinition[]; signal?: AbortSignal } = {}) {
+function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?: ToolDefinition[]; signal?: AbortSignal; model?: string | null } = {}) {
   const ops = fakeOps();
   const browser = fakeBrowser();
   const signal = opts.signal ?? new AbortController().signal;
@@ -91,6 +91,7 @@ function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?:
     prompt,
     systemPrompt: "You are a harness agent.",
     cwd: ctx.cwd,
+    model: opts.model ?? null,
     state: opts.state ?? null,
     tools: opts.tools ?? toolsForRun(kind, { hasBuiltinTools: false }),
     toolContext: ctx,
@@ -146,7 +147,7 @@ describe("anthropic-api driver", () => {
 
   test("request carries model, system prompt, max_tokens, tools with input_schema, and the prompt", async () => {
     const { driver, fake } = driverWith([{ content: [text("ok")], stop_reason: "end_turn" }]);
-    const { req } = makeReq("review", "Review it");
+    const { req } = makeReq("review", "Review it", { model: "claude-test-model" });
     await collect(driver, req);
     const p = fake.requests[0]!;
     expect(p.model).toBe("claude-test-model");
@@ -328,5 +329,82 @@ describe("anthropic-api driver", () => {
     expect(error).toBeNull();
     expect(fake.requests.length).toBe(2);
     expect(fake.requests[1]!.messages.at(-1)!.role).toBe("assistant");
+  });
+});
+
+describe("anthropic-api models", () => {
+  /** A models.list() like the SDK's: an async iterable that walks pages lazily. */
+  function pagedModels(pages: { id: string; display_name: string }[][]) {
+    const seen = { pagesFetched: 0, params: [] as unknown[], keys: [] as string[] };
+    const createClient = (key: string): MessagesClientLike => {
+      seen.keys.push(key);
+      return {
+        messages: { stream: () => { throw new Error("not used"); } },
+        models: {
+          list(params) {
+            seen.params.push(params);
+            return (async function* () {
+              for (const page of pages) {
+                seen.pagesFetched++;
+                yield* page;
+              }
+            })();
+          },
+        },
+      };
+    };
+    return { seen, createClient };
+  }
+
+  test("lists every page, de-duplicates, marks the driver default", async () => {
+    const { seen, createClient } = pagedModels([
+      [{ id: "claude-opus-5", display_name: "Claude Opus 5" }, { id: DEFAULT_ANTHROPIC_MODEL, display_name: "Claude Sonnet 5" }],
+      [{ id: "claude-haiku-4-5", display_name: "" }, { id: "claude-opus-5", display_name: "dup" }],
+    ]);
+    const driver = new AnthropicApiDriver({ settings: () => ({ ...baseSettings, anthropicApiKey: "sk-set" }), createClient, env: {} });
+    const models = await driver.listModels();
+    expect(models).toEqual([
+      { id: "claude-opus-5", name: "Claude Opus 5" },
+      { id: DEFAULT_ANTHROPIC_MODEL, name: "Claude Sonnet 5", default: true },
+      { id: "claude-haiku-4-5", name: "claude-haiku-4-5" },
+    ]);
+    expect(seen.pagesFetched).toBe(2);
+    expect(seen.keys).toEqual(["sk-set"]);
+  });
+
+  test("no API key → throws (the catalog turns it into [] + error)", async () => {
+    const { seen, createClient } = pagedModels([[]]);
+    const driver = new AnthropicApiDriver({ settings: () => ({ ...baseSettings, anthropicApiKey: null }), createClient, env: {} });
+    await expect(driver.listModels()).rejects.toThrow(/No Anthropic API key/);
+    expect(seen.keys).toEqual([]);
+  });
+
+  test("API errors propagate from listing", async () => {
+    const driver = new AnthropicApiDriver({
+      settings: () => ({ ...baseSettings, anthropicApiKey: "sk" }),
+      createClient: () => ({
+        messages: { stream: () => { throw new Error("not used"); } },
+        models: {
+          list: () =>
+            (async function* () {
+              throw new Error("401 invalid x-api-key");
+            })(),
+        },
+      }),
+      env: {},
+    });
+    await expect(driver.listModels()).rejects.toThrow("401 invalid x-api-key");
+  });
+
+  test("runs use req.model, else the driver default", async () => {
+    const a = driverWith([{ content: [text("ok")], stop_reason: "end_turn" }], { anthropicApiKey: "sk" });
+    await collect(a.driver, makeReq("work", "x", { model: "claude-opus-5" }).req);
+    await collect(a.driver, makeReq("work", "y").req);
+    expect(a.fake.requests.map((r) => r.model)).toEqual(["claude-opus-5", DEFAULT_ANTHROPIC_MODEL]);
+  });
+
+  test("info shows the settings default model", async () => {
+    const d = driverWith([], { anthropicApiKey: "sk", defaultModels: { "anthropic-api": "claude-opus-5" } });
+    expect((await d.driver.info()).detail).toStartWith("claude-opus-5 ·");
   });
 });

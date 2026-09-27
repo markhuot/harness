@@ -13,6 +13,57 @@ import { appendFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
 const env = process.env;
+
+// SDK control protocol (`-p --input-format stream-json`): answer `initialize` like the real
+// CLI (models etc.), then idle until stdin closes or we're killed. Env:
+//   FAKE_CLAUDE_MODELS       JSON array for response.models (default: two models + "default")
+//   FAKE_CLAUDE_INIT         "error" → error control_response; "exit" → exit 2 with stderr, no answer;
+//                            "hang" → never answer; "noise" → junk lines + an unrelated response first
+if (argv[0] === "-p" && argv[argv.indexOf("--input-format") + 1] === "stream-json") {
+  if (env.FAKE_CLAUDE_RECORD) {
+    const passEnv = Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith("CLAUDE") || k === "HARNESS_MARKER"));
+    appendFileSync(env.FAKE_CLAUDE_RECORD, JSON.stringify({ argv, stdin: "", cwd: process.cwd(), env: passEnv }) + "\n");
+  }
+  const say = (o: unknown) => process.stdout.write(JSON.stringify(o) + "\n");
+  const mode = env.FAKE_CLAUDE_INIT ?? "";
+  if (mode === "exit") {
+    process.stderr.write("Error: not logged in\n");
+    process.exit(2);
+  }
+  say({ type: "system", subtype: "hook_started", hook_name: "SessionStart:startup", session_id: "s" });
+  const models = env.FAKE_CLAUDE_MODELS
+    ? JSON.parse(env.FAKE_CLAUDE_MODELS)
+    : [
+        { value: "default", resolvedModel: "claude-opus-9", displayName: "Default (recommended)", description: "Opus 9 · Best for everyday tasks" },
+        { value: "opus", resolvedModel: "claude-opus-9", displayName: "Opus 9", description: "Most capable" },
+        { value: "haiku", resolvedModel: "claude-haiku-9", displayName: "Haiku 9", description: "Fastest" },
+      ];
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of Bun.stdin.stream() as unknown as AsyncIterable<Uint8Array>) {
+    buf += decoder.decode(chunk, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const raw = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!raw) continue;
+      const msg = JSON.parse(raw);
+      if (msg.type === "user") {
+        // The harness must never spend tokens to list models.
+        process.stderr.write("fake-claude: unexpected user message\n");
+        process.exit(9);
+      }
+      if (msg.type !== "control_request" || msg.request?.subtype !== "initialize" || mode === "hang") continue;
+      if (mode === "noise") {
+        process.stdout.write("warn: something odd\n");
+        say({ type: "control_response", response: { subtype: "success", request_id: "someone-else", response: { models: [] } } });
+      }
+      if (mode === "error") say({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Already initialized" } });
+      else say({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { commands: [], models, account: { email: "x@y" } } } });
+    }
+  }
+  process.exit(0);
+}
 const stdin = argv[0] === "-p" ? await new Response(Bun.stdin.stream()).text() : "";
 
 if (env.FAKE_CLAUDE_RECORD) {

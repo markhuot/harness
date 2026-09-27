@@ -26,6 +26,7 @@ interface TicketRow {
   pending_approval: string | null;
   allowed_tools: string;
   review_rejections: number;
+  model: string | null;
   busy: number;
 }
 
@@ -62,6 +63,7 @@ export interface NewTicket {
   autoStart: boolean;
   externalRef: ExternalRef | null;
   workdir: string | null;
+  model?: string | null;
 }
 
 export type TicketPatch = Partial<{
@@ -80,6 +82,7 @@ export type TicketPatch = Partial<{
   pendingApproval: PendingApproval | null;
   allowedTools: string[];
   reviewRejections: number;
+  model: string | null;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -97,6 +100,7 @@ const COLUMNS: Record<string, string> = {
   pendingApproval: "pending_approval",
   allowedTools: "allowed_tools",
   reviewRejections: "review_rejections",
+  model: "model",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
@@ -142,6 +146,7 @@ export class TicketRepo {
       busy: bool(r.busy),
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
+      model: r.model ?? null,
       position: r.position,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
@@ -198,9 +203,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, created_at, updated_at)
+           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $t, $t)`,
+           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $t, $t)`,
       )
       .run({
         id,
@@ -217,6 +222,7 @@ export class TicketRepo {
         externalRef: toJson(input.externalRef),
         workdir: input.workdir,
         position: this.nextPosition(input.projectId),
+        model: input.model ?? null,
         t,
       });
     this.setDeps(id, input.dependsOn);

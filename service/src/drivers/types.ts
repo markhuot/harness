@@ -1,7 +1,7 @@
 // Driver contract. A driver turns one "run" (a prompt in the context of a session)
 // into a stream of events. Drivers never touch the DB; the orchestrator persists events.
 
-import type { DriverInfo, RunKind } from "@harness/shared";
+import type { DriverInfo, ModelInfo, RunKind } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 
 export type DriverEvent =
@@ -25,6 +25,11 @@ export interface RunRequest {
   /** Harness system prompt for this run kind (drivers append it to their own, if any) */
   systemPrompt: string;
   cwd: string;
+  /**
+   * Model for this run, resolved by the orchestrator (ticket → project → settings; review runs
+   * may use settings.reviewModels). null → the driver's own default.
+   */
+  model: string | null;
   /** Previously persisted driver state for this session (null on first run) */
   state: unknown;
   /** Tools available in this run. Native-loop drivers call tool.execute(input, toolContext). */
@@ -53,6 +58,22 @@ export interface Driver {
   /** Start an interactive login if supported. Returns a URL to open, if any. */
   login?(): Promise<{ url: string | null; message: string }>;
   run(req: RunRequest): AsyncIterable<DriverEvent>;
+  /**
+   * Models this driver can run with. Throw on failure; a ModelListError can carry a
+   * fallback list (shown alongside the error). The orchestrator caches the result.
+   */
+  listModels(): Promise<ModelInfo[]>;
+}
+
+/** A model-list failure that still has something useful to offer (e.g. well-known aliases). */
+export class ModelListError extends Error {
+  constructor(
+    message: string,
+    readonly fallback: ModelInfo[] = [],
+  ) {
+    super(message);
+    this.name = "ModelListError";
+  }
 }
 
 /**

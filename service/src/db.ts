@@ -165,6 +165,19 @@ export const MIGRATIONS: string[] = [
 
   UPDATE settings SET value = '"acceptEdits"' WHERE key = 'claudePermissionMode' AND value = '"bypassPermissions"';
   `,
+  // 3: model selection: per-ticket model, per-project default models, settings.defaultModels
+  //    replaces claudeModel / anthropicModel
+  `
+  ALTER TABLE tickets ADD COLUMN model TEXT;
+  ALTER TABLE projects ADD COLUMN default_models TEXT NOT NULL DEFAULT '{}';
+
+  INSERT OR IGNORE INTO settings (key, value)
+  SELECT 'defaultModels', json_object(
+    'claude-code', (SELECT json(value) FROM settings WHERE key = 'claudeModel'),
+    'anthropic-api', (SELECT json(value) FROM settings WHERE key = 'anthropicModel'))
+  WHERE EXISTS (SELECT 1 FROM settings WHERE key IN ('claudeModel', 'anthropicModel'));
+  DELETE FROM settings WHERE key IN ('claudeModel', 'anthropicModel');
+  `,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
