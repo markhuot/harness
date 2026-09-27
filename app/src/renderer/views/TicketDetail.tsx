@@ -12,8 +12,10 @@ import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
+import { ChildrenTab } from "./ChildrenTab";
+import { ParentCrumb } from "../components/Conductor";
 
-const TAB_LABEL: Record<BuiltinTicketTab, string> = { summaries: "Summaries", transcript: "Transcript", browser: "Browser", details: "Details" };
+const TAB_LABEL: Record<BuiltinTicketTab, string> = { summaries: "Summaries", children: "Tickets", transcript: "Transcript", browser: "Browser", details: "Details" };
 
 const PLACEHOLDER: Record<TicketStatus, string> = {
   planning: "Refine the plan…",
@@ -97,17 +99,20 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
   const wantPlugin = parsePluginTab(routeTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
-  const tab: TicketTab = wantPlugin && !activePlugin && pluginTabs ? "summaries" : routeTab;
+  // Likewise the conductor-only Tickets tab on a plain ticket.
+  const tab: TicketTab = (wantPlugin && !activePlugin && pluginTabs) || (routeTab === "children" && ticket.kind !== "conductor") ? "summaries" : routeTab;
   const setTab = (t: TicketTab) => route.view === "board" && navigate({ ...route, tab: t });
+  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
 
   return (
     <aside className={`detail ${wide ? "wide" : ""}`}>
       <DetailHeader ticket={ticket} onClose={close} wide={wide} onToggleWide={toggleWide} />
       <nav className="tabs">
-        {TICKET_TABS.map((t) => (
-          <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>
+        {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
+          <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
+            {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
@@ -123,6 +128,7 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
       </nav>
       <div className="detail-body">
         {tab === "summaries" && <Summaries ticket={ticket} />}
+        {tab === "children" && <ChildrenTab ticket={ticket} />}
         {tab === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
         {tab === "details" && <TicketDetails ticket={ticket} />}
@@ -145,6 +151,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
   const project = state.projects[ticket.projectId];
+  const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const ready = isReady(ticket);
   const k = ticket.key;
 
@@ -204,6 +211,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
       </div>
 
       <div className="detail-hero">
+        {parent && <ParentCrumb parent={parent} onOpen={(key) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "children" })} />}
         <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
           {project && (

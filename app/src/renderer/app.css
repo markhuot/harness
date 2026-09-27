@@ -333,13 +333,6 @@
   color: var(--text-3);
   letter-spacing: 0.01em;
 }
-.card-parent {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--violet);
-}
 .card-title {
   font-weight: 500;
   font-size: 13px;
@@ -390,18 +383,6 @@
   gap: 5px;
   flex-wrap: wrap;
   margin-top: 1px;
-}
-.card-progress {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--bg-active);
-  overflow: hidden;
-}
-.card-progress span {
-  display: block;
-  height: 100%;
-  background: var(--c-done);
 }
 .pending-dot {
   width: 6px;
@@ -1075,17 +1056,11 @@
   padding: 0 4px;
   gap: 2px;
 }
-.card-key,
-.card-parent {
+.card-key {
   white-space: nowrap;
 }
 .card-top .card-key {
   flex: none;
-}
-.card-parent {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .card-top .badge,
 .card-top .spinner,

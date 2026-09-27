@@ -292,6 +292,117 @@ try {
   await until("picker after reload", () => exists("[data-theme-option=system]"));
   await js(`document.querySelector("[data-theme-option=system]").click()`);
 
+  // 6d. Conductor: Tickets tab (live), child breadcrumb, board dimming, rollup, hide-children toggle.
+  {
+    type CT = { id: string; key: string; projectId: string; status: string };
+    const all = await api<CT[]>("GET", "/tickets");
+    const conductor = all.find((t) => t.key === "HARNESS-1")!;
+    const hxId = conductor.projectId;
+    const rowKeys = () => js<string[]>(`[...document.querySelectorAll(".child-row")].map(r => r.dataset.key)`);
+    const progressText = () => js<string>(`document.querySelector("[data-testid=children-progress]")?.textContent ?? ""`);
+    const tabCount = () => js<string>(`document.querySelector(".tab[data-tab=children] .count")?.textContent ?? ""`);
+
+    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+    const rows = await until("children rows", async () => {
+      const k = await rowKeys();
+      return k.length >= 7 && k;
+    });
+    check(
+      "Tickets tab lists the children grouped in lifecycle order",
+      rows.join(",") === "HARNESS-3,HARNESS-6,HARNESS-7,HARNESS-8,HARNESS-10,HARNESS-2,HARNESS-5",
+      rows.join(","),
+    );
+    check("Tickets tab shows the progress header", (await progressText()) === "1/7 done · 1 in progress · 2 blocked · 2 review · 1 up next", await progressText());
+    check("Tickets tab badge counts the children", (await tabCount()) === "7", await tabCount());
+    const notes = await js<Record<string, string>>(
+      `Object.fromEntries([...document.querySelectorAll(".child-row")].map(r => [r.dataset.key, (r.querySelector(".child-note")?.textContent ?? "") + "|" + [...r.querySelectorAll(".child-foot .chip")].map(c => c.textContent).join(",")]))`,
+    );
+    check("approval child shows the tool it waits on", notes["HARNESS-8"] === "Needs approval: Bash|waiting onHARNESS-2", notes["HARNESS-8"]);
+    check("blocked child shows its question and done dep", notes["HARNESS-7"]!.startsWith("Which Apple Developer team") && notes["HARNESS-7"]!.endsWith("|afterHARNESS-5"), notes["HARNESS-7"]);
+
+    // Live: a new child (ticket.upserted) appears, and a status change regroups an existing one.
+    const fresh = await api<CT>("POST", "/tickets", { projectId: hxId, parentId: conductor.id, prompt: "Write the release notes", start: false, dependsOn: ["HARNESS-7"] });
+    const grown = await until("new child row", async () => {
+      const k = await rowKeys();
+      return k.length === 8 && (await tabCount()) === "8" && k;
+    });
+    check("a new child streams into the Tickets tab", grown.includes(fresh.key), grown.join(","));
+    await api("PATCH", "/tickets/HARNESS-3", { status: "done" });
+    const regrouped = await until("HARNESS-3 regrouped", () =>
+      js<boolean>(`!!document.querySelector('.children-group[data-status=done] .child-row[data-key="HARNESS-3"]')`),
+    );
+    check("a child's status change regroups it live", regrouped);
+    check("progress header follows live", (await until("progress 2/8", async () => (await progressText()).startsWith("2/8 done") && (await progressText()))) === "2/8 done · 1 in progress · 2 blocked · 2 review · 1 up next");
+
+    // Row → child; the breadcrumb leads back to the conductor's Tickets tab.
+    await js(`document.querySelector('.child-row[data-key="HARNESS-6"]').click()`);
+    const crumb = await until("parent crumb", () => js<string>(`location.hash.endsWith("/ticket/HARNESS-6") && document.querySelector("[data-testid=parent-crumb]")?.textContent`));
+    check("child detail shows the Part of breadcrumb", crumb === "Part ofHARNESS-1Build the harness desktop app", crumb);
+    await js(`document.querySelector("[data-testid=parent-crumb]").click()`);
+    const back = await until("back to conductor", () => js<string>(`location.hash`).then((h) => h.endsWith("/ticket/HARNESS-1/children") && h));
+    check("breadcrumb opens the conductor's Tickets tab", !!back, back);
+    await js(`location.hash = "#/board/all/ticket/HARNESS-6/children"`);
+    const plainTab = await until("plain ticket tabs", () =>
+      js<string>(`location.hash.includes("HARNESS-6") && document.querySelector(".tab.on")?.dataset.tab`),
+    );
+    check("plain tickets have no Tickets tab (the route falls back to Summaries)", plainTab === "summaries" && !(await exists(".tab[data-tab=children]")), plainTab);
+
+    // Empty conductor.
+    const empty = await api<CT>("POST", "/tickets", { projectId: hxId, kind: "conductor", prompt: "Plan the 1.0 launch", start: false });
+    await js(`location.hash = "#/board/all/ticket/${empty.key}/children"`);
+    const emptyText = await until("children empty state", () => js<string>(`document.querySelector("[data-testid=children-empty]")?.textContent ?? ""`));
+    check("empty conductor explains there are no tickets yet", emptyText.includes("The conductor hasn't created any tickets yet."), emptyText);
+
+    // Board: quiet children are dimmed, ones that need you are not; the conductor card rolls up.
+    await js(`location.hash = "#/board/${hxId}"`);
+    await until("harness board", () => exists('.card[data-key="HARNESS-1"]'));
+    const dimmed = () =>
+      js<Record<string, boolean>>(`Object.fromEntries([...document.querySelectorAll(".card[data-key]")].map(c => [c.dataset.key, c.classList.contains("child-dim")]))`);
+    const d = await dimmed();
+    check(
+      "quiet children are dimmed on the board",
+      d["HARNESS-6"] === true && d["HARNESS-2"] === true && d["HARNESS-5"] === true && d[fresh.key] === true,
+      JSON.stringify(d),
+    );
+    check(
+      "children that need you (blocked, approval, review) and the conductor are not dimmed",
+      d["HARNESS-7"] === false && d["HARNESS-8"] === false && d["HARNESS-10"] === false && d["HARNESS-1"] === false && d["HARNESS-9"] === false,
+      JSON.stringify(d),
+    );
+    const rollup = await js<string>(`document.querySelector('.card[data-key="HARNESS-1"] [data-testid=conductor-rollup]')?.textContent ?? ""`);
+    check("conductor card rolls up progress and what needs you", rollup === "2/8 done3 need you", rollup);
+    const parentChip = await js<string>(`document.querySelector('.card[data-key="HARNESS-6"] .card-parent-chip')?.textContent ?? ""`);
+    check("child card carries a parent chip", parentChip === "↳ HARNESS-1", parentChip);
+
+    // Toggle: hides quiet children only, persists across a reload, and turns back off.
+    const cardKeys = () => js<string[]>(`[...document.querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
+    await js(`document.querySelector("[data-testid=hide-children]").click()`);
+    const hidden = await until("children hidden", async () => {
+      const k = await cardKeys();
+      return !k.includes("HARNESS-6") && k;
+    });
+    check(
+      "Hide child tickets hides quiet children",
+      ["HARNESS-2", "HARNESS-3", "HARNESS-5", "HARNESS-6", fresh.key].every((k) => !hidden.includes(k)),
+      hidden.join(","),
+    );
+    check("…but keeps the ones that need you and the conductor", ["HARNESS-1", "HARNESS-7", "HARNESS-8", "HARNESS-10"].every((k) => hidden.includes(k)), hidden.join(","));
+    check("toolbar says how many are hidden", (await js<string>(`document.querySelector("[data-testid=hidden-count]")?.textContent ?? ""`)) === "5 hidden");
+    await js(`location.reload()`);
+    await Bun.sleep(300);
+    const afterReload = await until("board after reload", async () => {
+      const k = await cardKeys();
+      return k.includes("HARNESS-1") && k;
+    });
+    check("hide-children survives a reload", !afterReload.includes("HARNESS-6") && afterReload.includes("HARNESS-8"), afterReload.join(","));
+    await js(`document.querySelector("[data-testid=hide-children]").click()`);
+    const shown = await until("children shown", async () => {
+      const k = await cardKeys();
+      return k.includes("HARNESS-6") && k;
+    });
+    check("toggling off shows every child again", ["HARNESS-2", "HARNESS-5", "HARNESS-6"].every((k) => shown.includes(k)), shown.join(","));
+  }
+
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.
   mock.kill();
   await mock.exited;

@@ -478,7 +478,7 @@ function seed() {
     summaries: [["agent", "Dispatched from Jira. Waiting on the newsletter migration before touching the meter script."]],
   });
 
-  // Conductor with two children in HARNESS
+  // Conductor with seven children in HARNESS, across every column (Tickets tab, board rollup)
   seedTicket({
     project: hx,
     kind: "conductor",
@@ -488,7 +488,7 @@ function seed() {
     driver: "claude-code",
     busy: true,
     ageMin: 120,
-    summaries: [["agent", "Split the work into two child tickets. HARNESS-3 depends on HARNESS-2."]],
+    summaries: [["agent", "Split the work into seven child tickets. The shell (HARNESS-5) goes first; the store, signing and settings build on it."]],
   }); // HARNESS-1
   seedTicket({
     project: hx,
@@ -523,6 +523,70 @@ function seed() {
     ageMin: 2000,
     summaries: [["agent", "Docs written in `DESIGN.md` under Runtime paths."]],
   }); // HARNESS-4
+  const child = (s: Omit<SeedTicket, "project" | "parentKey">) => seedTicket({ project: hx, parentKey: "HARNESS-1", ...s });
+  child({
+    key: "HARNESS-5",
+    title: "Scaffold the Electron shell and preload bridge",
+    description: "Main process, preload with a typed bridge, hidden-inset titlebar.",
+    status: "done",
+    driver: "claude-code",
+    agentReview: "approved",
+    humanReview: "approved",
+    ageMin: 118,
+    summaries: [["agent", "Shell boots with a typed `window.harness` bridge; window state persists across launches."]],
+  });
+  child({
+    key: "HARNESS-6",
+    title: "Wire the WebSocket store and reducer",
+    description: "REST snapshot + live events into one normalized store.",
+    status: "in_progress",
+    driver: "anthropic-api",
+    busy: true,
+    dependsOn: ["HARNESS-5"],
+    ageMin: 100,
+    summaries: [["agent", "Reducer handles every event kind; reconnect refetches the snapshot. Writing the dedupe tests now."]],
+  });
+  child({
+    key: "HARNESS-7",
+    title: "Sign and notarize the macOS build",
+    description: "Developer ID signing + notarytool in the package script.",
+    status: "blocked",
+    driver: "claude-code",
+    dependsOn: ["HARNESS-5"],
+    blockedReason: "Which Apple Developer team should sign the build: Happy Cog or your personal account?",
+    ageMin: 95,
+    summaries: [["agent", "Packaging works unsigned. Need to know which team's certificate to use."]],
+  });
+  child({
+    key: "HARNESS-8",
+    title: "Add a Playwright e2e for the board",
+    description: "Drive the built app and check drag and drop.",
+    status: "blocked",
+    driver: "claude-code",
+    dependsOn: ["HARNESS-2"],
+    blockedReason: "Waiting for permission to use Bash",
+    pendingApproval: {
+      id: "appr_2",
+      runId: "run_appr_2",
+      toolName: "Bash",
+      input: { command: "bunx playwright install chromium", description: "Install the Playwright browser" },
+      requestedAt: now() - 45_000,
+    },
+    ageMin: 60,
+  });
+  child({
+    key: "HARNESS-10",
+    title: "Settings screen for drivers and watchers",
+    description: "Driver login state, watcher CRUD, key mappings.",
+    status: "review",
+    driver: "claude-code",
+    dependsOn: ["HARNESS-5"],
+    agentReview: "approved",
+    humanReview: "pending",
+    ageMin: 80,
+    summaries: [["agent", "Settings has Drivers, Watchers and Mappings sections; each saves on blur."]],
+  });
+  hx.nextSeq = 11;
 
   // A project whose key was derived from a long folder name (Project settings → Identifier).
   const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness");

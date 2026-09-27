@@ -7,6 +7,8 @@ import { DriverBadge, KindBadge, MOD, ReviewMark, STATUS_LABEL, StatusDot } from
 import { plainText } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
 import { TicketDetail } from "./TicketDetail";
+import { ConductorRollup, useHideChildren } from "../components/Conductor";
+import { dimOnBoard, hideOnBoard, isChild, progressOf } from "../state/conductor";
 
 const DRAG_MIME = "application/x-harness-ticket";
 
@@ -24,6 +26,9 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   const { state, route, navigate, client, dispatch, refresh } = useStore();
   const act = useAction();
   const [filter, setFilter] = useState("");
+  const [hideChildren, toggleHideChildren] = useHideChildren();
+  // Hovering a conductor highlights its children.
+  const [hoverConductor, setHoverConductor] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<{ status: TicketStatus; index: number } | null>(null);
   const dragging = useRef<string | null>(null);
   if (route.view !== "board") return null;
@@ -32,7 +37,9 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   const project = projectId ? state.projects[projectId] : null;
   const columns = boardColumns(state, projectId);
   const q = filter.trim().toLowerCase();
-  const visible = (t: Ticket) => !q || t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q);
+  const visible = (t: Ticket) => !hideOnBoard(t, hideChildren) && (!q || t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q));
+  const hasChildren = Object.values(columns).some((c) => c.some(isChild));
+  const hiddenCount = hideChildren ? Object.values(columns).reduce((n, c) => n + c.filter((t) => hideOnBoard(t, true)).length, 0) : 0;
 
   const open = (key: string) => navigate({ view: "board", projectId, ticketKey: key, tab: "summaries" });
 
@@ -87,6 +94,19 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
             </button>
           )}
           <div className="grow" />
+          {hasChildren && (
+            <button
+              className={`btn btn-ghost btn-sm toggle-btn no-drag ${hideChildren ? "" : "btn-icon"}`}
+              aria-pressed={hideChildren}
+              aria-label="Hide child tickets"
+              data-testid="hide-children"
+              title={hideChildren ? "Showing only conductor children that need you. Click to show all." : "Hide child tickets (ones that need you stay visible)"}
+              onClick={toggleHideChildren}
+            >
+              <Icon name={hideChildren ? "eye" : "conductor"} size={13} />
+              {hideChildren && <span data-testid="hidden-count">{hiddenCount} hidden</span>}
+            </button>
+          )}
           <div className="search no-drag">
             <Icon name="hash" size={12} />
             <input placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -145,6 +165,8 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
                       state={state}
                       selected={route.ticketKey === t.key}
                       showProject={!projectId}
+                      related={!!hoverConductor && t.parentId === hoverConductor}
+                      onHoverConductor={setHoverConductor}
                       onOpen={open}
                     />
                   ))}
@@ -178,6 +200,8 @@ const TicketCard = memo(function TicketCard({
   onOpen,
   onDragStart,
   dropBefore,
+  related,
+  onHoverConductor,
 }: {
   ticket: Ticket;
   state: State;
@@ -186,10 +210,13 @@ const TicketCard = memo(function TicketCard({
   onOpen: (key: string) => void;
   onDragStart: (key: string) => void;
   dropBefore: boolean;
+  related: boolean;
+  onHoverConductor: (id: string | null) => void;
 }) {
   const deps = dependencyStates(state, t);
   const children = t.kind === "conductor" ? childrenOf(state, t.id) : [];
-  const childDone = children.filter((c) => c.status === "done").length;
+  const progress = t.kind === "conductor" ? progressOf(children) : null;
+  const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
   const ready = isReady(t);
   const project = state.projects[t.projectId];
@@ -197,8 +224,11 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dropBefore ? "drop-before" : ""}`}
+      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dropBefore ? "drop-before" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${t.kind === "conductor" ? "conductor-card" : ""}`}
       data-key={t.key}
+      data-parent={parent?.key}
+      onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
+      onMouseLeave={t.kind === "conductor" ? () => onHoverConductor(null) : undefined}
       draggable
       onDragStart={(e) => {
         onDragStart(t.key);
@@ -212,9 +242,8 @@ const TicketCard = memo(function TicketCard({
       <div className="card-top">
         <span className="card-key">{t.key}</span>
         {parent && (
-          <span className="card-parent" title={`Part of ${parent.key}`}>
-            <Icon name="chevronLeft" size={10} />
-            {parent.key}
+          <span className="card-parent-chip" title={`Part of ${parent.key} · ${parent.title}`}>
+            ↳ {parent.key}
           </span>
         )}
         <div className="grow" />
@@ -249,6 +278,8 @@ const TicketCard = memo(function TicketCard({
       )}
       {summary && t.status !== "blocked" && !t.pendingApproval && <div className="card-summary">{plainText(summary.body)}</div>}
 
+      {progress && <ConductorRollup progress={progress} />}
+
       {deps.length > 0 && (
         <div className="card-chips">
           {deps.map((d) => (
@@ -264,12 +295,7 @@ const TicketCard = memo(function TicketCard({
         {showProject && project && <span className="project-key sm">{project.key.slice(0, 3)}</span>}
         <DriverBadge driver={t.driver} />
         <ModelBadge model={t.model} driver={t.driver} />
-        <KindBadge ticket={t} childCount={children.length} />
-        {t.kind === "conductor" && children.length > 0 && (
-          <span className="card-progress" title={`${childDone}/${children.length} children done`}>
-            <span style={{ width: `${(childDone / children.length) * 100}%` }} />
-          </span>
-        )}
+        <KindBadge ticket={t} />
         <div className="grow" />
         {ready && (
           <span className="badge badge-green">
@@ -282,9 +308,9 @@ const TicketCard = memo(function TicketCard({
   );
 }, cardPropsEqual);
 
-type CardProps = { ticket: Ticket; state: State; selected: boolean; showProject: boolean; dropBefore: boolean };
+type CardProps = { ticket: Ticket; state: State; selected: boolean; showProject: boolean; dropBefore: boolean; related: boolean };
 function cardPropsEqual(a: CardProps, b: CardProps) {
-  if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.dropBefore !== b.dropBefore) return false;
+  if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.dropBefore !== b.dropBefore || a.related !== b.related) return false;
   const s1 = a.state;
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
