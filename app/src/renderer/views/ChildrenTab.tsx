@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -17,8 +17,6 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
-  const project = state.projects[ticket.projectId];
-  const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? ticket.driver;
 
   // The store backfills summaries for moving tickets; fill in the rest (older done children).
   const fetched = useRef(new Set<string>());
@@ -72,7 +70,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
           </div>
           <div className="children-list card-surface">
             {g.tickets.map((c) => (
-              <ChildRow key={c.id} child={c} defaultDriver={defaultDriver} onOpen={open} />
+              <ChildRow key={c.id} child={c} onOpen={open} />
             ))}
           </div>
         </section>
@@ -81,13 +79,13 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function ChildRow({ child: c, defaultDriver, onOpen }: { child: Ticket; defaultDriver: string; onOpen: (key: string) => void }) {
+function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) => void }) {
   const { state } = useStore();
   const deps = depStates(state.tickets, c, state.keyAliases);
   const summary = latestSummary(state, c.sessionId);
   const attention = attentionOf(c);
   const model = modelOf(c);
-  const showDriver = c.driver !== defaultDriver;
+  const showDriver = hasCustomDriver(state, c);
   const quietDone = c.status === "done";
 
   return (

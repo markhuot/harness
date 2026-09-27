@@ -11,6 +11,7 @@ import {
   dependentsOf,
   driverLabel,
   groupChildren,
+  hasCustomDriver,
   inheritedModel,
   latestSummary,
   plainText,
@@ -100,8 +101,6 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
-  const project = state.projects[ticket.projectId];
-  const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? ticket.driver;
 
   const fetched = useRef(new Set<string>());
   useEffect(() => {
@@ -159,7 +158,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
           </View>
           <Card>
             {g.tickets.map((ch, i) => (
-              <ChildRow key={ch.id} child={ch} defaultDriver={defaultDriver} onOpen={open} first={i === 0} />
+              <ChildRow key={ch.id} child={ch} onOpen={open} first={i === 0} />
             ))}
           </Card>
         </View>
@@ -168,13 +167,13 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function ChildRow({ child: ch, defaultDriver, onOpen, first }: { child: Ticket; defaultDriver: string; onOpen: (key: string) => void; first: boolean }) {
+function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: string) => void; first: boolean }) {
   const { state } = useStore();
   const c = useColors();
   const deps = dependencyStates(state, ch);
   const summary = latestSummary(state, ch.sessionId);
   const attention = attentionOf(ch);
-  const showDriver = ch.driver !== defaultDriver;
+  const showDriver = hasCustomDriver(state, ch);
   return (
     <Pressable
       onPress={() => onOpen(ch.key)}
