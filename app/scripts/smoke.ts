@@ -251,7 +251,7 @@ try {
   await Bun.sleep(300);
   const afterReload = await until("theme after reload", async () => {
     const t = await themeNow();
-    return t.attr && t;
+    return t.attr ? t : null;
   });
   check("theme preference survives a reload", afterReload.attr === "dark" && afterReload.pref === "dark", JSON.stringify(afterReload));
   await until("picker after reload", () => exists("[data-theme-option=system]"));
