@@ -136,7 +136,7 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   check("narrow panel hides the tree behind a toggle", await frame.js<boolean>(`document.getElementById("app").classList.contains("narrow")`));
 
   // Expanded detail panel: the tree sits beside the diffs.
-  await app.js(`document.querySelector('.detail-titlebar button[title="Expand"]')?.click()`);
+  await app.js(`document.querySelector('.detail-titlebar button[title^="Expand"]')?.click()`);
   const wide = await until("plugin goes wide", () => frame.js<boolean>(`!document.getElementById("app").classList.contains("narrow")`), 5000).catch(() => false);
   check("expanded panel shows the file tree beside the diffs", !!wide);
   await Bun.sleep(800);
