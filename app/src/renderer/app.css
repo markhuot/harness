@@ -64,7 +64,7 @@
 /* ------------------------------------------------------------------ sidebar */
 
 .sidebar {
-  width: var(--sidebar-w);
+  width: var(--sidebar-open-w);
   flex: none;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
@@ -398,7 +398,9 @@
 /* ------------------------------------------------------------------ ticket detail */
 
 .detail {
-  width: clamp(440px, 40vw, 680px);
+  /* The dragged width (--detail-width, see panes.css), else a responsive default; always ≥360px,
+     ≤80% of the window, and leaving the board at least 320px. */
+  width: clamp(360px, var(--detail-width, clamp(440px, 40vw, 680px)), min(80vw, 100% - 320px));
   flex: none;
   border-left: 1px solid var(--border);
   background: var(--bg-elev);

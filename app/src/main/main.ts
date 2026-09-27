@@ -276,6 +276,10 @@ function buildMenu() {
     {
       label: "View",
       submenu: [
+        // ⌃⌘S is the macOS standard (Finder, Mail, Notes' HIG entry); ⌘0 is already Actual Size.
+        // The renderer handles the key itself and reports the state back for the checkmark.
+        { id: "toggle-sidebar", label: "Show Sidebar", type: "checkbox", checked: true, accelerator: "Ctrl+Cmd+S", click: () => sendMenu("toggle-sidebar") },
+        { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
         { role: "toggleDevTools" },
@@ -345,6 +349,10 @@ ipcMain.on("harness:getThemeSync", (e) => {
 ipcMain.handle("harness:setTheme", (_e, pref: unknown) => {
   if (isThemePreference(pref)) setThemePreference(pref);
   return themeState();
+});
+ipcMain.on("harness:sidebarVisible", (_e, visible: unknown) => {
+  const item = Menu.getApplicationMenu()?.getMenuItemById("toggle-sidebar");
+  if (item && typeof visible === "boolean") item.checked = visible;
 });
 ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
   if (typeof url === "string" && /^(https?|mailto):/.test(url)) await shell.openExternal(url);

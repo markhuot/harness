@@ -23,6 +23,7 @@ const bridge: HarnessBridge = {
     ipcRenderer.on("theme", listener);
     return () => ipcRenderer.removeListener("theme", listener);
   },
+  setSidebarVisible: (visible) => ipcRenderer.send("harness:sidebarVisible", visible),
   platform: process.platform,
 };
 

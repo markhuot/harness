@@ -411,6 +411,10 @@ try {
     check("conductor card rolls up progress and what needs you", rollup === "2/8 done2 need you", rollup);
     const parentChip = await js<string>(`document.querySelector('.card[data-key="HARNESS-6"] .card-parent-chip')?.textContent ?? ""`);
     check("child card carries a parent chip", parentChip === "↳ HARNESS-1", parentChip);
+    // The Conductor badge and rollup carry it; the card has no accent edge.
+    const edge = await js<{ left: string; top: string; lc: string; tc: string }>(`(() => { const cs = getComputedStyle(document.querySelector('.card[data-key="HARNESS-1"]'));
+      return { left: cs.borderLeftWidth, top: cs.borderTopWidth, lc: cs.borderLeftColor, tc: cs.borderTopColor }; })()`);
+    check("conductor card has no left accent border", edge.left === edge.top && edge.lc === edge.tc, JSON.stringify(edge));
 
     // Toggle: hides quiet children only, persists across a reload, and turns back off.
     const cardKeys = () => js<string[]>(`[...document.querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
@@ -439,6 +443,136 @@ try {
       return k.includes("HARNESS-6") && k;
     });
     check("toggling off shows every child again", ["HARNESS-2", "HARNESS-5", "HARNESS-6"].every((k) => shown.includes(k)), shown.join(","));
+  }
+
+  // 6c. Layout: collapsible + resizable sidebar, resizable ticket panel; all persisted.
+  {
+    await js(`location.hash = "#/board/all"`);
+    await until("board", () => exists(".board-pane .view-header"));
+    const width = (sel: string) => js<number>(`Math.round(document.querySelector(${JSON.stringify(sel)})?.getBoundingClientRect().width ?? -1)`);
+    const stored = () => js<Record<string, unknown>>(`JSON.parse(localStorage.getItem("harness.layout") ?? "{}")`);
+    const reload = async (ready: string) => {
+      await js(`location.reload()`);
+      await Bun.sleep(300);
+      await until("reloaded", () => exists(ready), 10000);
+      await Bun.sleep(300); // let the width transition settle
+    };
+    const mouse = (type: string, x: number, y: number, clickCount = 1) => cdp("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount });
+    /** Real pointer drag of a handle by dx, in steps (so it crosses whatever is under the path). */
+    const drag = async (sel: string, dx: number, during?: () => Promise<void>) => {
+      const r = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+      await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.x, y: r.y });
+      await mouse("mousePressed", r.x, r.y);
+      for (let i = 1; i <= 6; i++) await mouse("mouseMoved", r.x + (dx * i) / 6, r.y);
+      await during?.();
+      await mouse("mouseReleased", r.x + dx, r.y);
+      await Bun.sleep(50);
+    };
+    const dblclick = async (sel: string) => {
+      const r = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+      await mouse("mousePressed", r.x, r.y, 1);
+      await mouse("mouseReleased", r.x, r.y, 1);
+      await mouse("mousePressed", r.x, r.y, 2);
+      await mouse("mouseReleased", r.x, r.y, 2);
+      await Bun.sleep(300);
+    };
+    const shortcut = () => app!.key("s", "KeyS", 83, 2 | 4); // ⌃⌘S (Ctrl=2, Meta=4)
+
+    // Sidebar: collapse with the button; the board header clears the traffic lights and stays a drag region.
+    const open = await width(".sidebar");
+    await js(`document.querySelector("[data-testid=sidebar-toggle]").click()`);
+    const collapsed = await until("sidebar collapsed", async () => (await width(".sidebar")) === 0 && (await js<boolean>(`document.querySelector(".sidebar").inert`)));
+    const head = await js<{ region: string; expanded: string | null }>(`(() => { const cs = getComputedStyle(document.querySelector(".board-pane > .view-header"));
+      return { region: cs.getPropertyValue("-webkit-app-region"), expanded: document.querySelector("[data-testid=sidebar-toggle]").getAttribute("aria-expanded") }; })()`);
+    await Bun.sleep(250);
+    const headPad = await js<number>(`parseFloat(getComputedStyle(document.querySelector(".board-pane > .view-header")).paddingLeft)`);
+    const toggleRight = await js<number>(`document.querySelector("[data-testid=sidebar-toggle]").getBoundingClientRect().right`);
+    check("toggle button collapses the sidebar (inert, aria-expanded=false)", open > 150 && collapsed && head.expanded === "false", `${open}px → 0`);
+    check("collapsed board header clears the traffic lights + toggle and stays draggable", headPad > toggleRight && toggleRight > 90 && head.region === "drag", `${headPad}px pad, toggle ends ${toggleRight}px, region ${head.region}`);
+    check("collapsed state is persisted", (await stored()).sidebarCollapsed === true);
+    await reload(".board-pane .view-header");
+    check("collapsed sidebar survives a reload", (await width(".sidebar")) === 0);
+    await shortcut();
+    const back = await until("sidebar expanded by ⌃⌘S", async () => (await width(".sidebar")) === open);
+    check("⌃⌘S expands it again", back === true && (await stored()).sidebarCollapsed === false);
+    await shortcut();
+    check("⌃⌘S collapses it", !!(await until("collapsed by shortcut", async () => (await width(".sidebar")) === 0)));
+    await shortcut();
+    await until("expanded", async () => (await width(".sidebar")) === open);
+
+    // Sidebar drag-resize, persistence, keyboard, double-click reset, clamping.
+    await drag("[data-testid=sidebar-resizer]", 60);
+    check("dragging the sidebar edge widens it", (await width(".sidebar")) === open + 60, `${open} → ${await width(".sidebar")}`);
+    check("sidebar width is persisted", (await stored()).sidebarWidth === open + 60, JSON.stringify(await stored()));
+    await reload(".board-pane .view-header");
+    check("sidebar width survives a reload", (await width(".sidebar")) === open + 60);
+    await drag("[data-testid=sidebar-resizer]", 1000);
+    check("sidebar width stops at its maximum", (await width(".sidebar")) === 400, String(await width(".sidebar")));
+    await js(`document.querySelector("[data-testid=sidebar-resizer]").focus()`);
+    await app!.key("ArrowLeft", "ArrowLeft", 37);
+    // Keyboard and reset changes animate (drags don't): wait for the width to land.
+    const settled = (sel: string, w: number) => until(`${sel} at ${w}px`, async () => (await width(sel)) === w).catch(() => false);
+    const keyed = await settled(".sidebar", 384);
+    const aria = await until("aria-valuenow", () => js<string>(`document.querySelector("[data-testid=sidebar-resizer]").getAttribute("aria-valuenow")`).then((v) => v === "384" && v)).catch(() => "");
+    check("arrow keys resize the focused handle (role=separator, aria-valuenow)", keyed && aria === "384", `${await width(".sidebar")} / ${aria}`);
+    await dblclick("[data-testid=sidebar-resizer]");
+    check("double-clicking the sidebar handle resets its width", (await settled(".sidebar", open)) && (await stored()).sidebarWidth === null, String(await width(".sidebar")));
+
+    // Ticket panel: drag its left edge across an iframe (iframes swallow pointer events without the overlay).
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-4"`);
+    await until("detail", () => exists("[data-testid=detail-resizer]"));
+    await Bun.sleep(300);
+    const def = await width(".detail");
+    await js(`(() => { const f = document.createElement("iframe"); f.id = "smoke-iframe"; f.srcdoc = "<body style='margin:0;background:#f0f'>";
+      const x = document.querySelector("[data-testid=detail-resizer]").getBoundingClientRect().x;
+      Object.assign(f.style, { position: "fixed", top: "0", left: "0", width: (x - 10) + "px", height: "100vh", border: "0", zIndex: "15", opacity: "0.01" });
+      document.body.appendChild(f); })()`);
+    let overlayOnTop = false;
+    await drag("[data-testid=detail-resizer]", -200, async () => {
+      overlayOnTop = await js<boolean>(`document.elementFromPoint(40, 300)?.dataset.testid === "resize-overlay"`);
+    });
+    const grown = await width(".detail");
+    check("dragging over an iframe still resizes the ticket panel", grown === def + 200, `${def} → ${grown}`);
+    check("a full-window overlay covers iframes mid-drag and goes away after", overlayOnTop && !(await exists(".resize-overlay")));
+    await js(`document.getElementById("smoke-iframe")?.remove()`);
+    check("ticket panel width is persisted", (await stored()).detailWidth === grown);
+    const bounds = await js<{ max: number }>(`(() => ({ max: Math.floor(Math.min(innerWidth * 0.8, document.querySelector(".board-layout").clientWidth - 320)) }))()`);
+    await drag("[data-testid=detail-resizer]", -3000);
+    const maxed = await width(".detail");
+    check("ticket panel stops at its maximum and the board keeps ≥320px", maxed === bounds.max && (await width(".board-pane")) >= 319, `${maxed} vs ${bounds.max}, board ${await width(".board-pane")}`);
+    await drag("[data-testid=detail-resizer]", 3000);
+    check("ticket panel stops at 360px", (await width(".detail")) === 360, String(await width(".detail")));
+    await drag("[data-testid=detail-resizer]", -(grown - 360));
+    await reload("[data-testid=detail-resizer]");
+    check("ticket panel width survives a reload", (await width(".detail")) === grown, String(await width(".detail")));
+    await js(`document.querySelector("[data-testid=detail-resizer]").focus()`);
+    await app!.key("ArrowLeft", "ArrowLeft", 37);
+    check("ArrowLeft on the panel's handle widens it", (await width(".detail")) === grown + 16);
+    await app!.key("ArrowRight", "ArrowRight", 39);
+
+    // Expand = full width; restore = the dragged width.
+    await js(`document.querySelector(".detail-titlebar button[title^='Expand']").click()`);
+    await until("wide", () => exists(".detail.wide"));
+    const full = await width(".detail");
+    check("Expand takes the full width and hides the handle", full === (await width(".main")) && !(await exists("[data-testid=detail-resizer]")), `${full}`);
+    await js(`document.querySelector(".detail-titlebar button[title='Show the board']").click()`);
+    await until("not wide", async () => !(await exists(".detail.wide")));
+    check("restoring from Expand returns to the dragged width", (await width(".detail")) === grown, String(await width(".detail")));
+    await dblclick("[data-testid=detail-resizer]");
+    check("double-clicking the panel handle resets it", (await width(".detail")) === def && (await stored()).detailWidth === null, `${await width(".detail")} vs ${def}`);
+
+    // The browser canvas follows the panel: the service gets the new viewport size.
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
+    await until("browser stage", () => exists(".browser-canvas"));
+    await Bun.sleep(600);
+    await drag("[data-testid=detail-resizer]", -120);
+    const stageW = await until("stage resized", async () => {
+      const w = await js<number>(`Math.round(document.querySelector(".browser-stage").clientWidth)`);
+      return inputs.some((l) => l.includes('"type":"resize"') && l.includes(`"width":${w}`)) && w;
+    }).catch(() => 0);
+    check("dragging the panel resizes the browser viewport", stageW > 0, String(stageW));
+    await dblclick("[data-testid=detail-resizer]");
+    await js(`location.hash = "#/board/all"`);
   }
 
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.

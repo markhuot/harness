@@ -8,6 +8,8 @@ import { InboxView } from "./views/Inbox";
 import { SettingsView } from "./views/Settings";
 import { NewSessionModal } from "./views/NewSession";
 import { ProjectSettingsView } from "./views/ProjectSettings";
+import { ResizeHandle } from "./components/ResizeHandle";
+import { sidebarBounds, toggleSidebar, updateLayout, useLayout } from "./state/layout";
 
 interface Toast {
   id: number;
@@ -125,8 +127,18 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
   );
 }
 
+/** ⌃⌘S (View → Show Sidebar). The menu shows it; the renderer handles the key so it's testable. */
+const isSidebarShortcut = (e: KeyboardEvent) => e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "KeyS";
+
 function Shell() {
   const { route, state } = useStore();
+  const layout = useLayout();
+  const appRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const setSidebarVar = (w: number | null) => {
+    if (w === null) appRef.current?.style.removeProperty("--sidebar-width");
+    else appRef.current?.style.setProperty("--sidebar-width", `${w}px`);
+  };
   // false = closed; otherwise open, optionally preselecting a project ("New session in X").
   const [composer, setComposerState] = useState<false | { projectId: string | null }>(false);
   const setComposer = useCallback((open: boolean, projectId: string | null = null) => setComposerState(open ? { projectId } : false), []);
@@ -140,14 +152,24 @@ function Shell() {
     };
     compose();
     addEventListener("hashchange", compose);
+    // A keypress the renderer handled shouldn't also arrive as the menu command.
+    let keyToggledAt = 0;
     const off = window.harness?.onMenu((cmd) => {
-      if (cmd === "new-session") setComposer(true);
+      if (cmd === "toggle-sidebar") {
+        if (Date.now() - keyToggledAt > 400) toggleSidebar();
+      } else if (cmd === "new-session") setComposer(true);
       else if (cmd === "settings") location.hash = "#/settings";
       else if (cmd === "inbox") location.hash = "#/inbox";
       else if (cmd === "board") location.hash = "#/board/all";
     });
     // Outside Electron the menu accelerator doesn't exist; handle ⌘N here.
     const key = (e: KeyboardEvent) => {
+      if (isSidebarShortcut(e)) {
+        e.preventDefault();
+        keyToggledAt = Date.now();
+        toggleSidebar();
+        return;
+      }
       if (!window.harness && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
         e.preventDefault();
         setComposer(true);
@@ -162,8 +184,41 @@ function Shell() {
   }, []);
 
   return (
-    <div className="app">
-      <Sidebar onNewSession={(projectId) => setComposer(true, projectId ?? null)} />
+    <div
+      ref={appRef}
+      className={`app ${layout.sidebarCollapsed ? "sidebar-collapsed" : ""} ${window.harness?.platform === "darwin" ? "has-traffic-lights" : ""}`}
+      style={layout.sidebarWidth ? ({ "--sidebar-width": `${layout.sidebarWidth}px` } as React.CSSProperties) : undefined}
+    >
+      <button
+        className="btn btn-ghost btn-icon sidebar-toggle"
+        data-testid="sidebar-toggle"
+        aria-controls="app-sidebar"
+        aria-expanded={!layout.sidebarCollapsed}
+        aria-label={layout.sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        title={`${layout.sidebarCollapsed ? "Show" : "Hide"} sidebar (⌃⌘S)`}
+        onClick={toggleSidebar}
+      >
+        <Icon name="sidebar" />
+      </button>
+      <div className="sidebar-slot">
+        <Sidebar ref={sidebarRef} collapsed={layout.sidebarCollapsed} onNewSession={(projectId) => setComposer(true, projectId ?? null)} />
+        {!layout.sidebarCollapsed && (
+          <ResizeHandle
+            className="sidebar-resizer"
+            testId="sidebar-resizer"
+            edge="right"
+            label="Resize sidebar"
+            target={sidebarRef}
+            bounds={sidebarBounds}
+            onPreview={setSidebarVar}
+            onCommit={(w) => updateLayout({ sidebarWidth: w })}
+            onReset={() => {
+              setSidebarVar(null);
+              updateLayout({ sidebarWidth: null });
+            }}
+          />
+        )}
+      </div>
       <main className="main">
         {!state.ready ? (
           <div className="empty" style={{ flex: 1 }}>

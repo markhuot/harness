@@ -30,6 +30,10 @@ const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!
 const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
 
 const hideChildren = `document.querySelector("[data-testid=hide-children]")?.click()`;
+const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
+// The layout store follows storage events (another window, or this).
+const layout = (l: object) =>
+  `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -50,6 +54,9 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
   { name: "board-conductor", route: `#/board/${harness}` },
   { name: "board-hidden", route: `#/board/${harness}`, setup: hideChildren },
+  { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
+  { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
+  { name: "panel-resized", route: "#/board/all/ticket/HARNESS-1/children", setup: layout({ sidebarCollapsed: false, sidebarWidth: 280, detailWidth: 860 }) },
 ];
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");

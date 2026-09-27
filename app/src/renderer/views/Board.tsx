@@ -109,9 +109,9 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
             <Icon name="hash" size={12} />
             <input placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={onNewSession}>
+          <button className="btn btn-primary board-new" onClick={onNewSession} title={`New session (${MOD}N)`} aria-label="New session">
             <Icon name="plus" strokeWidth={2.25} />
-            New session
+            <span className="board-new-label">New session</span>
             <span className="kbd">{MOD}N</span>
           </button>
         </header>

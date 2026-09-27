@@ -21,7 +21,7 @@ export interface ConnectionError {
 
 export type ConnectionResult = Connection | ConnectionError;
 
-export type MenuCommand = "new-session" | "settings" | "inbox" | "board";
+export type MenuCommand = "new-session" | "settings" | "inbox" | "board" | "toggle-sidebar";
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =
@@ -50,5 +50,7 @@ export interface HarnessBridge {
   getTheme(): ThemeState;
   setTheme(preference: ThemePreference): Promise<ThemeState>;
   onThemeChange(cb: (state: ThemeState) => void): () => void;
+  /** Keep View → Show Sidebar's checkmark in step with the renderer's sidebar */
+  setSidebarVisible(visible: boolean): void;
   platform: string;
 }

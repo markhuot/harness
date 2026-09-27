@@ -13,6 +13,8 @@ import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { ParentCrumb } from "../components/Conductor";
+import { ResizeHandle } from "../components/ResizeHandle";
+import { detailBounds, updateLayout, useLayout } from "../state/layout";
 
 
 
@@ -29,6 +31,13 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
   const { state, client, dispatch, epoch, route, navigate } = useStore();
   const [missing, setMissing] = useState(false);
   const [wide, setWide] = useState(readWide);
+  // Expand = the full width; restoring goes back to the dragged width (layout.detailWidth).
+  const { detailWidth } = useLayout();
+  const panel = useRef<HTMLElement>(null);
+  const setWidthVar = (w: number | null) => {
+    if (w === null) panel.current?.style.removeProperty("--detail-width");
+    else panel.current?.style.setProperty("--detail-width", `${w}px`);
+  };
   const toggleWide = () => {
     setWide((w) => {
       try {
@@ -101,7 +110,27 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
 
   return (
-    <aside className={`detail ${wide ? "wide" : ""}`}>
+    <aside
+      ref={panel}
+      className={`detail ${wide ? "wide" : ""}`}
+      style={detailWidth ? ({ "--detail-width": `${detailWidth}px` } as React.CSSProperties) : undefined}
+    >
+      {!wide && (
+        <ResizeHandle
+          className="detail-resizer"
+          testId="detail-resizer"
+          edge="left"
+          label="Resize ticket panel"
+          target={panel}
+          bounds={() => detailBounds(window.innerWidth, panel.current?.parentElement?.clientWidth ?? window.innerWidth)}
+          onPreview={setWidthVar}
+          onCommit={(w) => updateLayout({ detailWidth: w })}
+          onReset={() => {
+            setWidthVar(null);
+            updateLayout({ detailWidth: null });
+          }}
+        />
+      )}
       <DetailHeader ticket={ticket} onClose={close} wide={wide} onToggleWide={toggleWide} />
       <nav className="tabs">
         {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
@@ -198,7 +227,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
             </>
           )}
         </MenuButton>
-        <button className="btn btn-ghost btn-icon" onClick={onToggleWide} title={wide ? "Show the board" : "Expand"}>
+        <button className="btn btn-ghost btn-icon" onClick={onToggleWide} title={wide ? "Show the board" : "Expand to full width"}>
           <Icon name={wide ? "sidebar" : "expand"} />
         </button>
         <button className="btn btn-ghost btn-icon" onClick={onClose} title="Close (Esc)">
