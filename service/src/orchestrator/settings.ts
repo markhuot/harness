@@ -1,5 +1,5 @@
-import type { PublicSettings, Settings } from "@harness/shared";
-import { CLASSIFIER_BACKENDS, PERMISSION_MODES } from "@harness/shared";
+import type { ListenSetting, PublicSettings, Settings } from "@harness/shared";
+import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODES } from "@harness/shared";
 import { badRequest } from "./errors";
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultModels: {},
   reviewModels: {},
   anthropicApiKey: null,
+  listen: { mode: "localhost" },
 };
 
 /**
@@ -84,6 +85,9 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
         if (value !== null && typeof value !== "string") throw badRequest("anthropicApiKey must be a string or null");
         out.anthropicApiKey = value ? (value as string).trim() || null : null;
         break;
+      case "listen":
+        out.listen = validateListen(value);
+        break;
       case "anthropicApiKeySet":
         break; // echoed back from PublicSettings; ignore
       default:
@@ -91,6 +95,20 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
     }
   }
   return out;
+}
+
+const HOSTNAME = /^[A-Za-z0-9.:%_-]{1,253}$/;
+
+/** { mode, host? }: host is required for "custom" (a hostname or IP, no scheme/port) and dropped otherwise. */
+export function validateListen(value: unknown): ListenSetting {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest("listen must be an object { mode, host? }");
+  const { mode, host } = value as { mode?: unknown; host?: unknown };
+  if (!(LISTEN_MODES as readonly unknown[]).includes(mode)) throw badRequest(`listen.mode must be one of ${LISTEN_MODES.join(", ")}`);
+  if (mode !== "custom") return { mode: mode as ListenSetting["mode"] };
+  if (typeof host !== "string" || !host.trim()) throw badRequest("listen.host is required for custom mode");
+  const h = host.trim().replace(/^\[(.*)\]$/, "$1");
+  if (!HOSTNAME.test(h)) throw badRequest("listen.host must be a hostname or IP address (no scheme or port)");
+  return { mode: "custom", host: h };
 }
 
 const MODEL_ID = /^[^\s]{1,200}$/;

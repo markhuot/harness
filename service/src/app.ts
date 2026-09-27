@@ -1,14 +1,15 @@
 // Composition root: boots store, orchestrator and the HTTP/WS server.
 
-import type { Server } from "bun";
 import type { Settings } from "@harness/shared";
-import { ensureHome, ensureToken, type HarnessPaths } from "./config";
+import { ensureHome, ensureToken, rotateToken, type HarnessPaths } from "./config";
 import { openDb } from "./db";
 import { Store } from "./store";
 import { EventBus } from "./events";
 import { Orchestrator, type OrchestratorOptions } from "./orchestrator/orchestrator";
 import { resolveSettings } from "./orchestrator/settings";
-import { createHttpServer, type McpHandler } from "./api/http";
+import { createHttpHandler, type McpHandler, type TokenStore } from "./api/http";
+import { DEFAULT_SETTINGS } from "./orchestrator/settings";
+import { NetworkManager, parseHostOverride, type NetworkDeps } from "./api/network";
 import type { WsData } from "./api/ws";
 import type { Driver } from "./drivers/types";
 import type { BrowserService } from "./browser/types";
@@ -21,7 +22,15 @@ export const BUILTIN_PLUGINS_DIR = resolve(import.meta.dir, "..", "..", "plugins
 export interface CreateHarnessOptions {
   home: string;
   port: number;
-  hostname?: string;
+  /** HARNESS_HOST: a listen mode keyword or host that overrides settings.listen (tests / dev). */
+  hostname?: string | null;
+  /** Tailscale lookup (tests inject one); defaults to the tailscale CLI. */
+  tailscale?: NetworkDeps["tailscale"];
+  /** Address helpers for custom-host validation (tests). */
+  localAddresses?: NetworkDeps["localAddresses"];
+  resolveHost?: NetworkDeps["resolveHost"];
+  /** Retry interval for the configured listen mode after a boot fallback (default 30s). */
+  networkRetryMs?: number;
   drivers?: Driver[];
   browser?: BrowserService;
   /** Override tool selection (tests); defaults to tools/index toolsForRun */
@@ -36,19 +45,24 @@ export interface CreateHarnessOptions {
 export interface Harness {
   url: string;
   port: number;
-  token: string;
+  /** The current bearer token (changes on POST /token/rotate). */
+  readonly token: string;
   paths: HarnessPaths;
   store: Store;
   bus: EventBus;
   orchestrator: Orchestrator;
-  server: Server<WsData>;
+  network: NetworkManager;
   plugins: PluginHost;
   stop(): Promise<void>;
 }
 
 export async function createHarness(opts: CreateHarnessOptions): Promise<Harness> {
   const paths = ensureHome(opts.home);
-  const token = ensureToken(paths);
+  let token = ensureToken(paths);
+  const tokens: TokenStore = {
+    get: () => token,
+    rotate: () => (token = rotateToken(paths)),
+  };
   const db = openDb(paths.dbPath);
   const store = new Store(db);
   const bus = new EventBus();
@@ -88,27 +102,51 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   });
   await plugins.load();
 
-  const server = createHttpServer({ orchestrator, bus, browser, token, port: opts.port, hostname: opts.hostname, mcp, plugins });
-  const port = server.port!;
-  baseUrl = `http://127.0.0.1:${port}`;
+  const log = opts.log ?? ((m: string) => console.log(m));
+  const network = new NetworkManager({
+    port: opts.port,
+    listen: () => settings().listen ?? DEFAULT_SETTINGS.listen!,
+    override: parseHostOverride(opts.hostname),
+    overrideRaw: opts.hostname ?? null,
+    tailscale: opts.tailscale,
+    localAddresses: opts.localAddresses,
+    resolveHost: opts.resolveHost,
+    retryMs: opts.networkRetryMs,
+    log,
+    serve: (hostname, port) => Bun.serve<WsData>({ hostname, port, idleTimeout: 255, websocket: http.websocket, fetch: http.fetch as never }),
+  });
+  const http = createHttpHandler({ orchestrator, bus, browser, tokens, mcp, plugins, network });
+  try {
+    await network.boot();
+  } catch (err) {
+    await orchestrator.stop();
+    await plugins.stop();
+    if (ownsBrowser) await browser.shutdown().catch(() => {});
+    db.close();
+    throw err;
+  }
+  const port = network.boundPort;
+  baseUrl = network.loopbackUrl;
 
   let stopped = false;
   return {
     url: baseUrl,
     port,
-    token,
+    get token() {
+      return token;
+    },
     paths,
     store,
     bus,
     orchestrator,
-    server,
+    network,
     plugins,
     async stop() {
       if (stopped) return;
       stopped = true;
       await orchestrator.stop();
       await plugins.stop();
-      server.stop(true);
+      network.stop();
       if (ownsBrowser) await browser.shutdown().catch(() => {});
       db.close();
     },

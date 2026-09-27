@@ -9,6 +9,15 @@ import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
 import type { PluginHost } from "../plugins/host";
+import { isLoopback, type NetworkManager } from "./network";
+import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
+
+/** The bearer token, rotatable at runtime (POST /token/rotate). */
+export interface TokenStore {
+  get(): string;
+  /** Replace the token (persisted); the old one stops working immediately. */
+  rotate(): string;
+}
 
 export type McpHandler = (req: Request, run: ReturnType<Orchestrator["mcpRun"]>) => Promise<Response>;
 
@@ -16,11 +25,18 @@ export interface HttpServerOptions {
   orchestrator: Orchestrator;
   bus: EventBus;
   browser: BrowserService;
-  token: string;
-  port: number;
-  hostname?: string;
+  tokens: TokenStore;
   mcp: McpHandler;
   plugins?: PluginHost;
+  /** Listen addresses; enables /network, /pairing and live rebinds on PATCH /settings { listen }. */
+  network?: NetworkManager;
+}
+
+export interface HttpHandler {
+  fetch(req: Request, server: Server<WsData>): Promise<Response | undefined>;
+  websocket: ReturnType<typeof createWsHandlers>["websocket"];
+  /** Close every open WebSocket (after a token rotation). */
+  closeSockets(): void;
 }
 
 type Params = Record<string, string>;
@@ -92,7 +108,16 @@ function bearer(req: Request): string | null {
   return m ? m[1]!.trim() : null;
 }
 
-export function buildRoutes(o: Orchestrator, browser: BrowserService, plugins?: PluginHost): Route[] {
+export interface RouteExtras {
+  plugins?: PluginHost;
+  network?: NetworkManager;
+  tokens?: TokenStore;
+  /** Called after the token rotates (closes sockets authenticated with the old one). */
+  onRotate?: () => void;
+}
+
+export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: RouteExtras = {}): Route[] {
+  const { plugins, network, tokens } = extras;
   const routes: Route[] = [];
   const add = (method: string, path: string, handler: Handler) => routes.push({ method, ...compile(path), handler });
 
@@ -152,7 +177,33 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, plugins?: 
   add("POST", "/drivers/:id/login", ({ params }) => o.loginDriver(params.id!));
   add("GET", "/drivers/:id/models", ({ params, url }) => o.listModels(params.id!, { refresh: /^(1|true)$/.test(url.searchParams.get("refresh") ?? "") }));
   add("GET", "/settings", () => o.publicSettings());
-  add("PATCH", "/settings", async ({ body }) => o.updateSettings(await body()));
+  add("PATCH", "/settings", async ({ body }) => {
+    const b = await body();
+    if (b && typeof b === "object" && !Array.isArray(b) && "listen" in b) {
+      // Validate everything first, then rebind (409 keeps the old listeners), then persist.
+      validateSettingsPatch(b, o.driverList().map((d) => d.id));
+      const listen = validateListen(b.listen);
+      if (network) await network.apply(listen);
+      return o.updateSettings({ ...b, listen });
+    }
+    return o.updateSettings(b);
+  });
+
+  // Network, pairing, token (DESIGN.md "Network")
+  add("GET", "/network", async () => {
+    if (!network) throw new HarnessError(404, "Network status isn't available");
+    return network.status();
+  });
+  add("GET", "/pairing", async () => {
+    if (!network || !tokens) throw new HarnessError(404, "Pairing isn't available");
+    return network.pairing(tokens.get());
+  });
+  add("POST", "/token/rotate", () => {
+    if (!tokens) throw new HarnessError(404, "Token rotation isn't available");
+    const token = tokens.rotate();
+    extras.onRotate?.();
+    return { token };
+  });
 
   // Browser
   add("GET", "/browser/:sessionId", ({ params }) => browser.state(o.getSession(params.sessionId!).id));
@@ -169,22 +220,36 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, plugins?: 
   return routes;
 }
 
-export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
-  const routes = buildRoutes(opts.orchestrator, opts.browser, opts.plugins);
-  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser });
+/** Is the request from this machine? (Bun reports the peer; unknown counts as remote.) */
+function fromLoopback(req: Request, server: Server<WsData>): boolean {
+  try {
+    const ip = server.requestIP(req);
+    return !!ip && isLoopback(ip.address);
+  } catch {
+    return false;
+  }
+}
 
-  return Bun.serve<WsData>({
-    port: opts.port,
-    hostname: opts.hostname ?? "127.0.0.1",
-    idleTimeout: 255,
+/** One fetch/websocket pair shared by every listener (loopback, Tailscale, custom, 0.0.0.0). */
+export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
+  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser });
+  const routes = buildRoutes(opts.orchestrator, opts.browser, {
+    plugins: opts.plugins,
+    network: opts.network,
+    tokens: opts.tokens,
+    onRotate: () => ws.closeAll(),
+  });
+
+  return {
     websocket: ws.websocket,
+    closeSockets: () => ws.closeAll(),
     async fetch(req, server) {
       const origin = allowedOrigin(req.headers.get("origin"));
       if (req.method === "OPTIONS") return preflight(origin);
       const res = await handle(req, server);
-      return res ? withCors(res, origin) : (undefined as unknown as Response);
+      return res ? withCors(res, origin) : undefined;
     },
-  });
+  };
 
   async function handle(req: Request, server: Server<WsData>): Promise<Response | undefined> {
     {
@@ -201,9 +266,11 @@ export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
 
       if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid } });
 
-      // MCP: authenticated by the run-scoped token in the path
+      // MCP: authenticated by the run-scoped token in the path. Only agents on this machine use it,
+      // so it isn't offered to other hosts even when the service listens beyond loopback.
       const mcp = /^\/mcp\/([^/]+)$/.exec(path);
       if (mcp) {
+        if (!fromLoopback(req, server)) return json({ error: "MCP is only served to this machine" }, 403);
         try {
           return await opts.mcp(req, opts.orchestrator.mcpRun(decodeURIComponent(mcp[1]!)));
         } catch (err) {
@@ -212,12 +279,13 @@ export function createHttpServer(opts: HttpServerOptions): Server<WsData> {
       }
 
       if (path === "/ws") {
-        if (!tokenMatches(url.searchParams.get("token"), opts.token)) return json({ error: "Unauthorized" }, 401);
+        if (!tokenMatches(url.searchParams.get("token"), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
         if (server.upgrade(req, { data: ws.newData() })) return undefined;
         return json({ error: "WebSocket upgrade required" }, 400);
       }
 
-      if (!tokenMatches(bearer(req), opts.token)) return json({ error: "Unauthorized" }, 401);
+      // Every other route needs the bearer token, from loopback and remote hosts alike.
+      if (!tokenMatches(bearer(req), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
 
       const pluginApi = /^\/plugins\/([^/]+)\/api(\/.*)?$/.exec(path);
       if (pluginApi) {

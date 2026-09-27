@@ -1,6 +1,6 @@
 // Runtime paths, port and the service bearer token.
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -73,6 +73,21 @@ export function ensureToken(paths: Pick<HarnessPaths, "tokenPath">): string {
   writeFileSync(paths.tokenPath, token + "\n", { mode: 0o600 });
   chmodSync(paths.tokenPath, 0o600);
   return token;
+}
+
+/** Replace the token file with a fresh random token (written 0600 to a temp file, then renamed over). */
+export function rotateToken(paths: Pick<HarnessPaths, "tokenPath">): string {
+  const token = randomBytes(32).toString("hex");
+  const tmp = `${paths.tokenPath}.${process.pid}.tmp`;
+  writeFileSync(tmp, token + "\n", { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, paths.tokenPath);
+  return token;
+}
+
+/** HARNESS_HOST (tests / dev): overrides the listen setting. */
+export function resolveHostOverride(env: Record<string, string | undefined> = process.env): string | null {
+  return env.HARNESS_HOST?.trim() || null;
 }
 
 export function readToken(paths: Pick<HarnessPaths, "tokenPath">): string | null {

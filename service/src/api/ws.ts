@@ -22,6 +22,7 @@ function send(ws: ServerWebSocket<WsData>, msg: ServerMessage) {
 
 export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService }) {
   const { bus, browser } = opts;
+  const sockets = new Set<ServerWebSocket<WsData>>();
 
   const unsubscribe = (ws: ServerWebSocket<WsData>, sessionId: string) => {
     if (!ws.data.subs.delete(sessionId)) return;
@@ -31,6 +32,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
   const websocket: WebSocketHandler<WsData> = {
     idleTimeout: 120,
     open(ws) {
+      sockets.add(ws);
       send(ws, { type: "welcome", version: VERSION });
       ws.data.off = bus.on((event: HarnessEvent) => {
         if (event.kind === "browser.frame" || event.kind === "browser.state") {
@@ -82,6 +84,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
       }
     },
     close(ws) {
+      sockets.delete(ws);
       ws.data.off?.();
       ws.data.off = null;
       for (const sid of [...ws.data.subs]) unsubscribe(ws, sid);
@@ -91,5 +94,13 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
   return {
     websocket,
     newData: (): WsData => ({ id: randomUUID(), subs: new Set(), off: null }),
+    /** Close every open socket (token rotation: they authenticated with the old token). */
+    closeAll(code = 4001, reason = "token rotated") {
+      for (const ws of [...sockets]) {
+        try {
+          ws.close(code, reason);
+        } catch {}
+      }
+    },
   };
 }
