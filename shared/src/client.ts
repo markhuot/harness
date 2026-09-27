@@ -20,6 +20,8 @@ import type {
   Summary,
   Ticket,
   TicketDetail,
+  TicketPage,
+  TicketStatus,
   TranscriptEntry,
   UpdateTicketBody,
   Watcher,
@@ -42,6 +44,14 @@ export class HarnessApiError extends Error {
 export interface HarnessClientOptions {
   baseUrl: string; // http://127.0.0.1:7717
   token: string;
+}
+
+/** `?a=1&b=2` from the defined, non-empty values (or "" when there are none). */
+function query(params: Record<string, string | number | null | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
 export class HarnessClient {
@@ -90,8 +100,27 @@ export class HarnessClient {
   }
 
   // Tickets
-  listTickets(projectId?: string) {
-    return this.request<Ticket[]>("GET", `/tickets${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`);
+  /** Every ticket (optionally one project's), or only those in `opts.status` (e.g. all but done). */
+  listTickets(projectId?: string, opts: { status?: TicketStatus[] } = {}) {
+    return this.request<Ticket[]>("GET", `/tickets${query({ projectId, status: opts.status?.length ? opts.status.join(",") : undefined })}`);
+  }
+  /**
+   * One page of a single column. done pages newest-completed first; other statuses by position.
+   * `q` narrows to tickets matching the search. Pass the previous page's nextCursor as `cursor`.
+   */
+  ticketPage(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number; cursor?: string | null }) {
+    return this.request<TicketPage>(
+      "GET",
+      `/tickets/page${query({ status: opts.status, projectId: opts.projectId, q: opts.q, limit: opts.limit, cursor: opts.cursor })}`,
+    );
+  }
+  /**
+   * Search every status: key (current or pre-rename, exact/prefix), title, description and the
+   * latest summary. Key matches rank first, then title, then the rest; newest first within a rank.
+   * An empty/whitespace `q` is a 400.
+   */
+  searchTickets(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null }) {
+    return this.request<TicketPage>("GET", `/tickets/search${query({ q: opts.q, projectId: opts.projectId, limit: opts.limit, cursor: opts.cursor })}`);
   }
   createTicket(body: CreateTicketBody) {
     return this.request<Ticket>("POST", "/tickets", body);

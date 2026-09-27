@@ -112,8 +112,25 @@ export interface Ticket {
   model: string | null;
   /** Sort order within a column */
   position: number;
+  /**
+   * When the ticket last entered done (ms). Set on the move into done, cleared (null) when it
+   * leaves. The service always sends it; it's optional here only so older fixtures and payloads
+   * still type-check. The Done column sorts by this, newest first (fall back to updatedAt).
+   */
+  completedAt?: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * One page of tickets from GET /tickets/page or GET /tickets/search. `nextCursor` is opaque:
+ * pass it back as `cursor` for the next page; null means this was the last page. `total` counts
+ * every ticket matching the filter (not just this page).
+ */
+export interface TicketPage {
+  tickets: Ticket[];
+  nextCursor: string | null;
+  total: number;
 }
 
 export interface PendingApproval {
