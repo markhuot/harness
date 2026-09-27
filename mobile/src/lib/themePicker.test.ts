@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_PREFS, normalizePrefs } from "./prefs";
-import { pickerCaption, themeOptions } from "./themePicker";
+import { pickerCaption, themeLinkPrefs, themeOptions } from "./themePicker";
 
 describe("prefs normalization", () => {
   test("a blob from before themes (appearance only) gets the Harness defaults", () => {
@@ -50,5 +50,16 @@ describe("theme picker", () => {
     expect(pickerCaption("light", prefs, false)).toBe("In use now.");
     expect(pickerCaption("dark", prefs, false)).toBe("Used when iOS is in dark mode.");
     expect(pickerCaption("dark", { ...prefs, theme: "light" }, true)).toBe("Used when Theme is Dark, or System with iOS in dark mode.");
+  });
+});
+
+describe("theme deep link", () => {
+  test("takes valid picks and appearance", () => {
+    expect(themeLinkPrefs({ darkTheme: "catppuccin-mocha", lightTheme: "rose-pine-dawn", theme: "dark" })).toEqual({ darkTheme: "catppuccin-mocha", lightTheme: "rose-pine-dawn", theme: "dark" });
+  });
+  test("drops unknown ids, wrong-appearance ids, arrays and bad appearances instead of resetting", () => {
+    expect(themeLinkPrefs({ darkTheme: "one-light", lightTheme: "nope", theme: "sepia" })).toEqual({});
+    expect(themeLinkPrefs({ darkTheme: ["dracula", "nord"] })).toEqual({});
+    expect(themeLinkPrefs({})).toEqual({});
   });
 });

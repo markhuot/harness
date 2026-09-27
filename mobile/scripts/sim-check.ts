@@ -6,11 +6,15 @@
 //   4. pairs via `simctl openurl harness://pair?…`, deep-links to every screen and saves
 //      screenshots in light and dark to mobile/build/screens/
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name]
+//   5. --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
+//      (harness://settings?darkTheme=…) and saves board-<id>.png + settings-<id>.png
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--udid=…] [--keep] [--only=name,name] [--themes=id,id]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
+import { findTheme } from "@harness/shared/themes";
 
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
@@ -22,6 +26,8 @@ const env = { ...process.env, DEVELOPER_DIR };
 const shots = join(here, "build", "screens");
 const appPath = join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const only = opt("only")?.split(",");
+const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
+for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
   const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env, stdout: "pipe", stderr: "pipe" });
@@ -250,6 +256,30 @@ try {
     ["project-settings", `harness://project/${seeded.project.id}`],
     ["connect", "harness://connect"],
   ];
+  const relaunch = async () => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+  };
+  for (const id of themeShots) {
+    const theme = findTheme(id)!;
+    await simctl("ui", udid, "appearance", theme.appearance);
+    await relaunch();
+    await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
+    await Bun.sleep(2200);
+    await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
+    await relaunch();
+    await Bun.sleep(2200);
+    const file = join(shots, `board-${id}.png`);
+    await simctl("io", udid, "screenshot", file);
+    console.log(`  ${file}`);
+  }
+  if (themeShots.length) {
+    // Back to the defaults for the light/dark pass.
+    await relaunch();
+    await openUrl(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
+    await Bun.sleep(1500);
+  }
   for (const theme of flag("interactions-only") ? [] : (["light", "dark"] as const)) {
     await simctl("ui", udid, "appearance", theme);
     for (const [name, url, wait] of screens) {

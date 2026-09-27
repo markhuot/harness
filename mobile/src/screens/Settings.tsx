@@ -2,7 +2,7 @@
 // general, models, permissions, watchers, mappings, projects.
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings } from "@harness/shared";
 import { CLASSIFIER_LABELS, inheritedModel, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
@@ -17,7 +17,7 @@ import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ThemeSwatch } from "../ui/ThemeSwatch";
-import { pickerCaption, themeOptions, themePrefKey } from "../lib/themePicker";
+import { pickerCaption, themeLinkPrefs, themeOptions, themePrefKey } from "../lib/themePicker";
 import type { Prefs } from "../lib/prefs";
 
 export function SettingsScreen() {
@@ -162,6 +162,12 @@ function NetworkSection() {
 function AppearanceSection() {
   const { prefs, setPref } = useApp();
   const t = useTheme();
+  // harness://settings?lightTheme=…&darkTheme=…&theme=… applies a shared theme setup.
+  const params = useLocalSearchParams<{ lightTheme?: string; darkTheme?: string; theme?: string }>();
+  const link = JSON.stringify(themeLinkPrefs(params));
+  useEffect(() => {
+    for (const [k, v] of Object.entries(JSON.parse(link) as Partial<Prefs>)) setPref(k as keyof Prefs, v as never);
+  }, [link, setPref]);
   // Appearance.setColorScheme pins useColorScheme to an explicit choice, so the OS side is only
   // known under System; the pickers only consult it then.
   const systemDark = t.preference === "system" && t.resolved === "dark";
