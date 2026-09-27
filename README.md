@@ -61,13 +61,24 @@ you answer.
   Inbox. Triage either dispatches the item to a local ticket keyed by the external ID
   (`FOO-123`, in the project your mappings point to) or declines it.
 
+## Plugins
+
+Plugins add tabs to the ticket panel, with optional server routes. The built-in **git** plugin
+adds a **Changes** tab that shows everything a ticket changed: its branch against the base branch,
+including uncommitted and untracked files. Drop your own plugins in `~/.harness/plugins/`. See
+[plugins/README.md](plugins/README.md) for how to write one. `bun run plugins:build` builds the
+built-in plugin UIs, and the service also builds them on start when they're missing.
+
 ## Tests
 
 ```sh
 cd shared && bun test     # key helpers
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
-cd app && bun test        # reducer, routes, rendering
+cd app && bun test        # reducer, routes, rendering, plugin bridge
+cd plugins/sdk && bun test   # plugin iframe bridge (connect)
+cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service
 cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
+cd app && bun run changes # git plugin Changes tab against a real daemon, light + dark screenshots
 cd app && bun scripts/acceptance.ts [dummy|claude-code]   # installed app + launchd service, hello world → Done
 ```

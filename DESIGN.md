@@ -33,6 +33,9 @@ Closing the app never stops agents: runs live in the service, which launchd keep
 | `service/src/daemon.ts` | Service entrypoint |
 | `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...` |
 | `app/` | Electron main + React renderer |
+| `service/src/plugins/host.ts` | Plugin discovery, loading, `/plugins/<id>/api` + `/ui` serving, tab `when` evaluation |
+| `plugins/sdk/` | Plugin API: `server.ts` (types, `definePlugin`) and `harness-plugin.ts` (iframe bridge, `connect()`) |
+| `plugins/git/` | Built-in git plugin: the ticket **Changes** tab |
 
 ## Project keys
 
@@ -222,7 +225,8 @@ Directives are read from the run prompt:
 
 ## HTTP API
 
-All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health`.
+All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health` and
+the static plugin UIs under `/plugins/:id/ui/`.
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
@@ -239,12 +243,124 @@ GET    /mappings                 POST /mappings            DELETE /mappings/:id
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings
 GET    /browser/:sessionId       POST /browser/:sessionId/navigate { url }
+GET    /plugins                  GET /tickets/:key/tabs    → PluginInfo[] / PluginTab[]
+*      /plugins/:id/api/*        (plugin routes, bearer auth)
+GET    /plugins/:id/ui/*         (plugin static UI, no auth)
 POST   /mcp/:runToken            (MCP streamable-HTTP, JSON responses; run-scoped token)
 GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 ```
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+## Plugins
+
+A plugin adds ticket tabs (a web UI in an iframe) and, optionally, server routes. Plugin UIs
+are plain web pages served by the service, so any host (the Electron app today, iOS later) can
+embed them without Electron APIs. Author docs: [plugins/README.md](plugins/README.md).
+
+**Discovery.** At start the service scans `<repo>/plugins/*` (builtin), then
+`$HARNESS_HOME/plugins/*` (user). A directory is a plugin when it has a `plugin.json`. A user
+plugin with the same `id` replaces the builtin one. Changes are picked up on service restart.
+
+```jsonc
+{
+  "id": "git",                 // /^[a-z0-9][a-z0-9_-]{0,63}$/
+  "name": "Git", "version": "0.1.0", "description": "…",
+  "server": "server.ts",       // optional; dynamic-imported by the service (Bun: .ts or .js)
+  "ui": "dist/",               // optional; required when there are tabs
+  "build": "build.ts",         // optional; run with the service's bun when ui/index.html is missing or
+                               // older than the plugin's sources (node_modules, dotfiles, *.test.* ignored)
+  "tabs": [{ "id": "changes", "title": "Changes", "icon": "branch", "when": "workdir" }]
+}
+```
+
+**Isolation.** A bad manifest, a server module that throws on import or has no default export,
+a `routes()` that throws, or a failed UI build (with no previous bundle) marks that plugin with
+`error`. It stays listed in `GET /plugins`, its API answers 503, and its tabs are not offered.
+Everything else keeps working. Errors in `onTicketEvent` are logged and swallowed.
+
+**Server API** (`plugins/sdk/server.ts`). `export default definePlugin({ routes(router, ctx),
+onTicketEvent?(event, ctx), dispose?() })`. Routes are mounted at `/plugins/<id>/api/*` behind the
+same bearer auth as every other route (`router.get("/changes", …)` → `GET /plugins/<id>/api/changes`;
+`:param` segments). Handlers return JSON-able data (sent as `{ data }`) or a `Response`; throwing an
+error with a numeric `status` (e.g. `PluginHttpError`) sends `{ error }` with that status. The
+context is read-only: `getTicket(key)` → `{ ticket, project }`, `ticketWorkdir(key)` (the ticket's
+workdir when set and present on disk), `exec(cmd, args, { cwd, env, timeoutMs, maxBytes, stdin })`
+(no shell; never throws; reports `truncated`/`timedOut`), `log.info|warn|error`. `onTicketEvent`
+receives `ticket.upserted` / `ticket.deleted`. Plugins are trusted code: they run in the service
+process with its privileges.
+
+**Tabs.** `GET /tickets/:key/tabs` returns the tabs of healthy plugins whose `when` holds, sorted
+by plugin id:
+
+| `when` | Shown when |
+| --- | --- |
+| `always` | every ticket |
+| `workdir` | `ticket.workdir` is set, exists, and `git rev-parse --is-inside-work-tree` is true there |
+| `worktree` | `ticket.branch` is set and `ticket.workdir` exists (a harness worktree) |
+
+The app lists plugin tabs after Summaries, Transcript, Browser and Details. Their route is
+`#/board/<project>/ticket/<KEY>/plugin:<pluginId>:<tabId>`; a plugin tab that no longer applies
+falls back to Summaries.
+
+**UI hosting.** The tab body is `<iframe src="<baseUrl>/plugins/<id>/ui/index.html?tab=<tabId>"
+sandbox="allow-scripts allow-same-origin allow-forms allow-downloads">`. The iframe's origin is the
+service origin, so the plugin's API calls are same-origin and only need the bearer token (the
+renderer's CSP allows `frame-src` for local service origins). Static UI files are served without
+auth (they carry no data), with path-traversal and symlink-escape protection.
+
+**Bridge** (`PluginHostMessage` / `PluginFrameMessage` in `protocol.ts`):
+
+| Direction | Message | When |
+| --- | --- | --- |
+| iframe → host | `{ type: "harness:ready" }` | the SDK's `connect()` starts; the host answers with init |
+| host → iframe | `{ type: "harness:init", baseUrl, token, ticketKey, tabId, theme }` | iframe load and every ready |
+| host → iframe | `{ type: "harness:theme", theme }` | `<html data-theme>` changes (MutationObserver) |
+| host → iframe | `{ type: "harness:ticket", ticket }` | every `ticket.upserted` for that ticket |
+| iframe → host | `{ type: "harness:openExternal", url }` | http(s)/mailto only |
+| iframe → host | `{ type: "harness:navigate", ticketKey }` | open another ticket |
+
+Origin rules: the host posts with `targetOrigin` = the service origin (the token never reaches a
+frame that navigated elsewhere) and accepts messages only when `event.source` is its own iframe and
+`event.origin` is the service origin. The SDK accepts messages only from `window.parent`, first
+from an allowed host origin (`file://`/`null` for Electron, local http(s) origins, or ones passed as
+`allowedOrigins`), and after init only from the origin that sent init. `theme` is always the
+resolved `"light" | "dark"`; the SDK mirrors it onto the iframe's `<html data-theme>` and
+`color-scheme`.
+
+**Builds.** Plugin bundles are not committed (`dist` is gitignored). `bun run plugins:build` at the
+root builds every builtin plugin, `app/scripts/build.ts` runs it, and the service runs a plugin's
+`build` script at start when its bundle is missing or stale. UI requests wait for an in-flight build.
+
+### Git plugin (`plugins/git`)
+
+Tab **Changes** (`when: "workdir"`). Routes:
+
+- `GET /plugins/git/api/changes?ticket=KEY[&maxBytes=N]` → `{ mode, base, baseSha, head, branch, files, patch,
+  truncated, additions, deletions }`, `files: [{ path, oldPath?, status, additions, deletions, binary }]`
+  with `status` ∈ `added | modified | deleted | renamed | untracked`.
+  - **branch mode** (ticket has a branch): the diff runs from `merge-base(base, HEAD)` to the worktree
+    **as it is on disk**, so committed, staged, unstaged and untracked (not ignored) changes all show.
+    `base` is the branch checked out at the project path, falling back to `main`/`master`.
+  - **workdir mode** (no branch): uncommitted + untracked changes against `HEAD` (or the empty tree in
+    a repo without commits).
+  - The user's index is never touched. The plugin copies it (keeping its mtime so git's racy-clean
+    detection still works) to a temp `GIT_INDEX_FILE`, runs `git add -A` there, and diffs `--cached`
+    with rename detection and config-independent flags.
+  - `patch` is capped at 4 MiB by default (`maxBytes`, up to 64 MiB) and cut at a file boundary with
+    `truncated: true`. The file list is always complete.
+- `GET /plugins/git/api/log?ticket=KEY` → `{ mode, base, commits: [{ sha, shortSha, subject, author, email, date }] }`,
+  the branch's commits since the merge-base (empty in workdir mode).
+- `GET /plugins/git/api/file?ticket=KEY&side=old|new&path=P[&ref=<sha>]` → `{ contents }`, one side of a file, used to
+  expand unchanged context. Paths are repo-relative; `..`, absolute paths and `.git` are rejected.
+
+The UI uses Pierre's [@pierre/trees](https://trees.software) for the changed-file tree (git status
+colors plus `+a −d` decorations) and [@pierre/diffs](https://diffs.com) `CodeView` for the stacked,
+virtualized diffs with sticky headers and syntax highlighting. It offers unified/split view,
+expandable context, a commits dropdown, empty/error/truncated states, and follows the host theme.
+It refreshes on `harness:ticket` (debounced), polls every 4 s while the ticket is busy (file edits
+don't emit ticket events), and has a refresh button. Below 720 px the tree becomes a drawer.
 
 ## Testing
 
