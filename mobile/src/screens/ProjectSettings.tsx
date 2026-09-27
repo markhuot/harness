@@ -110,8 +110,11 @@ function ProjectSettings({ project }: { project: Project }) {
         <SRow title="Worktree per ticket" sub="Each ticket works on its own branch (harness/<key>) when the folder is a git repo.">
           <SSwitch value={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
         </SRow>
-        <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion." last>
+        <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
           <SSwitch value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
+        </SRow>
+        <SRow title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done." last>
+          <SSwitch value={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
         </SRow>
       </Group>
       <Group title="Danger zone">

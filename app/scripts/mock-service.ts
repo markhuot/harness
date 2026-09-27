@@ -294,6 +294,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     defaultModels: {},
     useWorktrees: true,
     requireHumanReview,
+    autoComplete: true,
     permissionMode: null,
     createdAt: now() - 86400_000 * 7,
     updatedAt: now() - 86400_000 * 7,
@@ -846,6 +847,21 @@ function submitForReview(t: Ticket) {
   upsertTicket(t);
   simulateRun(t, "review", "Review the change.", "The change looks correct and is covered by tests. Approving.", (cur) => {
     cur.agentReview = "approved";
+    queueMicrotask(() => noteReady(cur));
+  });
+}
+
+/** Mirrors Orchestrator.noteReady: both reviews approved + project autoComplete → complete run. */
+function noteReady(t: Ticket) {
+  if (t.status !== "review" || t.agentReview !== "approved" || t.humanReview !== "approved") return;
+  if (!projects.get(t.projectId)?.autoComplete || t.parentId) return;
+  completeRun(t);
+}
+
+function completeRun(t: Ticket, instructions = "") {
+  simulateRun(t, "complete", `Finalize: merge the worktree branch. ${instructions}`, "Merged the branch and cleaned up the worktree.", (cur) => {
+    addSummary(cur.sessionId, cur.id, "agent", "Completed.");
+    setStatus(cur, "done");
   });
 }
 
@@ -950,6 +966,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
         requireHumanReview: body.requireHumanReview ?? true,
+        autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
         createdAt: now(),
         updatedAt: now(),
@@ -1066,6 +1083,7 @@ async function route(req: Request, url: URL): Promise<Response> {
             t.humanReview = "approved";
             addSummary(t.sessionId, t.id, "human", body.notes ? `Approved: ${body.notes}` : "Approved.");
             upsertTicket(t);
+            noteReady(t);
           } else {
             t.agentReview = "pending";
             t.humanReview = "pending";
@@ -1080,10 +1098,7 @@ async function route(req: Request, url: URL): Promise<Response> {
             setStatus(t, "done");
             upsertTicket(t);
           } else {
-            simulateRun(t, "complete", `Finalize: merge the worktree branch. ${body.instructions ?? ""}`, "Merged the branch and cleaned up the worktree.", (cur) => {
-              addSummary(cur.sessionId, cur.id, "agent", "Completed.");
-              setStatus(cur, "done");
-            });
+            completeRun(t, body.instructions ?? "");
           }
           return ok(t);
         case "cancel": {
@@ -1114,6 +1129,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           upsertTicket(t);
           simulateRun(t, "review", "Review the change.", "Re-reviewed: still looks good. Approving.", (cur) => {
             cur.agentReview = "approved";
+            queueMicrotask(() => noteReady(cur));
           });
           return ok(t);
       }

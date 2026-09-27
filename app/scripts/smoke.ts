@@ -254,10 +254,31 @@ try {
   await clickText(".actions button", "Approve");
   const approved = await until("human approved", async () => (await api<{ ticket: { humanReview: string } }>("GET", "/tickets/NYTIMES-4")).ticket.humanReview === "approved");
   check("Approve sets humanReview", approved);
+  const autoDone = await until("auto-completed", async () => (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-4")).ticket.status === "done", 10000);
+  check("approving a ready ticket runs the completion step and moves it to done", autoDone);
+
+  // 4b. With Complete when approved off, approval leaves the ticket ready and Complete runs it.
+  const nyProject = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!;
+  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: false });
+  const manual = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Manual completion" });
+  await until("manual ticket agent-approved", async () => {
+    const t = (await api<{ ticket: { status: string; agentReview: string; busy: boolean } }>("GET", `/tickets/${manual.key}`)).ticket;
+    return t.status === "review" && t.agentReview === "approved" && !t.busy;
+  }, 15000);
+  await js(`location.hash = "#/board/all/ticket/${manual.key}"`);
+  await until("approve button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Approve"))`));
+  await clickText(".actions button", "Approve");
   const completeEnabled = await until("Complete enabled", () =>
     js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Complete") && !b.disabled)`),
   );
-  check("Complete enables once both reviews approve", completeEnabled);
+  check("with auto-complete off, Complete enables once both reviews approve", completeEnabled);
+  check("with auto-complete off, the ticket waits in review", (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "review");
+  await clickText(".actions button", "Complete");
+  await until("complete modal", () => exists(".modal"));
+  await clickText(".modal-foot button", "Complete");
+  const manualDone = await until("manual done", async () => (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "done", 10000);
+  check("Complete runs the completion step and moves it to done", manualDone);
+  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: true });
 
   // 5. New session composer (⌘N path goes through the menu; use the #/compose route).
   await js(`location.hash = "#/board/all"`);
@@ -391,6 +412,13 @@ try {
   check("project permission mode PATCHes the project", projMode);
   await pick("#settings-project-agents [data-testid=permission-mode]", "");
   await until("project mode cleared", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === null);
+  const autoCompleteSwitch = `[...document.querySelectorAll("#settings-project-agents .settings-row")].find(r => r.querySelector(".settings-row-title")?.textContent === "Complete when approved")?.querySelector("input")`;
+  check("project settings show Complete when approved, on by default", await js<boolean>(`${autoCompleteSwitch}?.checked === true`));
+  await js(`${autoCompleteSwitch}.click()`);
+  const autoOff = await until("autoComplete saved", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === false);
+  check("toggling Complete when approved PATCHes the project", autoOff && (await js<boolean>(`${autoCompleteSwitch}?.checked === false`)));
+  await js(`${autoCompleteSwitch}.click()`);
+  await until("autoComplete restored", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === true);
   await js(`location.hash = "#/board/${hh.id}"`);
   const boardKeys = await until("board shows renamed cards", async () => {
     const k = await js<string[]>(`[...document.querySelectorAll(".card-key")].map(e => e.textContent)`);

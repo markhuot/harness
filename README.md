@@ -73,9 +73,10 @@ you answer.
 - Leave "Start immediately" on to skip planning.
 - A ticket moves to Review when the agent submits it. An independent agent reviewer
   then runs, and you give your own review.
-- Once both reviews approve, **Complete** runs a final agent step. If the ticket was
-  worked in a git worktree, that step merges the branch. You can also mark the ticket
-  done without an agent run.
+- Once both reviews approve, a final agent step runs on its own and moves the ticket to
+  Done. If the ticket was worked in a git worktree, that step merges the branch. Turn off
+  **Complete when approved** in project settings to press **Complete** yourself instead.
+  You can also mark the ticket done without an agent run.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
