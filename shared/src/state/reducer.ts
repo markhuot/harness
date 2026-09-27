@@ -12,10 +12,14 @@ import type {
   Summary,
   Ticket,
   TicketDetail,
+  TicketPage,
   TicketStatus,
   TranscriptEntry,
   Watcher,
 } from "../index";
+import type { DepState } from "./conductor";
+import { dispatchedKey } from "./format";
+import { adjustDoneTotals, doneColumn, mergeTickets, pagingFromPage, reducePaging, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
   entries: TranscriptEntry[];
@@ -41,6 +45,20 @@ export interface State {
   mappings: Record<string, Mapping>;
   settings: PublicSettings | null;
   drivers: DriverInfo[];
+  /** Done paging per board scope (project id or ALL_SCOPE); see paging.ts */
+  donePaging: Record<string, DonePaging>;
+  /** The board's server-side search, when the filter box has a query */
+  search: SearchState | null;
+  /** Old ticket keys (upper-case, from before a project rename) → ticket id */
+  keyAliases: Record<string, string>;
+  /** Keys the service answered 404 for (so they aren't refetched until the next snapshot) */
+  missingKeys: Record<string, true>;
+  /** Conductors whose full child list came from the service (a detail); the rest may be partial */
+  childrenLoaded: Record<string, true>;
+  /** Dependents (ticket keys) from the latest detail, by ticket id; live changes are merged in selectors */
+  dependents: Record<string, string[]>;
+  /** Newest createdAt the last snapshot saw (null before one): tells new tickets from unloaded old ones */
+  ticketsAsOf: number | null;
 }
 
 export const initialState: State = {
@@ -57,6 +75,13 @@ export const initialState: State = {
   mappings: {},
   settings: null,
   drivers: [],
+  donePaging: {},
+  search: null,
+  keyAliases: {},
+  missingKeys: {},
+  childrenLoaded: {},
+  dependents: {},
+  ticketsAsOf: null,
 };
 
 export interface Snapshot {
@@ -67,16 +92,22 @@ export interface Snapshot {
   mappings: Mapping[];
   settings: PublicSettings | null;
   drivers: DriverInfo[];
+  /** The first done page for the board's current scope (tickets holds every non-done ticket) */
+  donePage?: { scope: string; page: TicketPage };
 }
 
 export type Action =
   | { type: "event"; event: HarnessEvent }
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "connected"; connected: boolean }
-  | { type: "detail"; detail: TicketDetail }
+  /** `requestedKey`: the key the detail was fetched by (an old key records an alias) */
+  | { type: "detail"; detail: TicketDetail; requestedKey?: string }
+  /** The service has no ticket with these keys (404) */
+  | { type: "missingKeys"; keys: string[] }
   | { type: "transcript"; sessionId: string; entries: TranscriptEntry[] }
   | { type: "summaries"; sessionId: string; summaries: Summary[] }
-  | { type: "drivers"; drivers: DriverInfo[] };
+  | { type: "drivers"; drivers: DriverInfo[] }
+  | PagingAction;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,9 +185,17 @@ export function applyEvent(state: State, event: HarnessEvent): State {
       return { ...state, projects: without(state.projects, event.id), tickets, mappings };
     }
     case "ticket.upserted":
-      return { ...state, tickets: { ...state.tickets, [event.ticket.id]: event.ticket } };
+      return {
+        ...state,
+        tickets: { ...state.tickets, [event.ticket.id]: event.ticket },
+        donePaging: adjustDoneTotals(state, state.tickets[event.ticket.id], event.ticket),
+      };
     case "ticket.deleted":
-      return { ...state, tickets: without(state.tickets, event.id) };
+      return {
+        ...state,
+        tickets: without(state.tickets, event.id),
+        donePaging: adjustDoneTotals(state, state.tickets[event.id], null),
+      };
     case "session.upserted":
       return { ...state, sessions: { ...state.sessions, [event.session.id]: event.session } };
     case "run.upserted": {
@@ -219,12 +258,23 @@ export function reducer(state: State, action: Action): State {
     case "snapshot": {
       const s = action.snapshot;
       // A snapshot is authoritative for entity lists; transcripts/summaries are kept (they are
-      // merged by id, and views refetch them on reconnect).
+      // merged by id, and views refetch them on reconnect). Paging restarts from its first page;
+      // an active search is re-armed (ids → null) for the client to re-run.
+      const all = s.donePage ? [...s.tickets, ...s.donePage.page.tickets] : s.tickets;
+      const donePaging: State["donePaging"] = {};
+      if (s.donePage) donePaging[s.donePage.scope] = pagingFromPage(s.donePage.page, undefined, false);
       return {
         ...state,
         ready: true,
         projects: preferNewer(byId(s.projects), state.projects),
-        tickets: preferNewer(byId(s.tickets), state.tickets),
+        tickets: preferNewer(byId(all), state.tickets),
+        donePaging,
+        search: state.search ? { ...state.search, ids: null, nextCursor: null, total: 0, loading: true, error: null } : null,
+        keyAliases: {},
+        missingKeys: {},
+        childrenLoaded: {},
+        dependents: {},
+        ticketsAsOf: all.reduce((n, t) => Math.max(n, t.createdAt), 0),
         sessions: preferNewer(byId(s.sessions), state.sessions),
         watchers: byId(s.watchers),
         mappings: byId(s.mappings),
@@ -234,13 +284,18 @@ export function reducer(state: State, action: Action): State {
     }
     case "detail": {
       const d = action.detail;
-      const tickets = { ...state.tickets, [d.ticket.id]: d.ticket };
-      for (const child of d.children) tickets[child.id] = child;
+      const tickets = mergeTickets(state.tickets, [d.ticket, ...d.children]);
+      const asked = (d.resolvedFrom ?? action.requestedKey)?.toUpperCase();
+      const keyAliases = asked && asked !== d.ticket.key.toUpperCase() ? { ...state.keyAliases, [asked]: d.ticket.id } : state.keyAliases;
       const runs = { ...state.runs };
       for (const r of d.runs) runs[r.id] = r;
       return {
         ...state,
         tickets,
+        keyAliases,
+        missingKeys: asked && state.missingKeys[asked] ? without(state.missingKeys, asked) : state.missingKeys,
+        childrenLoaded: d.ticket.kind === "conductor" ? { ...state.childrenLoaded, [d.ticket.id]: true } : state.childrenLoaded,
+        dependents: { ...state.dependents, [d.ticket.id]: d.dependents },
         runs,
         sessions: { ...state.sessions, [d.session.id]: d.session },
         summaries: {
@@ -261,6 +316,13 @@ export function reducer(state: State, action: Action): State {
       };
     case "drivers":
       return { ...state, drivers: action.drivers };
+    case "missingKeys": {
+      const missingKeys = { ...state.missingKeys };
+      for (const k of action.keys) missingKeys[k.toUpperCase()] = true;
+      return { ...state, missingKeys };
+    }
+    default:
+      return reducePaging(state, action);
   }
 }
 
@@ -274,18 +336,22 @@ export function ticketsForProject(state: State, projectId: string | null): Ticke
 
 export function boardColumns(state: State, projectId: string | null): Record<TicketStatus, Ticket[]> {
   const cols: Record<TicketStatus, Ticket[]> = { planning: [], in_progress: [], blocked: [], review: [], done: [] };
-  for (const t of ticketsForProject(state, projectId)) cols[t.status]?.push(t);
+  for (const t of ticketsForProject(state, projectId)) if (t.status !== "done") cols[t.status]?.push(t);
   for (const list of Object.values(cols)) {
     list.sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   }
-  // Newest-finished first in Done reads better than creation order.
-  cols.done.sort((a, b) => b.updatedAt - a.updatedAt);
+  // Done: newest-completed first, only the paged-in prefix (see paging.ts).
+  cols.done = doneColumn(state, projectId);
   return cols;
 }
 
+/** By current key, else by an old key (from before a project rename) the service resolved for us. */
 export function ticketByKey(state: State, key: string): Ticket | undefined {
   const upper = key.toUpperCase();
-  return Object.values(state.tickets).find((t) => t.key.toUpperCase() === upper);
+  const direct = Object.values(state.tickets).find((t) => t.key.toUpperCase() === upper);
+  if (direct) return direct;
+  const aliased = state.keyAliases[upper];
+  return aliased ? state.tickets[aliased] : undefined;
 }
 
 export function triageSessions(state: State): Session[] {
@@ -300,12 +366,67 @@ export function childrenOf(state: State, ticketId: string): Ticket[] {
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-/** A dependency is satisfied when the ticket it names is done. Unknown keys count as unsatisfied. */
-export function dependencyStates(state: State, ticket: Ticket): { key: string; done: boolean; ticket?: Ticket }[] {
+/**
+ * A dependency is satisfied when the ticket it names is done. A key that isn't loaded is
+ * "unknown" (not "pending"): done tickets aren't all in memory, so a missing ticket is most likely
+ * an older done one. Clients fetch unresolved keys (unresolvedKeys) and the state settles.
+ */
+export function dependencyStates(state: State, ticket: Ticket): DepState[] {
   return ticket.dependsOn.map((key) => {
     const dep = ticketByKey(state, key);
-    return { key, done: dep?.status === "done", ticket: dep };
+    const status: DepState["state"] = !dep ? "unknown" : dep.status === "done" ? "done" : "pending";
+    return { key, done: status === "done", state: status, ticket: dep, missing: !dep && !!state.missingKeys[key.toUpperCase()] };
   });
+}
+
+/**
+ * Ticket keys the UI references but the store can't resolve yet: dependencies of loaded tickets,
+ * dependents from details, and triage outcomes ("Dispatched to FOO-123"). Keys the service
+ * already 404'd are left out. Fetch each with getTicket and dispatch "detail" (with requestedKey)
+ * or "missingKeys".
+ */
+export function unresolvedKeys(state: State, extra: string[] = []): string[] {
+  if (!state.ready) return [];
+  const known = new Set<string>();
+  for (const t of Object.values(state.tickets)) known.add(t.key.toUpperCase());
+  for (const k of Object.keys(state.keyAliases)) known.add(k);
+  const out = new Set<string>();
+  const want = (k: string) => {
+    const u = k.toUpperCase();
+    if (!known.has(u) && !state.missingKeys[u]) out.add(u);
+  };
+  for (const t of Object.values(state.tickets)) t.dependsOn.forEach(want);
+  for (const keys of Object.values(state.dependents)) keys.forEach(want);
+  for (const s of Object.values(state.sessions)) {
+    const k = s.kind === "triage" ? dispatchedKey(s) : null;
+    if (k) want(k);
+  }
+  extra.forEach(want);
+  return [...out];
+}
+
+/** Conductors on hand whose child list may be partial (no detail yet): fetch their details. */
+export function conductorsNeedingChildren(state: State): Ticket[] {
+  if (!state.ready) return [];
+  return Object.values(state.tickets).filter((t) => t.kind === "conductor" && !state.childrenLoaded[t.id]);
+}
+
+/**
+ * Tickets that depend on this one: the detail's list (covers done ones that aren't loaded) merged
+ * with a live scan of the store (covers ones added since). Unloaded keys come back as `{ key }`.
+ */
+export function dependentsOf(state: State, ticket: Ticket): { key: string; ticket?: Ticket }[] {
+  const out = new Map<string, { key: string; ticket?: Ticket }>();
+  for (const t of Object.values(state.tickets)) {
+    if (t.dependsOn.some((k) => k.toUpperCase() === ticket.key.toUpperCase())) out.set(t.key.toUpperCase(), { key: t.key, ticket: t });
+  }
+  for (const k of state.dependents[ticket.id] ?? []) {
+    const t = ticketByKey(state, k);
+    if (t && !t.dependsOn.some((d) => d.toUpperCase() === ticket.key.toUpperCase())) continue; // no longer depends on it
+    const key = (t?.key ?? k).toUpperCase();
+    if (!out.has(key)) out.set(key, { key: t?.key ?? k, ticket: t });
+  }
+  return [...out.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
 }
 
 export function latestSummary(state: State, sessionId: string): Summary | undefined {

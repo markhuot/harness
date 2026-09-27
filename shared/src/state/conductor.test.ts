@@ -111,7 +111,7 @@ describe("children and progress", () => {
 });
 
 describe("dependencies", () => {
-  test("depStates resolves case-insensitively; unknown keys stay pending", () => {
+  test("depStates resolves case-insensitively (and through aliases); unloaded keys are unknown, not pending", () => {
     const done = tk({ key: "D-1", status: "done" });
     const running = tk({ key: "D-2", status: "in_progress" });
     const t = tk({ key: "D-3", dependsOn: ["d-1", "D-2", "D-99"] });
@@ -121,7 +121,12 @@ describe("dependencies", () => {
       ["D-2", false, "D-2"],
       ["D-99", false, undefined],
     ]);
+    expect(deps.map((d) => d.state)).toEqual(["done", "pending", "unknown"]);
     expect(waitingOn(deps)).toEqual(["D-2", "D-99"]);
+    // An old key (pre-rename) resolves through the alias map to the renamed ticket.
+    const renamed = tk({ key: "NEW-1", status: "done" });
+    const viaAlias = depStates(rec(renamed), tk({ key: "X-1", dependsOn: ["old-1"] }), { "OLD-1": renamed.id });
+    expect(viaAlias.map((d) => [d.state, d.ticket?.key])).toEqual([["done", "NEW-1"]]);
   });
 
   test("depths follow sibling chains, ignore outside deps and survive cycles", () => {
@@ -154,14 +159,20 @@ describe("dependencies", () => {
 });
 
 describe("hide-children preference", () => {
-  test("round-trips through storage and tolerates throwing or missing storage", () => {
+  test("children are hidden on a first run; an explicit choice persists either way", () => {
     const mem = new Map<string, string>();
     const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
-    expect(readHideChildren(storage)).toBe(false);
+    expect(readHideChildren(storage)).toBe(true); // nothing stored → hidden
+    writeHideChildren(false, storage);
+    expect(mem.get("harness.board.hideChildren")).toBe("0");
+    expect(readHideChildren(storage)).toBe(false); // "Show child tickets" sticks
     writeHideChildren(true, storage);
     expect(readHideChildren(storage)).toBe(true);
-    writeHideChildren(false, storage);
-    expect(readHideChildren(storage)).toBe(false);
+    mem.set("harness.board.hideChildren", "garbage");
+    expect(readHideChildren(storage)).toBe(true); // unreadable value → the default
+  });
+
+  test("tolerates throwing or missing storage (falls back to hidden)", () => {
     const broken = {
       getItem: () => {
         throw new Error("SecurityError");
@@ -170,8 +181,8 @@ describe("hide-children preference", () => {
         throw new Error("QuotaExceeded");
       },
     };
-    expect(readHideChildren(broken)).toBe(false);
+    expect(readHideChildren(broken)).toBe(true);
     expect(() => writeHideChildren(true, broken)).not.toThrow();
-    expect(readHideChildren(undefined)).toBe(false);
+    expect(readHideChildren(undefined)).toBe(true);
   });
 });

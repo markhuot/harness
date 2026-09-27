@@ -74,19 +74,30 @@ export function progressSegments(p: Progress): { status: TicketStatus; count: nu
 export interface DepState {
   key: string;
   done: boolean;
+  /**
+   * done / pending (loaded, not done) / unknown (not loaded: done tickets page in, so an unloaded
+   * dependency is usually an older done one; clients resolve it and the state settles). Render
+   * unknown neutrally, never as "waiting".
+   */
+  state: "done" | "pending" | "unknown";
   ticket?: Ticket;
+  /** The service said this key doesn't exist */
+  missing?: boolean;
 }
 
-export function depStates(tickets: Record<string, Ticket>, t: Ticket): DepState[] {
+/** `aliases`: old key (upper-case) → ticket id, for keys from before a project rename. */
+export function depStates(tickets: Record<string, Ticket>, t: Ticket, aliases: Record<string, string> = {}): DepState[] {
   const byKey = new Map<string, Ticket>();
   for (const x of Object.values(tickets)) byKey.set(x.key.toUpperCase(), x);
   return t.dependsOn.map((key) => {
-    const dep = byKey.get(key.toUpperCase());
-    return { key, done: dep?.status === "done", ticket: dep };
+    const upper = key.toUpperCase();
+    const dep = byKey.get(upper) ?? (aliases[upper] ? tickets[aliases[upper]!] : undefined);
+    const state: DepState["state"] = !dep ? "unknown" : dep.status === "done" ? "done" : "pending";
+    return { key, done: state === "done", state, ticket: dep };
   });
 }
 
-/** Keys still holding this ticket back (unknown keys count as pending). */
+/** Keys still holding this ticket back (unknown keys count: gating must be conservative). */
 export const waitingOn = (deps: DepState[]) => deps.filter((d) => !d.done).map((d) => d.key);
 
 /**
@@ -142,10 +153,13 @@ export function groupChildren(children: Ticket[]): ChildGroup[] {
 }
 
 // ---------------------------------------------------------------------------
-// Board preference: "Hide child tickets" (per machine: localStorage on desktop, injected storage elsewhere)
+// Board preference: child tickets are hidden unless the user shows them ("Show child tickets"),
+// per machine: localStorage on desktop, injected storage elsewhere. Stored "1" = hide, "0" = show;
+// nothing stored (first run) = hide.
 // ---------------------------------------------------------------------------
 
 export const HIDE_CHILDREN_KEY = "harness.board.hideChildren";
+export const HIDE_CHILDREN_DEFAULT = true;
 
 /** The slice of Web Storage the preference needs (localStorage on desktop; any sync KV elsewhere). */
 export interface KV {
@@ -156,9 +170,10 @@ const defaultStorage = (): KV | undefined => (globalThis as { localStorage?: KV 
 
 export function readHideChildren(storage: KV | undefined = defaultStorage()): boolean {
   try {
-    return storage?.getItem(HIDE_CHILDREN_KEY) === "1";
+    const v = storage?.getItem(HIDE_CHILDREN_KEY);
+    return v === "1" ? true : v === "0" ? false : HIDE_CHILDREN_DEFAULT;
   } catch {
-    return false;
+    return HIDE_CHILDREN_DEFAULT;
   }
 }
 
