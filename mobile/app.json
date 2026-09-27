@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Harness",
+    "slug": "harness",
+    "scheme": "harness",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#fbfbfc",
+    "ios": {
+      "bundleIdentifier": "com.markhuot.harness",
+      "appleTeamId": "47P4ZSALX4",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "Harness connects to the harness service running on your Mac over your local network or Tailscale.",
+        "NSCameraUsageDescription": "Harness uses the camera to scan the pairing QR code shown in the desktop app.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Harness uses the camera to scan the pairing QR code shown in the desktop app.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "resizeMode": "contain",
+          "backgroundColor": "#fbfbfc",
+          "dark": { "image": "./assets/splash-icon.png", "backgroundColor": "#111214" }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
