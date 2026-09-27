@@ -147,3 +147,114 @@ describe("plugin sdk bridge", () => {
     expect(isAllowedHostOrigin("capacitor://localhost", ["capacitor://localhost"])).toBe(true);
   });
 });
+
+const SERVICE = "http://100.64.1.2:7717"; // a Tailscale address: not on the localhost allowlist
+
+/** A top-level page (window.parent === window), optionally inside a React Native WebView. */
+function fakeTopWindow(opts: { native?: boolean; origin?: string } = {}) {
+  const listeners = new Set<Listener>();
+  const nativePosted: unknown[] = [];
+  const parentPosted: unknown[] = [];
+  const win: BridgeWindow & { postMessage(message: unknown, targetOrigin: string): void } = {
+    parent: null,
+    postMessage: (message: unknown) => void parentPosted.push(message),
+    location: { pathname: "/plugins/git/ui/index.html", search: "?tab=changes", origin: opts.origin ?? SERVICE },
+    addEventListener: (_t, l) => void listeners.add(l),
+    removeEventListener: (_t, l) => void listeners.delete(l),
+    document: { documentElement: { dataset: {}, style: {} } },
+  };
+  win.parent = win; // a real top-level window is its own parent
+  if (opts.native) win.ReactNativeWebView = { postMessage: (data: string) => void nativePosted.push(data) };
+  /** Deliver a message event; defaults to what the WebView host's injected window.postMessage produces. */
+  const send = (data: unknown, origin = win.location.origin!, source: unknown = win) => {
+    for (const l of [...listeners]) l({ data, origin, source } as MessageEvent);
+  };
+  return { win, send, nativePosted, parentPosted, listeners };
+}
+
+describe("plugin sdk bridge inside a React Native WebView", () => {
+  const rnInit = { ...init, baseUrl: SERVICE };
+
+  test("ready goes to ReactNativeWebView as a JSON string, not window.parent", () => {
+    const f = fakeTopWindow({ native: true });
+    void connect({ window: f.win, timeoutMs: 50 }).catch(() => {});
+    expect(f.nativePosted).toEqual([JSON.stringify({ type: "harness:ready" })]);
+    expect(typeof f.nativePosted[0]).toBe("string");
+    expect(f.parentPosted).toEqual([]);
+  });
+
+  test("init posted to the page itself at its own (non-local) origin resolves", async () => {
+    expect(isAllowedHostOrigin(SERVICE)).toBe(false); // proves this isn't the allowlist at work
+    const f = fakeTopWindow({ native: true });
+    const p = connect({ window: f.win });
+    f.send(rnInit);
+    const h = await p;
+    expect(h).toMatchObject({ baseUrl: SERVICE, token: "tok", ticketKey: "HELLO-1", tabId: "changes", pluginId: "git", theme: "dark" });
+  });
+
+  test("ignores other origins (even allowlisted ones) and other sources", async () => {
+    const f = fakeTopWindow({ native: true });
+    let resolved = false;
+    const p = connect({ window: f.win, timeoutMs: 200 }).then((h) => ((resolved = true), h));
+    f.send(rnInit, "https://evil.example");
+    f.send(rnInit, "http://127.0.0.1:7717"); // local, but not this page's origin
+    f.send(rnInit, "file://");
+    f.send(rnInit, SERVICE, { postMessage() {} }); // right origin, another window (e.g. a child iframe)
+    await Bun.sleep(5);
+    expect(resolved).toBe(false);
+    f.send(rnInit);
+    expect((await p).token).toBe("tok");
+  });
+
+  test("an opaque page origin never trusts anything", async () => {
+    const f = fakeTopWindow({ native: true, origin: "null" });
+    await expect(
+      (() => {
+        const p = connect({ window: f.win, timeoutMs: 20 });
+        f.send(rnInit, "null");
+        return p;
+      })(),
+    ).rejects.toThrow(/Timed out/);
+  });
+
+  test("after init only the init origin is trusted; openExternal/navigate go through ReactNativeWebView", async () => {
+    const f = fakeTopWindow({ native: true });
+    const p = connect({ window: f.win });
+    f.send(rnInit);
+    const h = await p;
+    const themes: string[] = [];
+    const tickets: string[] = [];
+    h.onTheme((t) => themes.push(t));
+    h.onTicket((t) => tickets.push(t.key));
+    f.send({ type: "harness:theme", theme: "light" }, "http://localhost:7717");
+    f.send({ type: "harness:theme", theme: "light" }, SERVICE, { postMessage() {} });
+    expect(themes).toEqual([]);
+    f.send({ type: "harness:theme", theme: "light" });
+    f.send({ type: "harness:ticket", ticket: ticket("HELLO-1") });
+    expect(themes).toEqual(["light"]);
+    expect(tickets).toEqual(["HELLO-1"]);
+    expect(f.win.document!.documentElement.dataset.theme).toBe("light");
+    h.openExternal("https://example.com");
+    h.navigate("OTHER-2");
+    expect(f.nativePosted.slice(1).map((d) => JSON.parse(d as string))).toEqual([
+      { type: "harness:openExternal", url: "https://example.com" },
+      { type: "harness:navigate", ticketKey: "OTHER-2" },
+    ]);
+    expect(f.parentPosted).toEqual([]);
+  });
+
+  test("a top-level page without ReactNativeWebView does not trust self-posted init from its own origin", async () => {
+    const f = fakeTopWindow({ native: false });
+    const p = connect({ window: f.win, timeoutMs: 30 });
+    expect(f.parentPosted).toEqual([{ type: "harness:ready" }]); // iframe transport
+    f.send(rnInit); // source = window (= window.parent here), origin = own non-local origin
+    await expect(p).rejects.toThrow(/Timed out/);
+  });
+
+  test("a non-function ReactNativeWebView.postMessage falls back to the iframe transport", () => {
+    const f = fakeTopWindow({ native: false });
+    (f.win as { ReactNativeWebView?: unknown }).ReactNativeWebView = { postMessage: "nope" };
+    void connect({ window: f.win, timeoutMs: 20 }).catch(() => {});
+    expect(f.parentPosted).toEqual([{ type: "harness:ready" }]);
+  });
+});

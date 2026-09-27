@@ -496,24 +496,36 @@ service origin, so the plugin's API calls are same-origin and only need the bear
 renderer's CSP allows `frame-src` for local service origins). Static UI files are served without
 auth (they carry no data), with path-traversal and symlink-escape protection.
 
-**Bridge** (`PluginHostMessage` / `PluginFrameMessage` in `protocol.ts`):
+**Bridge** (`PluginHostMessage` / `PluginFrameMessage` in `protocol.ts`; host logic in
+`shared/src/state/pluginBridge.ts`, used by both the desktop iframe and the iOS WebView):
 
 | Direction | Message | When |
 | --- | --- | --- |
-| iframe → host | `{ type: "harness:ready" }` | the SDK's `connect()` starts; the host answers with init |
-| host → iframe | `{ type: "harness:init", baseUrl, token, ticketKey, tabId, theme }` | iframe load and every ready |
-| host → iframe | `{ type: "harness:theme", theme }` | `<html data-theme>` changes (MutationObserver) |
-| host → iframe | `{ type: "harness:ticket", ticket }` | every `ticket.upserted` for that ticket |
-| iframe → host | `{ type: "harness:openExternal", url }` | http(s)/mailto only |
-| iframe → host | `{ type: "harness:navigate", ticketKey }` | open another ticket |
+| page → host | `{ type: "harness:ready" }` | the SDK's `connect()` starts; the host answers with init |
+| host → page | `{ type: "harness:init", baseUrl, token, ticketKey, tabId, theme }` | page load and every ready |
+| host → page | `{ type: "harness:theme", theme }` | the resolved theme changes (desktop: `<html data-theme>` MutationObserver) |
+| host → page | `{ type: "harness:ticket", ticket }` | every `ticket.upserted` for that ticket |
+| page → host | `{ type: "harness:openExternal", url }` | http(s)/mailto only |
+| page → host | `{ type: "harness:navigate", ticketKey }` | open another ticket |
 
-Origin rules: the host posts with `targetOrigin` = the service origin (the token never reaches a
-frame that navigated elsewhere) and accepts messages only when `event.source` is its own iframe and
-`event.origin` is the service origin. The SDK accepts messages only from `window.parent`, first
-from an allowed host origin (`file://`/`null` for Electron, local http(s) origins, or ones passed as
-`allowedOrigins`), and after init only from the origin that sent init. `theme` is always the
-resolved `"light" | "dark"`; the SDK mirrors it onto the iframe's `<html data-theme>` and
-`color-scheme`.
+Transports. Desktop: the page is an iframe; host → page is `iframe.contentWindow.postMessage` and
+page → host is `window.parent.postMessage`. iOS: the page is a `react-native-webview`
+(`mobile/src/lib/pluginHost.ts`); host → page is `injectJavaScript` of
+`(function(){ if (location.origin !== <serviceOrigin>) return; window.postMessage(<msg>, <serviceOrigin>); })(); true;`,
+and page → host is `window.ReactNativeWebView.postMessage(JSON.stringify(msg))`, which the host
+adapts to `{ data: JSON.parse(data), origin: new URL(nativeEvent.url).origin, source: <frame adapter> }`.
+
+Origin rules: the host only ever sends to the service origin (iframe `targetOrigin`, or the
+injected `location.origin` guard), so the token never reaches a page that navigated elsewhere, and
+accepts messages only when `event.source` is its own frame and `event.origin` is the service
+origin. The SDK picks its transport by whether `window.ReactNativeWebView.postMessage` exists. In an
+iframe it accepts messages only from `window.parent`, first from an allowed host origin
+(`file://`/`null` for Electron, local http(s) origins, or ones passed as `allowedOrigins`). In a
+WebView it accepts them only when `event.source` is its own window and `event.origin` is its own
+origin (the service origin, which may be a Tailscale address); a top-level page without
+`ReactNativeWebView` never trusts its own origin. In both, after init only the origin that sent init
+is trusted. `theme` is always the resolved `"light" | "dark"`; the SDK mirrors it onto the page's
+`<html data-theme>` and `color-scheme`.
 
 **Builds.** Plugin bundles are not committed (`dist` is gitignored). `bun run plugins:build` at the
 root builds every builtin plugin, `app/scripts/build.ts` runs it, and the service runs a plugin's

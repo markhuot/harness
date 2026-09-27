@@ -5,10 +5,15 @@
 //   const changes = await h.api("changes?ticket=" + h.ticketKey);   // → /plugins/<id>/api/changes
 //   h.onTheme((t) => …); h.onTicket((ticket) => …);
 //
-// The UI runs in an iframe served by the service (/plugins/<id>/ui/), so its origin is the
-// service origin and API calls are same-origin; they just need the bearer token from harness:init.
-// Messages are accepted only from window.parent, only from an allowed host origin, and — after
-// init — only from the origin that sent init.
+// The UI is served by the service (/plugins/<id>/ui/), so its origin is the service origin and API
+// calls are same-origin; they just need the bearer token from harness:init. Two hosts, one API:
+//   - Desktop: an iframe. Messages are accepted only from window.parent, first only from an allowed
+//     host origin, and replies go to window.parent.postMessage.
+//   - iOS: a React Native WebView (detected by window.ReactNativeWebView.postMessage). The host
+//     injects `window.postMessage(msg, serviceOrigin)` into the page, so messages are accepted only
+//     when event.source is this window and event.origin is this page's own origin; replies go to
+//     ReactNativeWebView.postMessage(JSON.stringify(msg)).
+// In both, after init only the origin that sent init is trusted. Don't assume window.parent exists.
 
 import type { PluginFrameMessage, PluginHostMessage, Ticket } from "@harness/shared";
 
@@ -47,7 +52,9 @@ export class HarnessPluginError extends Error {
 /** The subset of `window` the bridge uses (injectable for tests and non-browser hosts). */
 export interface BridgeWindow {
   parent: { postMessage(message: unknown, targetOrigin: string): void } | null;
-  location: { pathname: string; search: string };
+  location: { pathname: string; search: string; origin?: string };
+  /** Injected by react-native-webview before the page loads when hosted in the iOS app */
+  ReactNativeWebView?: { postMessage(data: string): void };
   addEventListener(type: "message", listener: (e: MessageEvent) => void): void;
   removeEventListener(type: "message", listener: (e: MessageEvent) => void): void;
   document?: { documentElement: { dataset: Record<string, string | undefined>; style: { colorScheme?: string } } };
@@ -92,10 +99,24 @@ export function connect(opts: ConnectOptions = {}): Promise<HarnessPlugin> {
     win.document.documentElement.dataset.theme = t;
     win.document.documentElement.style.colorScheme = t;
   };
+  const native = typeof win.ReactNativeWebView?.postMessage === "function" ? win.ReactNativeWebView : null;
   const post = (msg: PluginFrameMessage) => {
+    if (native) return native.postMessage(JSON.stringify(msg));
     // Opaque/file origins can't be named as a targetOrigin; these messages carry no secrets.
     const target = hostOrigin && hostOrigin !== "null" && hostOrigin !== "file://" ? hostOrigin : "*";
     win.parent?.postMessage(msg, target);
+  };
+  /** Is this event from our host? (source + origin rules for the iframe or WebView transport) */
+  const fromHost = (e: MessageEvent): boolean => {
+    if (native) {
+      // The WebView host injects window.postMessage(msg, serviceOrigin) into this page.
+      if (e.source !== win) return false;
+      const own = win.location.origin;
+      if (!own || own === "null") return false;
+      return hostOrigin ? e.origin === hostOrigin : e.origin === own;
+    }
+    if (!win.parent || e.source !== win.parent) return false;
+    return hostOrigin ? e.origin === hostOrigin : isAllowedHostOrigin(e.origin, opts.allowedOrigins);
   };
 
   return new Promise<HarnessPlugin>((resolve, reject) => {
@@ -105,8 +126,7 @@ export function connect(opts: ConnectOptions = {}): Promise<HarnessPlugin> {
     }, opts.timeoutMs ?? 10_000);
 
     function onMessage(e: MessageEvent) {
-      if (!win.parent || e.source !== win.parent) return;
-      if (hostOrigin ? e.origin !== hostOrigin : !isAllowedHostOrigin(e.origin, opts.allowedOrigins)) return;
+      if (!fromHost(e)) return;
       const msg = e.data as PluginHostMessage;
       if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
       if (msg.type === "harness:init") {

@@ -1,7 +1,7 @@
 # Writing a Harness plugin
 
 A plugin adds tabs to a ticket's detail panel and, if it needs data, HTTP routes on the service.
-The tab is a normal web page that the app shows in an iframe, so it works in any Harness client.
+The tab is a normal web page that the app shows in an iframe (a WebView on iOS), so it works in any Harness client.
 The full contract (discovery, isolation, origin rules) is in [DESIGN.md → Plugins](../DESIGN.md#plugins).
 `plugins/git` is a complete example.
 
@@ -84,8 +84,10 @@ argument unchanged, a plain `export default { routes(router, ctx) { … } }` wor
 
 ## UI
 
-The iframe loads `/plugins/<id>/ui/index.html?tab=<tabId>` from the service. Use the SDK to get
-the connection details:
+The app loads `/plugins/<id>/ui/index.html?tab=<tabId>` from the service: in an iframe on the
+desktop, and in a React Native WebView in the iOS app. `connect()` handles both transports, so the
+same bundle works in each. Talk to the host only through the SDK, and don't assume `window.parent`
+is the app (in the WebView it's the page itself). Use the SDK to get the connection details:
 
 ```ts
 import { connect } from "@harness/plugin-sdk";
@@ -116,6 +118,7 @@ while `ticket.busy` is true, as the git plugin does.
   `service/src/app.ts` and call your routes with `HarnessClient.request`. The built-in plugins load
   by default. See `plugins/git/server.test.ts`.
 - The bridge: `connect({ window, fetch })` accepts a fake window, so it can be tested without a DOM.
-  See `plugins/sdk/harness-plugin.test.ts`.
+  Give the fake window a `ReactNativeWebView` to test the iOS transport. See
+  `plugins/sdk/harness-plugin.test.ts` and `mobile/src/lib/pluginHost.test.ts`.
 - In the app: `cd app && bun run changes` runs the git plugin against a real daemon and saves
   screenshots. `app/scripts/lib/drive.ts`'s `frame(urlPart)` evaluates JavaScript inside a plugin iframe.
