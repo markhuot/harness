@@ -16,6 +16,9 @@ import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings"
 import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { ThemeSwatch } from "../ui/ThemeSwatch";
+import { pickerCaption, themeOptions, themePrefKey } from "../lib/themePicker";
+import type { Prefs } from "../lib/prefs";
 
 export function SettingsScreen() {
   const { state, refresh } = useStore();
@@ -157,21 +160,48 @@ function NetworkSection() {
 }
 
 function AppearanceSection() {
-  const { setPref } = useApp();
+  const { prefs, setPref } = useApp();
   const t = useTheme();
+  // Appearance.setColorScheme pins useColorScheme to an explicit choice, so the OS side is only
+  // known under System; the pickers only consult it then.
+  const systemDark = t.preference === "system" && t.resolved === "dark";
   return (
-    <Group title="Appearance" footer={t.preference === "system" ? `Follows iOS (currently ${t.resolved}).` : "Stays the same regardless of the iOS setting."}>
-      <SRow title="Theme" stacked last>
-        <Segmented
-          value={t.preference}
-          onChange={(v) => setPref("theme", v)}
-          options={[
-            { value: "system", label: "System" },
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-          ]}
-        />
-      </SRow>
+    <>
+      <Group title="Appearance" footer={t.preference === "system" ? `Follows iOS (currently ${t.resolved}).` : "Stays the same regardless of the iOS setting."}>
+        <SRow title="Theme" stacked last>
+          <Segmented
+            value={t.preference}
+            onChange={(v) => setPref("theme", v)}
+            options={[
+              { value: "system", label: "System" },
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ]}
+          />
+        </SRow>
+      </Group>
+      {(["light", "dark"] as const).map((appearance) => (
+        <ThemePicker key={appearance} appearance={appearance} prefs={prefs} systemDark={systemDark} onPick={(id) => setPref(themePrefKey(appearance), id)} />
+      ))}
+    </>
+  );
+}
+
+function ThemePicker({ appearance, prefs, systemDark, onPick }: { appearance: "light" | "dark"; prefs: Prefs; systemDark: boolean; onPick: (id: string) => void }) {
+  const options = themeOptions(appearance, prefs, systemDark);
+  return (
+    <Group title={appearance === "light" ? "Light theme" : "Dark theme"} footer={pickerCaption(appearance, prefs, systemDark)}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ padding: 12, gap: 10 }}
+        accessibilityRole="radiogroup"
+        accessibilityLabel={appearance === "light" ? "Light theme" : "Dark theme"}
+      >
+        {options.map((o) => (
+          <ThemeSwatch key={o.theme.id} theme={o.theme} selected={o.selected} onPress={() => onPick(o.theme.id)} />
+        ))}
+      </ScrollView>
     </Group>
   );
 }

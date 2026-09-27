@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import type { PluginTab, Ticket } from "@harness/shared";
 import { createPluginHostBridge, pluginUiUrl } from "@harness/shared/state";
 import { createWebViewFrame, webViewMessageEvent } from "../lib/pluginHost";
+import { pluginThemeInfo } from "@harness/shared/themes";
 import { useColors, useTheme } from "../state/app";
 import { useStore } from "../state/store";
 import { Spinner } from "../ui/kit";
@@ -39,8 +40,10 @@ export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab })
   const web = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
   const src = pluginUiUrl(client.baseUrl, tab.pluginId, tab.id);
-  const themeRef = useRef(theme.resolved);
-  themeRef.current = theme.resolved;
+  // Plugins get the full theme (id, tokens, syntax theme) next to the old light/dark value.
+  const themeInfo = useMemo(() => pluginThemeInfo(theme.theme), [theme.theme]);
+  const themeRef = useRef(themeInfo);
+  themeRef.current = themeInfo;
 
   const frame = useMemo(() => createWebViewFrame((script) => web.current?.injectJavaScript(script)), []);
   const bridge = useMemo(
@@ -61,8 +64,8 @@ export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab })
   const origin = bridge.serviceOrigin;
 
   useEffect(() => {
-    bridge.sendTheme(theme.resolved);
-  }, [bridge, theme.resolved]);
+    bridge.sendTheme(themeInfo);
+  }, [bridge, themeInfo]);
   useEffect(() => {
     bridge.sendTicket(ticket);
   }, [bridge, ticket]);

@@ -12,7 +12,7 @@ export default function TabsLayout() {
   if (!active) return <Redirect href="/connect" />;
   const triaging = store ? triageSessions(store.state).filter((s) => s.triageStatus === "triaging" || s.busy).length : 0;
   return (
-    <NativeTabs tintColor={c.accent}>
+    <NativeTabs tintColor={c.accent} badgeBackgroundColor={c.redSolid}>
       <NativeTabs.Trigger name="board">
         <NativeTabs.Trigger.Icon sf={{ default: "rectangle.split.3x1", selected: "rectangle.split.3x1.fill" }} />
         <NativeTabs.Trigger.Label>Board</NativeTabs.Trigger.Label>

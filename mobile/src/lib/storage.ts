@@ -2,6 +2,7 @@
 // (tokens under their own keys) and a small preferences blob. Nothing secret ships in the app.
 
 import * as SecureStore from "expo-secure-store";
+import { normalizePrefs, type Prefs } from "./prefs";
 
 export interface SavedServer {
   id: string;
@@ -10,18 +11,7 @@ export interface SavedServer {
   addedAt: number;
 }
 
-export type ThemePreference = "system" | "light" | "dark";
-
-export interface Prefs {
-  theme: ThemePreference;
-  hideChildren: boolean;
-  lastProject: string | null;
-  /** Board project filter (null = All projects) */
-  boardProject: string | null;
-  activeServer: string | null;
-}
-
-export const DEFAULT_PREFS: Prefs = { theme: "system", hideChildren: false, lastProject: null, boardProject: null, activeServer: null };
+export { DEFAULT_PREFS, normalizePrefs, type Prefs, type ThemePreference } from "./prefs";
 
 const SERVERS = "harness.servers";
 const PREFS = "harness.prefs";
@@ -44,6 +34,6 @@ export const saveToken = (id: string, token: string) => SecureStore.setItemAsync
 export const deleteToken = (id: string) => SecureStore.deleteItemAsync(tokenKey(id), opts);
 
 export async function loadPrefs(): Promise<Prefs> {
-  return { ...DEFAULT_PREFS, ...(await readJson<Partial<Prefs>>(PREFS, {})) };
+  return normalizePrefs(await readJson<Partial<Prefs>>(PREFS, {}));
 }
 export const savePrefs = (p: Prefs) => SecureStore.setItemAsync(PREFS, JSON.stringify(p), opts).catch(() => {});

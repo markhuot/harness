@@ -301,7 +301,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
           onPress={() => void send()}
           style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 20, backgroundColor: c.accent, alignItems: "center", justifyContent: "center", opacity: !text.trim() || sending ? 0.4 : pressed ? 0.7 : 1 })}
         >
-          {sending ? <Spinner color="#fff" /> : <Icon name="arrowUp" size={19} color="#fff" strokeWidth={2.5} />}
+          {sending ? <Spinner color={c.onAccent} /> : <Icon name="arrowUp" size={19} color={c.onAccent} strokeWidth={2.5} />}
         </Pressable>
       </View>
     </View>

@@ -97,7 +97,7 @@ function NavRow({ icon, label, count, badge, active, onPress, last }: { icon: Ic
       <Text style={{ color: c.text, fontSize: 16, flex: 1 }}>{label}</Text>
       {badge ? (
         <View style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: c.amber, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 }}>
-          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>{badge}</Text>
+          <Text style={{ color: c.onAmber, fontSize: 12, fontWeight: "700" }}>{badge}</Text>
         </View>
       ) : count ? (
         <Text style={{ color: c.text3, fontSize: 14 }}>{count}</Text>

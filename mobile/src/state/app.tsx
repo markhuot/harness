@@ -4,7 +4,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Appearance, useColorScheme } from "react-native";
 import * as SystemUI from "expo-system-ui";
-import { dark, light, type Palette } from "../theme/tokens";
+import { resolveThemeChoice, type Theme as ColorTheme } from "@harness/shared/themes";
+import type { Palette } from "../theme/tokens";
 import { probeServer, type ProbeResult } from "../lib/connection";
 import type { ServerAddress } from "../lib/pair";
 import { removeServer, renameServer, upsertServer } from "../lib/servers";
@@ -139,20 +140,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Theme: follows the system unless Settings → Appearance overrides it
+// Theme: follows the system unless Settings → Appearance overrides it; the light/dark theme
+// picks decide the colors for each appearance
 // ---------------------------------------------------------------------------
 
 export interface Theme {
+  /** Appearance preference: System / Light / Dark */
   preference: ThemePreference;
   resolved: "light" | "dark";
+  /** The active color theme: the light pick when resolved is light, the dark pick when dark */
+  theme: ColorTheme;
   c: Palette;
 }
 
 export function useTheme(): Theme {
   const { prefs } = useApp();
   const scheme = useColorScheme();
-  const resolved = prefs.theme === "system" ? (scheme === "dark" ? "dark" : "light") : prefs.theme;
-  return useMemo(() => ({ preference: prefs.theme, resolved, c: resolved === "dark" ? dark : light }), [prefs.theme, resolved]);
+  const { theme: pref, lightTheme, darkTheme } = prefs;
+  return useMemo(() => {
+    const { appearance, theme } = resolveThemeChoice({ appearance: pref, lightTheme, darkTheme }, scheme === "dark");
+    return { preference: pref, resolved: appearance, theme, c: theme.tokens };
+  }, [pref, lightTheme, darkTheme, scheme]);
 }
 
 export const useColors = () => useTheme().c;

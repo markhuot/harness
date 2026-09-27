@@ -161,11 +161,11 @@ export function Button({
 }) {
   const c = useColors();
   const colors = {
-    primary: { bg: c.accent, fg: "#ffffff", border: c.accent },
+    primary: { bg: c.accent, fg: c.onAccent, border: c.accent },
     secondary: { bg: c.bgElev, fg: c.text, border: c.border },
     ghost: { bg: "transparent", fg: c.text2, border: "transparent" },
     danger: { bg: "transparent", fg: c.red, border: "transparent" },
-    dangerSolid: { bg: c.red, fg: "#ffffff", border: c.red },
+    dangerSolid: { bg: c.redSolid, fg: c.onDanger, border: c.redSolid },
   }[variant];
   return (
     <Pressable
