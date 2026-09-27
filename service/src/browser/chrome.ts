@@ -1,7 +1,8 @@
 // Locate and launch a Chrome/Chromium process with remote debugging on an ephemeral port.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { CdpClient } from "./cdp.ts";
 
 const MAC_CANDIDATES = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -33,6 +34,49 @@ export function findChrome(explicit?: string): string | null {
     candidates.push(...MAC_CANDIDATES.map((p) => join(process.env.HOME!, p)));
   }
   return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+let cloneRootCache: string | null | undefined;
+
+/**
+ * Where macOS Chrome puts the ~2 GB copy of its app bundle it makes at every launch
+ * (`<DARWIN_USER_TEMP_DIR>/../X/com.google.Chrome.code_sign_clone/code_sign_clone.XXXXXX`).
+ * Chrome deletes its clone only on a clean exit, so anything that ends Chrome with a
+ * signal leaks one. Null when it can't be located (non-macOS, or not created yet).
+ */
+export function codeSignCloneRoot(): string | null {
+  if (cloneRootCache !== undefined) return cloneRootCache;
+  if (process.platform !== "darwin") return (cloneRootCache = null);
+  let userTemp = "";
+  try {
+    userTemp = Bun.spawnSync(["getconf", "DARWIN_USER_TEMP_DIR"]).stdout.toString().trim();
+  } catch {}
+  if (!userTemp) userTemp = process.env.TMPDIR ?? "";
+  if (!userTemp) return (cloneRootCache = null);
+  const root = join(dirname(userTemp.replace(/\/+$/, "")), "X", "com.google.Chrome.code_sign_clone");
+  // Only cache a hit: the directory appears the first time Chrome ever launches.
+  if (!existsSync(root)) return null;
+  return (cloneRootCache = root);
+}
+
+/** Current clone directory names (not paths). */
+export function listCodeSignClones(): string[] {
+  const root = codeSignCloneRoot();
+  if (!root) return [];
+  try {
+    return readdirSync(root).filter((n) => n.startsWith("code_sign_clone."));
+  } catch {
+    return [];
+  }
+}
+
+export interface CloseOptions {
+  /** An already-open browser-level CDP client to send Browser.close on. */
+  cdp?: CdpClient;
+  /** How long to wait for Chrome to exit after Browser.close (ms). */
+  graceMs?: number;
+  /** How long to wait after SIGTERM before SIGKILL (ms). */
+  termMs?: number;
 }
 
 export interface LaunchOptions {
@@ -82,8 +126,13 @@ export class ChromeProcess {
   ) {
     void proc.exited.then(() => {
       this._exited = true;
+      // Crashes and external kills leak the clone too; clean up after ourselves.
+      void this.removeLeakedClone();
     });
   }
+
+  /** This process's code-sign clone directory (macOS), when it could be attributed. */
+  cloneDir?: string;
 
   /** The browser-level DevTools WebSocket URL (set once launched). */
   wsUrl = "";
@@ -109,6 +158,7 @@ export class ChromeProcess {
       unlinkSync(portFile);
     } catch {}
 
+    const clonesBefore = new Set(listCodeSignClones());
     const proc = Bun.spawn([opts.chromePath, ...chromeArgs(opts)], {
       stdin: "ignore",
       stdout: "ignore",
@@ -129,12 +179,16 @@ export class ChromeProcess {
         if (port > 0 && path) {
           chrome.port = port;
           chrome.wsUrl = `ws://127.0.0.1:${port}${path}`;
+          // The clone exists before DevTools is up. Only claim it when exactly one new clone
+          // appeared, so a concurrent launch elsewhere is never mistaken for ours.
+          const fresh = listCodeSignClones().filter((n) => !clonesBefore.has(n));
+          if (fresh.length === 1) chrome.cloneDir = join(codeSignCloneRoot()!, fresh[0]!);
           return chrome;
         }
       }
       await Bun.sleep(25);
     }
-    await chrome.kill();
+    await chrome.close();
     throw new Error(`Timed out waiting for Chrome DevTools port.\n${chrome.stderr()}`);
   }
 
@@ -143,19 +197,77 @@ export class ChromeProcess {
     return this.stderrTail.join("\n");
   }
 
-  /** SIGTERM, then SIGKILL if it hasn't exited within `graceMs`. */
-  async kill(graceMs = 3000): Promise<void> {
-    if (this._exited) return;
-    try {
-      this.proc.kill("SIGTERM");
-    } catch {}
-    const exited = await Promise.race([this.proc.exited.then(() => true), Bun.sleep(graceMs).then(() => false)]);
-    if (!exited) {
+  /**
+   * Shut Chrome down, as cleanly as it allows: CDP Browser.close and wait for it to exit
+   * (the only path on which Chrome deletes its code-sign clone), then SIGTERM, then SIGKILL.
+   * After an unclean exit, removes this process's own clone directory.
+   */
+  async close(opts: CloseOptions = {}): Promise<void> {
+    const graceMs = opts.graceMs ?? 10_000;
+    const termMs = opts.termMs ?? 5000;
+    if (!this._exited && this.wsUrl) {
+      let cdp = opts.cdp && !opts.cdp.closed ? opts.cdp : undefined;
+      let own = false;
+      try {
+        if (!cdp) {
+          cdp = await CdpClient.connect(this.wsUrl, { connectTimeoutMs: 2000 });
+          own = true;
+        }
+        // Chrome may drop the socket before answering; that's fine, we wait for exit.
+        await cdp.send("Browser.close", {}, undefined, 3000).catch(() => {});
+      } catch {
+        // Couldn't reach DevTools: fall through to signals.
+      } finally {
+        if (own) cdp?.close();
+      }
+      await this.waitForExit(graceMs);
+    }
+    if (!this._exited) {
+      try {
+        this.proc.kill("SIGTERM");
+      } catch {}
+      await this.waitForExit(termMs);
+    }
+    if (!this._exited) {
       try {
         this.proc.kill("SIGKILL");
       } catch {}
       await this.proc.exited;
+      this._exited = true;
     }
+    await this.removeLeakedClone();
+  }
+
+  /** @deprecated use close(); kept as an alias so nothing kills Chrome un-gracefully. */
+  kill(): Promise<void> {
+    return this.close();
+  }
+
+  private async waitForExit(ms: number): Promise<boolean> {
+    if (this._exited) return true;
+    const exited = await Promise.race([this.proc.exited.then(() => true), Bun.sleep(ms).then(() => false)]);
+    if (exited) this._exited = true;
+    return exited;
+  }
+
+  /**
+   * If Chrome died without deleting its clone (signal, crash), delete it — only the one this
+   * process was attributed at launch, never anything else in the clone root.
+   */
+  async removeLeakedClone(): Promise<void> {
+    const dir = this.cloneDir;
+    if (!dir || !this._exited) return;
+    // Give a clean exit a moment to finish its own cleanup, and helpers time to die.
+    for (let attempt = 0; attempt < 10 && existsSync(dir); attempt++) {
+      await Bun.sleep(attempt === 0 ? 300 : 500);
+      if (!existsSync(dir)) break;
+      if (attempt >= 1) {
+        try {
+          rmSync(dir, { recursive: true, force: true });
+        } catch {}
+      }
+    }
+    if (!existsSync(dir)) this.cloneDir = undefined;
   }
 
   private drainStderr(stream: ReadableStream<Uint8Array>): void {

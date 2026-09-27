@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "bun";
 import type { BrowserState } from "@harness/shared";
-import { findChrome } from "./chrome.ts";
+import { codeSignCloneRoot, findChrome, listCodeSignClones } from "./chrome.ts";
 import { BrowserManager, normalizeUrl } from "./manager.ts";
 import { createBrowserService } from "./index.ts";
 import type { BrowserFrame } from "./types.ts";
@@ -14,6 +14,12 @@ if (!chromePath) {
   console.warn("[browser tests] Chrome not found (set HARNESS_CHROME_PATH); skipping Chrome integration tests.");
 }
 const withChrome = chromePath ? describe : describe.skip;
+
+// One Chrome profile for the whole file (Chrome instances here run one at a time).
+const profileDir = chromePath ? mkdtempSync(join(tmpdir(), "harness-browser-test-")) : "";
+afterAll(() => {
+  if (profileDir) rmSync(profileDir, { recursive: true, force: true });
+});
 
 const html = (body: string, title = "Fixture") =>
   new Response(`<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`, {
@@ -114,20 +120,17 @@ describe("normalizeUrl", () => {
 withChrome("BrowserManager (real Chrome)", () => {
   let server: Server<unknown>;
   let base: string;
-  let profileDir: string;
   let browser: BrowserManager;
 
   beforeAll(() => {
     server = Bun.serve({ port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
-    profileDir = mkdtempSync(join(tmpdir(), "harness-browser-test-"));
     browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000 });
   });
 
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-    rmSync(profileDir, { recursive: true, force: true });
   });
 
   test("state is null before a session has a tab; open returns title and url", async () => {
@@ -413,34 +416,53 @@ withChrome("BrowserManager (real Chrome)", () => {
   test("relaunches Chrome on next use after a crash", async () => {
     await browser.open("s-crash", `${base}/`);
     const pid = browser.chromePid!;
+    // SIGKILL means Chrome can't delete its ~2 GB code-sign clone; we must, and only that one.
+    const clone = browser.chromeCloneDir;
     expect(isAlive(pid)).toBe(true);
-    process.kill(pid, "SIGKILL");
-    await until(() => !isAlive(pid), "chrome to die");
-    await until(async () => (await browser.state("s-crash")) === null, "tab to be forgotten");
-    const state = await browser.open("s-crash", `${base}/page2`);
-    expect(state.title).toBe("Page Two");
-    expect(browser.chromePid).not.toBe(pid);
+    try {
+      process.kill(pid, "SIGKILL");
+      await until(() => !isAlive(pid), "chrome to die");
+      await until(async () => (await browser.state("s-crash")) === null, "tab to be forgotten");
+      if (clone) await until(() => !existsSync(clone), "the killed Chrome's clone to be removed", 10_000);
+
+      const state = await browser.open("s-crash", `${base}/page2`);
+      expect(state.title).toBe("Page Two");
+      expect(browser.chromePid).not.toBe(pid);
+    } finally {
+      if (clone && existsSync(clone)) rmSync(clone, { recursive: true, force: true });
+    }
   }, 30_000);
 });
 
 withChrome("createBrowserService shutdown", () => {
-  test("shutdown kills the Chrome process and a later call relaunches", async () => {
-    const profileDir = mkdtempSync(join(tmpdir(), "harness-browser-shutdown-"));
+  test("shutdown closes Chrome gracefully: process gone, no code-sign clone left, later call relaunches", async () => {
+    const cloneRoot = codeSignCloneRoot();
+    if (!cloneRoot) console.warn("[browser tests] code_sign_clone dir not found; skipping clone-leak assertions.");
     const service = createBrowserService({ profileDir, chromePath: chromePath! }) as BrowserManager;
     try {
       expect(service.chromePid).toBeUndefined(); // lazy: nothing launched yet
-      await service.open("s", "about:blank");
-      const pid = service.chromePid!;
-      expect(isAlive(pid)).toBe(true);
-      await service.shutdown();
-      expect(isAlive(pid)).toBe(false);
-      expect(service.chromePid).toBeUndefined();
-      expect(await service.state("s")).toBeNull();
-      await service.open("s", "about:blank");
-      expect(service.chromePid).not.toBe(pid);
+      for (let round = 0; round < 2; round++) {
+        const before = new Set(listCodeSignClones());
+        await service.open("s", "about:blank");
+        const pid = service.chromePid!;
+        expect(isAlive(pid)).toBe(true);
+        if (cloneRoot) {
+          // This Chrome made (and was attributed) exactly one new clone — so the check below can fail.
+          const fresh = listCodeSignClones().filter((n) => !before.has(n));
+          expect(fresh.length).toBe(1);
+          expect(service.chromeCloneDir).toBe(join(cloneRoot, fresh[0]!));
+        }
+        await service.shutdown();
+        expect(isAlive(pid)).toBe(false);
+        expect(service.chromePid).toBeUndefined();
+        expect(await service.state("s")).toBeNull();
+        if (cloneRoot) {
+          // Chrome itself removed it on its clean exit; nothing new is left behind.
+          expect(listCodeSignClones().filter((n) => !before.has(n))).toEqual([]);
+        }
+      }
     } finally {
       await service.shutdown();
-      rmSync(profileDir, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 60_000);
 });

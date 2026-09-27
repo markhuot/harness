@@ -118,6 +118,11 @@ export class BrowserManager implements BrowserService {
     this.settleTimeoutMs = opts.settleTimeoutMs ?? 10_000;
   }
 
+  /** The running Chrome's code-sign clone directory (macOS), if attributed. */
+  get chromeCloneDir(): string | undefined {
+    return this.browser && !this.browser.chrome.exited ? this.browser.chrome.cloneDir : undefined;
+  }
+
   /** PID of the running Chrome, if any (for diagnostics/tests). */
   get chromePid(): number | undefined {
     return this.browser && !this.browser.chrome.exited ? this.browser.chrome.pid : undefined;
@@ -380,11 +385,9 @@ export class BrowserManager implements BrowserService {
     for (const entry of this.entries.values()) if (entry.tab) this.dropTab(entry.tab);
     this.entries.clear();
     if (!browser) return;
-    if (!browser.cdp.closed) {
-      await browser.cdp.send("Browser.close", {}, undefined, 2000).catch(() => {});
-      browser.cdp.close();
-    }
-    await browser.chrome.kill();
+    // Graceful: Browser.close and wait for exit, so Chrome removes its code-sign clone.
+    await browser.chrome.close({ cdp: browser.cdp });
+    browser.cdp.close();
   }
 
   // -------------------------------------------------------------------------
@@ -406,8 +409,8 @@ export class BrowserManager implements BrowserService {
     const old = this.browser;
     this.browser = undefined;
     if (old) {
+      await old.chrome.close({ cdp: old.cdp });
       old.cdp.close();
-      await old.chrome.kill();
     }
     const chromePath = findChrome(this.opts.chromePath);
     if (!chromePath) {
@@ -428,7 +431,7 @@ export class BrowserManager implements BrowserService {
     try {
       cdp = await CdpClient.connect(chrome.wsUrl, { timeoutMs: this.opts.commandTimeoutMs ?? 30_000 });
     } catch (e) {
-      await chrome.kill();
+      await chrome.close();
       throw e;
     }
     const browser: Browser = { chrome, cdp };
@@ -437,7 +440,7 @@ export class BrowserManager implements BrowserService {
       // Chrome died or the socket dropped: forget every tab; the next call relaunches.
       for (const entry of this.entries.values()) if (entry.tab) this.dropTab(entry.tab);
       if (this.browser === browser) this.browser = undefined;
-      if (!chrome.exited) void chrome.kill();
+      if (!chrome.exited) void chrome.close();
     });
     void chrome.exitedPromise.then(() => cdp.close());
 

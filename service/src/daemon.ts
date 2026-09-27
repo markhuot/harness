@@ -19,7 +19,9 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     log(`received ${signal}, shutting down`);
-    const timer = setTimeout(() => process.exit(1), 10_000);
+    // Long enough for orchestrator.stop() plus a graceful Chrome close (worst case ~15s); a forced
+    // exit mid-close orphans Chrome and leaks its multi-GB code_sign_clone directory.
+    const timer = setTimeout(() => process.exit(1), 25_000);
     try {
       await harness.stop();
       if (readServiceJson(harness.paths)?.pid === process.pid) rmSync(harness.paths.serviceJsonPath, { force: true });
