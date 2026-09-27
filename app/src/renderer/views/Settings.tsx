@@ -3,8 +3,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { setThemePreference, useTheme } from "../state/theme";
-import { THEME_PREFERENCES, type ThemePreference } from "../../main/theme";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -13,6 +11,7 @@ import { relativeTime } from "../components/bits";
 import { ModelsSection } from "./settings/ModelSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
+import { AppearanceSection } from "./settings/AppearanceSettings";
 
 const SECTIONS = [
   ["appearance", "Appearance"],
@@ -650,47 +649,3 @@ function ProjectsSection() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Appearance (app-side: persisted by the main process, not the service)
-// ---------------------------------------------------------------------------
-
-const THEME_LABEL: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
-
-function AppearanceSection() {
-  const theme = useTheme();
-  return (
-    <Section id="appearance" title="Appearance">
-      <div className="card-surface settings-card">
-        <Row
-          title="Theme"
-          sub={
-            theme.forced
-              ? `Forced to ${theme.forced} by HARNESS_THEME.`
-              : theme.preference === "system"
-                ? `Follows macOS (currently ${theme.resolved}).`
-                : "Stays the same regardless of the macOS setting."
-          }
-        >
-          <div className="theme-picker" role="radiogroup" aria-label="Theme">
-            {THEME_PREFERENCES.map((pref) => (
-              <button
-                key={pref}
-                role="radio"
-                aria-checked={theme.preference === pref}
-                data-theme-option={pref}
-                className={`theme-option ${theme.preference === pref ? "on" : ""}`}
-                onClick={() => void setThemePreference(pref)}
-              >
-                <span className="theme-swatch">
-                  {pref !== "dark" && <span className="sw-light" />}
-                  {pref !== "light" && <span className="sw-dark" />}
-                </span>
-                {THEME_LABEL[pref]}
-              </button>
-            ))}
-          </div>
-        </Row>
-      </div>
-    </Section>
-  );
-}

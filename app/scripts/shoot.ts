@@ -1,13 +1,21 @@
 // Visual check: boot the mock service, launch the built app against it once per route/theme and
 // capture the window via webContents.capturePage (HARNESS_CAPTURE, see src/main/main.ts).
 //
-//   bun scripts/shoot.ts [outDir] [--only=board-light,ticket-dark]
+//   bun scripts/shoot.ts [outDir] [--only=board-light,ticket-dark] [--themes=harness-dark,catppuccin-mocha]
+//
+// --themes takes color theme ids (default: harness-light,harness-dark, saved as -light / -dark);
+// other themes are saved as <shot>-<theme id>.png.
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { findTheme } from "@harness/shared/themes";
 
 const appDir = resolve(import.meta.dir, "..");
 const outDir = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots"));
 const only = process.argv.find((a) => a.startsWith("--only="))?.slice(7).split(",");
+const themeIds = process.argv.find((a) => a.startsWith("--themes="))?.slice(9).split(",") ?? ["harness-light", "harness-dark"];
+const unknown = themeIds.filter((id) => !findTheme(id));
+if (unknown.length) throw new Error(`unknown theme ids: ${unknown.join(", ")}`);
+const themeLabel = (id: string) => (id === "harness-light" ? "light" : id === "harness-dark" ? "dark" : id);
 mkdirSync(outDir, { recursive: true });
 
 const port = 7700 + Math.floor(Math.random() * 90);
@@ -43,6 +51,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
   { name: "settings", route: "#/settings" },
+  { name: "appearance", route: "#/settings/appearance" },
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "compose", route: "#/compose" },
@@ -61,7 +70,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");
 try {
-  for (const theme of ["light", "dark"] as const) {
+  for (const themeId of themeIds) {
+    const theme = themeLabel(themeId);
     for (const s of shots) {
       const name = `${s.name}-${theme}`;
       if (only && !only.includes(name) && !only.includes(s.name)) continue;
@@ -70,7 +80,7 @@ try {
         ...process.env,
         HARNESS_URL: base,
         HARNESS_TOKEN: token,
-        HARNESS_THEME: theme,
+        HARNESS_THEME_ID: themeId,
         HARNESS_ROUTE: s.route,
         HARNESS_CAPTURE: file,
         HARNESS_CAPTURE_DELAY: String(s.delay ?? 2500),

@@ -23,7 +23,9 @@ test("every var() the renderer uses is defined somewhere", () => {
   for (const { f, text } of css) for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) used.set(m[1]!, f);
   for (const text of tsx) for (const m of text.matchAll(/var\(\s*(--[\w-]+)/g)) used.set(m[1]!, "tsx");
   // `var(--c-${status})` in a template: the prefix must name a family of defined tokens.
-  const ok = (v: string) => (v.endsWith("-") ? [...defined].some((d) => d.startsWith(v)) : defined.has(v));
+  // Settings previews draw with --p-<token>: the previewed theme's tokens, set inline per card.
+  const known = (v: string) => defined.has(v) || (v.startsWith("--p-") && themeVars.has("--" + v.slice(4)));
+  const ok = (v: string) => (v.endsWith("-") ? [...defined, ...[...themeVars].map((t) => "--p-" + t.slice(2))].some((d) => d.startsWith(v)) : known(v));
   const missing = [...used].filter(([v]) => !ok(v)).map(([v, f]) => `${v} (${f})`);
   expect(missing).toEqual([]);
   // Sanity: the scan actually sees the theme tokens in use.
