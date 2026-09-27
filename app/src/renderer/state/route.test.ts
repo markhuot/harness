@@ -10,6 +10,12 @@ test("parses board routes with and without a project", () => {
   expect(parseRoute("#/board/all/ticket/FOO-1/bogus")).toMatchObject({ tab: "summaries" });
 });
 
+test("the conductor Tickets tab has its own route segment", () => {
+  const r: Route = { view: "board", projectId: null, ticketKey: "HEL-1", tab: "children" };
+  expect(formatRoute(r)).toBe("#/board/all/ticket/HEL-1/children");
+  expect(parseRoute("#/board/all/ticket/HEL-1/children")).toEqual(r);
+});
+
 test("round-trips every view", () => {
   const routes: Route[] = [
     { view: "board", projectId: null, ticketKey: null, tab: "summaries" },

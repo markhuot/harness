@@ -4,10 +4,11 @@
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
 
-export type BuiltinTicketTab = "summaries" | "transcript" | "browser" | "details";
+/** "children" is the conductor-only Tickets tab (listed right after Summaries). */
+export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "browser" | "details";
 /** Built-in tabs, or a plugin tab as "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins"). */
 export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}`;
-export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "transcript", "browser", "details"];
+export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "children", "transcript", "browser", "details"];
 
 const PLUGIN_TAB = /^plugin:([a-z0-9][a-z0-9_-]*):([a-z0-9][a-z0-9_-]*)$/;
 export function pluginTabRoute(pluginId: string, tabId: string): TicketTab {

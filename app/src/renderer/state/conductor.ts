@@ -1,0 +1,162 @@
+// Pure derivations for conductor tickets and their children (Children tab, board rollup,
+// board dimming / hiding). No React, no I/O.
+
+import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+
+/** Why a ticket needs the human right now, or null. Order = urgency. */
+export type Attention = "approval" | "blocked" | "review";
+
+export function attentionOf(t: Ticket): Attention | null {
+  if (t.pendingApproval) return "approval";
+  if (t.status === "blocked") return "blocked";
+  if (t.status === "review" && t.humanReview === "pending") return "review";
+  return null;
+}
+
+export const needsHuman = (t: Ticket) => attentionOf(t) !== null;
+
+export const isChild = (t: Ticket) => t.parentId !== null;
+
+/**
+ * Children are downplayed on the board so the conductor stays the focus, except when they
+ * need the human: those keep full weight wherever they are.
+ */
+export const dimOnBoard = (t: Ticket) => isChild(t) && !needsHuman(t);
+
+/** "Hide child tickets" never hides a child the human has to act on. */
+export const hideOnBoard = (t: Ticket, hideChildren: boolean) => hideChildren && dimOnBoard(t);
+
+export function childrenOfTicket(tickets: Record<string, Ticket>, conductorId: string): Ticket[] {
+  return Object.values(tickets)
+    .filter((t) => t.parentId === conductorId)
+    .sort((a, b) => a.createdAt - b.createdAt || a.position - b.position);
+}
+
+export interface Progress {
+  total: number;
+  byStatus: Record<TicketStatus, number>;
+  /** Children needing the human (approval / blocked / review with human pending) */
+  attention: number;
+}
+
+export function progressOf(children: Ticket[]): Progress {
+  const byStatus: Record<TicketStatus, number> = { planning: 0, in_progress: 0, blocked: 0, review: 0, done: 0 };
+  let attention = 0;
+  for (const c of children) {
+    byStatus[c.status]++;
+    if (needsHuman(c)) attention++;
+  }
+  return { total: children.length, byStatus, attention };
+}
+
+/** "4/10 done · 2 in progress · 1 blocked · 1 review" (zero counts omitted, planning = "up next"). */
+export function progressLabel(p: Progress): string {
+  const parts = [`${p.byStatus.done}/${p.total} done`];
+  if (p.byStatus.in_progress) parts.push(`${p.byStatus.in_progress} in progress`);
+  if (p.byStatus.blocked) parts.push(`${p.byStatus.blocked} blocked`);
+  if (p.byStatus.review) parts.push(`${p.byStatus.review} review`);
+  if (p.byStatus.planning) parts.push(`${p.byStatus.planning} up next`);
+  return parts.join(" · ");
+}
+
+/** Bar segments, left to right: done, review, in progress, blocked, planning. Empty ones dropped. */
+export const SEGMENT_ORDER: TicketStatus[] = ["done", "review", "in_progress", "blocked", "planning"];
+export function progressSegments(p: Progress): { status: TicketStatus; count: number; pct: number }[] {
+  if (!p.total) return [];
+  return SEGMENT_ORDER.filter((s) => p.byStatus[s] > 0).map((s) => ({ status: s, count: p.byStatus[s], pct: (p.byStatus[s] / p.total) * 100 }));
+}
+
+export interface DepState {
+  key: string;
+  done: boolean;
+  ticket?: Ticket;
+}
+
+export function depStates(tickets: Record<string, Ticket>, t: Ticket): DepState[] {
+  const byKey = new Map<string, Ticket>();
+  for (const x of Object.values(tickets)) byKey.set(x.key.toUpperCase(), x);
+  return t.dependsOn.map((key) => {
+    const dep = byKey.get(key.toUpperCase());
+    return { key, done: dep?.status === "done", ticket: dep };
+  });
+}
+
+/** Keys still holding this ticket back (unknown keys count as pending). */
+export const waitingOn = (deps: DepState[]) => deps.filter((d) => !d.done).map((d) => d.key);
+
+/**
+ * Depth in the sibling dependency graph: 0 = depends on no sibling, n = 1 + deepest sibling dep.
+ * Deps outside the set are ignored; cycles are cut (a ticket revisited mid-walk counts as 0).
+ */
+export function dependencyDepths(children: Ticket[]): Map<string, number> {
+  const byKey = new Map(children.map((c) => [c.key.toUpperCase(), c]));
+  const depth = new Map<string, number>();
+  const walking = new Set<string>();
+  const visit = (t: Ticket): number => {
+    const k = t.key.toUpperCase();
+    const known = depth.get(k);
+    if (known !== undefined) return known;
+    if (walking.has(k)) return 0;
+    walking.add(k);
+    let d = 0;
+    for (const dep of t.dependsOn) {
+      const sib = byKey.get(dep.toUpperCase());
+      if (sib) d = Math.max(d, visit(sib) + 1);
+    }
+    walking.delete(k);
+    depth.set(k, d);
+    return d;
+  };
+  for (const c of children) visit(c);
+  return depth;
+}
+
+export interface ChildGroup {
+  status: TicketStatus;
+  tickets: Ticket[];
+}
+
+/**
+ * Children grouped by status in lifecycle (board) order, empty groups dropped. Within a group,
+ * attention first, then dependency order (a ticket after the siblings it waits on), then age.
+ */
+export function groupChildren(children: Ticket[]): ChildGroup[] {
+  const depth = dependencyDepths(children);
+  const rank = (t: Ticket) => (needsHuman(t) ? 0 : 1);
+  return TICKET_STATUSES.map((status) => ({
+    status,
+    tickets: children
+      .filter((c) => c.status === status)
+      .sort(
+        (a, b) =>
+          rank(a) - rank(b) ||
+          (depth.get(a.key.toUpperCase()) ?? 0) - (depth.get(b.key.toUpperCase()) ?? 0) ||
+          a.createdAt - b.createdAt,
+      ),
+  })).filter((g) => g.tickets.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Board preference: "Hide child tickets" (per machine, localStorage)
+// ---------------------------------------------------------------------------
+
+export const HIDE_CHILDREN_KEY = "harness.board.hideChildren";
+
+type KV = Pick<Storage, "getItem" | "setItem">;
+const defaultStorage = (): KV | undefined => (typeof localStorage === "undefined" ? undefined : localStorage);
+
+export function readHideChildren(storage: KV | undefined = defaultStorage()): boolean {
+  try {
+    return storage?.getItem(HIDE_CHILDREN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeHideChildren(value: boolean, storage: KV | undefined = defaultStorage()): void {
+  try {
+    storage?.setItem(HIDE_CHILDREN_KEY, value ? "1" : "0");
+  } catch {
+    // Private mode / blocked storage: the toggle still works for this session.
+  }
+}
