@@ -440,6 +440,40 @@ the traffic; `any` exposes the port to every network the Mac joins (coffee-shop 
 with the token readable by anyone on the path. Rotate the token if a phone is lost or a QR code
 leaks.
 
+## Color themes
+
+Themes live in `shared/src/themes` (`@harness/shared/themes`); the desktop, the phone and plugins
+all read the same registry. A theme is `{ id, name, appearance: "light" | "dark", source,
+syntaxTheme, tokens }`, where `tokens` (`ThemeTokens`, `types.ts`) is the semantic set the apps
+use: surfaces (`bg`, `bgSidebar`, `bgElev`, `bgSunken`, `bgColumn`, hover/active washes, borders),
+three text levels, accent (+ hover, soft, `accentText`, `onAccent`), `focus`, `selection`, shadows,
+the modal scrim, one color per board column (`planning` … `done`), tones (`green`, `red` +
+`redSolid`/`onDanger`, `amber` + `onAmber`, `violet`, each with a soft fill) and diff colors.
+`CSS_VAR` maps each token to the desktop's custom property (`--bg`, `--text-2`, `--c-blocked`, …).
+
+Bundled: Harness Light / Harness Dark (the original look, verbatim, and the defaults), One Light,
+Atom One Dark, Catppuccin Latte / Frappé / Macchiato / Mocha, Solarized Light / Dark, GitHub Light /
+Dark, Dracula, Nord, Gruvbox Light / Dark, Tokyo Night / Tokyo Night Day, Rosé Pine / Rosé Pine
+Dawn. Each cites its palette. Non-Harness themes go through `defineTheme` (`define.ts`): the
+palette names surfaces, text, accent and hues; washes, soft fills, focus, shadows and on-colors are
+derived the same way for every theme, and text / accent text / tone text are nudged toward the
+theme's ink only as far as WCAG AA needs (body text aims for 7:1, status dots 3:1).
+`themes.test.ts` recomputes contrast for every pair the UI relies on (text levels on every
+surface, text on the selected row, on-colors on accent/danger/amber fills, tones in their pills,
+diff colors, status dots on columns and cards) and fails below AA; the Harness themes carry a
+pinned, exact list of their original sub-AA pairs, since they must stay pixel-identical. It also
+checks status colors stay apart (OKLab ΔE ≥ 0.08) and text levels keep their order.
+
+Settings → Appearance keeps System / Light / Dark and adds a Light theme and a Dark theme pick
+(only themes of that appearance, previewed as a mini board in the theme's own tokens). The active
+theme is the light pick when the resolved appearance is light, the dark pick when dark
+(`resolveThemeChoice`). Desktop: `preferences.json` holds `{ theme, lightTheme, darkTheme }`; the
+preload reads it synchronously and stamps `<html data-theme>` (resolved appearance — the plugin
+contract), `data-theme-id` and the tokens as custom properties on `<html style>` before first
+paint; the renderer restamps on every change. No stylesheet defines a theme token
+(`theme-tokens.test.ts`). `HARNESS_THEME_ID=<id>` forces a theme (screenshots:
+`scripts/shoot.ts --themes=<ids>`). Phone: see "iPhone app".
+
 ## Plugins
 
 A plugin adds ticket tabs (a web UI in an iframe) and, optionally, server routes. Plugin UIs
@@ -503,8 +537,8 @@ auth (they carry no data), with path-traversal and symlink-escape protection.
 | Direction | Message | When |
 | --- | --- | --- |
 | page → host | `{ type: "harness:ready" }` | the SDK's `connect()` starts; the host answers with init |
-| host → page | `{ type: "harness:init", baseUrl, token, ticketKey, tabId, theme }` | page load and every ready |
-| host → page | `{ type: "harness:theme", theme }` | the resolved theme changes (desktop: `<html data-theme>` MutationObserver) |
+| host → page | `{ type: "harness:init", baseUrl, token, ticketKey, tabId, theme, appearance?, themeId?, themeName?, syntaxTheme?, tokens? }` | page load and every ready |
+| host → page | `{ type: "harness:theme", theme, appearance?, themeId?, themeName?, syntaxTheme?, tokens? }` | the theme changes: light/dark or the color theme (desktop: `<html data-theme>` / `data-theme-id` MutationObserver) |
 | host → page | `{ type: "harness:ticket", ticket }` | every `ticket.upserted` for that ticket |
 | page → host | `{ type: "harness:openExternal", url }` | http(s)/mailto only |
 | page → host | `{ type: "harness:navigate", ticketKey }` | open another ticket |
@@ -525,8 +559,13 @@ iframe it accepts messages only from `window.parent`, first from an allowed host
 WebView it accepts them only when `event.source` is its own window and `event.origin` is its own
 origin (the service origin, which may be a Tailscale address); a top-level page without
 `ReactNativeWebView` never trusts its own origin. In both, after init only the origin that sent init
-is trusted. `theme` is always the resolved `"light" | "dark"`; the SDK mirrors it onto the page's
-`<html data-theme>` and `color-scheme`.
+is trusted. `theme` is always the resolved `"light" | "dark"`, which old plugins keep reading. Hosts
+with color themes also send the active theme's `themeId`, `themeName`, `syntaxTheme` (the matching
+Shiki theme, or null) and `tokens` (`ThemeTokens`). The SDK validates them and mirrors all of it
+onto the page: `<html data-theme>`, `color-scheme`, `data-theme-id`, and each token as
+`--harness-<app var>` (`--harness-bg`, `--harness-text-2`, `--harness-c-planning`,
+`--harness-diff-add`, …), removing stale ones. `onTheme(theme, info)` fires on any change,
+including dark → dark. Plugin CSS should use the vars with fallbacks so older hosts still work.
 
 **Builds.** Plugin bundles are not committed (`dist` is gitignored). `bun run plugins:build` at the
 root builds every builtin plugin, `app/scripts/build.ts` runs it, and the service runs a plugin's
@@ -557,7 +596,10 @@ Tab **Changes** (`when: "workdir"`). Routes:
 The UI uses Pierre's [@pierre/trees](https://trees.software) for the changed-file tree (git status
 colors plus `+a −d` decorations) and [@pierre/diffs](https://diffs.com) `CodeView` for the stacked,
 virtualized diffs with sticky headers and syntax highlighting. It offers unified/split view,
-expandable context, a commits dropdown, empty/error/truncated states, and follows the host theme.
+expandable context, a commits dropdown, empty/error/truncated states, and follows the host theme:
+the chrome uses the `--harness-*` tokens (Harness Light/Dark as fallbacks), and diffs and the tree
+use the app theme's `syntaxTheme`, falling back to pierre-light / pierre-dark when there is none or
+it fails to load.
 It refreshes on `harness:ticket` (debounced), polls every 4 s while the ticket is busy (file edits
 don't emit ticket events), and has a refresh button. Below 720 px the tree becomes a drawer.
 
@@ -590,6 +632,11 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   only on real changes.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
+  Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.
+- **Themes.** The phone uses the shared registry directly; `useColors()` returns the active theme's
+  tokens, and the status bar, navigation and tab bar follow it. Appearance plus the Light / Dark
+  theme picks are stored in the Keychain prefs blob and normalized on load.
+  `harness://settings?lightTheme=<id>&darkTheme=<id>&theme=<system|light|dark>` applies a setup.
 - **iOS 27.** UIKit now requires the scene life cycle; `mobile/plugins/withSceneLifecycle.js`
   wires Expo's `EXExpoAppSceneDelegate` into the generated project.
 - **Builds.** `mobile/Tools/publish-install.sh` archives the Release app (JS bundle embedded),

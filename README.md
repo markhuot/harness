@@ -46,7 +46,8 @@ It shares its state logic with the desktop through `@harness/shared/state`.
 - **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,
   then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
   throwaway daemon, taps through approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
-  and saves light and dark screenshots to `mobile/build/screens/`. Use
+  and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
+  board + settings shots per color theme). Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 
@@ -94,10 +95,10 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 ## Tests
 
 ```sh
-cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown)
+cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
-cd app && bun test        # routes, theme
-cd mobile && bun run test # pairing links, connection probe, browser touch mapping, servers, tokens, install page
+cd app && bun test        # routes, theme resolution, CSS var coverage
+cd mobile && bun run test # pairing links, connection probe, browser touch mapping, servers, prefs/theme pickers, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service
