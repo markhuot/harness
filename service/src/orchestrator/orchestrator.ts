@@ -106,8 +106,13 @@ interface ActiveRun {
   mcpToken: string | null;
   /** The agent called block during this run */
   blocked: boolean;
-  /** Calls a permission system inside the driver denied without asking (permission_denied) */
+  /**
+   * Calls a permission system inside the driver denied without asking (permission_denied) and
+   * the agent didn't then run successfully in the same run
+   */
   denials: { toolName: string; input: unknown; reason: string }[];
+  /** callId → tool call of this run, to match a later successful call against the denials */
+  calls: Map<string, { toolName: string; input: unknown }>;
   /** grantKey()s of the one-time grants the driver pre-approved for this run (grant_applied) */
   appliedGrants: Set<string>;
 }
@@ -1229,17 +1234,19 @@ export class Orchestrator {
 
   /**
    * After a succeeded work/complete/conductor run: the driver's own permission system denied a
-   * call without asking (Claude Code's auto-mode classifier). Unless the agent submitted, the
-   * run's last denial becomes a pending approval (attached to the agent's block, if it blocked).
+   * call without asking (Claude Code's auto-mode classifier) and the call never went through.
+   * The run's last such denial becomes a pending approval: attached to the agent's block if it
+   * blocked; if it submitted anyway (it usually does, reporting the denial), the ticket goes from
+   * review to blocked instead of starting a review of work that couldn't be done.
    * A denial of a tool the human already allows on the ticket is retried with the exact call
    * pre-approved instead (bounded by MAX_AUTO_RETRIES). Returns true when it handled the run.
    */
   private surfaceDenial(ticket: Ticket, run: Run, active: ActiveRun): boolean {
     const denial = active.denials.at(-1);
-    if (!denial || !APPROVABLE_RUNS.includes(run.kind) || active.submitted) return false;
+    if (!denial || !APPROVABLE_RUNS.includes(run.kind)) return false;
     const t = this.store.tickets.get(ticket.id);
     if (!t || t.pendingApproval || this.permissionModeFor(t) === "read_only") return false;
-    if (t.status !== "in_progress" && t.status !== "blocked" && !(run.kind === "complete" && t.status === "review")) return false;
+    if (t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && (run.kind === "complete" || active.submitted))) return false;
     const key = grantKey(denial.toolName, denial.input);
     // The exact rule for this call was passed and it was still denied: next time, ask instead.
     if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
@@ -1533,6 +1540,7 @@ export class Orchestrator {
       mcpToken: null,
       blocked: false,
       denials: [],
+      calls: new Map(),
       appliedGrants: new Set(),
     };
     this.active.set(run.id, active);
@@ -1642,9 +1650,18 @@ export class Orchestrator {
         this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text });
         return null;
       case "tool_call":
+        active.calls.set(ev.callId, { toolName: ev.name, input: ev.input });
         this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input });
         return null;
       case "tool_result":
+        if (!ev.result.isError && active.denials.length) {
+          // The denied call went through after all (e.g. the agent retried it and it was allowed).
+          const call = active.calls.get(ev.callId);
+          if (call) {
+            const key = grantKey(call.toolName, call.input);
+            active.denials = active.denials.filter((d) => grantKey(d.toolName, d.input) !== key);
+          }
+        }
         this.append(run.sessionId, run.id, "tool", {
           type: "tool_result",
           callId: ev.callId,

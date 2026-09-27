@@ -72,10 +72,15 @@ const SUMMARIES = section(
 Call \`post_summary\` at meaningful milestones, not after every step.`,
 );
 
-const APPROVALS = section(
-  "Tool approvals",
-  `Some tool calls need a human's approval first. If a tool call is denied pending human approval, stop immediately: don't retry it, don't work around it with another tool, and don't call any other tool. The ticket is blocked until the human decides, and you will be resumed in this conversation with their answer.`,
-);
+const APPROVALS_BODY = `Some tool calls need a human's approval first. If a tool call is denied pending human approval, stop immediately: don't retry it, don't work around it with another tool, and don't call any other tool. The ticket is blocked until the human decides, and you will be resumed in this conversation with their answer.`;
+const CLASSIFIER_DENIALS = (next: string) =>
+  `If a permission classifier denies a call you need (e.g. "denied by the Claude Code auto mode classifier"), don't retry it or work around it, and don't submit for review: ${next} The human sees the denied call and can approve it; you are resumed with the answer and an approved retry is allowed.`;
+/** Tool approvals for a run kind: work runs can block, complete/conductor runs just stop. */
+const approvals = (kind: RunKind) =>
+  section(
+    "Tool approvals",
+    `${APPROVALS_BODY}\n${CLASSIFIER_DENIALS(kind === "work" ? "call \`block\` saying what the call is for." : "stop and end your turn, saying what the call is for.")}`,
+  );
 
 const BROWSER = section(
   "Browser",
@@ -254,7 +259,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && LIFECYCLE,
     instructions,
     ticketRun && SUMMARIES,
-    (kind === "work" || kind === "complete" || kind === "conductor") && APPROVALS,
+    (kind === "work" || kind === "complete" || kind === "conductor") && approvals(kind),
     browser && BROWSER,
   );
 }

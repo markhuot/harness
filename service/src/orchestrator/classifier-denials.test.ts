@@ -19,6 +19,8 @@ interface Sim {
   ruleIgnored: boolean;
   /** Each run tries a different command (never granted) */
   freshCommands: boolean;
+  /** After the denial the agent retries the same call in the same run, and it runs */
+  retryInRun: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Sim {
  * grant, if the prompt tool (requestApproval) allows it. Otherwise the classifier denies it.
  */
 function setup(sim: Partial<Sim> = {}) {
-  const s: Sim = { after: "none", ruleIgnored: false, freshCommands: false, ...sim };
+  const s: Sim = { after: "none", ruleIgnored: false, freshCommands: false, retryInRun: false, ...sim };
   const driver = new FakeDriver();
   const h = makeOrchestrator({ driver });
   const dir = join(h.home, "acme");
@@ -58,6 +60,10 @@ function setup(sim: Partial<Sim> = {}) {
     }
     yield { type: "tool_result", callId: "tu1", name: "Bash", result: { content: [{ type: "text", text: "denied by the Claude Code auto mode classifier" }], isError: true } };
     yield { type: "permission_denied", callId: "tu1", toolName: "Bash", input: call, reason: REASON };
+    if (s.retryInRun) {
+      yield { type: "tool_call", callId: "tu2", name: "Bash", input: { ...call, description: "try again" } };
+      yield { type: "tool_result", callId: "tu2", name: "Bash", result: { content: [{ type: "text", text: "scaffolded" }] } };
+    }
     if (s.after === "block") await ctx.ops.block(ctx, "The classifier denied npx; may I run it?");
     else if (s.after === "submit") await ctx.ops.submitForReview(ctx, "Done without scaffolding.");
     else yield { type: "text", text: "It was denied." };
@@ -103,12 +109,21 @@ describe("classifier denials → approval cards", () => {
     expect([resumed.status, resumed.blockedReason, resumed.pendingApproval]).toEqual(["in_progress", null, null]);
   });
 
-  test("no card when the agent submitted anyway", async () => {
+  test("an agent that submits after the denial (what it usually does) is blocked with the card instead of reviewed", async () => {
     const h = setup({ after: "submit" });
     const t = await denied(h);
     const cur = ticket(h, t.key);
-    expect(cur.status).toBe("review");
-    expect(cur.pendingApproval).toBeNull();
+    expect(cur.status).toBe("blocked");
+    expect(cur.pendingApproval).toMatchObject({ toolName: "Bash", source: "classifier", reason: REASON });
+    expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]); // no review run
+    expect(h.orch.summaries(t.key).some((s) => s.author === "agent" && s.body === "Done without scaffolding.")).toBe(true);
+  });
+
+  test("no card when the denied call went through later in the same run", async () => {
+    const h = setup({ retryInRun: true });
+    const t = await denied(h);
+    const cur = ticket(h, t.key);
+    expect([cur.status, cur.pendingApproval]).toEqual(["review", null]);
   });
 
   test("allow_once: the resumed run gets exactly that call as a one-time grant, used up by it", async () => {
