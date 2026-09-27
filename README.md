@@ -25,6 +25,10 @@ bun service/src/cli.ts service status|start|stop|restart|uninstall
 tail -f ~/.harness/logs/service.log
 ```
 
+To reach the service from a phone, pick **Settings → Network → Tailscale** in the app (or
+`harness listen tailscale`) and scan the **Pair a phone** QR code. See DESIGN.md "Network" for
+the modes and what exposing the token means.
+
 Everything the service stores lives under `~/.harness/`: the database, the API token,
 logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different location.
 

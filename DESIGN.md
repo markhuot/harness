@@ -9,7 +9,7 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
 │ Electron app │ ─────────────────────────────────────────▶ │ harness service (Bun, launchd)│
 │ (React UI)   │ ◀──── events: tickets, transcript, frames ─ │  SQLite · orchestrator · runs │
 └──────────────┘                                            │  drivers · tools · MCP · CDP  │
-   future iOS app ── SSH tunnel / LAN ──────────────────────▶ │  headless Chrome (one tab per │
+   iOS app ── Tailscale / LAN (settings.listen) ────────────▶ │  headless Chrome (one tab per │
                                                              │  session, screencast relayed) │
                                                              └─────────────────────────────┘
 ```
@@ -32,7 +32,7 @@ Closing the app never stops agents: runs live in the service, which launchd keep
 | `service/src/browser/*` | CDP client + `BrowserService` implementation |
 | `service/src/api/*` | HTTP routes, WebSocket, MCP endpoint |
 | `service/src/daemon.ts` | Service entrypoint |
-| `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...` |
+| `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...`, `harness network|listen|pair|token rotate` |
 | `app/` | Electron main + React renderer |
 | `service/src/plugins/host.ts` | Plugin discovery, loading, `/plugins/<id>/api` + `/ui` serving, tab `when` evaluation |
 | `plugins/sdk/` | Plugin API: `server.ts` (types, `definePlugin`) and `harness-plugin.ts` (iframe bridge, `connect()`) |
@@ -370,7 +370,8 @@ Directives are read from the run prompt:
 ## HTTP API
 
 All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health` and
-the static plugin UIs under `/plugins/:id/ui/`.
+the static plugin UIs under `/plugins/:id/ui/`. That holds for loopback and remote clients alike;
+`/mcp/:runToken` is additionally refused (403) to anything but loopback.
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
@@ -385,7 +386,9 @@ GET    /watchers                 POST /watchers            PATCH/DELETE /watcher
 POST   /watchers/:id/run         POST /watchers/inject { source, item }
 GET    /mappings                 POST /mappings            DELETE /mappings/:id
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
-GET    /settings                 PATCH /settings
+GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)
+GET    /network                  → NetworkStatus           GET /pairing → PairingInfo (409 in localhost mode)
+POST   /token/rotate             → { token }; the old token is rejected at once, open sockets closed
 GET    /browser/:sessionId       POST /browser/:sessionId/navigate { url }
 GET    /plugins                  GET /tickets/:key/tabs    → PluginInfo[] / PluginTab[]
 *      /plugins/:id/api/*        (plugin routes, bearer auth)
@@ -396,6 +399,45 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+## Network
+
+The service always answers on loopback, so the desktop app, agents' MCP URLs and the `harness`
+CLI keep using `http://127.0.0.1:<port>` whatever the setting. `settings.listen` adds to that:
+
+| `listen.mode` | Binds |
+| --- | --- |
+| `localhost` (default) | `127.0.0.1` |
+| `tailscale` | the Tailscale IPv4 (`tailscale status --json`, else `tailscale ip -4`; PATH, `/usr/local/bin`, `/opt/homebrew/bin`, the app bundle) + `127.0.0.1` |
+| `any` | `0.0.0.0` (covers loopback) |
+| `custom` | `listen.host`, which must be (or resolve to) an address of a local interface, + `127.0.0.1` |
+
+The port stays `HARNESS_PORT` / 7717. Each address is its own `Bun.serve` listener sharing one
+fetch/WebSocket handler (`api/network.ts` `NetworkManager`). `PATCH /settings { listen }`
+validates the whole body, rebinds, then persists: new listeners start before old ones stop
+(macOS lets `0.0.0.0` and a specific address share a port), and if any fails to bind the partial
+starts are undone, the old set keeps serving and the error comes back as 409 and as
+`NetworkStatus.error`. Removed listeners are retired: requests to addresses nothing else serves
+get 503, and they close (with their keep-alive and WebSocket connections) after a 1s drain. On
+boot, a mode that can't bind (Tailscale not up yet) falls back to loopback, logs it, and retries
+every 30s; `/network` shows `active: "localhost"` next to the configured `mode` meanwhile.
+`HARNESS_HOST` (`localhost` / `tailscale` / `any` / a host) overrides the setting for tests and
+dev; the setting can't be changed while it's set.
+
+**Pairing.** `GET /pairing` returns `{ url, token, pairUrl }` for the best address a phone can
+reach: the Tailscale IP (bound directly or covered by `0.0.0.0`) > the custom host > the first LAN
+IPv4 under `any`. `pairUrl` is exactly
+`harness://pair?url=<encodeURIComponent(url)>&token=<encodeURIComponent(token)>`
+(`shared/src/pairing.ts` builds and parses it); the desktop shows it as a QR code. `POST
+/token/rotate` writes a new token file (0600, atomic rename), rejects the old token immediately,
+closes every open WebSocket, and the desktop re-reads the token file and reconnects.
+
+**Exposure.** The bearer token is full control of the service: it can start agents that run
+commands in your projects. Anything beyond `localhost` puts that behind the token alone, sent in
+plain HTTP. Prefer `tailscale`, where only your tailnet can reach the port and WireGuard encrypts
+the traffic; `any` exposes the port to every network the Mac joins (coffee-shop Wi-Fi included)
+with the token readable by anyone on the path. Rotate the token if a phone is lost or a QR code
+leaks.
 
 ## Plugins
 
