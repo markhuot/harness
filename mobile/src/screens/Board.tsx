@@ -13,7 +13,7 @@ import { StatusDot, Empty } from "../ui/kit";
 import { TicketCard } from "./TicketCard";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { haptic } from "../ui/haptics";
-import { action, buttonItem, menuItem } from "../ui/header";
+import { action, buttonItem, primaryItemStyle, menuItem } from "../ui/header";
 
 export function BoardScreen() {
   const { state, client, dispatch, refresh } = useStore();
@@ -108,7 +108,7 @@ export function BoardScreen() {
               ...(project ? [action("Project settings", "gearshape", () => router.push({ pathname: "/project/[id]", params: { id: project.id } }))] : []),
               action("Refresh", "arrow.clockwise", () => void onRefresh()),
             ]),
-            buttonItem("New session", "plus", () => router.push({ pathname: "/new", params: projectId ? { projectId } : {} }), { variant: "prominent", tintColor: c.accent }),
+            buttonItem("New session", "plus", () => router.push({ pathname: "/new", params: projectId ? { projectId } : {} }), primaryItemStyle(c)),
           ],
         }}
       />

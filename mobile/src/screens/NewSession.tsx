@@ -10,7 +10,7 @@ import { Button, ProjectKey, Segmented } from "../ui/kit";
 import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
 import { haptic } from "../ui/haptics";
-import { buttonItem } from "../ui/header";
+import { buttonItem, primaryItemStyle } from "../ui/header";
 
 export function NewSessionScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
@@ -80,7 +80,7 @@ export function NewSessionScreen() {
         options={{
           title: "New session",
           unstable_headerLeftItems: () => [buttonItem("Cancel", "xmark", () => router.dismiss())],
-          unstable_headerRightItems: () => [buttonItem(start ? "Start" : "Plan", start ? "paperplane.fill" : "list.bullet.clipboard", () => void submit(), { variant: "prominent", tintColor: c.accent, disabled: !canSubmit })],
+          unstable_headerRightItems: () => [buttonItem(start ? "Start" : "Plan", start ? "paperplane.fill" : "list.bullet.clipboard", () => void submit(), { ...primaryItemStyle(c), disabled: !canSubmit })],
         }}
       />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">

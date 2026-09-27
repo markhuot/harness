@@ -267,9 +267,14 @@ try {
     await relaunch();
     await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
     await Bun.sleep(2200);
+    // Scroll down to the Appearance pickers.
+    await axe("swipe", "--start-x", "200", "--start-y", "700", "--end-x", "200", "--end-y", "150", "--duration", "0.4", "--udid", udid);
+    await Bun.sleep(1200);
     await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
     await relaunch();
-    await Bun.sleep(2200);
+    // The board needs the connection and the first ticket list, not just the first frame.
+    await until("board loaded", async () => (await labels(udid)).some((l) => /^[A-Z]+-\d+ /.test(l)), 20000).catch(() => {});
+    await Bun.sleep(1500);
     const file = join(shots, `board-${id}.png`);
     await simctl("io", udid, "screenshot", file);
     console.log(`  ${file}`);

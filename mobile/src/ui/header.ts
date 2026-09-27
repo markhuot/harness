@@ -15,3 +15,12 @@ export function menuItem(label: string, icon: string, items: NativeStackHeaderIt
 export function buttonItem(label: string, icon: string, onPress: () => void, extra: { tintColor?: string; variant?: "plain" | "done" | "prominent"; disabled?: boolean } = {}): NativeStackHeaderItem {
   return { type: "button", label, icon: sf(icon), onPress, ...extra };
 }
+
+/**
+ * Styling for a primary header button. iOS draws a prominent item's glyph in white on the tint, so
+ * themes whose accent needs dark text (Dracula, Catppuccin, Nord…) get a plain item tinted with the
+ * accent instead, which keeps the glyph readable.
+ */
+export function primaryItemStyle(c: { accent: string; onAccent: string }): { variant: "plain" | "prominent"; tintColor: string } {
+  return c.onAccent.toLowerCase() === "#ffffff" ? { variant: "prominent", tintColor: c.accent } : { variant: "plain", tintColor: c.accent };
+}

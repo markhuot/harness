@@ -10,7 +10,7 @@ import { Segmented } from "../ui/kit";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
 import { PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
-import { buttonItem } from "../ui/header";
+import { buttonItem, primaryItemStyle } from "../ui/header";
 
 interface Draft {
   name: string;
@@ -73,7 +73,7 @@ export function WatcherFormScreen() {
         options={{
           title: existing ? "Edit watcher" : "New watcher",
           unstable_headerLeftItems: () => [buttonItem("Cancel", "xmark", () => router.dismiss())],
-          unstable_headerRightItems: () => [buttonItem(existing ? "Save" : "Create", "checkmark", () => void submit(), { variant: "prominent", tintColor: c.accent, disabled: !valid || busy })],
+          unstable_headerRightItems: () => [buttonItem(existing ? "Save" : "Create", "checkmark", () => void submit(), { ...primaryItemStyle(c), disabled: !valid || busy })],
         }}
       />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
