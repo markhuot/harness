@@ -28,3 +28,10 @@ test("page: itms-services link to the manifest on the site, Mac download, sizes,
   expect(page(info({ notarized: true }))).not.toContain("right-click");
   expect(p).not.toMatch(/—/); // house style: no em dashes in page copy
 });
+
+test("page without a Mac build yet: no download link, the iPhone install still works", () => {
+  const p = page({ ...info(), mac: null });
+  expect(p).not.toContain("Harness-mac.zip");
+  expect(p).toContain("still being prepared");
+  expect(p).toContain("itms-services://");
+});

@@ -52,7 +52,6 @@
     font: 15px/1.5 var(--font);
     -webkit-font-smoothing: antialiased;
     display: flex;
-    align-items: center;
     justify-content: center;
     padding:
       calc(24px + env(safe-area-inset-top))
@@ -60,9 +59,9 @@
       calc(24px + env(safe-area-inset-bottom))
       calc(16px + env(safe-area-inset-left));
   }
-  main {
+  .stack { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; }
+  section {
     width: 100%;
-    max-width: 420px;
     background: var(--bg-elev);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -120,25 +119,46 @@
     word-break: break-word;
   }
   .foot { margin-top: 16px; font-size: 12px; color: var(--text-3); }
+  h2 { margin: 0; font-size: 17px; font-weight: 650; }
+  .meta { margin-top: 10px; font: 12px var(--mono); color: var(--text-3); }
+  section.pair p:first-of-type { margin-top: 8px; }
+  a.install.secondary { background: var(--bg-sunken); color: var(--text); border: 1px solid var(--border); }
 </style>
 </head>
 <body>
-  <main>
-    <header>
-      <img src="icon512.png" alt="">
-      <div>
-        <h1>Harness</h1>
-        <span class="tag">Development build</span>
-      </div>
-    </header>
-    <p>Your Harness board on your iPhone, talking to the service running on your Mac.</p>
-    <a class="install" href="itms-services://?action=download-manifest&amp;url=https://harness-install.vercel.app/manifest.plist">Install Harness</a>
-    <ol>
-      <li>Open this page in Safari on the iPhone and tap <strong>Install Harness</strong>.</li>
-      <li>If iOS says the developer is untrusted, open Settings &rarr; General &rarr; VPN &amp; Device Management and trust <code>Apple Development: Mark Huot</code>.</li>
-      <li>To pair the phone, scan the QR code in the desktop app under Settings &rarr; Network.</li>
-    </ol>
-    <p class="foot">The app contains no credentials. Pairing gives it the token.</p>
-  </main>
+  <div class="stack">
+    <section>
+      <header>
+        <img src="icon512.png" alt="">
+        <div>
+          <h1>Harness</h1>
+          <span class="tag">Release app-20260927.1529</span>
+        </div>
+      </header>
+      <p>These builds are for Mark's own Macs and iPhones. The Mac app runs agents from a local Harness checkout, and the iPhone app connects to it.</p>
+    </section>
+
+    <section>
+      <h2>iPhone</h2>
+      <p>This is a development build, so it only installs on iPhones registered to the Apple Developer team.</p>
+      <a class="install" href="itms-services://?action=download-manifest&amp;url=https://harness-install.vercel.app/manifest.plist">Install on iPhone</a>
+      <ol>
+        <li>Open this page in Safari on the iPhone and tap <strong>Install on iPhone</strong>.</li>
+        <li>If iOS says the developer isn't trusted, open Settings &rarr; General &rarr; VPN &amp; Device Management and trust <code>Apple Development: Mark Huot</code>.</li>
+      </ol>
+      <div class="meta">Version 1.0.0 (1) &middot; 10.3 MB &middot; 2026-09-27</div>
+    </section>
+
+    <section>
+      <h2>Mac (Apple silicon)</h2>
+      <p>The signed Mac build for this release is still being prepared. Check back shortly.</p>
+    </section>
+
+    <section class="pair">
+      <h2>Pair your phone</h2>
+      <p>On the Mac, open Harness &rarr; Settings &rarr; Network, choose <strong>Tailscale</strong>, then scan the QR code with the iPhone's camera.</p>
+      <p class="foot">Neither build contains a token. Pairing hands the phone one, and it's kept in the iPhone's Keychain. <a href="https://github.com/markhuot/harness/releases/tag/app-20260927.1529">Release notes and files</a></p>
+    </section>
+  </div>
 </body>
 </html>

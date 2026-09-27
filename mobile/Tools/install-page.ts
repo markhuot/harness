@@ -12,7 +12,8 @@ export interface ReleaseInfo {
   releaseUrl: string;
   date: string;
   ios: { url: string; version: string; build: string; bytes: number };
-  mac: { url: string; version: string; bytes: number; notarized: boolean };
+  /** null while the Mac build isn't on the release yet */
+  mac: { url: string; version: string; bytes: number; notarized: boolean } | null;
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -57,7 +58,7 @@ export function manifest(r: ReleaseInfo): string {
 
 export function page(r: ReleaseInfo): string {
   const itms = `itms-services://?action=download-manifest&url=${r.site}/manifest.plist`;
-  const openNote = r.mac.notarized
+  const openNote = !r.mac ? "" : r.mac.notarized
     ? "It's signed and notarized, so it opens like any other app."
     : "It's signed with Mark's Developer ID but not notarized yet, so the first time, right-click Harness.app, choose Open, then confirm.";
   return `<!doctype html>
@@ -213,9 +214,13 @@ export function page(r: ReleaseInfo): string {
 
     <section>
       <h2>Mac (Apple silicon)</h2>
-      <p>${esc(openNote)}</p>
+${
+        r.mac
+          ? `      <p>${esc(openNote)}</p>
       <a class="install secondary" href="${esc(r.mac.url)}">Download for Mac</a>
-      <div class="meta">Version ${esc(r.mac.version)} &middot; ${mb(r.mac.bytes)} &middot; ${esc(r.date)}</div>
+      <div class="meta">Version ${esc(r.mac.version)} &middot; ${mb(r.mac.bytes)} &middot; ${esc(r.date)}</div>`
+          : `      <p>The signed Mac build for this release is still being prepared. Check back shortly.</p>`
+      }
     </section>
 
     <section class="pair">
