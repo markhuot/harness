@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { HarnessClient, type PluginInfo, type PluginTab } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
@@ -44,7 +45,7 @@ export default {
   },
 };`;
 
-async function boot(setup: (builtin: string, user: string) => void) {
+async function boot(setup: (builtin: string, user: string) => void, opts: { hostname?: string } = {}) {
   const home = tempHome("harness-plugins-");
   const builtin = join(home, "builtin-plugins");
   const user = join(home, "plugins");
@@ -55,6 +56,7 @@ async function boot(setup: (builtin: string, user: string) => void) {
   harness = await createHarness({
     home,
     port: 0,
+    hostname: opts.hostname,
     drivers: [new DummyDriver({ delayMs: 0 })],
     browser: stubBrowser(),
     watchers: null,
@@ -246,6 +248,23 @@ describe("plugin host over HTTP", () => {
     expect((await fetch(h.url + "/plugins/viewer/ui/", { method: "POST" })).status).toBe(405);
     // The API side of the same plugin still needs the token.
     expect((await get("/plugins/viewer/api/x")).status).toBe(401);
+  });
+
+  // A phone reaches the service over the LAN or Tailscale, never loopback. Bun streams a file
+  // body there without its status line or headers, so this only fails off loopback.
+  const lanIp = Object.values(networkInterfaces()).flat().find((a) => a && a.family === "IPv4" && !a.internal)?.address;
+  test.skipIf(!lanIp)("static UI: a well-formed HTTP response on a non-loopback address", async () => {
+    const { h } = await boot(
+      (builtin) => writePlugin(builtin, "viewer", { id: "viewer", ui: "dist", tabs: [{ id: "main", title: "Main" }] }, { "dist/index.html": "<!doctype html><p>hi</p>" }),
+      { hostname: lanIp },
+    );
+    const status = await h.network.status();
+    const bound = status.bound.find((b) => b.address === lanIp);
+    expect(bound).toBeDefined();
+    const res = await fetch(`${bound!.url}/plugins/viewer/ui/index.html?tab=main`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(await res.text()).toBe("<!doctype html><p>hi</p>");
   });
 
   test("build: a missing or stale UI is built on load; UI requests wait for the build; failures surface", async () => {

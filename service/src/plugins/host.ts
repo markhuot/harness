@@ -411,8 +411,10 @@ export class PluginHost {
     } catch {
       return json({ error: "Not found" }, 404);
     }
+    // Buffered, not `new Response(Bun.file(...))`: Bun's sendfile path drops the status line and
+    // headers on non-loopback sockets (LAN, Tailscale), which iOS reports as NSURLErrorDomain -1017.
     const f = Bun.file(file);
-    return new Response(f, {
+    return new Response(await f.bytes(), {
       headers: {
         "content-type": f.type || "application/octet-stream",
         "cache-control": "no-cache",
