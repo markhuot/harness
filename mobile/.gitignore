@@ -1,0 +1,9 @@
+# Build output and the published IPA are artifacts, not source
+build/
+*.ipa
+*.xcarchive
+Install/Harness.ipa
+
+# Vercel project link
+Install/.vercel
+.vercel
