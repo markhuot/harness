@@ -282,8 +282,8 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
             <>
               <button
                 className={`btn ${ready ? "btn-primary" : ""}`}
-                disabled={!ready}
-                title={ready ? "Finalize: merge, clean up, mark done" : "Needs both agent and human approval"}
+                disabled={!ready || ticket.busy}
+                title={!ready ? "Needs both agent and human approval" : ticket.busy ? "An agent run is in progress" : "Finalize: merge, clean up, mark done"}
                 onClick={() => setCompleting(true)}
               >
                 <Icon name="checkCircle" /> Complete

@@ -104,8 +104,8 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
-| Both approved | ticket is **ready** (still in review). UI shows "Complete". |
-| `POST /complete` | enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
+| Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
+| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
 | Drag to done | `done` without an agent run |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |

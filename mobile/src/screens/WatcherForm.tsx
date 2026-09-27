@@ -112,7 +112,7 @@ export function WatcherFormScreen() {
         </FormField>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ color: c.text, fontSize: 16 }}>Enabled</Text>
-          <SSwitch value={d.enabled} onChange={(v) => set("enabled", v)} />
+          <SSwitch label="Enabled" value={d.enabled} onChange={(v) => set("enabled", v)} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

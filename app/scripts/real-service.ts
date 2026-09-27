@@ -82,19 +82,17 @@ try {
   check("tool calls render in the transcript", toolRows.some((n) => /submit_for_review|post_summary/.test(n)), toolRows.join(","));
   await shot("2-transcript");
 
-  // --- 4. Summaries tab, then Approve → Complete → Done.
+  // --- 4. Summaries tab, then Approve → the complete run starts by itself (autoComplete) → Done.
   await go(`#/board/${project.id}/ticket/${created.key}`);
   await until("summaries", () => exists(".summary"));
   const summaryText = await js<string>(`document.querySelector(".summary-list")?.textContent ?? ""`);
   check("agent summaries render", summaryText.length > 10, summaryText.slice(0, 80));
   await shot("3-review");
   check("Approve clicked", await until("Approve button", () => clickText(".actions button", "Approve")));
-  await until("Complete enabled", () => clickText(".actions button", "Complete"));
-  await until("complete modal", () => exists(".modal"));
-  await shot("4-complete-modal");
-  await clickText(".modal-foot button", "Complete");
   const done = await until("ticket done", async () => (await api<TicketDetail>("GET", `/tickets/${created.key}`)).ticket.status === "done", 30000);
-  check("Complete runs the agent and lands in Done", done);
+  check("approving runs the complete agent step by itself and lands in Done", done);
+  const runs = (await api<TicketDetail>("GET", `/tickets/${created.key}`)).runs.map((r) => r.kind);
+  check("the complete run followed the approval", runs.at(-1) === "complete", runs.join(","));
   const inDone = await until("card in Done", () =>
     js<boolean>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done")?.textContent.includes(${JSON.stringify(created.key)})`),
   );

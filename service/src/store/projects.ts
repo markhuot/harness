@@ -12,6 +12,7 @@ interface ProjectRow {
   default_driver: string | null;
   use_worktrees: number;
   require_human_review: number;
+  auto_complete?: number;
   permission_mode?: string | null;
   default_models: string;
   created_at: number;
@@ -27,6 +28,7 @@ const toProject = (r: ProjectRow): Project => ({
   defaultDriver: r.default_driver,
   useWorktrees: bool(r.use_worktrees),
   requireHumanReview: bool(r.require_human_review),
+  autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
   permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
   defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
   createdAt: r.created_at,
@@ -45,6 +47,7 @@ export interface NewProject {
   defaultDriver?: string | null;
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
+  autoComplete?: boolean;
   defaultModels?: Record<string, string>;
 }
 
@@ -87,8 +90,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, default_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $defaultModels, $t, $t)`,
         )
         .run({
           id,
@@ -98,6 +101,7 @@ export class ProjectRepo {
           defaultDriver: input.defaultDriver ?? null,
           useWorktrees: int(input.useWorktrees ?? true),
           requireHumanReview: int(input.requireHumanReview ?? true),
+          autoComplete: int(input.autoComplete ?? true),
           defaultModels: toJson(input.defaultModels ?? {}),
           t,
         });
@@ -112,7 +116,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, default_models = $defaultModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -122,6 +126,7 @@ export class ProjectRepo {
         defaultDriver: patch.defaultDriver !== undefined ? patch.defaultDriver : existing.defaultDriver,
         useWorktrees: int(patch.useWorktrees ?? existing.useWorktrees),
         requireHumanReview: int(patch.requireHumanReview ?? existing.requireHumanReview),
+        autoComplete: int(patch.autoComplete ?? existing.autoComplete),
         defaultModels: toJson(patch.defaultModels ?? existing.defaultModels),
         t: now(),
       });

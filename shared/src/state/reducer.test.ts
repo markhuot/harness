@@ -21,7 +21,7 @@ const project = (id: string, key: string): Project => ({
   defaultDriver: null,
   defaultModels: {},
   useWorktrees: false,
-  requireHumanReview: true, permissionMode: null,
+  requireHumanReview: true, autoComplete: true, permissionMode: null,
   createdAt: 1,
   updatedAt: 1,
 });

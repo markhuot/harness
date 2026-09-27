@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { migrate, openDb, SCHEMA_VERSION } from "../db";
+import { MIGRATIONS, migrate, openDb, SCHEMA_VERSION } from "../db";
 import type { ExternalRef } from "@harness/shared";
 import { Store } from "./index";
 
@@ -40,6 +40,21 @@ describe("db", () => {
     db.close();
     const again = openDb(join(dir, "h.db"));
     expect((again.query("PRAGMA user_version").get() as any).user_version).toBe(SCHEMA_VERSION);
+  });
+
+  test("migration 7 turns autoComplete on for projects that already exist", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 6).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    migrate(db);
+    const store = new Store(db);
+    expect(store.projects.get("p1")!.autoComplete).toBe(true);
+    const off = store.projects.update("p1", { autoComplete: false })!;
+    expect(off.autoComplete).toBe(false);
+    expect(store.projects.update("p1", { name: "renamed" })!.autoComplete).toBe(false);
   });
 
   test("refuses a database from a newer schema", () => {

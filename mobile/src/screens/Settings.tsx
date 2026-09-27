@@ -424,7 +424,7 @@ function WatchersSection() {
             </View>
           }
         >
-          <SSwitch value={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
+          <SSwitch label={`Enable ${w.name}`} value={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
         </SRow>
       ))}
     </Group>

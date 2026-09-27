@@ -615,11 +615,11 @@ try {
         const t = await settle(seeded.approval.key, (x) => !x.pendingApproval, 15000);
         return `${t.key} → ${t.status}`;
       });
-      await check("Approve records the human review", async () => {
+      await check("Approve records the human review and auto-completes the ticket", async () => {
         await fresh(`harness://ticket/${k(seeded.hello)}`);
         await tapWhere(udid, "Approve");
-        const t = await settle(seeded.hello.key, (x) => x.humanReview === "approved", 15000);
-        return `${t.key} human=${t.humanReview}`;
+        const t = await settle(seeded.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
+        return `${t.key} human=${t.humanReview} → ${t.status}`;
       });
       await check("composer answers a blocked ticket", async () => {
         await fresh(`harness://ticket/${k(seeded.blocked)}`);
