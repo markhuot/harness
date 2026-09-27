@@ -11,14 +11,14 @@ import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime } from "../components/bits";
 import { ModelsSection } from "./settings/ModelSettings";
-
-const PERMISSION_MODES: Settings["claudePermissionMode"][] = ["bypassPermissions", "acceptEdits", "auto", "dontAsk"];
+import { PermissionsSection } from "./settings/PermissionSettings";
 
 const SECTIONS = [
   ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
   ["models", "Models"],
+  ["permissions", "Permissions"],
   ["watchers", "Watchers"],
   ["mappings", "Mappings"],
   ["projects", "Projects"],
@@ -65,6 +65,7 @@ export function SettingsView() {
             </Section>
           )}
           {state.settings && <ModelsSection settings={state.settings} />}
+          {state.settings && <PermissionsSection settings={state.settings} />}
           <WatchersSection />
           <MappingsSection />
           <ProjectsSection />
@@ -255,21 +256,6 @@ function GeneralSection({ settings, drivers }: { settings: PublicSettings; drive
               if (Number.isFinite(n)) save({ maxConcurrentRuns: Math.min(32, Math.max(1, n)) });
             }}
           />
-        </Row>
-      </div>
-
-      <div className="settings-section-head" style={{ marginTop: 20 }}>
-        <div className="section-title">Claude Code</div>
-      </div>
-      <div className="card-surface settings-card">
-        <Row title="Permission mode" sub="Passed to the claude CLI. Plan runs always use plan mode.">
-          <select className="select" value={settings.claudePermissionMode} onChange={(e) => save({ claudePermissionMode: e.target.value as Settings["claudePermissionMode"] })}>
-            {PERMISSION_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
         </Row>
       </div>
 

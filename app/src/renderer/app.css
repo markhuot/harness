@@ -1032,6 +1032,17 @@
   font-weight: 500;
   box-shadow: none !important;
 }
+/* The footer's pickers (kind, driver, model, permissions) wrap; the actions stay right-aligned. */
+.new-session-foot {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.new-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
 .new-session-prompt {
   width: 100%;
   min-height: 150px;

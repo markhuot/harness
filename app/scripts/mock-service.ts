@@ -55,7 +55,8 @@ let idSeq = 0;
 let settings: PublicSettings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
-  claudePermissionMode: "bypassPermissions",
+  permissionMode: "auto",
+  classifier: "claude-cli",
   defaultModels: {},
   reviewModels: {},
   anthropicApiKeySet: false,
@@ -251,6 +252,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     defaultModels: {},
     useWorktrees: true,
     requireHumanReview,
+    permissionMode: null,
     createdAt: now() - 86400_000 * 7,
     updatedAt: now() - 86400_000 * 7,
   };
@@ -295,6 +297,7 @@ interface SeedTicket {
   blockedReason?: string;
   pendingApproval?: Ticket["pendingApproval"];
   allowedTools?: string[];
+  permissionMode?: Ticket["permissionMode"];
   externalRef?: Ticket["externalRef"];
   autoStart?: boolean;
   summaries?: [SummaryAuthor, string][];
@@ -328,6 +331,7 @@ function seedTicket(s: SeedTicket): Ticket {
     workdir: worktree ? `/Users/markhuot/.harness/worktrees/${key}` : s.project.path,
     branch: worktree ? `harness/${key.toLowerCase()}` : null,
     blockedReason: s.blockedReason ?? null,
+    permissionMode: s.permissionMode ?? null,
     busy: s.busy ?? false,
     pendingApproval: s.pendingApproval ?? null,
     allowedTools: s.allowedTools ?? [],
@@ -372,6 +376,11 @@ function seedTicket(s: SeedTicket): Ticket {
     name: "Bash",
     output: [{ type: "text", text: "src/hooks/useArticle.ts:12:export function useArticle(id: string) {\nsrc/pages/article.tsx:8:import { useArticle } from \"../hooks/useArticle\";" }],
     isError: false,
+  });
+  push("system", {
+    type: "status",
+    text: "Allowed: rg -n \"useArticle\" src --type ts — read-only command",
+    permission: { tool: "bash", summary: 'rg -n "useArticle" src --type ts', decision: "allow", reason: "read-only command", source: "policy", mode: "auto" },
   });
   push("assistant", { type: "tool_call", callId: "call_2", name: "Read", input: { file_path: `${s.project.path}/src/hooks/useArticle.ts`, limit: 40 } });
   push("tool", { type: "tool_result", callId: "call_2", name: "Read", output: [{ type: "text", text: "ENOENT: no such file or directory" }], isError: true });
@@ -435,6 +444,8 @@ function seed() {
       toolName: "Bash",
       input: { command: "bun add -d @playwright/test && bunx playwright install chromium", description: "Install Playwright and its browser" },
       requestedAt: now() - 90_000,
+      reason: "Installs a new dev dependency the agent chose (@playwright/test) and downloads a browser binary.",
+      source: "classifier",
     },
     allowedTools: ["Read", "Edit"],
     ageMin: 25,
@@ -767,6 +778,7 @@ function createTicket(body: Record<string, any>): Ticket {
     workdir: start && project.useWorktrees ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
     branch: start && project.useWorktrees ? `harness/${key.toLowerCase()}` : null,
     blockedReason: null,
+    permissionMode: body.permissionMode ?? null,
     busy: false,
     pendingApproval: null,
     allowedTools: [],
@@ -829,6 +841,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
         requireHumanReview: body.requireHumanReview ?? true,
+        permissionMode: body.permissionMode ?? null,
         createdAt: now(),
         updatedAt: now(),
       };
@@ -874,6 +887,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (body[k] !== undefined) (t as any)[k] = body[k];
         }
         if (body.model !== undefined) t.model = body.model || null;
+        if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;
           if (to === "in_progress" && t.status === "planning") {

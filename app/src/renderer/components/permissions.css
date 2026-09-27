@@ -1,0 +1,73 @@
+/* Permission audit rows (transcript) and the approval-card reason. */
+
+.t-permission {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 2px 0;
+  padding-left: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.t-permission > svg {
+  flex: none;
+  align-self: center;
+}
+.t-permission-allow > svg {
+  color: var(--green);
+}
+.t-permission-ask > svg {
+  color: var(--amber);
+}
+.t-permission-deny > svg {
+  color: var(--red);
+}
+.t-permission-verb {
+  flex: none;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.t-permission-what {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+}
+.t-permission-reason {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.t-permission-source {
+  flex: none;
+  opacity: 0.8;
+}
+
+.approval-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.45;
+  background: var(--amber-soft);
+  color: var(--text-2);
+}
+.approval-reason > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--amber);
+}
+.approval-reason strong {
+  font-weight: 600;
+  color: var(--text);
+}

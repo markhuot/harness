@@ -10,6 +10,7 @@ import { Switch } from "../components/bits";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRows } from "./settings/ModelSettings";
+import { ProjectPermissionRow } from "./settings/PermissionSettings";
 
 const tildify = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 
@@ -105,6 +106,7 @@ function ProjectSettings({ project }: { project: Project }) {
                 <DriverSelect value={project.defaultDriver} drivers={state.drivers} fallback={state.settings?.defaultDriver} onChange={(v) => void save({ defaultDriver: v })} />
               </Row>
               <ProjectModelRows project={project} save={save} />
+              <ProjectPermissionRow project={project} save={save} />
               <Row title="Worktree per ticket" sub={<>Each ticket works on its own branch (harness/&lt;key&gt;) when the folder is a git repo.</>}>
                 <Switch checked={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
               </Row>

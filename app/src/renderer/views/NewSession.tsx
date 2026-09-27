@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { TicketKind } from "@harness/shared";
+import type { PermissionMode, TicketKind } from "@harness/shared";
+import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { composerProject, sortedProjects } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { inheritedModel } from "../state/models";
+import { PermissionModeSelect } from "../components/PermissionModeSelect";
 
 const LAST_PROJECT = "harness.lastProject";
 
@@ -34,6 +36,9 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   // null = inherit (project → settings → driver default). Model ids are per driver: reset on switch.
   const [model, setModel] = useState<string | null>(null);
   useEffect(() => setModel(null), [driver]);
+  // null = inherit (project → settings)
+  const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
+  const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -54,7 +59,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const submit = async () => {
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model }));
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode }));
     setBusy(false);
     if (!t) return;
     try {
@@ -108,7 +113,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
           }}
         />
       </div>
-      <div className="modal-foot">
+      <div className="modal-foot new-session-foot">
         <div className="segmented">
           <button className={kind === "task" ? "on" : ""} onClick={() => setKind("task")}>
             Task
@@ -134,13 +139,15 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
           ))}
         </select>
         <ModelSelect compact driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />
-        <div className="grow" />
-        <Switch checked={start} onChange={setStart} label="Start immediately" />
-        <button className="btn btn-primary" disabled={!prompt.trim() || !projectId || busy} onClick={submit}>
-          {busy ? <span className="spinner" /> : null}
-          {start ? "Start session" : "Plan first"}
-          <span className="kbd">{MOD}↩</span>
-        </button>
+        <PermissionModeSelect compact value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />
+        <div className="new-session-actions">
+          <Switch checked={start} onChange={setStart} label="Start immediately" />
+          <button className="btn btn-primary" disabled={!prompt.trim() || !projectId || busy} onClick={submit}>
+            {busy ? <span className="spinner" /> : null}
+            {start ? "Start session" : "Plan first"}
+            <span className="kbd">{MOD}↩</span>
+          </button>
+        </div>
       </div>
     </Modal>
   );

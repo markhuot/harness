@@ -7,6 +7,8 @@ import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { inheritedModel } from "../state/models";
+import { PermissionModeSelect } from "../components/PermissionModeSelect";
+import { resolvePermissionMode } from "@harness/shared";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const { state, client, navigate, route } = useStore();
@@ -148,6 +150,15 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
             onChange={(m) => void act(() => client.updateTicket(ticket.key, { model: m }))}
           />
         </dd>
+        <dt>Permissions</dt>
+        <dd title="Applies from the next tool call">
+          <PermissionModeSelect
+            value={ticket.permissionMode}
+            disabled={!editable}
+            inherited={resolvePermissionMode(null, state.projects[ticket.projectId], state.settings ?? { permissionMode: "auto" }).mode}
+            onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))}
+          />
+        </dd>
         {parent && (
           <>
             <dt>Conductor</dt>
@@ -211,7 +222,7 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
               ))}
             </div>
           ) : (
-            <span className="muted">Every tool asks first</span>
+            <span className="muted">None granted</span>
           )}
         </dd>
         <dt>Auto-start</dt>

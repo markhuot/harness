@@ -6,6 +6,7 @@ import type { PendingApproval, Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { Icon } from "../components/Icon";
 import { relativeTime, useNow } from "../components/bits";
+import { ApprovalReason } from "../components/PermissionLog";
 
 type Shown = { label: string; value: string; code: boolean };
 
@@ -75,6 +76,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
           </div>
         </div>
       </div>
+      <ApprovalReason approval={approval} />
       {primary && (
         <div className="approval-input">
           <div className="t-label">{(primary as Shown).label}</div>

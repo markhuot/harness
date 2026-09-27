@@ -20,7 +20,7 @@ const project = (id: string, key: string): Project => ({
   defaultDriver: null,
   defaultModels: {},
   useWorktrees: false,
-  requireHumanReview: true,
+  requireHumanReview: true, permissionMode: null,
   createdAt: 1,
   updatedAt: 1,
 });
@@ -44,6 +44,7 @@ const ticket = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   workdir: null,
   branch: null,
   blockedReason: null,
+  permissionMode: null,
   busy: false,
   pendingApproval: null,
   allowedTools: [],

@@ -4,6 +4,7 @@ import { useStore } from "../state/store";
 import { liveDelta } from "../state/reducer";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { PermissionStatusRow } from "../components/PermissionLog";
 
 type Item =
   | { kind: "entry"; entry: TranscriptEntry }
@@ -144,6 +145,7 @@ const EntryRow = memo(function EntryRow({ entry }: { entry: TranscriptEntry }) {
     case "thinking":
       return <Thinking text={c.text} />;
     case "status":
+      if (c.permission) return <PermissionStatusRow log={c.permission} time={time} />;
       return (
         <div className="t-status">
           <span className="t-rule" />

@@ -86,6 +86,8 @@ try {
   await until("approval card", () => exists(".approval"));
   const cmd = await js<string>(`document.querySelector(".approval-input pre")?.textContent ?? ""`);
   check("approval card renders the Bash command", cmd.startsWith("bun add -d @playwright/test"), cmd);
+  const why = await js<string>(`document.querySelector(".approval [data-testid=approval-reason]")?.textContent ?? ""`);
+  check("approval card shows the classifier's reason", why.startsWith("Auto-mode classifier:") && why.includes("@playwright/test"), why);
   await clickText(".approval-actions button", "Always allow Bash");
   const answered = await until("approval answered", async () => {
     const t = (await api<{ ticket: T }>("GET", "/tickets/HARNESS-9")).ticket;
@@ -99,6 +101,10 @@ try {
     return c.includes("Bash") && c;
   });
   check("Details lists allowed tools", chips.join(",") === "Read,Edit,Bash", chips.join(","));
+  // 1d. Permission decisions render as audit rows in the transcript.
+  await js(`location.hash = "#/board/all/ticket/HARNESS-9/transcript"`);
+  const audit = await until("permission audit row", () => js<string>(`document.querySelector("[data-testid=permission-row]")?.textContent ?? ""`).then((t) => t && t));
+  check("transcript shows permission decisions as a shield row", audit.startsWith("Allowed") && audit.includes("read-only command") && audit.includes("policy"), audit);
   await js(`location.hash = "#/board/all"`);
 
   // 2. Drag NYTIMES-2 (planning) onto In progress.
@@ -163,6 +169,9 @@ try {
   });
   check("switching driver refetches the model list", !dummyOpts.includes("Sonnet 5") && dummyOpts[0] === "Default (Dummy Fast)", dummyOpts.join(","));
   await pick(".modal-foot select[aria-label=Model]", "dummy-slow");
+  const modeOpts = await js<string[]>(`[...document.querySelectorAll(".modal-foot [data-testid=permission-mode] option")].map(o => o.textContent)`);
+  check("composer offers the permission modes, inheriting by default", modeOpts.join(",") === "Default · Auto,Auto,Ask,Read only", modeOpts.join(","));
+  await pick(".modal-foot [data-testid=permission-mode]", "read_only");
   await type(".new-session-prompt", "Add a print stylesheet for recipe cards");
   await cmdEnter();
   const created = await until("ticket created", async () =>
@@ -173,6 +182,8 @@ try {
   check("composer opens the new ticket", !!opened, opened);
   const withModel = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
   check("composer sends the chosen driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
+  const withMode = (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
+  check("composer sends the chosen permission mode", withMode.permissionMode === "read_only", String(withMode.permissionMode));
   const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
   check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
   await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
@@ -180,6 +191,9 @@ try {
   await pick(".props .model-select select", "");
   const cleared = await until("model cleared", async () => (await api<{ ticket: { model: string | null } }>("GET", `/tickets/${created.key}`)).ticket.model === null);
   check("Details model select PATCHes the ticket (Default → null)", cleared);
+  await pick(".props [data-testid=permission-mode]", "");
+  const modeCleared = await until("mode cleared", async () => (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${created.key}`)).ticket.permissionMode === null);
+  check("Details permission select PATCHes the ticket (Default → null)", modeCleared);
   check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
   const cardBadge = await js<string>(`document.querySelector('.card[data-key="NYTIMES-1"] .model-badge')?.textContent ?? ""`);
   check("board card shows a non-default model", cardBadge === "Sonnet 5", cardBadge);
@@ -190,6 +204,17 @@ try {
   check("Settings → Models saves a per-driver default", savedDefault);
   await pick("[data-testid=model-settings-claude-code] select", "");
   await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string> }>("GET", "/settings")).defaultModels["claude-code"]);
+  await js(`location.hash = "#/settings/permissions"`);
+  await until("permission settings", () => exists("#settings-permissions [data-testid=permission-mode]"));
+  await pick("#settings-permissions [data-testid=permission-mode]", "ask");
+  await pick("#settings-permissions [data-testid=classifier-backend]", "anthropic-api");
+  const savedPerm = await until("permission settings saved", async () => {
+    const s = await api<{ permissionMode: string; classifier: string }>("GET", "/settings");
+    return s.permissionMode === "ask" && s.classifier === "anthropic-api" && s;
+  });
+  check("Settings → Permissions saves the mode and classifier", !!savedPerm);
+  await pick("#settings-permissions [data-testid=permission-mode]", "auto");
+  await pick("#settings-permissions [data-testid=classifier-backend]", "claude-cli");
 
   // 6. Browser tab forwards input to the service.
   await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
@@ -248,6 +273,13 @@ try {
   );
   check("sidebar picks up the new key live", sidebarKey === "HEL");
   check("hint returns to numbering after save", (await until("hint reset", async () => (await hint()).startsWith("New tickets") && (await hint()))) === "New tickets are numbered HEL-4, HEL-5…");
+  const projModeOpts = await js<string[]>(`[...document.querySelectorAll("#settings-project-agents [data-testid=permission-mode] option")].map(o => o.textContent)`);
+  check("project settings offer a permission mode that defaults to the global one", projModeOpts[0] === "Default (Auto)", projModeOpts.join(","));
+  await pick("#settings-project-agents [data-testid=permission-mode]", "read_only");
+  const projMode = await until("project mode saved", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === "read_only");
+  check("project permission mode PATCHes the project", projMode);
+  await pick("#settings-project-agents [data-testid=permission-mode]", "");
+  await until("project mode cleared", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === null);
   await js(`location.hash = "#/board/${hh.id}"`);
   const boardKeys = await until("board shows renamed cards", async () => {
     const k = await js<string[]>(`[...document.querySelectorAll(".card-key")].map(e => e.textContent)`);
