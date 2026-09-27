@@ -1,41 +1,45 @@
-/* Git plugin UI. Mirrors the app's tokens; <html data-theme> is set by the plugin SDK. */
+/* Git plugin UI. Uses the app theme's tokens (--harness-*, set on <html> by the plugin SDK from
+   harness:init / harness:theme); the fallbacks are Harness Light / Dark for hosts that predate
+   color themes. <html data-theme> is set by the SDK too. */
 :root {
   color-scheme: light;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
   --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
-  --bg: #fbfbfc;
-  --bg-side: #f5f5f7;
-  --bg-elev: #ffffff;
-  --bg-hover: rgba(15, 17, 22, 0.045);
-  --bg-active: rgba(15, 17, 22, 0.075);
-  --border: #e4e4e8;
-  --text: #1a1b1f;
-  --text-2: #55575f;
-  --text-3: #8a8c94;
-  --accent: #5e6ad2;
-  --accent-soft: rgba(94, 106, 210, 0.12);
-  --add: #2f9a63;
-  --del: #d93d42;
-  --amber: #b7791f;
-  --amber-soft: rgba(217, 154, 30, 0.13);
+  --bg: var(--harness-bg, #fbfbfc);
+  --bg-side: var(--harness-bg-sunken, #f5f5f7);
+  --bg-elev: var(--harness-bg-elev, #ffffff);
+  --bg-hover: var(--harness-bg-hover, rgba(15, 17, 22, 0.045));
+  --bg-active: var(--harness-bg-active, rgba(15, 17, 22, 0.075));
+  --border: var(--harness-border, #e4e4e8);
+  --text: var(--harness-text, #1a1b1f);
+  --text-2: var(--harness-text-2, #55575f);
+  --text-3: var(--harness-text-3, #8a8c94);
+  --accent: var(--harness-accent, #5e6ad2);
+  --accent-soft: var(--harness-accent-soft, rgba(94, 106, 210, 0.12));
+  --add: var(--harness-diff-add, #2f9a63);
+  --del: var(--harness-diff-del, #d93d42);
+  --amber: var(--harness-amber, #b7791f);
+  --amber-soft: var(--harness-amber-soft, rgba(217, 154, 30, 0.13));
+  --shadow-lg: var(--harness-shadow-lg, 0 8px 30px rgba(0, 0, 0, 0.18));
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #111214;
-  --bg-side: #0e0f11;
-  --bg-elev: #1a1b1e;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.085);
-  --border: #26272c;
-  --text: #e8e8eb;
-  --text-2: #a4a6ae;
-  --text-3: #6f717a;
-  --accent: #6e79d6;
-  --accent-soft: rgba(110, 121, 214, 0.18);
-  --add: #4cc38a;
-  --del: #f2555a;
-  --amber: #f0b43c;
-  --amber-soft: rgba(217, 154, 30, 0.14);
+  --bg: var(--harness-bg, #111214);
+  --bg-side: var(--harness-bg-sunken, #0e0f11);
+  --bg-elev: var(--harness-bg-elev, #1a1b1e);
+  --bg-hover: var(--harness-bg-hover, rgba(255, 255, 255, 0.05));
+  --bg-active: var(--harness-bg-active, rgba(255, 255, 255, 0.085));
+  --border: var(--harness-border, #26272c);
+  --text: var(--harness-text, #e8e8eb);
+  --text-2: var(--harness-text-2, #a4a6ae);
+  --text-3: var(--harness-text-3, #6f717a);
+  --accent: var(--harness-accent, #6e79d6);
+  --accent-soft: var(--harness-accent-soft, rgba(110, 121, 214, 0.18));
+  --add: var(--harness-diff-add, #4cc38a);
+  --del: var(--harness-diff-del, #f2555a);
+  --amber: var(--harness-amber, #f0b43c);
+  --amber-soft: var(--harness-amber-soft, rgba(217, 154, 30, 0.14));
+  --shadow-lg: var(--harness-shadow-lg, 0 8px 30px rgba(0, 0, 0, 0.18));
 }
 
 * {
@@ -275,7 +279,7 @@ code {
   width: min(300px, 85%);
   transform: translateX(-102%);
   transition: transform 0.16s ease;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-lg);
 }
 .narrow.files-open .files {
   transform: none;

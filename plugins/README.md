@@ -94,17 +94,25 @@ import { connect } from "@harness/plugin-sdk";
 
 const h = await connect();
 // h.baseUrl, h.token, h.ticketKey, h.tabId, h.theme ("light" | "dark")
+// h.themeId ("catppuccin-mocha"), h.themeName, h.syntaxTheme (a Shiki theme name or null), h.tokens
 
 const summary = await h.api(`summary?ticket=${h.ticketKey}`); // → /plugins/<id>/api/summary
 const detail = await h.api(`/tickets/${h.ticketKey}`);        // leading slash: any service route
 
-h.onTheme((theme) => repaint(theme));     // <html data-theme> and color-scheme are set for you
+h.onTheme((theme, info) => repaint(info)); // any theme change, including dark → another dark theme
 h.onTicket((ticket) => refreshSoon());    // fires on every change to this ticket
 h.openExternal("https://example.com");    // opens in the default browser (http, https, mailto)
 h.navigate("OTHER-12");                   // show another ticket
 ```
 
-Style against `:root[data-theme="dark"]` for dark mode. Bundle the SDK into your UI with
+The SDK keeps `<html>` in step with the app: `data-theme="light|dark"`, `color-scheme`,
+`data-theme-id`, and the app theme's color tokens as custom properties named like the app's own
+(`--harness-bg`, `--harness-bg-elev`, `--harness-text`, `--harness-text-2`, `--harness-accent`,
+`--harness-border`, `--harness-c-planning` … `--harness-c-done`, `--harness-green`, `--harness-red`,
+`--harness-diff-add`, `--harness-diff-del`, …). Use them with a fallback, since older hosts only
+send light/dark: `background: var(--harness-bg, #fbfbfc)`, with dark fallbacks under
+`:root[data-theme="dark"]`. `h.syntaxTheme` names the matching Shiki theme for code (null when
+the app theme has none; use your own light/dark default). Bundle the SDK into your UI with
 `bun build` or Vite; it has no runtime dependencies. If you use Bun with code splitting, bundle
 your JS entry and write `index.html` yourself, as `plugins/git/build.ts` does. Bun's HTML
 entrypoints can point the page at the wrong chunk when a dependency has many chunks.

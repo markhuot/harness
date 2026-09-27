@@ -2,9 +2,10 @@ import "./style.css";
 // Changes tab: file tree (@pierre/trees) + stacked, virtualized diffs (@pierre/diffs CodeView).
 import { CodeView, parsePatchFiles, resolveTheme, type CodeViewDiffItem, type FileDiffMetadata } from "@pierre/diffs";
 import { FileTree, themeToTreeStyles, type GitStatusEntry } from "@pierre/trees";
-import { connect, type HarnessPlugin, type Theme } from "@harness/plugin-sdk";
+import { connect, type HarnessPlugin } from "@harness/plugin-sdk";
 import type { Ticket } from "@harness/shared";
 import type { ChangedFile, Changes, Commit } from "../git";
+import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "./theme";
 
 type DiffStyle = "unified" | "split";
 interface Log {
@@ -83,13 +84,19 @@ class ChangesView {
   private busy = false;
   private poll: ReturnType<typeof setInterval> | null = null;
   private debounce: ReturnType<typeof setTimeout> | null = null;
-  private treeThemes = new Map<Theme, Record<string, string>>();
+  /** Tree CSS variables per Shiki theme name, the theme in use, and names that failed to resolve */
+  private treeThemes = new Map<string, Record<string, string>>();
+  private themeName: string;
+  private failedThemes = new Set<string>();
+  private themeSeq = 0;
+  private treeVars: string[] = [];
   private diffsById = new Map<string, FileDiffMetadata>();
 
   constructor(
     private root: HTMLElement,
     private host: HarnessPlugin,
   ) {
+    this.themeName = PIERRE_DEFAULT[host.theme];
     const saved = readStyle();
     this.styleChosen = !!saved;
     this.diffStyle = saved ?? (innerWidth >= 1000 ? "split" : "unified");
@@ -100,11 +107,11 @@ class ChangesView {
       h("div", { class: "notice", hidden: "" }),
       h("main", { class: "body" }, h("aside", { class: "files" }), h("section", { class: "diffs" }), h("div", { class: "state", hidden: "" })),
     );
-    host.onTheme((t) => this.applyTheme(t));
+    host.onTheme(() => void this.applyTheme()); // light↔dark and dark→dark (another app theme)
     host.onTicket((t) => this.onTicket(t));
     new ResizeObserver(() => this.layout()).observe(root);
     document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && this.refresh());
-    void this.applyTheme(host.theme);
+    void this.applyTheme();
     this.renderBar();
     void this.refresh();
   }
@@ -149,23 +156,25 @@ class ChangesView {
 
   // --- theme ------------------------------------------------------------------------------
 
-  private async applyTheme(theme: Theme) {
+  /** Follow the app theme: its matching Shiki theme for diffs and the tree, else Pierre's default. */
+  private async applyTheme() {
+    const appearance = this.host.theme;
+    const want = syntaxThemeName(appearance, this.host.syntaxTheme, this.failedThemes);
+    const seq = ++this.themeSeq;
+    const { name } = await treeStylesFor(appearance, want, this.treeThemes, this.failedThemes, async (n) => themeToTreeStyles(await resolveTheme(n)));
+    if (seq !== this.themeSeq) return; // a newer theme change won
+    this.themeName = name;
     this.viewer?.setOptions(this.viewerOptions());
-    if (!this.treeThemes.has(theme)) {
-      try {
-        this.treeThemes.set(theme, themeToTreeStyles(await resolveTheme(theme === "dark" ? "pierre-dark" : "pierre-light")));
-      } catch {
-        this.treeThemes.set(theme, {});
-      }
-    }
     this.styleTree();
   }
 
   private styleTree() {
     const el = this.tree?.getFileTreeContainer();
-    const vars = this.treeThemes.get(this.host.theme);
+    const vars = this.treeThemes.get(this.themeName);
     if (!el || !vars) return;
-    for (const [k, v] of Object.entries(vars)) if (k.startsWith("--")) el.style.setProperty(k, v);
+    for (const k of this.treeVars) if (!(k in vars)) el.style.removeProperty(k);
+    this.treeVars = Object.keys(vars).filter((k) => k.startsWith("--"));
+    for (const k of this.treeVars) el.style.setProperty(k, vars[k]!);
     // Blend the tree into our sidebar surface rather than the theme's editor background.
     el.style.setProperty("--trees-bg-override", "transparent");
     el.style.setProperty("--trees-border-color-override", "transparent");
@@ -357,7 +366,7 @@ class ChangesView {
 
   private viewerOptions() {
     return {
-      theme: { dark: "pierre-dark", light: "pierre-light" },
+      theme: viewerThemes(this.host.theme, this.themeName),
       themeType: this.host.theme,
       diffStyle: this.diffStyle,
       stickyHeaders: true,
