@@ -13,7 +13,10 @@ import type {
   DriverInfo,
   DriverModels,
   HarnessEvent,
+  ListenMode,
+  ListenSetting,
   Mapping,
+  NetworkStatus,
   Project,
   PublicSettings,
   Run,
@@ -30,10 +33,11 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
-import { checkProjectKey } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, LISTEN_MODES } from "@harness/shared";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
-const TOKEN = process.env.MOCK_TOKEN ?? "mock-token";
+/** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
+let TOKEN = process.env.MOCK_TOKEN ?? "mock-token";
 const QUIET = process.env.MOCK_QUIET === "1";
 
 // ---------------------------------------------------------------------------
@@ -60,7 +64,43 @@ let settings: PublicSettings = {
   defaultModels: {},
   reviewModels: {},
   anthropicApiKeySet: false,
+  listen: { mode: "localhost" },
 };
+
+// Network (mirrors service/src/api/network.ts): a fake Tailscale and a fake LAN address.
+const MOCK_TAILSCALE = { ip: "100.101.102.103", dnsName: "mock.tail.ts.net." };
+const MOCK_LAN = "192.168.1.50";
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", MOCK_LAN, MOCK_TAILSCALE.ip, "mock.local"]);
+let networkError: string | null = null;
+
+function networkStatus(): NetworkStatus {
+  const listen = settings.listen ?? { mode: "localhost" };
+  const url = (a: string) => ({ address: a, url: `http://${a}:${PORT}` });
+  const bound =
+    listen.mode === "any"
+      ? [url("0.0.0.0")]
+      : listen.mode === "tailscale"
+        ? [url(MOCK_TAILSCALE.ip), url("127.0.0.1")]
+        : listen.mode === "custom" && listen.host && listen.host !== "127.0.0.1"
+          ? [url(listen.host), url("127.0.0.1")]
+          : [url("127.0.0.1")];
+  return { mode: listen.mode, host: listen.mode === "custom" ? (listen.host ?? null) : null, port: PORT, bound, active: listen.mode, tailscale: MOCK_TAILSCALE, error: networkError, override: null };
+}
+
+/** Validate + "bind" a listen setting: 400 for a bad shape, 409 when the host isn't this machine's. */
+function applyListen(value: unknown): ListenSetting {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpError(400, "listen must be an object { mode, host? }");
+  const { mode, host } = value as { mode?: unknown; host?: unknown };
+  if (!(LISTEN_MODES as readonly unknown[]).includes(mode)) throw new HttpError(400, `listen.mode must be one of ${LISTEN_MODES.join(", ")}`);
+  if (mode !== "custom") return { mode: mode as ListenMode };
+  if (typeof host !== "string" || !host.trim()) throw new HttpError(400, "listen.host is required for custom mode");
+  const h = host.trim();
+  if (!LOCAL_HOSTS.has(h)) {
+    networkError = `${h} is not an address of this machine; still listening on ${networkStatus().bound.map((b) => b.address).join(", ")}`;
+    throw new HttpError(409, networkError);
+  }
+  return { mode: "custom", host: h };
+}
 
 const MOCK_MODELS: Record<string, DriverModels["models"]> = {
   "claude-code": [
@@ -1108,7 +1148,11 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, defaultModels, reviewModels, ...rest } = body;
+      const { anthropicApiKey, defaultModels, reviewModels, listen, ...rest } = body;
+      if (listen !== undefined) {
+        settings.listen = applyListen(listen);
+        networkError = null;
+      }
       settings = { ...settings, ...rest, defaultModels: mergeModels(settings.defaultModels, defaultModels), reviewModels: mergeModels(settings.reviewModels, reviewModels) };
       if (anthropicApiKey !== undefined) {
         settings.anthropicApiKeySet = !!anthropicApiKey;
@@ -1119,6 +1163,24 @@ async function route(req: Request, url: URL): Promise<Response> {
       broadcast({ kind: "settings.updated", settings });
       return ok(settings);
     }
+  }
+
+  // Network & pairing
+  if (a === "network" && !b && method === "GET") return ok(networkStatus());
+  if (a === "pairing" && !b && method === "GET") {
+    const mode = settings.listen?.mode ?? "localhost";
+    if (mode === "localhost") throw new HttpError(409, "The service only listens on localhost; choose Tailscale, Any or Custom to pair a phone");
+    const host = mode === "tailscale" ? MOCK_TAILSCALE.ip : mode === "custom" ? settings.listen!.host! : MOCK_LAN;
+    const base = `http://${host}:${PORT}`;
+    return ok({ url: base, token: TOKEN, pairUrl: buildPairUrl(base, TOKEN) });
+  }
+  if (a === "token" && b === "rotate" && method === "POST") {
+    TOKEN = `mock-${crypto.randomUUID().replace(/-/g, "")}`;
+    // Sockets opened with the old token are dropped, like the service does.
+    setTimeout(() => {
+      for (const ws of sockets) ws.close(4001, "Token rotated");
+    }, 50);
+    return ok({ token: TOKEN });
   }
 
   // Browser

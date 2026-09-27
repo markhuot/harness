@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ListenMode, ListenSetting, NetworkStatus, PairingInfo, PublicSettings } from "@harness/shared";
 import { useStore } from "../../state/store";
 import { encodeQr, qrPath } from "../../components/qr";
-import { DraftInput, Row, Section } from "../Settings";
+import { Row, Section } from "../Settings";
 import "./network.css";
 
 const MODES: { id: ListenMode; label: string; sub: string }[] = [
@@ -102,10 +102,8 @@ export function NetworkSection({ settings }: { settings: PublicSettings }) {
           </div>
         </Row>
         {shown === "custom" && (
-          <Row title="Custom host" sub="A hostname or IP address that belongs to this Mac. Press Enter to apply.">
-            <span data-testid="listen-custom-host">
-              <DraftInput value={listen.host ?? ""} placeholder="192.168.1.20 or mac.local" onCommit={(h) => h.trim() && void apply({ mode: "custom", host: h.trim() })} />
-            </span>
+          <Row title="Custom host" sub="A hostname or IP address that belongs to this Mac.">
+            <CustomHost initial={listen.host ?? ""} saving={saving} onApply={(host) => void apply({ mode: "custom", host })} />
           </Row>
         )}
         {net?.override && (
@@ -153,6 +151,26 @@ export function NetworkSection({ settings }: { settings: PublicSettings }) {
       </div>
       <PairPhone active={active} bound={net?.bound.map((b) => b.url).join(" ") ?? ""} />
     </Section>
+  );
+}
+
+function CustomHost({ initial, saving, onApply }: { initial: string; saving: boolean; onApply: (host: string) => void }) {
+  const [host, setHost] = useState(initial);
+  useEffect(() => setHost(initial), [initial]);
+  return (
+    <form
+      className="network-custom"
+      data-testid="listen-custom-host"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (host.trim()) onApply(host.trim());
+      }}
+    >
+      <input className="input" value={host} placeholder="192.168.1.20 or mac.local" aria-label="Custom host" onChange={(e) => setHost(e.target.value)} />
+      <button className="btn btn-sm" type="submit" disabled={saving || !host.trim()}>
+        Apply
+      </button>
+    </form>
   );
 }
 

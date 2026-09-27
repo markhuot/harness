@@ -4,6 +4,7 @@
 //   bun run build && bun scripts/smoke.ts
 import { join } from "node:path";
 import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
+import { encodeQr, qrPath } from "../src/renderer/components/qr";
 
 const port = 7600 + Math.floor(Math.random() * 90);
 const token = "smoke-token";
@@ -40,6 +41,7 @@ for (let i = 0; i < 50; i++) {
 const counter = checker();
 const { check, fail } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
+let mock2: ReturnType<typeof Bun.spawn> | null = null;
 
 try {
   // Native context menus can't be clicked over CDP; this makes them pick "Project settings…".
@@ -444,20 +446,64 @@ try {
   await mock.exited;
   const offline = await until("reconnecting indicator", () => js<boolean>(`!!document.querySelector(".conn.off")`));
   check("connection indicator shows reconnecting", offline);
-  const mock2 = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
+  mock2 = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
     env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
     stdout: "ignore",
     stderr: "inherit",
   });
-  try {
+  {
     await until("reconnected", () => js<boolean>(`!!document.querySelector(".conn.on")`), 10000);
     // The restarted mock has fresh seed data: the ticket created in step 5 is gone after refetch.
     const gone = await until("refetch after reconnect", () =>
       js<boolean>(`location.hash = "#/board/all", ![...document.querySelectorAll(".card-key")].some(e => e.textContent === ${JSON.stringify(created.key)})`),
     );
     check("reconnect refetches the board", gone);
-  } finally {
-    mock2.kill();
+  }
+
+  // 8. Settings → Network: listen modes, pairing QR, bad custom host, token rotation.
+  // (Last: after rotation the smoke-token no longer works.)
+  {
+    type S = { listen?: { mode: string; host?: string } };
+    await js(`location.hash = "#/settings/network"`);
+    await until("network section", () => exists("[data-testid=network-section]"));
+    check("Network section renders in localhost mode", (await js<string>(`document.querySelector("[data-mode=localhost]").getAttribute("aria-checked")`)) === "true");
+    const bound = await until("bound urls", () => js<string>(`document.querySelector("[data-testid=network-bound]")?.textContent ?? ""`).then((t) => t.includes("127.0.0.1") && t));
+    check("shows the bound loopback URL", bound.includes(`http://127.0.0.1:${port}`), bound);
+    check("Localhost mode disables pairing with an explanation", (await exists("[data-testid=pair-disabled]")) && !(await exists("[data-testid=pair-qr]")));
+    const ts = await js<string>(`document.querySelector("[data-testid=network-tailscale]")?.textContent ?? ""`);
+    check("shows Tailscale IP and MagicDNS name", ts.includes("100.101.102.103") && ts.includes("mock.tail.ts.net"), ts);
+
+    await js(`document.querySelector("[data-mode=tailscale]").click()`);
+    await until("listen saved as tailscale", async () => (await api<S>("GET", "/settings")).listen?.mode === "tailscale");
+    const d = await until("pairing QR", () => js<string>(`document.querySelector("[data-testid=pair-qr] svg path")?.getAttribute("d") ?? ""`));
+    const pairing = await api<{ url: string; token: string; pairUrl: string }>("GET", "/pairing");
+    check("QR encodes exactly the pairUrl", d === qrPath(encodeQr(pairing.pairUrl), 4));
+    check("pair URL is the Tailscale address", (await js<string>(`document.querySelector("[data-testid=pair-url]").textContent`)) === `http://100.101.102.103:${port}`);
+    const masked = await js<string>(`document.querySelector("[data-testid=pair-token]").textContent`);
+    check("token is masked", !masked.includes(token) && masked.startsWith("•") && masked.endsWith(token.slice(-4)), masked);
+
+    await js(`document.querySelector("[data-mode=any]").click()`);
+    await until("any warning", () => exists("[data-testid=network-any-warning]"));
+    check("Any shows the exposure warning", true);
+
+    await js(`document.querySelector("[data-mode=custom]").click()`);
+    await until("custom host field", () => exists("[data-testid=listen-custom-host] input"));
+    await type("[data-testid=listen-custom-host] input", "bad.example");
+    await clickText("[data-testid=listen-custom-host] button", "Apply");
+    const err = await until("custom host error", () => js<string>(`document.querySelector("[data-testid=network-error]")?.textContent ?? ""`));
+    check("a non-local custom host is refused and shown", err.includes("bad.example") && (await api<S>("GET", "/settings")).listen?.mode === "any", err);
+
+    await js(`window.confirm = () => true; document.querySelector("[data-testid=rotate-token]").click()`);
+    await until("old token rejected", async () => (await fetch(base + "/projects", { headers: { authorization: `Bearer ${token}` } })).status === 401);
+    check("rotation invalidates the old token", true);
+    await js(`document.querySelector("[data-testid=pair-token-reveal]").click()`);
+    const rotated = await until("new token shown", () => js<string>(`document.querySelector("[data-testid=pair-token]")?.textContent ?? ""`).then((t) => t && t !== token && !t.includes("•") && t));
+    const api2 = makeApi(base, rotated);
+    await until("socket reconnected with the new token", () => js<boolean>(`!!document.querySelector(".conn.on")`), 10000);
+    await js(`document.querySelector("[data-mode=localhost]").click()`);
+    const back = await until("app works after rotation", async () => (await api2<S>("GET", "/settings")).listen?.mode === "localhost");
+    check("after rotation the app keeps working (switching back to Localhost saved)", back);
+    check("…and pairing is disabled again", await until("pair disabled", () => exists("[data-testid=pair-disabled]")));
   }
 
 } catch (e) {
@@ -466,6 +512,7 @@ try {
 } finally {
   app?.close();
   mock.kill();
+  mock2?.kill();
 }
 console.log(counter.failures ? `${counter.failures} check(s) failed` : "all checks passed");
 process.exit(counter.failures ? 1 : 0);

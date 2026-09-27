@@ -74,3 +74,8 @@
   gap: 10px;
   margin-top: 4px;
 }
+.network-custom {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
