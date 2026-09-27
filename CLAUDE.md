@@ -23,6 +23,13 @@ tag's digits (`202609271854`), which keeps it increasing from one release to the
 requires. The user-facing versions (`version` in `mobile/app.json` and `app/package.json`) change
 only when someone decides to bump them. They don't identify a release; the tag does.
 
+**Asking to cut a release approves the whole release.** A request to cut a release (or "ship",
+"publish", or "deploy" the apps) is approval to commit the changelog and any fixes the release
+needs, create and push the tag, push `main`, run the publish (GitHub release plus the Vercel
+install page), and commit the regenerated install page. Don't stop to ask again before any of
+those steps. That approval covers only the release it was given for. It doesn't carry over to
+later work, and it never covers moving, deleting, or force-pushing a tag or `main`.
+
 **Cutting a release** happens on `main` in the main checkout, with a clean tree:
 
 1. Check that `## [Unreleased]` in CHANGELOG.md lists everything merged since the last tag
