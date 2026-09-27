@@ -7,7 +7,7 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild --platform ios",
-    "test": "bun test src scripts",
+    "test": "bun test ./src ./Tools",
     "typecheck": "tsc --noEmit -p .",
     "sim-check": "bun scripts/sim-check.ts"
   },

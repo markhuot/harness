@@ -32,6 +32,24 @@ the modes and what exposing the token means.
 Everything the service stores lives under `~/.harness/`: the database, the API token,
 logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different location.
 
+## iPhone app
+
+`mobile/` is a native iPhone app (Expo SDK 57, React Native, expo-router) with the desktop's
+board, ticket tabs (including the live browser and plugin tabs), approvals, Inbox and settings.
+It shares its state logic with the desktop through `@harness/shared/state`.
+
+- **Install:** open https://harness-install.vercel.app in Safari on a registered iPhone. The page
+  also has the signed Mac build. `mobile/Tools/publish-install.sh` rebuilds both, publishes them
+  as a GitHub release and redeploys the page.
+- **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone
+  camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
+- **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,
+  then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
+  throwaway daemon, taps through approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
+  and saves light and dark screenshots to `mobile/build/screens/`. Use
+  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
+  at the Command Line Tools.
+
 ## Drivers
 
 | Driver | Auth | Notes |
@@ -79,6 +97,7 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
 cd app && bun test        # routes, theme
+cd mobile && bun run test # pairing links, connection probe, browser touch mapping, servers, tokens, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service

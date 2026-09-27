@@ -1,0 +1,238 @@
+// Writes Install/index.html and Install/manifest.plist for a release. The page links the iPhone
+// build (OTA via itms-services + manifest.plist, which must be served from HTTPS as text/xml) and
+// the Mac build; both files live on the GitHub release. No secrets go in either file.
+//
+//   bun Tools/install-page.ts '<json>'   (see ReleaseInfo)
+import { writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+export interface ReleaseInfo {
+  site: string;
+  tag: string;
+  releaseUrl: string;
+  date: string;
+  ios: { url: string; version: string; build: string; bytes: number };
+  mac: { url: string; version: string; bytes: number; notarized: boolean };
+}
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+export function manifest(r: ReleaseInfo): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>assets</key>
+			<array>
+				<dict>
+					<key>kind</key><string>software-package</string>
+					<key>url</key><string>${esc(r.ios.url)}</string>
+				</dict>
+				<dict>
+					<key>kind</key><string>display-image</string>
+					<key>url</key><string>${esc(r.site)}/icon57.png</string>
+				</dict>
+				<dict>
+					<key>kind</key><string>full-size-image</string>
+					<key>url</key><string>${esc(r.site)}/icon512.png</string>
+				</dict>
+			</array>
+			<key>metadata</key>
+			<dict>
+				<key>bundle-identifier</key><string>com.markhuot.harness</string>
+				<key>bundle-version</key><string>${esc(r.ios.version)}</string>
+				<key>kind</key><string>software</string>
+				<key>title</key><string>Harness</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>
+`;
+}
+
+export function page(r: ReleaseInfo): string {
+  const itms = `itms-services://?action=download-manifest&url=${r.site}/manifest.plist`;
+  const openNote = r.mac.notarized
+    ? "It's signed and notarized, so it opens like any other app."
+    : "It's signed with Mark's Developer ID but not notarized yet, so the first time, right-click Harness.app, choose Open, then confirm.";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+<title>Install Harness</title>
+<link rel="apple-touch-icon" href="icon512.png">
+<link rel="icon" href="icon57.png">
+<style>
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    --bg: #fbfbfc;
+    --bg-elev: #ffffff;
+    --bg-sunken: #f5f5f7;
+    --border: #e4e4e8;
+    --text: #1a1b1f;
+    --text-2: #55575f;
+    --text-3: #8a8c94;
+    --accent: #5e6ad2;
+    --accent-hover: #515cc4;
+    --accent-soft: rgba(94, 106, 210, 0.12);
+    --accent-text: #4b56c0;
+    --shadow: 0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111214;
+      --bg-elev: #1a1b1e;
+      --bg-sunken: #0e0f11;
+      --border: #26272c;
+      --text: #e8e8eb;
+      --text-2: #a4a6ae;
+      --text-3: #6f717a;
+      --accent: #6e79d6;
+      --accent-hover: #7f89e0;
+      --accent-soft: rgba(110, 121, 214, 0.18);
+      --accent-text: #a3abf0;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 var(--font);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding:
+      calc(24px + env(safe-area-inset-top))
+      calc(16px + env(safe-area-inset-right))
+      calc(24px + env(safe-area-inset-bottom))
+      calc(16px + env(safe-area-inset-left));
+  }
+  .stack { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; }
+  section {
+    width: 100%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 28px 22px 22px;
+  }
+  header { display: flex; align-items: center; gap: 14px; }
+  header img { width: 64px; height: 64px; border-radius: 15px; flex: none; }
+  h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+  .tag {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-text);
+    background: var(--accent-soft);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  p { margin: 18px 0 0; color: var(--text-2); }
+  a.install {
+    display: block;
+    margin-top: 22px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    text-align: center;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  a.install:active, a.install:hover { background: var(--accent-hover); }
+  ol {
+    margin: 22px 0 0;
+    padding: 16px 16px 16px 34px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-2);
+    font-size: 13.5px;
+  }
+  ol li + li { margin-top: 8px; }
+  strong { color: var(--text); font-weight: 600; }
+  code {
+    font: 12px var(--mono);
+    color: var(--text);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 5px;
+    word-break: break-word;
+  }
+  .foot { margin-top: 16px; font-size: 12px; color: var(--text-3); }
+  h2 { margin: 0; font-size: 17px; font-weight: 650; }
+  .meta { margin-top: 10px; font: 12px var(--mono); color: var(--text-3); }
+  section.pair p:first-of-type { margin-top: 8px; }
+  a.install.secondary { background: var(--bg-sunken); color: var(--text); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+  <div class="stack">
+    <section>
+      <header>
+        <img src="icon512.png" alt="">
+        <div>
+          <h1>Harness</h1>
+          <span class="tag">Release ${esc(r.tag)}</span>
+        </div>
+      </header>
+      <p>These builds are for Mark's own Macs and iPhones. The Mac app runs agents from a local Harness checkout, and the iPhone app connects to it.</p>
+    </section>
+
+    <section>
+      <h2>iPhone</h2>
+      <p>This is a development build, so it only installs on iPhones registered to the Apple Developer team.</p>
+      <a class="install" href="${esc(itms)}">Install on iPhone</a>
+      <ol>
+        <li>Open this page in Safari on the iPhone and tap <strong>Install on iPhone</strong>.</li>
+        <li>If iOS says the developer isn't trusted, open Settings &rarr; General &rarr; VPN &amp; Device Management and trust <code>Apple Development: Mark Huot</code>.</li>
+      </ol>
+      <div class="meta">Version ${esc(r.ios.version)} (${esc(r.ios.build)}) &middot; ${mb(r.ios.bytes)} &middot; ${esc(r.date)}</div>
+    </section>
+
+    <section>
+      <h2>Mac (Apple silicon)</h2>
+      <p>${esc(openNote)}</p>
+      <a class="install secondary" href="${esc(r.mac.url)}">Download for Mac</a>
+      <div class="meta">Version ${esc(r.mac.version)} &middot; ${mb(r.mac.bytes)} &middot; ${esc(r.date)}</div>
+    </section>
+
+    <section class="pair">
+      <h2>Pair your phone</h2>
+      <p>On the Mac, open Harness &rarr; Settings &rarr; Network, choose <strong>Tailscale</strong>, then scan the QR code with the iPhone's camera.</p>
+      <p class="foot">Neither build contains a token. Pairing hands the phone one, and it's kept in the iPhone's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a></p>
+    </section>
+  </div>
+</body>
+</html>
+`;
+}
+
+if (import.meta.main) {
+  const info = JSON.parse(process.argv[2] ?? "{}") as ReleaseInfo;
+  const dir = resolve(import.meta.dir, "..", "Install");
+  writeFileSync(join(dir, "index.html"), page(info));
+  writeFileSync(join(dir, "manifest.plist"), manifest(info));
+  console.log(`wrote ${dir}/index.html and manifest.plist for ${info.tag}`);
+}
