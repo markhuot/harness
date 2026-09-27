@@ -53,6 +53,115 @@ try {
   const cols = await js<string[]>(`[...document.querySelectorAll(".column-title")].map(e => e.textContent)`);
   check("board shows five columns", cols.join(",") === "Planning,In progress,Blocked,Review,Done", cols.join(","));
 
+  // 1a. Child tickets are hidden by default (ones that need you stay); a plain switch shows them.
+  // No "N hidden" count anywhere.
+  const cardKeys = () => js<string[]>(`[...document.querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
+  const hiddenCountText = () => js<boolean>(`/\\d+\\s*hidden/i.test(document.body.innerText)`);
+  const toggleState = () => js<{ checked: string | null; text: string }>(`(() => { const b = document.querySelector("[data-testid=show-children]"); return { checked: b?.getAttribute("aria-checked") ?? null, text: b?.textContent ?? "" }; })()`);
+  {
+    const first = await until("board cards", async () => {
+      const k = await cardKeys();
+      return k.includes("HARNESS-1") && k;
+    });
+    check(
+      "child tickets are hidden by default; children that need you and the conductor stay",
+      ["HARNESS-2", "HARNESS-3", "HARNESS-6", "HARNESS-10"].every((k) => !first.includes(k)) && ["HARNESS-1", "HARNESS-7", "HARNESS-8"].every((k) => first.includes(k)),
+      first.join(","),
+    );
+    const off = await toggleState();
+    check("the toolbar switch reads Show child tickets, off", off.checked === "false" && off.text === "Show child tickets", JSON.stringify(off));
+    check("no hidden-count text while children are hidden", !(await hiddenCountText()));
+    await js(`document.querySelector("[data-testid=show-children]").click()`);
+    const shownKeys = await until("children shown", async () => {
+      const k = await cardKeys();
+      return k.includes("HARNESS-2") && k;
+    });
+    check("the switch shows child tickets", ["HARNESS-2", "HARNESS-3", "HARNESS-6", "HARNESS-10"].every((k) => shownKeys.includes(k)), shownKeys.join(","));
+    const on = await toggleState();
+    check("…and reads on, still with no count", on.checked === "true" && on.text === "Show child tickets" && !(await hiddenCountText()), JSON.stringify(on));
+  }
+
+  // 1a'. Done pages from the service: first 50, the server total in the header, Load more, live
+  // completions, auto-load on scroll; search reaches tickets that aren't loaded (and old keys).
+  {
+    const doneKeys = () =>
+      js<string[]>(`[...[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done").querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
+    const doneCountText = () => js<string>(`document.querySelector("[data-testid=count-done]")?.textContent ?? ""`);
+    const serverTotal = (await api<{ total: number }>("GET", "/tickets/page?status=done&limit=1")).total;
+    const firstPage = await until("first done page", async () => {
+      const k = await doneKeys();
+      return k.length >= 50 && k;
+    });
+    check("Done shows the first page (50, newest completed first)", firstPage.length === 50 && firstPage[0] === "SITE-130" && firstPage[49] === "SITE-81", `${firstPage.length}: ${firstPage[0]}…${firstPage.at(-1)}`);
+    check("Done's header counts the server total, not the loaded cards", serverTotal >= 120 && (await doneCountText()) === String(serverTotal), `${await doneCountText()} vs ${serverTotal}`);
+    check("older done tickets aren't loaded", !(await exists('.card[data-key="SITE-42"]')) && !(await exists('.card[data-key="HARNESS-5"]')));
+
+    // The conductor's Tickets tab lists its done child even though the board hasn't paged it in.
+    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+    const kids = await until("conductor children", async () => {
+      const k = await js<string[]>(`[...document.querySelectorAll(".child-row")].map(r => r.dataset.key)`);
+      return k.includes("HARNESS-5") && k;
+    }).catch(() => [] as string[]);
+    check("conductor Tickets tab lists done children that aren't on the board", kids.includes("HARNESS-5") && !(await doneKeys()).includes("HARNESS-5"), kids.join(","));
+    await js(`location.hash = "#/board/all"`);
+    await until("board again", () => exists(".column .card"));
+
+    // Search: server-side, finds a done ticket that isn't loaded, and one by its pre-rename key.
+    const searchStatus = () => js<string>(`document.querySelector("[data-testid=search-status]")?.textContent ?? ""`);
+    await type("[data-testid=board-search]", "carousel");
+    const found = await until("search result", async () => (await doneKeys()).includes("SITE-42") && (await doneKeys()));
+    check("search finds a done ticket that wasn't loaded", found.join(",") === "SITE-42" && (await cardKeys()).join(",") === "SITE-42", (await cardKeys()).join(","));
+    check("search says how many matched", (await searchStatus()).includes("1 match"), await searchStatus());
+    await type("[data-testid=board-search]", "WWW-7");
+    const alias = await until("alias search", async () => {
+      const k = await cardKeys();
+      return k.includes("SITE-7") && k;
+    });
+    check("search finds a ticket by its old (pre-rename) key", alias.includes("SITE-7") && !alias.includes("SITE-42"), alias.join(","));
+    await type("[data-testid=board-search]", "zzzz-no-such-thing");
+    const none = await until("no matches", async () => (await searchStatus()).includes("No matches") && (await searchStatus()));
+    check("a search with no hits says so", none.includes("No matches") && (await cardKeys()).length === 0, none);
+    await js(`document.querySelector(".search-clear").click()`);
+    const restored = await until("board restored", async () => {
+      const k = await doneKeys();
+      return !(await exists("[data-testid=search-status]")) && k.length === 50 && k;
+    });
+    check(
+      "clearing the search restores the board (search hits older than the page stay out of Done)",
+      restored[0] === "SITE-130" && !restored.includes("SITE-42") && !restored.includes("SITE-7") && (await cardKeys()).includes("HARNESS-2") && (await doneCountText()) === String(serverTotal),
+      restored.slice(0, 3).join(","),
+    );
+
+    // Load more appends the next page without duplicates.
+    await js(`document.querySelector("[data-testid=done-load-more] button").click()`);
+    const two = await until("second page", async () => {
+      const k = await doneKeys();
+      return k.length >= 100 && k;
+    });
+    check("Load more appends the next page in order, no duplicates", two.length === 100 && new Set(two).size === 100 && two[50] === "SITE-80" && two.slice(0, 50).join() === firstPage.join(), `${two.length} ${two[50]}`);
+
+    // A live completion goes to the top and counts.
+    const nyId = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!.id;
+    const liveT = await api<{ key: string }>("POST", "/tickets", { projectId: nyId, prompt: "Ship the live completion check", start: false });
+    await api("PATCH", `/tickets/${liveT.key}`, { status: "done" });
+    const top = await until("live completion prepends", async () => {
+      const k = await doneKeys();
+      return k[0] === liveT.key && k;
+    });
+    check("a live completion prepends to Done and bumps the total", top.length === 101 && (await doneCountText()) === String(serverTotal + 1), `${top.length} / ${await doneCountText()}`);
+
+    // Scrolling to the end auto-loads the rest (IntersectionObserver), still without duplicates.
+    const scrollDone = () =>
+      js(`(() => { const b = [...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done").querySelector(".column-body"); b.scrollTop = b.scrollHeight; })()`);
+    const all = await until("auto-load to the end", async () => {
+      await scrollDone();
+      const k = await doneKeys();
+      return k.length >= serverTotal + 1 && !(await exists("[data-testid=done-load-more]")) && k;
+    }, 12000);
+    check("scrolling to the end auto-loads every page, no duplicates", all.length === serverTotal + 1 && new Set(all).size === all.length && all.includes("HARNESS-5"), `${all.length}/${serverTotal + 1}`);
+    await js(`[...document.querySelectorAll(".column-body")].forEach(b => b.scrollTop = 0)`);
+  }
+
   // 1b. Reorder within a column: drop HARNESS-2 above NYTIMES-4 in Review.
   type T = { key: string; status: string; position: number; allowedTools: string[]; pendingApproval: unknown };
   const reviewOrder = () =>
@@ -453,9 +562,8 @@ try {
       return { left: cs.borderLeftWidth, top: cs.borderTopWidth, lc: cs.borderLeftColor, tc: cs.borderTopColor }; })()`);
     check("conductor card has no left accent border", edge.left === edge.top && edge.lc === edge.tc, JSON.stringify(edge));
 
-    // Toggle: hides quiet children only, persists across a reload, and turns back off.
-    const cardKeys = () => js<string[]>(`[...document.querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
-    await js(`document.querySelector("[data-testid=hide-children]").click()`);
+    // Switch off: hides quiet children only, persists across a reload, and turns back on.
+    await js(`document.querySelector("[data-testid=show-children]").click()`);
     const hidden = await until("children hidden", async () => {
       const k = await cardKeys();
       return !k.includes("HARNESS-6") && k;
@@ -466,20 +574,20 @@ try {
       hidden.join(","),
     );
     check("…but keeps the ones that need you and the conductor", ["HARNESS-1", "HARNESS-7", "HARNESS-8"].every((k) => hidden.includes(k)), hidden.join(","));
-    check("toolbar says how many are hidden", (await js<string>(`document.querySelector("[data-testid=hidden-count]")?.textContent ?? ""`)) === "6 hidden");
+    check("the switch shows no count of what it hides", (await toggleState()).text === "Show child tickets" && !(await hiddenCountText()), (await toggleState()).text);
     await js(`location.reload()`);
     await Bun.sleep(300);
     const afterReload = await until("board after reload", async () => {
       const k = await cardKeys();
       return k.includes("HARNESS-1") && k;
     });
-    check("hide-children survives a reload", !afterReload.includes("HARNESS-6") && afterReload.includes("HARNESS-8"), afterReload.join(","));
-    await js(`document.querySelector("[data-testid=hide-children]").click()`);
+    check("hiding children survives a reload", !afterReload.includes("HARNESS-6") && afterReload.includes("HARNESS-8") && (await toggleState()).checked === "false", afterReload.join(","));
+    await js(`document.querySelector("[data-testid=show-children]").click()`);
     const shown = await until("children shown", async () => {
       const k = await cardKeys();
       return k.includes("HARNESS-6") && k;
     });
-    check("toggling off shows every child again", ["HARNESS-2", "HARNESS-5", "HARNESS-6"].every((k) => shown.includes(k)), shown.join(","));
+    check("switching it back on shows every child again", ["HARNESS-2", "HARNESS-5", "HARNESS-6"].every((k) => shown.includes(k)), shown.join(","));
   }
 
   // 6c. Layout: collapsible + resizable sidebar, resizable ticket panel; all persisted.
@@ -629,6 +737,11 @@ try {
       js<boolean>(`location.hash = "#/board/all", ![...document.querySelectorAll(".card-key")].some(e => e.textContent === ${JSON.stringify(created.key)})`),
     );
     check("reconnect refetches the board", gone);
+    const donePage = await until("done paging reset", async () => {
+      const n = await js<number>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done")?.querySelectorAll(".card[data-key]").length ?? 0`);
+      return n === 50 && n;
+    }).catch(() => 0);
+    check("reconnect resets Done paging to the first page", donePage === 50, String(donePage));
   }
 
   // 8. Settings → Network: listen modes, pairing QR, bad custom host, token rotation.
