@@ -59,13 +59,22 @@ describe("attention", () => {
     expect(attentionOf(tk({ key: "A-6", status: "done", humanReview: "pending" }))).toBeNull();
   });
 
-  test("board dims and hides quiet children only; conductors and top-level tickets are untouched", () => {
+  test("a child's pending human review is the conductor's job, not the human's", () => {
+    const child = { parentId: "id-P-1", status: "review" as const, humanReview: "pending" as const };
+    expect(attentionOf(tk({ key: "P-2", ...child }))).toBeNull();
+    expect(attentionOf(tk({ key: "P-3", ...child, pendingApproval: approval }))).toBe("approval");
+    expect(attentionOf(tk({ key: "P-4", parentId: "id-P-1", status: "blocked" }))).toBe("blocked");
+  });
+
+  test("board dims and hides quiet children (including ones in conductor review); top-level tickets are untouched", () => {
     const quiet = tk({ key: "C-2", parentId: "id-C-1", status: "in_progress" });
     const blocked = tk({ key: "C-3", parentId: "id-C-1", status: "blocked" });
     const reviewing = tk({ key: "C-4", parentId: "id-C-1", status: "review", humanReview: "pending" });
     const topLevel = tk({ key: "C-5", status: "in_progress" });
-    expect([quiet, blocked, reviewing, topLevel].map(dimOnBoard)).toEqual([true, false, false, false]);
-    expect([quiet, blocked, reviewing, topLevel].map((t) => hideOnBoard(t, true))).toEqual([true, false, false, false]);
+    const topReview = tk({ key: "C-6", status: "review", humanReview: "pending" });
+    const all = [quiet, blocked, reviewing, topLevel, topReview];
+    expect(all.map(dimOnBoard)).toEqual([true, false, true, false, false]);
+    expect(all.map((t) => hideOnBoard(t, true))).toEqual([true, false, true, false, false]);
     expect(hideOnBoard(quiet, false)).toBe(false);
   });
 });
@@ -78,19 +87,21 @@ describe("children and progress", () => {
     expect(childrenOfTicket(rec(a, other, b), "id-H-1").map((t) => t.key)).toEqual(["H-2", "H-3"]);
   });
 
-  test("counts by status and attention; label omits zero counts", () => {
+  test("counts by status and attention (blocked / approval only); label omits zero counts", () => {
+    const kid = (o: Partial<Ticket> & { key: string }) => tk({ parentId: "id-K-0", ...o });
     const kids = [
-      tk({ key: "K-1", status: "done" }),
-      tk({ key: "K-2", status: "done" }),
-      tk({ key: "K-3", status: "in_progress" }),
-      tk({ key: "K-4", status: "blocked", pendingApproval: approval }),
-      tk({ key: "K-5", status: "review", humanReview: "pending" }),
-      tk({ key: "K-6", status: "planning" }),
+      kid({ key: "K-1", status: "done" }),
+      kid({ key: "K-2", status: "done" }),
+      kid({ key: "K-3", status: "in_progress" }),
+      kid({ key: "K-4", status: "blocked", pendingApproval: approval }),
+      kid({ key: "K-5", status: "review", humanReview: "pending" }),
+      kid({ key: "K-6", status: "planning" }),
+      kid({ key: "K-8", status: "blocked" }),
     ];
     const p = progressOf(kids);
-    expect(p.total).toBe(6);
+    expect(p.total).toBe(7);
     expect(p.attention).toBe(2);
-    expect(progressLabel(p)).toBe("2/6 done · 1 in progress · 1 blocked · 1 review · 1 up next");
+    expect(progressLabel(p)).toBe("2/7 done · 1 in progress · 2 blocked · 1 review · 1 up next");
     expect(progressLabel(progressOf([tk({ key: "K-7", status: "done" })]))).toBe("1/1 done");
     const segs = progressSegments(p);
     expect(segs.map((s) => s.status)).toEqual(["done", "review", "in_progress", "blocked", "planning"]);
@@ -125,15 +136,20 @@ describe("dependencies", () => {
   });
 
   test("groups follow lifecycle order; attention first, then dependency order within a group", () => {
-    const first = tk({ key: "L-1", status: "planning", dependsOn: ["L-2"], createdAt: 1 });
-    const dep = tk({ key: "L-2", status: "planning", createdAt: 2 });
-    const done = tk({ key: "L-3", status: "done" });
-    const r1 = tk({ key: "L-4", status: "review", humanReview: "approved", createdAt: 1 });
-    const r2 = tk({ key: "L-5", status: "review", humanReview: "pending", createdAt: 2 });
-    const groups = groupChildren([done, first, r1, dep, r2]);
-    expect(groups.map((g) => g.status)).toEqual(["planning", "review", "done"]);
+    const kid = (o: Partial<Ticket> & { key: string }) => tk({ parentId: "id-L-0", ...o });
+    const first = kid({ key: "L-1", status: "planning", dependsOn: ["L-2"], createdAt: 1 });
+    const dep = kid({ key: "L-2", status: "planning", createdAt: 2 });
+    const done = kid({ key: "L-3", status: "done" });
+    const r1 = kid({ key: "L-4", status: "review", humanReview: "approved", createdAt: 1 });
+    const r2 = kid({ key: "L-5", status: "review", humanReview: "pending", createdAt: 2 });
+    const w1 = kid({ key: "L-6", status: "in_progress", createdAt: 1 });
+    const w2 = kid({ key: "L-7", status: "in_progress", pendingApproval: approval, createdAt: 2 });
+    const groups = groupChildren([done, first, r1, dep, r2, w1, w2]);
+    expect(groups.map((g) => g.status)).toEqual(["planning", "in_progress", "review", "done"]);
     expect(groups[0]!.tickets.map((t) => t.key)).toEqual(["L-2", "L-1"]);
-    expect(groups[1]!.tickets.map((t) => t.key)).toEqual(["L-5", "L-4"]);
+    expect(groups[1]!.tickets.map((t) => t.key)).toEqual(["L-7", "L-6"]);
+    // A pending human review doesn't jump the queue: the conductor reviews it, so age decides.
+    expect(groups[2]!.tickets.map((t) => t.key)).toEqual(["L-4", "L-5"]);
   });
 });
 

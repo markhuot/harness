@@ -3,19 +3,24 @@
 
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 
+export const isChild = (t: Ticket) => t.parentId !== null;
+
 /** Why a ticket needs the human right now, or null. Order = urgency. */
 export type Attention = "approval" | "blocked" | "review";
 
+/**
+ * A pending human review is the human's job only on top-level tickets. A conductor child's
+ * human review belongs to its conductor (it calls review_ticket), so a child needs the human
+ * only when it is blocked or waiting on a tool approval.
+ */
 export function attentionOf(t: Ticket): Attention | null {
   if (t.pendingApproval) return "approval";
   if (t.status === "blocked") return "blocked";
-  if (t.status === "review" && t.humanReview === "pending") return "review";
+  if (t.status === "review" && t.humanReview === "pending" && !isChild(t)) return "review";
   return null;
 }
 
 export const needsHuman = (t: Ticket) => attentionOf(t) !== null;
-
-export const isChild = (t: Ticket) => t.parentId !== null;
 
 /**
  * Children are downplayed on the board so the conductor stays the focus, except when they
@@ -35,7 +40,7 @@ export function childrenOfTicket(tickets: Record<string, Ticket>, conductorId: s
 export interface Progress {
   total: number;
   byStatus: Record<TicketStatus, number>;
-  /** Children needing the human (approval / blocked / review with human pending) */
+  /** Children needing the human (approval / blocked; their reviews are the conductor's) */
   attention: number;
 }
 

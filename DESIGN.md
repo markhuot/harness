@@ -102,7 +102,10 @@ tools create and steer child tickets (`parentId` = conductor). Children created 
 conductor default to `autoStart: true`: they start as soon as all `dependsOn` are done
 (immediately if none). Whenever a child changes status the orchestrator enqueues one
 (coalesced) conductor run describing the changes. The conductor acts as the human reviewer
-for its children (`review_ticket`) and completes them (`complete_ticket`). When all children
+for its children (`review_ticket`) and completes them (`complete_ticket`). So in the app a
+child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
+with the human review pending is the conductor's to act on (it stays dimmed on the board and
+isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
 are done and the conductor run ends without submitting, the orchestrator submits the
 conductor for review automatically.
 

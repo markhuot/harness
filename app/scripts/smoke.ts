@@ -341,11 +341,15 @@ try {
     });
     check(
       "Tickets tab lists the children grouped in lifecycle order",
-      rows.join(",") === "HARNESS-3,HARNESS-6,HARNESS-7,HARNESS-8,HARNESS-10,HARNESS-2,HARNESS-5",
+      rows.join(",") === "HARNESS-3,HARNESS-6,HARNESS-7,HARNESS-8,HARNESS-2,HARNESS-10,HARNESS-5",
       rows.join(","),
     );
     check("Tickets tab shows the progress header", (await progressText()) === "1/7 done · 1 in progress · 2 blocked · 2 review · 1 up next", await progressText());
     check("Tickets tab badge counts the children", (await tabCount()) === "7", await tabCount());
+    const waiting = await js<string>(`document.querySelector(".children-attn")?.textContent ?? ""`);
+    check("header counts blocked/approval children only (reviews are the conductor's)", waiting === "2 tickets waiting on you", waiting);
+    const attnRows = await js<string[]>(`[...document.querySelectorAll(".child-row.attn")].map(r => r.dataset.key)`);
+    check("only blocked/approval children get the attention edge", attnRows.join(",") === "HARNESS-7,HARNESS-8", attnRows.join(","));
     const notes = await js<Record<string, string>>(
       `Object.fromEntries([...document.querySelectorAll(".child-row")].map(r => [r.dataset.key, (r.querySelector(".child-note")?.textContent ?? "") + "|" + [...r.querySelectorAll(".child-foot .chip")].map(c => c.textContent).join(",")]))`,
     );
@@ -393,16 +397,16 @@ try {
     const d = await dimmed();
     check(
       "quiet children are dimmed on the board",
-      d["HARNESS-6"] === true && d["HARNESS-2"] === true && d["HARNESS-5"] === true && d[fresh.key] === true,
+      d["HARNESS-6"] === true && d["HARNESS-2"] === true && d["HARNESS-5"] === true && d[fresh.key] === true && d["HARNESS-10"] === true,
       JSON.stringify(d),
     );
     check(
-      "children that need you (blocked, approval, review) and the conductor are not dimmed",
-      d["HARNESS-7"] === false && d["HARNESS-8"] === false && d["HARNESS-10"] === false && d["HARNESS-1"] === false && d["HARNESS-9"] === false,
+      "children that need you (blocked, approval) and the conductor are not dimmed",
+      d["HARNESS-7"] === false && d["HARNESS-8"] === false && d["HARNESS-1"] === false && d["HARNESS-9"] === false,
       JSON.stringify(d),
     );
     const rollup = await js<string>(`document.querySelector('.card[data-key="HARNESS-1"] [data-testid=conductor-rollup]')?.textContent ?? ""`);
-    check("conductor card rolls up progress and what needs you", rollup === "2/8 done3 need you", rollup);
+    check("conductor card rolls up progress and what needs you", rollup === "2/8 done2 need you", rollup);
     const parentChip = await js<string>(`document.querySelector('.card[data-key="HARNESS-6"] .card-parent-chip')?.textContent ?? ""`);
     check("child card carries a parent chip", parentChip === "↳ HARNESS-1", parentChip);
 
@@ -415,11 +419,11 @@ try {
     });
     check(
       "Hide child tickets hides quiet children",
-      ["HARNESS-2", "HARNESS-3", "HARNESS-5", "HARNESS-6", fresh.key].every((k) => !hidden.includes(k)),
+      ["HARNESS-2", "HARNESS-3", "HARNESS-5", "HARNESS-6", "HARNESS-10", fresh.key].every((k) => !hidden.includes(k)),
       hidden.join(","),
     );
-    check("…but keeps the ones that need you and the conductor", ["HARNESS-1", "HARNESS-7", "HARNESS-8", "HARNESS-10"].every((k) => hidden.includes(k)), hidden.join(","));
-    check("toolbar says how many are hidden", (await js<string>(`document.querySelector("[data-testid=hidden-count]")?.textContent ?? ""`)) === "5 hidden");
+    check("…but keeps the ones that need you and the conductor", ["HARNESS-1", "HARNESS-7", "HARNESS-8"].every((k) => hidden.includes(k)), hidden.join(","));
+    check("toolbar says how many are hidden", (await js<string>(`document.querySelector("[data-testid=hidden-count]")?.textContent ?? ""`)) === "6 hidden");
     await js(`location.reload()`);
     await Bun.sleep(300);
     const afterReload = await until("board after reload", async () => {

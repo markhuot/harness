@@ -127,11 +127,6 @@ function ChildRow({ child: c, defaultDriver, onOpen }: { child: Ticket; defaultD
             <Icon name="alert" size={11} />
             <span>{c.blockedReason || "Blocked"}</span>
           </div>
-        ) : attention === "review" ? (
-          <div className="child-note note-review">
-            <Icon name="user" size={11} />
-            <span>Waiting for your review</span>
-          </div>
         ) : (
           summary && <div className="child-summary">{plainText(summary.body)}</div>
         )}
