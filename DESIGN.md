@@ -177,6 +177,35 @@ tools (`read_file`, `list_files`, `bash`); triage gets none.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
 
+### Models
+
+Every driver implements `listModels(): Promise<ModelInfo[]>` (`{ id, name, description?, default? }`),
+served as `GET /drivers/:id/models[?refresh=1]` → `DriverModels { driverId, models, error, fetchedAt }`.
+The orchestrator caches each driver's list for 10 min (failures for 30 s, returned as `models: []`
+or a fallback list plus `error`, never an HTTP error); `?refresh=1` re-queries, a login or API-key
+change invalidates. `GET /drivers` does not include models (listing can spawn the CLI).
+
+- **claude-code** asks the CLI itself: `claude -p --input-format stream-json --output-format
+  stream-json --verbose`, write one `{"type":"control_request","request_id":…,"request":{"subtype":
+  "initialize"}}` line, read until the matching `control_response`, kill the child. Its
+  `response.models` (`value`, `displayName`, `description`, `resolvedModel`) is what `/model` shows,
+  already filtered by the org's `availableModels`. No user message is sent, so no tokens are spent
+  (SessionStart hooks do run). The synthetic `default` entry is dropped and the model it resolves
+  to is marked `default`. On failure: the aliases `sonnet`, `opus`, `fable`, `haiku` plus the error.
+- **anthropic-api**: `GET /v1/models` (SDK `models.list`, all pages) with the stored key; no key →
+  error. Default model when none is chosen: `claude-sonnet-5`.
+- **dummy**: `dummy-fast` (default) and `dummy-slow` (10× the per-word delay, ≥ 50 ms); any other
+  model fails the run.
+
+Which model a run uses is resolved when the run starts (`orchestrator/models.ts`), first set wins:
+review runs → `settings.reviewModels[driver]`; `ticket.model`; `project.defaultModels[driver]`;
+`settings.defaultModels[driver]`; else `null` (the driver's own default). It reaches the driver
+as `RunRequest.model` (claude-code `--model`, anthropic-api `model`). Changing a ticket's model
+applies from its next run; claude-code resumes the same conversation with the new `--model`
+(verified against the real CLI). Changing a ticket's driver clears its model. Both settings maps
+and `project.defaultModels` PATCH-merge per driver (`null` clears one). Migration 3 moved the old
+`claudeModel` / `anthropicModel` settings into `defaultModels`.
+
 ### Dummy driver script
 
 Streams its text word by word (`HARNESS_DUMMY_DELAY_MS`, default 15ms; tests use 0).
@@ -207,7 +236,7 @@ GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/tra
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, item }
 GET    /mappings                 POST /mappings            DELETE /mappings/:id
-GET    /drivers                  POST /drivers/:id/login
+GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings
 GET    /browser/:sessionId       POST /browser/:sessionId/navigate { url }
 POST   /mcp/:runToken            (MCP streamable-HTTP, JSON responses; run-scoped token)
