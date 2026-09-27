@@ -152,6 +152,7 @@ code {
   font-weight: 600;
 }
 .seg {
+  margin-left: auto; /* stays right-aligned when the bar wraps onto a second row */
   display: inline-flex;
   padding: 2px;
   border-radius: 7px;

@@ -1,3 +1,4 @@
+import "./style.css";
 // Changes tab: file tree (@pierre/trees) + stacked, virtualized diffs (@pierre/diffs CodeView).
 import { CodeView, parsePatchFiles, resolveTheme, type CodeViewDiffItem, type FileDiffMetadata } from "@pierre/diffs";
 import { FileTree, themeToTreeStyles, type GitStatusEntry } from "@pierre/trees";
@@ -316,6 +317,7 @@ class ChangesView {
           const f = stats.get(item.path);
           if (!f || item.kind !== "file") return null;
           if (f.binary) return { text: "bin", title: "Binary file" };
+          if (f.status === "renamed" && !f.additions && !f.deletions) return f.oldPath ? { text: "moved", title: `Renamed from ${f.oldPath}` } : null;
           return {
             text: `+${f.additions} −${f.deletions}`,
             title: `${f.additions} additions, ${f.deletions} deletions`,
