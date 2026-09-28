@@ -8,8 +8,8 @@ import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { Button, ProjectKey, Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
-import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
-import { pick } from "../ui/pick";
+import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { driverOptions } from "../lib/selectOptions";
 import { haptic } from "../ui/haptics";
 import { buttonItem, primaryItemStyle } from "../ui/header";
 
@@ -52,27 +52,15 @@ export function NewSessionScreen() {
     router.push({ pathname: "/ticket/[key]", params: { key: t.key, tab: start ? "transcript" : "summaries" } });
   };
 
-  const chooseProject = async () => {
-    const v = await pick({ title: "Project", selected: projectId, choices: [...projects.map((p) => ({ value: p.id, label: `${p.name} (${p.key})` })), { value: "__add", label: "Add a project…" }] });
-    if (v === "__add") return addProject();
-    if (v) setChosen(v);
-  };
   const addProject = () =>
     Alert.prompt("Add project", "The folder's absolute path on the Mac, e.g. /Users/you/Sites/app", async (path) => {
       if (!path?.trim()) return;
       const p = await act(() => client.createProject({ path: path.trim() }), "Project added");
       if (p) setChosen(p.id);
     });
-  const chooseDriver = async () => {
-    const d = await pick({
-      title: "Driver",
-      selected: driver,
-      choices: state.drivers.map((x) => ({ value: x.id, label: `${x.name}${!x.authenticated ? " · not signed in" : ""}`, disabled: !x.available })),
-    });
-    if (d) {
-      touchedDriver.current = true;
-      setDriver(d);
-    }
+  const chooseDriver = (d: string) => {
+    touchedDriver.current = true;
+    setDriver(d);
   };
 
   return (
@@ -87,7 +75,15 @@ export function NewSessionScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {project && <ProjectKey k={project.key} />}
-          <PickerButton label={project ? `${project.name} (${project.key})` : projects.length ? "Choose a project" : "Add a project"} onPress={() => (projects.length ? void chooseProject() : addProject())} icon="folder" />
+          <Select
+            value={projectId}
+            options={projects.map((p) => ({ value: p.id, label: `${p.name} (${p.key})` }))}
+            onChange={setChosen}
+            placeholder={projects.length ? "Choose a project" : "Add a project"}
+            title="Project"
+            accessibilityName="Project"
+            actions={[{ label: "Add a project…", systemImage: "folder.badge.plus", onPress: addProject }]}
+          />
         </View>
         <TextInput
           autoFocus
@@ -110,7 +106,7 @@ export function NewSessionScreen() {
         {kind === "conductor" && <Text style={{ color: c.text3, fontSize: 13 }}>Orchestrates child tickets.</Text>}
         <View style={{ gap: 10 }}>
           <Line label="Driver">
-            <PickerButton label={state.drivers.find((d) => d.id === driver)?.name ?? (driver || "Default")} onPress={() => void chooseDriver()} icon="bot" />
+            <Select value={driver} options={driverOptions(state.drivers, { unavailable: "disable" })} onChange={chooseDriver} placeholder={driver || "Default"} title="Driver" accessibilityName="Driver" />
           </Line>
           <Line label="Model">
             <ModelPicker driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />

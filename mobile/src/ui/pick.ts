@@ -1,4 +1,4 @@
-// Native pickers: an action sheet for a short list of choices, a destructive confirm, a prompt.
+// Native action sheets for a short list of actions (selects are ui/selects.tsx), and a confirm.
 import { ActionSheetIOS, Alert } from "react-native";
 
 export interface Choice<V> {
@@ -9,9 +9,9 @@ export interface Choice<V> {
 }
 
 /** Show an action sheet; resolves to the chosen value, or undefined when cancelled. */
-export function pick<V>(opts: { title?: string; message?: string; choices: Choice<V>[]; selected?: V; cancelLabel?: string }): Promise<V | undefined> {
+export function pick<V>(opts: { title?: string; message?: string; choices: Choice<V>[]; cancelLabel?: string }): Promise<V | undefined> {
   const usable = opts.choices;
-  const labels = usable.map((c) => (opts.selected !== undefined && c.value === opts.selected ? `✓ ${c.label}` : c.label));
+  const labels = usable.map((c) => c.label);
   return new Promise((resolve) => {
     ActionSheetIOS.showActionSheetWithOptions(
       {

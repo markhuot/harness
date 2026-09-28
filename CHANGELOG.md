@@ -74,6 +74,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Agents now read and edit files with their file tools instead of shell commands like `sed -i`,
   `cat`, or heredocs. In Ask mode that means fewer approval requests for ordinary edits inside
   the ticket's worktree, and a ticket's activity shows which file each step read or changed.
+- On iPhone, choosing a project, driver, model, permission mode, network mode or classifier now
+  opens a dropdown menu next to the field, with a checkmark on the current choice, instead of a
+  sheet of buttons at the bottom of the screen. Permission modes show
+  their description under each name, and drivers that aren't signed in say so.
 
 ### Removed
 

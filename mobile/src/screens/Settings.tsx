@@ -13,7 +13,8 @@ import { MONO } from "../theme/tokens";
 import { Badge, Button, ProjectKey, Segmented, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
+import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { driverOptions } from "../lib/selectOptions";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ThemeSwatch } from "../ui/ThemeSwatch";
@@ -119,9 +120,8 @@ function NetworkSection() {
   }, [client]);
   useEffect(load, [load, epoch, state.settings?.listen?.mode]);
   if (!net) return null;
-  const change = async () => {
-    const v = await pick<ListenMode>({ title: "Listen on", selected: net.mode, choices: LISTEN_MODES.filter((m) => m !== "custom").map((m) => ({ value: m, label: LISTEN_LABEL[m] })) });
-    if (!v || v === net.mode) return;
+  const change = async (v: ListenMode) => {
+    if (v === net.mode) return;
     if (v === "localhost" && !(await confirm("Listen on this Mac only?", "This iPhone will lose its connection until you change it back on the Mac.", "Change"))) return;
     await act(() => client.updateSettings({ listen: { mode: v } } as never), "Network updated");
     setTimeout(load, 800);
@@ -129,7 +129,15 @@ function NetworkSection() {
   return (
     <Group title="Network" footer={net.override ? `HARNESS_HOST=${net.override} overrides this setting.` : "Where the service accepts connections. The phone needs Tailscale or All networks."}>
       <SRow title="Listen on" sub={net.error ?? undefined}>
-        <PickerButton label={net.mode === "custom" ? `Custom · ${net.host ?? ""}` : LISTEN_LABEL[net.mode]} onPress={() => void change()} disabled={!!net.override} />
+        <Select
+          value={net.mode}
+          options={LISTEN_MODES.filter((m) => m !== "custom").map((m) => ({ value: m, label: LISTEN_LABEL[m] }))}
+          onChange={(v) => void change(v)}
+          label={net.mode === "custom" ? `Custom · ${net.host ?? ""}` : LISTEN_LABEL[net.mode]}
+          title="Listen on"
+          accessibilityName="Listen on"
+          disabled={!!net.override}
+        />
       </SRow>
       <SRow title="Addresses" last={!net.tailscale}>
         <View style={{ alignItems: "flex-end" }}>
@@ -282,10 +290,6 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
   const [apiKey, setApiKey] = useState("");
   const [replacing, setReplacing] = useState(false);
   const save = (body: Parameters<typeof client.updateSettings>[0]) => act(() => client.updateSettings(body));
-  const chooseDriver = async () => {
-    const v = await pick({ title: "Default driver", selected: settings.defaultDriver, choices: state.drivers.map((d) => ({ value: d.id, label: d.name })) });
-    if (v) void save({ defaultDriver: v });
-  };
   const saveKey = async () => {
     if (!apiKey.trim()) return;
     const ok = await act(() => client.updateSettings({ anthropicApiKey: apiKey.trim() }), "API key saved");
@@ -297,7 +301,7 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
   return (
     <Group title="General">
       <SRow title="Default driver" sub="Used for new sessions unless the project overrides it.">
-        <PickerButton label={state.drivers.find((d) => d.id === settings.defaultDriver)?.name ?? settings.defaultDriver} onPress={() => void chooseDriver()} />
+        <Select value={settings.defaultDriver} options={driverOptions(state.drivers)} onChange={(v) => void save({ defaultDriver: v })} placeholder={settings.defaultDriver} title="Default driver" accessibilityName="Default driver" />
       </SRow>
       <SRow title="Max concurrent runs" sub="Agent runs across all sessions. Extra runs wait in the queue.">
         <DraftField
@@ -357,17 +361,19 @@ function ModelsSection({ settings }: { settings: PublicSettings }) {
 function PermissionsSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
-  const chooseClassifier = async () => {
-    const v = await pick<ClassifierBackend>({ title: "Auto-mode classifier", selected: settings.classifier, choices: CLASSIFIER_BACKENDS.map((b) => ({ value: b, label: CLASSIFIER_LABELS[b] })) });
-    if (v) void act(() => client.updateSettings({ classifier: v }));
-  };
   return (
     <Group title="Permissions" footer="How much agents may do without asking. Projects and tickets can override the mode. Plan runs are always read-only.">
       <SRow title="Default mode" sub={PERMISSION_MODE_LABELS[settings.permissionMode].description}>
         <PermissionPicker value={settings.permissionMode} onChange={(m) => m && void act(() => client.updateSettings({ permissionMode: m }))} />
       </SRow>
       <SRow title="Auto-mode classifier" sub="Judges actions in auto mode for the Anthropic API and Dummy drivers. Claude Code tickets use Claude Code's own classifier." last>
-        <PickerButton label={CLASSIFIER_LABELS[settings.classifier]} onPress={() => void chooseClassifier()} />
+        <Select<ClassifierBackend>
+          value={settings.classifier}
+          options={CLASSIFIER_BACKENDS.map((b) => ({ value: b, label: CLASSIFIER_LABELS[b] }))}
+          onChange={(v) => void act(() => client.updateSettings({ classifier: v }))}
+          title="Auto-mode classifier"
+          accessibilityName="Auto-mode classifier"
+        />
       </SRow>
     </Group>
   );

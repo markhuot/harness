@@ -886,6 +886,12 @@ child tickets, rollups, key-rename preview, model and permission options) match 
 - **Board.** Five columns as horizontal pages under a status strip with counts. Touch and hold
   a card to move it between columns or to the top or bottom (VoiceOver gets the moves as custom
   actions). The project filter and the sidebar live in a Projects sheet.
+- **Selects.** Every desktop `<select>` is a `Select` (`mobile/src/ui/selects.tsx`): a SwiftUI
+  `Menu` from `@expo/ui` whose label shows the value with the ⌃⌄ glyph. Each option is a
+  controlled `Toggle` (a menu draws it as a checkmark item, with an optional subtitle line), so
+  the menu only ever shows the parent's value, even when the parent refuses the choice. Actions
+  (Refresh model list, Add a project…) sit in their own section. Action sheets (`mobile/src/ui/pick.ts`) are only for
+  lists of actions: card moves, a saved Mac, a watcher.
 - **Browser tab.** Frames are double-buffered `Image`s letterboxed into the stage. A tap sends
   move + down + up, a pan sends wheel events in page pixels, and hold-then-drag sends a mouse drag
   (`mobile/src/lib/browserInput.ts`). A hidden `TextInput` carries the keyboard (diffed into text
