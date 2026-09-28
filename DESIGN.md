@@ -192,6 +192,15 @@ error result.
 
 `toolsForRun(kind, driver)` in `service/src/tools/index.ts` is the single source of truth.
 
+File tools over the shell: every ticket run's system prompt has a "Files" section telling the
+model to read and edit through its file tools (claude-code's `Read`/`Edit`/`Write`/`Grep`/`Glob`,
+or the native `read_file`/`edit_file`/`write_file`/`list_files` when `hasBuiltinTools` is false),
+not `cat`/`sed -i`/heredocs through bash. Claude Code's auto mode prompt tells the model shell
+edits are fine; the section overrides that, because edits in the workdir are auto-allowed (ask →
+`acceptEdits`, and the PermissionGate's edit-in-workdir path) while the same change through bash
+goes to a permission prompt or the classifier. Plan, review and conductor runs get only the read
+half. We don't reimplement the file tools for claude-code: the CLI's own are used as-is.
+
 ## Drivers
 
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).

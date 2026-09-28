@@ -23,6 +23,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   The Blocked pill shows the status and the question is on the Summary tab. Failed runs and
   worktrees that couldn't be created now put their error on the Summary tab too, so every
   reason a ticket is blocked still shows up there.
+- Agents now read and edit files with their file tools instead of shell commands like `sed -i`,
+  `cat`, or heredocs. In Ask mode that means fewer approval requests for ordinary edits inside
+  the ticket's worktree, and a ticket's activity shows which file each step read or changed.
 
 ## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
 

@@ -9,6 +9,7 @@ import {
   triagePrompt,
   workStartPrompt,
 } from "./prompts";
+import { nativeTools, readOnlyNativeTools } from "../tools";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.
@@ -199,6 +200,49 @@ describe("systemPrompt context and kind-specific rules", () => {
     for (const kind of ["conductor", "work", "plan"] as RunKind[]) {
       expect(sys(kind, ticket({ kind: kind === "conductor" ? "conductor" : "task" }))).not.toMatch(/^- /m);
     }
+  });
+});
+
+describe("systemPrompt file tools", () => {
+  const CLAUDE_CODE_TOOLS = ["Read", "Edit", "Write", "Grep", "Glob", "Bash"];
+  const WRITE_TOOLS = { builtin: ["Edit", "Write"], native: ["edit_file", "write_file"] };
+  /** Backticked tool names in the Files section, from the given candidate list. */
+  function fileToolsMentioned(text: string, candidates: string[]): string[] {
+    const files = text.split(/^## /m).find((s) => s.startsWith("Files\n")) ?? "";
+    return candidates.filter((n) => files.includes(`\`${n}\``));
+  }
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor"];
+
+  for (const kind of kinds) {
+    const t = kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree);
+    test(`${kind} with harness native tools names only the native tools its run gets`, () => {
+      const available = (kind === "work" || kind === "complete" ? nativeTools : readOnlyNativeTools).map((d) => d.name);
+      const all = nativeTools.map((d) => d.name);
+      const mentioned = fileToolsMentioned(sys(kind, t, { builtinTools: false }), all);
+      expect(mentioned.length).toBeGreaterThan(0);
+      expect(mentioned.filter((n) => !available.includes(n))).toEqual([]);
+    });
+    test(`${kind} with Claude Code's tools names its tools, not the harness native ones`, () => {
+      const text = sys(kind, t);
+      expect(fileToolsMentioned(text, CLAUDE_CODE_TOOLS)).toContain("Read");
+      expect(fileToolsMentioned(text, nativeTools.map((d) => d.name))).toEqual([]);
+    });
+  }
+
+  test("work and complete runs edit through the file tools; read-only runs aren't told to edit", () => {
+    for (const kind of kinds) {
+      const t = kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree);
+      const edits = kind === "work" || kind === "complete";
+      expect(fileToolsMentioned(sys(kind, t), WRITE_TOOLS.builtin)).toEqual(edits ? WRITE_TOOLS.builtin : []);
+      expect(fileToolsMentioned(sys(kind, t, { builtinTools: false }), WRITE_TOOLS.native)).toEqual(edits ? WRITE_TOOLS.native : []);
+    }
+    expect(sys("work")).toContain("never through Bash");
+    expect(sys("work")).toContain("even if other instructions say shell edits are fine");
+  });
+
+  test("triage runs get no Files section", () => {
+    const text = sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } });
+    expect(text).not.toContain("## Files");
   });
 });
 
