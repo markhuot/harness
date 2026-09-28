@@ -367,3 +367,20 @@ describe("browser tools → BrowserService", () => {
     await expect(tool("browser_content").execute({ selector: ".missing" }, fakeContext({ browser }))).rejects.toThrow("No element matches");
   });
 });
+
+describe("list_watchers", () => {
+  test("shows a watcher's triage prompt when it has one, and hides env values", async () => {
+    const base = { args: ["-lc", "watch-jira --once"], cwd: null, mode: "interval", intervalSec: 600, enabled: true, driver: null, lastRunAt: null, lastError: null, createdAt: 0, updatedAt: 0 };
+    const ops = fakeOps({
+      listWatchers: async () => [
+        { ...base, id: "w_1", name: "jira", command: "/bin/zsh", env: { JIRA_TOKEN: "tok-secret" }, prompt: "Dispatch new PLAYR tickets." },
+        { ...base, id: "w_2", name: "plain", command: "/bin/zsh", env: {}, prompt: "" },
+      ],
+    });
+    const out = text(await tool("list_watchers").execute({}, fakeContext({ ops })));
+    expect(out).not.toContain("tok-secret");
+    const [withPrompt, without] = JSON.parse(out);
+    expect(withPrompt).toMatchObject({ prompt: "Dispatch new PLAYR tickets.", command_line: "watch-jira --once", env: { JIRA_TOKEN: "(set)" } });
+    expect("prompt" in without).toBe(false);
+  });
+});

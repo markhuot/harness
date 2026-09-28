@@ -5,6 +5,7 @@ import type { Driver } from "../drivers/types";
 import { getTicket, listProjects, listTickets, searchTickets } from "./board";
 import { browserClick, browserContent, browserEval, browserOpen, browserScreenshot, browserType } from "./browser";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
+import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
@@ -16,11 +17,12 @@ export * from "./board";
 export * from "./board-write";
 export * from "./browser";
 export * from "./conductor";
+export * from "./config";
 export * from "./native";
 export * from "./permission";
 export * from "./ticket";
 export * from "./triage";
-export { defineTool, validateInput } from "./util";
+export { defineGatedTool, defineTool, validateInput } from "./util";
 
 export const browserTools: ToolDefinition[] = [browserOpen, browserContent, browserClick, browserType, browserEval, browserScreenshot];
 /** Read-only board tools: every run kind gets these (DESIGN.md "Tools"). */
@@ -41,10 +43,16 @@ export const allTools: ToolDefinition[] = [
   ...boardWriteTools,
   ...conductorTools,
   ...triageTools,
+  ...configReadTools,
+  ...configWriteTools,
   ...browserTools,
   permissionPrompt,
   ...nativeTools,
 ];
+
+// Config reads (watchers, mappings, settings, drivers) go to every run kind, like the board reads.
+// Config writes, all human-gated, go to work and conductor runs only: plan/review/triage have no
+// human in the loop to approve them.
 
 /**
  * Harness tools per run kind (see DESIGN.md "Tools"), plus which native set the
@@ -56,12 +64,15 @@ export const allTools: ToolDefinition[] = [
  *  - "none": triage only routes work
  */
 const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
-  plan: { harness: [postSummary, updatePlan, ...boardTools, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...browserTools], native: "full" },
-  review: { harness: [postSummary, reviewDecision, ...boardTools, ...browserTools], native: "read" },
-  complete: { harness: [postSummary, ...boardTools], native: "full" },
-  conductor: { harness: [postSummary, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...browserTools], native: "read" },
-  triage: { harness: [...boardTools, ...triageTools], native: "none" },
+  plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
+  review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  complete: { harness: [postSummary, ...boardTools, ...configReadTools], native: "full" },
+  conductor: {
+    harness: [postSummary, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    native: "read",
+  },
+  triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
 };
 
 /**

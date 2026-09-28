@@ -128,6 +128,22 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     declineWork: async () => {},
     requestApproval: async (_ctx: ToolContext, _tool: string, input: unknown) => ({ behavior: "allow", updatedInput: input }),
     checkPermission: async () => ({ behavior: "allow" }),
+    listWatchers: async () => [],
+    listMappings: async () => [],
+    getSettings: async () => ({}),
+    listDrivers: async () => [],
+    createWatcher: async (_ctx: ToolContext, input: Record<string, unknown>, dryRun?: boolean) =>
+      dryRun ? null : { id: "w_1", args: [], cwd: null, env: {}, mode: "loop", intervalSec: 60, enabled: true, driver: null, lastRunAt: null, lastError: null, ...input },
+    updateWatcher: async () => null,
+    deleteWatcher: async (_ctx: ToolContext, ref: string) => ({ id: ref, name: ref }),
+    runWatcher: async (_ctx: ToolContext, ref: string) => ({ id: ref, name: ref }),
+    createMapping: async (_ctx: ToolContext, input: { pattern: string }, dryRun?: boolean) => (dryRun ? null : { id: "m_1", pattern: input.pattern }),
+    deleteMapping: async (_ctx: ToolContext, id: string) => ({ id, pattern: "FOO" }),
+    createProject: async () => null,
+    updateProject: async () => null,
+    deleteProject: async (_ctx: ToolContext, key: string) => ({ key, name: key }),
+    updateSettings: async () => ({}),
+    deleteTicket: async (_ctx: ToolContext, key: string) => fakeTicket({ key }),
   };
   const ops = {} as HarnessOps & { calls: RecordedCall[]; children: Ticket[] };
   for (const name of Object.keys(defaults) as (keyof HarnessOps)[]) {

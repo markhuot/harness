@@ -12,6 +12,7 @@ import type {
   TriageStatus,
 } from "../protocol";
 import { PERMISSION_MODE_LABELS } from "../permissions";
+import { commandLine } from "../commandLine";
 
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   planning: "Planning",
@@ -118,6 +119,20 @@ export function describeApprovalInput(toolName: string, input: unknown): { prima
     pick("url", "URL", false);
     pick("query", "Query", false);
   }
+  // Harness config tools: a watcher's command line is what the human is really approving.
+  if (/^(create|update)_watcher$/.test(tool) && (typeof o.command === "string" || Array.isArray(o.args))) {
+    const args = Array.isArray(o.args) ? o.args.map(String) : [];
+    primary = { label: "Command", value: commandLine(typeof o.command === "string" ? o.command : "(unchanged command)", args), code: true };
+    delete o.command;
+    delete o.args;
+  }
+  if (/^(delete|run)_watcher$/.test(tool) || tool === "update_watcher") pick("watcher", "Watcher", false);
+  if (tool === "create_mapping") pick("pattern", "Key pattern", true);
+  if (/^(create|delete|update)_project$/.test(tool)) {
+    pick("path", "Directory", true);
+    pick("project_key", "Project", false);
+  }
+  if (tool === "delete_ticket") pick("key", "Ticket", false);
   pick("command", "Command", true);
   pick("url", "URL", false);
   pick("file_path", "File", true);

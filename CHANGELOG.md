@@ -38,6 +38,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - When one piece of output covers several tickets (like a batch of Jira issues), triage can
   dispatch each of them. When the output is about a ticket you already have, the update goes
   to that ticket as a message.
+- Agents can now set up watchers, mappings, projects, and settings for you. A ticket like "add a
+  watcher that polls our events API every minute and dispatches anything assigned to me with next
+  steps" gets the watcher's command, schedule, and triage instructions filled in for you. Agents
+  can also delete tickets and projects, though never their own ticket, its parent tickets, or the
+  project they're working in. Each of these changes waits for you: the ticket shows an approval
+  card with a plain description of the change (for a watcher, the exact command it will run and
+  its triage instructions) and moves on only after you tap Allow once. These cards have no
+  "Always allow" button, and a read-only ticket can't make these changes at all. Agents can't see
+  or set your Anthropic API key, pair devices, or rotate the access token.
 
 ### Fixed
 

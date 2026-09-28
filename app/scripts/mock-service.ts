@@ -349,6 +349,11 @@ interface SeedTicket {
 
 const byKey = (key: string) => [...tickets.values()].find((t) => t.key === key);
 
+// HARNESS-20's approval card: a looping curl watcher with a triage prompt.
+const EVENTS_LOOP = "while true; do curl -s 'https://api.example.com/events?since=1m'; sleep 60; done";
+const EVENTS_PROMPT = "If this event is assigned to me and has actionable next steps, dispatch it to an agent.";
+const EVENTS_SUMMARY = `Create watcher "events" (loop): ${EVENTS_LOOP}; prompt: "${EVENTS_PROMPT}"`;
+
 function seedTicket(s: SeedTicket): Ticket {
   const createdAt = now() - s.ageMin * 60_000;
   const key = s.key ?? `${s.project.key}-${s.project.nextSeq++}`;
@@ -498,6 +503,33 @@ function seed() {
     ageMin: 25,
     summaries: [["agent", "Scaffolded `tests/smoke.spec.ts`. Needs Playwright installed to run it."]],
   }); // HARNESS-9
+  seedTicket({
+    project: hx,
+    key: "HARNESS-20",
+    title: "Watch the events API",
+    description: "Add a watcher that polls https://api.example.com/events every minute. If an event is assigned to me and has actionable next steps, dispatch it to an agent.",
+    status: "blocked",
+    driver: "claude-code",
+    blockedReason: `Permission needed: create_watcher — ${EVENTS_SUMMARY}`,
+    pendingApproval: {
+      id: "appr_cfg",
+      runId: "run_appr_cfg",
+      toolName: "mcp__harness__create_watcher",
+      input: {
+        name: "events",
+        command: EVENTS_LOOP,
+        mode: "loop",
+        prompt: EVENTS_PROMPT,
+      },
+      requestedAt: now() - 30_000,
+      reason: "A watcher's command runs on this Mac as you, outside any ticket sandbox, every time the watcher fires.",
+      source: "policy",
+      summary: EVENTS_SUMMARY,
+      onceOnly: true,
+    },
+    ageMin: 5,
+    summaries: [["agent", "Checked the events endpoint with `curl`. Asking to add the watcher with your triage instructions."]],
+  }); // HARNESS-20
   seedTicket({
     project: ny,
     title: "Lazy-load below-the-fold images on section fronts",
@@ -1140,6 +1172,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (!pa) throw new HttpError(409, "No pending approval");
           const decision = String(body.decision ?? "");
           if (!["allow_once", "allow_tool", "deny"].includes(decision)) throw new HttpError(400, "decision must be allow_once, allow_tool or deny");
+          if (decision === "allow_tool" && pa.onceOnly) throw new HttpError(400, `${pa.toolName} can only be allowed once`);
           if (decision === "allow_tool" && !t.allowedTools.includes(pa.toolName)) t.allowedTools = [...t.allowedTools, pa.toolName];
           t.pendingApproval = null;
           t.blockedReason = null;

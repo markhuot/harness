@@ -73,6 +73,38 @@ test("approval input: Write/Edit show file_path, WebFetch shows the url as plain
   expect(describeApprovalInput("WebFetch", { url: "https://x.y", prompt: "p" })).toMatchObject({ primary: { label: "URL", value: "https://x.y", code: false }, rest: { prompt: "p" } });
 });
 
+test("approval input: config tools show the watcher command line and what they act on", () => {
+  // a shell command line (no args) is shown as typed, not quoted as one word
+  expect(describeApprovalInput("create_watcher", { name: "status", command: "while true; do curl -s https://x.test; sleep 60; done", prompt: "Dispatch outages." })).toEqual({
+    primary: { label: "Command", value: "while true; do curl -s https://x.test; sleep 60; done", code: true },
+    description: null,
+    rest: { name: "status", prompt: "Dispatch outages." },
+  });
+  // a login shell running one line shows the line itself
+  expect(describeApprovalInput("create_watcher", { command: "/bin/zsh", args: ["-lc", "while true; do curl -s 'https://x.test'; sleep 60; done"] }).primary).toEqual({
+    label: "Command",
+    value: "while true; do curl -s 'https://x.test'; sleep 60; done",
+    code: true,
+  });
+  // other command + args are quoted as the argv they are
+  expect(describeApprovalInput("create_watcher", { name: "jira", command: "/usr/local/bin/watch-jira", args: ["--project=FOO", "--jql=status = Done"], mode: "loop" })).toEqual({
+    primary: { label: "Command", value: "/usr/local/bin/watch-jira --project=FOO '--jql=status = Done'", code: true },
+    description: null,
+    rest: { name: "jira", mode: "loop" },
+  });
+  // an args-only update still shows what will run
+  expect(describeApprovalInput("mcp__harness__update_watcher", { watcher: "jira", args: ["it's"] })).toMatchObject({
+    primary: { value: "'(unchanged command)' 'it'\\''s'" },
+    rest: { watcher: "jira" },
+  });
+  expect(describeApprovalInput("update_watcher", { watcher: "jira", enabled: false }).primary).toEqual({ label: "Watcher", value: "jira", code: false });
+  expect(describeApprovalInput("delete_ticket", { key: "ACME-3" }).primary).toEqual({ label: "Ticket", value: "ACME-3", code: false });
+  expect(describeApprovalInput("update_project", { project_key: "ACME", auto_complete: true })).toMatchObject({
+    primary: { label: "Project", value: "ACME" },
+    rest: { auto_complete: true },
+  });
+});
+
 test("approval input: unknown tools fall back to JSON, non-objects are shown raw", () => {
   expect(describeApprovalInput("mcp__x__thing", { a: 1 })).toEqual({ primary: null, description: null, rest: { a: 1 } });
   expect(describeApprovalInput("Odd", "raw")).toMatchObject({ primary: { label: "Input", value: '"raw"' } });

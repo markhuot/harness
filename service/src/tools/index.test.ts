@@ -9,18 +9,33 @@ const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR = ["review_ticket", "complete_ticket"];
 
+const CONFIG_READ = ["list_watchers", "list_mappings", "get_settings", "list_drivers"];
+const CONFIG_WRITE = [
+  "create_watcher",
+  "update_watcher",
+  "delete_watcher",
+  "run_watcher",
+  "create_mapping",
+  "delete_mapping",
+  "create_project",
+  "update_project",
+  "delete_project",
+  "update_settings",
+  "delete_ticket",
+];
+
 const builtin = { hasBuiltinTools: true };
 const bare = { hasBuiltinTools: false };
 const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }) => toolsForRun(kind, driver).map((t) => t.name);
 
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
-    plan: ["post_summary", "update_plan", ...BOARD, ...BROWSER],
-    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...BROWSER],
-    review: ["post_summary", "review_decision", ...BOARD, ...BROWSER],
-    complete: ["post_summary", ...BOARD],
-    conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...BROWSER],
-    triage: [...BOARD, "dispatch_ticket", "decline_work"],
+    plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    complete: ["post_summary", ...BOARD, ...CONFIG_READ],
+    conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -61,6 +76,13 @@ describe("toolsForRun", () => {
     for (const read of BOARD) expect(who(read)).toEqual(kinds);
     for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor"]);
     for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["conductor"]);
+  });
+
+  test("config reads go to every run kind; config writes only to work and conductor runs", () => {
+    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+    const who = (tool: string) => kinds.filter((k) => names(k, bare).includes(tool));
+    for (const tool of CONFIG_READ) expect(who(tool)).toEqual(kinds);
+    for (const tool of CONFIG_WRITE) expect(who(tool)).toEqual(["work", "conductor"]);
   });
 
   test("permission_prompt is added for every kind when the driver uses it, and only then", () => {

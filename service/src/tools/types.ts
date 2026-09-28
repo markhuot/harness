@@ -2,7 +2,21 @@
 //  - natively, to drivers that run their own agent loop (dummy, anthropic-api)
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
-import type { PermissionMode, RunKind, Session, Ticket, TicketStatus, ToolResultContent, TranscriptRole } from "@harness/shared";
+import type {
+  CreateProjectBody,
+  DriverInfo,
+  DriverModels,
+  Mapping,
+  PermissionMode,
+  PublicSettings,
+  RunKind,
+  Session,
+  Ticket,
+  TicketStatus,
+  ToolResultContent,
+  TranscriptRole,
+  Watcher,
+} from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 
 /** JSON Schema object describing the tool input */
@@ -137,7 +151,8 @@ export interface HarnessOps {
     ctx: ToolContext,
     input: { query: string; projectKey?: string; limit?: number; cursor?: string },
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
-  listProjects(ctx: ToolContext): Promise<{ key: string; name: string; path: string }[]>;
+  /** Every project with its settings (null permissionMode → the settings default) */
+  listProjects(ctx: ToolContext): Promise<ProjectView[]>;
 
   // --- board (write): work and conductor runs ---
   // What a person does to cards on the board, through the same Orchestrator methods as the HTTP
@@ -190,8 +205,12 @@ export interface HarnessOps {
     ctx: ToolContext,
     toolName: string,
     input: unknown,
-    /** Shown on the approval card: why a human is asked, and by whom (classifier / static policy) */
-    meta?: { reason?: string; source?: "classifier" | "policy" },
+    /**
+     * Shown on the approval card: why a human is asked, and by whom (classifier / static policy).
+     * summary replaces the generic input summary; onceOnly calls are allowed by a one-time grant
+     * only (never by ticket.allowedTools), and the card offers no "always allow".
+     */
+    meta?: ApprovalMeta,
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }>;
 
   // --- native tool permissions (PermissionGate; DESIGN.md "Permissions") ---
@@ -201,4 +220,56 @@ export interface HarnessOps {
    * (soft deny / ask mode), exactly like requestApproval.
    */
   checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }>;
+
+  // --- config (Settings / Project Settings; DESIGN.md "Config tools") ---
+  // Reads work in every ticket run and triage. Mutations are for work and conductor runs only
+  // and throw otherwise; their tools ask a human first (defineGatedTool). `dryRun` runs the same
+  // validation (and throws the same errors) without changing anything, so a tool can reject a bad
+  // call before it puts an approval card in front of the human.
+  listWatchers(ctx: ToolContext): Promise<Watcher[]>;
+  /** Mappings with the target project's key */
+  listMappings(ctx: ToolContext): Promise<(Mapping & { projectKey: string | null })[]>;
+  /** Settings without secrets (anthropicApiKeySet instead of the key) */
+  getSettings(ctx: ToolContext): Promise<PublicSettings>;
+  listDrivers(ctx: ToolContext): Promise<(DriverInfo & { models: DriverModels })[]>;
+  createWatcher(ctx: ToolContext, input: WatcherFields & { name: string; command: string }, dryRun?: boolean): Promise<Watcher | null>;
+  /** `ref` is a watcher id or its exact name */
+  updateWatcher(ctx: ToolContext, ref: string, input: WatcherFields, dryRun?: boolean): Promise<Watcher | null>;
+  deleteWatcher(ctx: ToolContext, ref: string, dryRun?: boolean): Promise<Watcher>;
+  runWatcher(ctx: ToolContext, ref: string, dryRun?: boolean): Promise<Watcher>;
+  createMapping(ctx: ToolContext, input: { pattern: string; projectKey: string; notes?: string }, dryRun?: boolean): Promise<Mapping | null>;
+  deleteMapping(ctx: ToolContext, id: string, dryRun?: boolean): Promise<Mapping>;
+  createProject(ctx: ToolContext, input: CreateProjectBody, dryRun?: boolean): Promise<ProjectView | null>;
+  /** `key` is the project's current key; input.key renames it */
+  updateProject(ctx: ToolContext, key: string, input: Partial<CreateProjectBody>, dryRun?: boolean): Promise<ProjectView | null>;
+  /** Refuses the project of the run's own ticket */
+  deleteProject(ctx: ToolContext, key: string, dryRun?: boolean): Promise<ProjectView>;
+  /** Same validation as PATCH /settings; anthropicApiKey is refused */
+  updateSettings(ctx: ToolContext, patch: Record<string, unknown>, dryRun?: boolean): Promise<PublicSettings>;
+  /** Refuses the run's own ticket and its ancestors */
+  deleteTicket(ctx: ToolContext, key: string, dryRun?: boolean): Promise<Ticket>;
+}
+
+/** Watcher fields a tool may set (Watcher without ids, timestamps and run status). */
+export type WatcherFields = Partial<Pick<Watcher, "name" | "command" | "args" | "prompt" | "cwd" | "env" | "mode" | "intervalSec" | "enabled" | "driver">>;
+
+/** A project as tools see it. */
+export interface ProjectView {
+  key: string;
+  name: string;
+  path: string;
+  defaultDriver: string | null;
+  defaultModels: Record<string, string>;
+  useWorktrees: boolean;
+  requireHumanReview: boolean;
+  autoComplete: boolean;
+  /** null → the settings default */
+  permissionMode: PermissionMode | null;
+}
+
+export interface ApprovalMeta {
+  reason?: string;
+  source?: "classifier" | "policy";
+  summary?: string;
+  onceOnly?: boolean;
 }

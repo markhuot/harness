@@ -1,7 +1,7 @@
 // Shared helpers for tool definitions: input validation, result builders, formatting.
 
 import type { Ticket } from "@harness/shared";
-import type { JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./types";
+import type { ApprovalMeta, JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./types";
 
 export function textResult(text: string, isError = false): ToolResult {
   return isError ? { content: [{ type: "text", text }], isError: true } : { content: [{ type: "text", text }] };
@@ -113,6 +113,43 @@ export function defineTool<I>(def: {
       return typeof out === "string" ? textResult(out) : out;
     },
   };
+}
+
+/**
+ * A tool that changes something outside the ticket's sandbox (watcher commands the service
+ * runs, settings that loosen permissions or network exposure, deletes). Every call goes to a
+ * human, whatever the ticket's permission mode: `check` validates first (a bad call fails
+ * without bothering anyone), then HarnessOps.requestApproval puts an approval card on the
+ * ticket and blocks it; the agent is resumed when the human answers, and the identical retry
+ * consumes the one-time grant and runs `run`. Read-only tickets are denied outright. Only
+ * "allow once" can approve these calls (onceOnly), so a human never unlocks a whole class of
+ * them by accident.
+ */
+export function defineGatedTool<I>(def: {
+  name: string;
+  description: string;
+  inputSchema: JsonSchema;
+  /** Card text: what the call does in one line, and why a human is asked */
+  describe(input: I): { summary: string; reason: string };
+  /** Validate without side effects; throw Error(message) to reject the call */
+  check?(input: I, ctx: ToolContext): Promise<unknown>;
+  run(input: I, ctx: ToolContext): Promise<ToolResult | string>;
+}): ToolDefinition<I> {
+  // Advertised like every harness tool (readOnlyHint): the gate is here, not in the client's
+  // permission system, so it holds whatever mode the CLI runs in.
+  return defineTool<I>({
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    async run(input, ctx) {
+      if (def.check) await def.check(input, ctx);
+      const { summary, reason } = def.describe(input);
+      const meta: ApprovalMeta = { summary, reason, source: "policy", onceOnly: true };
+      const decision = await ctx.ops.requestApproval(ctx, def.name, input, meta);
+      if (decision.behavior === "deny") return errorResult(decision.message);
+      return def.run(input, ctx);
+    },
+  });
 }
 
 export function schema(properties: Record<string, unknown>, required: string[] = []): JsonSchema {
