@@ -891,6 +891,24 @@ Settings, project settings, or on the board route the pane workspace.
   plugin's open-ticket request) replace that pane's content through `useOpenTicket`
   (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
   highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
+  drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
+  or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
+  key-and-title chip as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
+  layer over every pane, above plugin iframes and the browser canvas (which would otherwise
+  swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
+  drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
+  four triangles, ties go to left/right, and the centre goes to the right. The preview is the
+  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `applyDrop`
+  (`dropContent` for a ticket, `movePane` for a pane). A ticket that's already open moves with its
+  pane and keeps its tab, and a pane over itself isn't a target. Docking against the board leaves
+  it 60%, the same split a click makes, while any other pane is split in half. Drags that don't
+  carry our types (files, text) are ignored. The layer goes away on drop, on dragend (Escape
+  cancels a native drag with a dragend), or on the first buttonless mouse move if the source
+  left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
+  Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
+  (`splitTarget`), and it skips a pane already showing that ticket. Cards are focusable, and
+  Enter opens them.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay

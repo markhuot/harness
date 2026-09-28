@@ -6,10 +6,18 @@
 // Dividers between split children resize with the pointer or the keyboard. While dragging, the
 // new layout is written straight to the DOM (no React render per pointermove) and committed to
 // the store once on release.
+//
+// While a ticket or pane is being dragged (paneDrag.tsx), a drop layer covers the workspace, above
+// plugin iframes and the browser canvas that would otherwise swallow the drag. The half of the pane
+// under the pointer picks the drop (zoneAt); the preview shows where the dropped pane would land
+// (dropPreview), and drop applies it.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {
+  applyDrop,
   closePane,
+  dropPreview,
+  dropTargetAt,
   findLeaf,
   focusPane,
   keySplit,
@@ -21,6 +29,7 @@ import {
   updatePanes,
   usePanes,
   type DividerBox,
+  type DropZone,
   type PaneLayout,
   type PaneLeaf,
   type PaneState,
@@ -30,6 +39,7 @@ import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext } from "./paneContext";
+import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
 import "./panes.css";
 
 const pct = (n: number) => `${n * 100}%`;
@@ -112,6 +122,7 @@ export function PaneWorkspace() {
       {layout.dividers.map((d) => (
         <Divider key={dividerId(d)} box={d} panes={panes} workspace={ref} />
       ))}
+      <DropLayer layout={layout} panes={panes} workspace={ref} />
     </div>
   );
 }
@@ -224,6 +235,60 @@ function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState;
       }}
     >
       {overlay}
+    </div>
+  );
+}
+
+type DropHit = { leafId: string; zone: DropZone; landing: Rect };
+
+/**
+ * Covers the workspace while a harness drag is in progress. dragover finds the pane and half under
+ * the pointer and previews where the dropped pane would land, unless the drop would change nothing
+ * (a pane over itself); drop applies it. Drags that aren't ours (files, text) pass through untouched.
+ */
+function DropLayer({ layout, panes, workspace }: { layout: PaneLayout; panes: PaneState; workspace: RefObject<HTMLDivElement | null> }) {
+  const source = useActiveDrag();
+  const [hit, setHit] = useState<DropHit | null>(null);
+  useEffect(() => {
+    if (!source) setHit(null);
+  }, [source]);
+  if (!source) return null;
+
+  /** The drop the pointer is over, or null where dropping does nothing. */
+  const targetAt = (e: DragEvent): DropHit | null => {
+    const ws = workspace.current?.getBoundingClientRect();
+    if (!ws || !ws.width || !ws.height) return null;
+    const t = dropTargetAt(layout, (e.clientX - ws.left) / ws.width, (e.clientY - ws.top) / ws.height);
+    const landing = t && dropPreview(panes, source, t.leafId, t.zone);
+    return t && landing ? { leafId: t.leafId, zone: t.zone, landing } : null;
+  };
+  const over = (e: DragEvent) => {
+    if (!isHarnessDrag(e.dataTransfer)) return;
+    const t = targetAt(e);
+    if (t) {
+      e.preventDefault(); // accept the drop here
+      e.dataTransfer.dropEffect = "move";
+    }
+    setHit((h) => (h?.leafId === t?.leafId && h?.zone === t?.zone ? h : t));
+  };
+
+  return (
+    <div
+      className="pane-drop-layer"
+      data-testid="pane-drop-layer"
+      onDragEnter={over}
+      onDragOver={over}
+      onDragLeave={() => setHit(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        const t = targetAt(e);
+        const src = dragSourceOf(e.dataTransfer);
+        setHit(null);
+        endDrag();
+        if (t && src) updatePanes((s) => applyDrop(s, src, t.leafId, t.zone));
+      }}
+    >
+      {hit && <div className="pane-drop-preview" data-testid="pane-drop-preview" data-zone={hit.zone} data-target={hit.leafId} style={leafStyle(hit.landing)} />}
     </div>
   );
 }

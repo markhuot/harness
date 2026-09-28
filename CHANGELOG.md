@@ -11,6 +11,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- On the Mac, you can drag a card onto the left, right, top or bottom half of the board or an
+  open ticket to see several tickets side by side or stacked. While you drag, a tinted outline
+  shows where the new pane will go. Dropping a card on the board's right half opens it the same
+  way a click does. Rows in a conductor's Tickets tab drag the same way, so you can open a child
+  next to its conductor. To move a pane you already have open, drag the grip beside its ticket key.
+  Right-click a card (or press the context-menu key on it) and pick Open to the Right, Below, to
+  the Left or Above to do the same thing without dragging. Cards now take keyboard focus, and
+  Enter opens them.
+
 - Projects can have a color. Pick one of eleven presets (or Custom for any color you like) in
   project settings, and the project's key badge takes that color in the sidebar, on cards, in
   the board header and on tickets. On the Mac, Custom opens the system color panel. On iPhone it
