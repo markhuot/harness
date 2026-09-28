@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A blocked ticket no longer repeats the agent's question in a red box at the top of the ticket.
+  The Blocked pill shows the status and the question is on the Summary tab. Failed runs and
+  worktrees that couldn't be created now put their error on the Summary tab too, so every
+  reason a ticket is blocked still shows up there.
+
 ## [app-20260928.0230](https://github.com/markhuot/harness/releases/tag/app-20260928.0230) - 2026-09-28
 
 ### Fixed

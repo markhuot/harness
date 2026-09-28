@@ -252,15 +252,6 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
         </div>
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
-        {!ticket.pendingApproval && ticket.status === "blocked" && ticket.blockedReason && (
-          <div className="callout callout-blocked">
-            <Icon name="alert" />
-            <div>
-              <div className="callout-title">The agent needs your input</div>
-              <div className="selectable">{ticket.blockedReason}</div>
-            </div>
-          </div>
-        )}
 
         <div className="actions">
           {ticket.status === "planning" && (

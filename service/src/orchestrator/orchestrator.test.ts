@@ -153,6 +153,9 @@ describe("ticket lifecycle", () => {
     expect(h.orch.ticketDetail(a.key).runs[0]!.status).toBe("failed");
     const tb = h.orch.ticketDetail(b.key).ticket;
     expect(tb.blockedReason).toBe("kaboom");
+    // The detail view has no blocked callout; the Summary tab is where the reason shows.
+    expect(h.orch.summaries(a.key).map((s) => [s.author, s.body])).toEqual([["system", "Run failed: disk full"]]);
+    expect(h.orch.summaries(b.key).map((s) => s.body)).toEqual(["Run failed: kaboom"]);
     expect(h.store.transcript.list(a.sessionId).some((e) => e.content.type === "error" && e.content.text === "disk full")).toBe(true);
   });
 

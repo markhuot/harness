@@ -432,7 +432,10 @@ function seedTicket(s: SeedTicket): Ticket {
   push("assistant", { type: "text", text: "Found it. The hook caches by slug, not by id, which explains the stale data. I'll switch the cache key and add a regression test." });
   if (s.status !== "planning" && s.status !== "in_progress") push("system", { type: "status", text: `Moved to ${s.status.replace("_", " ")}` });
 
-  for (const [i, [author, body]] of (s.summaries ?? []).entries()) {
+  // Like the service's block tool: the question lands on the Summary tab (the detail view has no callout).
+  const seeded: [SummaryAuthor, string][] = [...(s.summaries ?? [])];
+  if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", `Blocked: ${s.blockedReason}`]);
+  for (const [i, [author, body]] of seeded.entries()) {
     summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000 });
   }
   return t;

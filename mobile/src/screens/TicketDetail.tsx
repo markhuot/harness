@@ -1,5 +1,5 @@
 // Ticket detail: header menu (copy key, external link, mark done, cancel, delete), hero (Part-of
-// breadcrumb, title, badges, approval card / blocked question, actions), tabs (built-in + plugin)
+// breadcrumb, title, badges, approval card, actions), tabs (built-in + plugin)
 // and the message composer with the desktop's state-dependent placeholders.
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import { childrenOf, hasCustomDriver, ticketByKey, COMPOSER_PLACEHOLDER, compose
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
-import { Badge, Button, Callout, DriverBadge, Empty, KindBadge, ReviewMark, Spinner, StatusPill } from "../ui/kit";
+import { Badge, Button, DriverBadge, Empty, KindBadge, ReviewMark, Spinner, StatusPill } from "../ui/kit";
 import { KeyboardAvoider, useKeyboardShown } from "../ui/KeyboardAvoider";
 import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
@@ -179,11 +179,6 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
 
       </>)}
       {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
-      {!ticket.pendingApproval && ticket.status === "blocked" && ticket.blockedReason && (
-        <Callout tone="red" icon="alert" title="The agent needs your input">
-          {ticket.blockedReason}
-        </Callout>
-      )}
 
       {!compact && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {ticket.status === "planning" && <Button small title="Start work" icon="play" variant="primary" hapticKind="success" onPress={() => void act(() => client.startTicket(k))} />}

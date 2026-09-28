@@ -1420,7 +1420,9 @@ export class Orchestrator {
           try {
             ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
           } catch (err) {
-            this.transition(ticket, "blocked", { blockedReason: `Could not create worktree: ${errMsg(err)}` }, "Could not create worktree");
+            const reason = `Could not create worktree: ${errMsg(err)}`;
+            this.addSummary(ticket.sessionId, ticket.id, "system", reason);
+            this.transition(ticket, "blocked", { blockedReason: reason }, "Could not create worktree");
             return;
           }
         }
@@ -1766,6 +1768,7 @@ export class Orchestrator {
     if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
+        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
       }
       return;
