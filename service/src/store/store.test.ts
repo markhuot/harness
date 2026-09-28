@@ -57,6 +57,22 @@ describe("db", () => {
     expect(store.projects.update("p1", { name: "renamed" })!.autoComplete).toBe(false);
   });
 
+  test("migration 8 gives existing watchers an empty prompt and keeps their command + args", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 7).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(
+      `INSERT INTO watchers (id, name, command, args, created_at, updated_at) VALUES ('w1', 'jira', 'node', '["watch-jira.js","--project","FOO"]', 0, 0)`,
+    );
+    migrate(db);
+    const w = new Store(db).watchers.get("w1")!;
+    expect(w.prompt).toBe("");
+    expect(w.command).toBe("node");
+    expect(w.args).toEqual(["watch-jira.js", "--project", "FOO"]);
+  });
+
   test("refuses a database from a newer schema", () => {
     const db = new Database(":memory:");
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
@@ -338,5 +354,9 @@ describe("misc", () => {
     expect(u.enabled).toBe(false);
     expect(u.lastError).toBe("boom");
     expect(u.mode).toBe("interval");
+    expect(u.prompt).toBe("");
+    const p = s.watchers.update(w.id, { prompt: "Dispatch anything assigned to me" })!;
+    expect(p.prompt).toBe("Dispatch anything assigned to me");
+    expect(s.watchers.update(w.id, { name: "renamed" })!.prompt).toBe("Dispatch anything assigned to me");
   });
 });
