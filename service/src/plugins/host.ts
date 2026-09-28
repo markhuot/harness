@@ -375,18 +375,27 @@ export class PluginHost {
     return (p.manifest?.tabs ?? []).map((t) => ({ pluginId: p.id, id: t.id, title: t.title, icon: t.icon ?? null, when: t.when ?? "always" }));
   }
 
-  /** Tabs of healthy plugins whose `when` holds for this ticket, in plugin-id order. */
+  /**
+   * Tabs of healthy plugins whose `when` holds for this ticket (or whose plugin's `showTab` keeps
+   * them anyway), in plugin-id order.
+   */
   async ticketTabs(ticket: Ticket): Promise<PluginTab[]> {
-    const tabs = [...this.plugins.values()].filter((p) => !p.error).sort((a, b) => a.id.localeCompare(b.id)).flatMap((p) => this.tabsOf(p));
+    const plugins = [...this.plugins.values()].filter((p) => !p.error).sort((a, b) => a.id.localeCompare(b.id));
     let gitRepo: boolean | null = null;
     const out: PluginTab[] = [];
-    for (const tab of tabs) {
-      if (tab.when === "always") out.push(tab);
-      else if (tab.when === "worktree") {
-        if (ticket.branch && ticket.workdir && existsSync(ticket.workdir)) out.push(tab);
-      } else if (tab.when === "workdir") {
-        gitRepo ??= !!ticket.workdir && (await isGitRepo(ticket.workdir));
-        if (gitRepo) out.push(tab);
+    for (const p of plugins) {
+      for (const tab of this.tabsOf(p)) {
+        let show = tab.when === "always";
+        if (tab.when === "worktree") show = !!ticket.branch && !!ticket.workdir && existsSync(ticket.workdir);
+        else if (tab.when === "workdir") show = gitRepo ??= !!ticket.workdir && (await isGitRepo(ticket.workdir));
+        if (!show && p.def?.showTab && p.ctx) {
+          try {
+            show = (await p.def.showTab({ id: tab.id, ticket, project: this.opts.getTicket(ticket.key)?.project ?? null }, p.ctx)) === true;
+          } catch (err) {
+            this.log(`[plugin:${p.id}] showTab failed: ${err}`);
+          }
+        }
+        if (show) out.push(tab);
       }
     }
     return out;

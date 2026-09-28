@@ -9,7 +9,7 @@ import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "./
 
 type DiffStyle = "unified" | "split";
 interface Log {
-  mode: "branch" | "workdir";
+  mode: Changes["mode"];
   base: string | null;
   commits: Commit[];
 }
@@ -223,8 +223,10 @@ class ChangesView {
       const detail =
         c.mode === "branch"
           ? `${c.branch ?? "This branch"} matches ${c.base ?? "its base"} and the worktree is clean. Changes appear here as the agent edits files.`
-          : "The working tree is clean. Changes appear here as the agent edits files.";
-      this.showState("check", "No changes yet", detail);
+          : c.mode === "pinned"
+            ? `${c.branch ?? "This branch"} didn't change anything before its worktree was removed.`
+            : "The working tree is clean. Changes appear here as the agent edits files.";
+      this.showState("check", c.mode === "pinned" ? "No changes" : "No changes yet", detail);
       this.lastPatchKey = "";
       this.viewer?.setItems([]);
       this.tree?.resetPaths([]);
@@ -249,15 +251,33 @@ class ChangesView {
     const bar = $(".bar", this.root);
     const c = this.changes;
     const commits = this.log?.commits ?? [];
+    const short = (sha: string | null) => sha?.slice(0, 7) ?? null;
     const title =
       c?.mode === "branch"
         ? h("span", { class: "refs" }, icon("branch"), h("code", { class: "ref", title: c.head ?? "" }, c.branch ?? "HEAD"), h("span", { class: "arrow" }, "→"), h("code", { class: "ref base", title: c.baseSha ?? "" }, c.base ?? "no base"))
-        : c
+        : c?.mode === "pinned"
+          ? h(
+              "span",
+              { class: "refs" },
+              icon("branch"),
+              h("code", { class: "ref", title: c.head ?? "" }, c.branch ?? short(c.head) ?? "HEAD"),
+              h("span", { class: "arrow" }, "→"),
+              h("code", { class: "ref base", title: c.base ? `${c.base} at ${c.baseSha}` : (c.baseSha ?? "") }, short(c.baseSha) ?? "no base"),
+              h(
+                "span",
+                {
+                  class: "pinned",
+                  title: `The worktree is gone, so this is the diff saved while it existed: ${short(c.baseSha)}..${short(c.worktree ?? c.head)}${c.worktree ? " (including changes that were never committed)" : ""}.`,
+                },
+                "Saved",
+              ),
+            )
+          : c
           ? h("span", { class: "refs" }, icon("branch"), h("span", { class: "muted" }, "Uncommitted on"), h("code", { class: "ref" }, c.branch ?? "HEAD"))
           : h("span", { class: "refs muted" }, "Changes");
 
     const commitBtn =
-      c?.mode === "branch"
+      c?.mode === "branch" || c?.mode === "pinned"
         ? h("button", { class: `chip ${this.showCommits ? "on" : ""}`, title: "Show commits", "data-action": "commits", ...(commits.length ? {} : { disabled: "" }) }, icon("commit", 13), plural(commits.length, "commit"), commits.length ? icon("chevron", 12) : null)
         : null;
     const stat = c && c.files.length ? h("span", { class: "stat" }, h("span", { class: "add" }, `+${c.additions}`), h("span", { class: "del" }, `−${c.deletions}`), h("span", { class: "muted" }, `across ${plural(c.files.length, "file")}`)) : null;

@@ -532,7 +532,7 @@ a `routes()` that throws, or a failed UI build (with no previous bundle) marks t
 Everything else keeps working. Errors in `onTicketEvent` are logged and swallowed.
 
 **Server API** (`plugins/sdk/server.ts`). `export default definePlugin({ routes(router, ctx),
-onTicketEvent?(event, ctx), dispose?() })`. Routes are mounted at `/plugins/<id>/api/*` behind the
+onTicketEvent?(event, ctx), showTab?(tab, ctx), dispose?() })`. Routes are mounted at `/plugins/<id>/api/*` behind the
 same bearer auth as every other route (`router.get("/changes", …)` → `GET /plugins/<id>/api/changes`;
 `:param` segments). Handlers return JSON-able data (sent as `{ data }`) or a `Response`; throwing an
 error with a numeric `status` (e.g. `PluginHttpError`) sends `{ error }` with that status. The
@@ -550,6 +550,10 @@ by plugin id:
 | `always` | every ticket |
 | `workdir` | `ticket.workdir` is set, exists, and `git rev-parse --is-inside-work-tree` is true there |
 | `worktree` | `ticket.branch` is set and `ticket.workdir` exists (a harness worktree) |
+
+When a tab's `when` doesn't hold and its plugin defines `showTab({ id, ticket, project }, ctx)`, the
+tab is offered if that returns `true` (a throw is logged and counts as `false`). The git plugin uses
+it to keep Changes on a ticket whose worktree was removed.
 
 The app lists plugin tabs after Summaries, Transcript, Browser and Details. Their route is
 `#/board/<project>/ticket/<KEY>/plugin:<pluginId>:<tabId>`; a plugin tab that no longer applies
@@ -603,30 +607,53 @@ root builds every builtin plugin, `app/scripts/build.ts` runs it, and the servic
 
 ### Git plugin (`plugins/git`)
 
-Tab **Changes** (`when: "workdir"`). Routes:
+Tab **Changes** (`when: "workdir"`, kept by `showTab` while a pin exists). Routes:
 
 - `GET /plugins/git/api/changes?ticket=KEY[&maxBytes=N]` → `{ mode, base, baseSha, head, branch, files, patch,
-  truncated, additions, deletions }`, `files: [{ path, oldPath?, status, additions, deletions, binary }]`
+  truncated, additions, deletions, worktree? }`, `files: [{ path, oldPath?, status, additions, deletions, binary }]`
   with `status` ∈ `added | modified | deleted | renamed | untracked`.
   - **branch mode** (ticket has a branch): the diff runs from `merge-base(base, HEAD)` to the worktree
     **as it is on disk**, so committed, staged, unstaged and untracked (not ignored) changes all show.
     `base` is the branch checked out at the project path, falling back to `main`/`master`.
   - **workdir mode** (no branch): uncommitted + untracked changes against `HEAD` (or the empty tree in
     a repo without commits).
+  - **pinned mode** (ticket has a branch, its workdir is gone): the diff saved while the worktree
+    existed, read from the project repo. See "Pinned diffs" below.
   - The user's index is never touched. The plugin copies it (keeping its mtime so git's racy-clean
     detection still works) to a temp `GIT_INDEX_FILE`, runs `git add -A` there, and diffs `--cached`
     with rename detection and config-independent flags.
   - `patch` is capped at 4 MiB by default (`maxBytes`, up to 64 MiB) and cut at a file boundary with
     `truncated: true`. The file list is always complete.
 - `GET /plugins/git/api/log?ticket=KEY` → `{ mode, base, commits: [{ sha, shortSha, subject, author, email, date }] }`,
-  the branch's commits since the merge-base (empty in workdir mode).
+  the branch's commits since the merge-base (empty in workdir mode; `base..head` of the pin in pinned mode).
 - `GET /plugins/git/api/file?ticket=KEY&side=old|new&path=P[&ref=<sha>]` → `{ contents }`, one side of a file, used to
-  expand unchanged context. Paths are repo-relative; `..`, absolute paths and `.git` are rejected.
+  expand unchanged context. Paths are repo-relative; `..`, absolute paths and `.git` are rejected. In
+  pinned mode the new side comes from the pinned commit, not the project checkout.
+
+**Pinned diffs.** The complete run merges the branch, removes the worktree and deletes the branch,
+so the live diff can't be computed afterwards. On every `ticket.upserted` for a ticket that has a
+branch, a worktree on disk and isn't `done`, the plugin pins the diff as refs in the project repo
+(runs coalesce per ticket):
+
+| Ref | Points at |
+| --- | --- |
+| `refs/harness/changes/<ticket id>/base` | the merge-base with the base branch |
+| `refs/harness/changes/<ticket id>/head` | the branch head |
+| `refs/harness/changes/<ticket id>/worktree` | only when the worktree had uncommitted or untracked changes: a snapshot commit (parent: head, author "Harness") of the worktree tree, built from the same throwaway index |
+
+The diff is `base..(worktree ?? head)`. The ticket id (not the key) names the refs, since keys
+change when a project is renamed. Enqueueing the complete run emits `ticket.upserted`, so the last
+pin holds the work as approved. An empty diff never replaces an existing pin: after the merge,
+merge-base == HEAD and the live diff is empty, but the pin should keep showing what the ticket
+changed. The refs keep the commits reachable after a squash merge or `gc`. They sit outside
+`refs/heads` and `refs/tags`, so `git push` doesn't send them. Deleting the ticket removes them
+(best effort: the plugin needs to have seen the ticket since the service started, because the
+delete event only carries the id).
 
 The UI uses Pierre's [@pierre/trees](https://trees.software) for the changed-file tree (git status
 colors plus `+a −d` decorations) and [@pierre/diffs](https://diffs.com) `CodeView` for the stacked,
 virtualized diffs with sticky headers and syntax highlighting. It offers unified/split view,
-expandable context, a commits dropdown, empty/error/truncated states, and follows the host theme:
+expandable context, a commits dropdown, empty/error/truncated states, a "Saved" marker in pinned mode, and follows the host theme:
 the chrome uses the `--harness-*` tokens (Harness Light/Dark as fallbacks), and diffs and the tree
 use the app theme's `syntaxTheme`, falling back to pierre-light / pierre-dark when there is none or
 it fails to load.

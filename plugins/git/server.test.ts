@@ -9,6 +9,7 @@ import { DummyDriver } from "../../service/src/drivers/dummy";
 import { stubBrowser } from "../../service/src/testing/fakes";
 import type { ChangedFile, Changes, Commit } from "./git";
 import { parseNameStatus, parseNumstat, truncatePatch } from "./git";
+import { pinsSettled } from "./server";
 
 let h: Harness;
 let client: HarnessClient;
@@ -232,6 +233,140 @@ describe("GET /plugins/git/api/changes", () => {
     const res = await fetch(`${h.url}/plugins/git/ui/index.html?tab=changes`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("<script");
+  });
+});
+
+describe("pinned diffs (the worktree is gone)", () => {
+  const log = (key: string) => client.request<{ mode: string; base: string | null; commits: Commit[] }>("GET", `/plugins/git/api/log?ticket=${key}`);
+  const file = (key: string, q: string) => client.request<{ contents: string | null }>("GET", `/plugins/git/api/file?ticket=${key}&${q}`);
+  const refs = (repo: string, id: string) => git(repo, "for-each-ref", "--format=%(refname:lstrip=4) %(objectname)", `refs/harness/changes/${id}/`);
+  const hasChanges = async (key: string) => (await client.ticketTabs(key)).some((t) => t.pluginId === "git" && t.id === "changes");
+
+  /** Emit a ticket event the way the orchestrator does, then wait for the plugin's pin to settle. */
+  async function upsert(key: string, patch: Partial<Ticket> = {}) {
+    const t = h.store.tickets.getByKey(key)!;
+    h.bus.emit({ kind: "ticket.upserted", ticket: h.store.tickets.update(t.id, patch as never)! });
+    await pinsSettled();
+  }
+
+  async function ticketWithWork(key: string) {
+    const repo = await makeRepo({ "a.txt": lines(5), "gone.txt": "bye\n" });
+    const wt = join(root, `wt-${seq}`);
+    const branch = `harness/${key}`;
+    await git(repo, "worktree", "add", "-q", wt, "-b", branch);
+    writeFileSync(join(wt, "a.txt"), lines(5).replace("line 2", "line two"));
+    unlinkSync(join(wt, "gone.txt"));
+    await git(wt, "add", "-A");
+    await git(wt, "commit", "-qm", "ticket work");
+    const { ticket } = await ticketFor(repo, { workdir: wt, branch, status: "in_progress" });
+    return { repo, wt, branch, ticket };
+  }
+
+  test("a merged, removed and deleted branch keeps its Changes tab, diff, commits and file contents", async () => {
+    const { repo, wt, branch, ticket } = await ticketWithWork("g-pin");
+    expect(await refs(repo, ticket.id)).toBe("");
+
+    // Uncommitted and untracked work is pinned too, as a snapshot commit on top of the branch head.
+    writeFileSync(join(wt, "a.txt"), lines(5).replace("line 2", "line two").replace("line 4", "line four"));
+    writeFileSync(join(wt, "new.txt"), "fresh\n");
+    const statusBefore = await git(wt, "status", "--porcelain=v1");
+    await upsert(ticket.key);
+    const head = await git(wt, "rev-parse", "HEAD");
+    const base = await git(wt, "merge-base", "main", "HEAD");
+    const pinned = await refs(repo, ticket.id);
+    expect(pinned).toContain(`base ${base}`);
+    expect(pinned).toContain(`head ${head}`);
+    const snapshot = /worktree ([0-9a-f]{40})/.exec(pinned)![1]!;
+    expect(await git(repo, "rev-parse", `${snapshot}^`)).toBe(head);
+    expect(await git(wt, "status", "--porcelain=v1")).toBe(statusBefore); // user's index untouched
+
+    // The complete run: commit the rest, merge into main, and (still in the worktree) an event
+    // arrives. The live diff is now empty (merge-base == HEAD); it must not replace the pin.
+    await git(wt, "add", "-A");
+    await git(wt, "commit", "-qm", "the rest");
+    await upsert(ticket.key, { status: "review" });
+    const beforeMerge = await refs(repo, ticket.id);
+    expect(beforeMerge).not.toContain("worktree "); // committed now: no snapshot needed
+    await git(repo, "merge", "-q", "--no-ff", "-m", "merge", branch);
+    await upsert(ticket.key);
+    expect(await refs(repo, ticket.id)).toBe(beforeMerge);
+    writeFileSync(join(repo, "a.txt"), "main moved on\n");
+    await git(repo, "commit", "-qam", "later main work");
+    await git(repo, "worktree", "remove", wt);
+    await git(repo, "branch", "-d", branch);
+    await upsert(ticket.key, { status: "done" });
+    expect(await refs(repo, ticket.id)).toBe(beforeMerge);
+
+    expect(await hasChanges(ticket.key)).toBe(true);
+    const c = await changes(ticket.key);
+    expect(c).toMatchObject({ mode: "pinned", base: "main", baseSha: base, branch, worktree: null, truncated: false });
+    expect(c.head).toBe(await git(repo, "rev-parse", "HEAD~1^2"));
+    const f = byPath(c.files);
+    expect(Object.keys(f).sort()).toEqual(["a.txt", "gone.txt", "new.txt"]);
+    expect(f["a.txt"]).toMatchObject({ status: "modified", additions: 2, deletions: 2 });
+    expect(f["gone.txt"]).toMatchObject({ status: "deleted" });
+    expect(f["new.txt"]).toMatchObject({ status: "added", additions: 1 });
+    expect(c.patch).toContain("+line four");
+    expect(c.patch).not.toContain("main moved on");
+
+    expect((await log(ticket.key)).commits.map((x) => x.subject)).toEqual(["the rest", "ticket work"]);
+    expect((await file(ticket.key, `side=old&path=a.txt&ref=${c.baseSha}`)).contents).toBe(lines(5));
+    // The new side comes from the pin, not the project checkout (where a.txt is "main moved on").
+    expect((await file(ticket.key, "side=new&path=a.txt")).contents).toContain("line four");
+    expect((await file(ticket.key, "side=new&path=gone.txt")).contents).toBeNull();
+    await expect(file(ticket.key, "side=new&path=..%2Fx")).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("uncommitted work survives a squash merge and gc once the branch is deleted", async () => {
+    const { repo, wt, branch, ticket } = await ticketWithWork("g-squash");
+    writeFileSync(join(wt, "wip.txt"), "never committed\n");
+    await upsert(ticket.key, { status: "review" });
+    await git(repo, "worktree", "remove", "--force", wt);
+    await git(repo, "merge", "-q", "--squash", branch);
+    await git(repo, "commit", "-qm", "squashed");
+    await git(repo, "branch", "-D", branch);
+    await git(repo, "reflog", "expire", "--expire=now", "--all");
+    await git(repo, "gc", "-q", "--prune=now");
+
+    const c = await changes(ticket.key);
+    expect(c.mode).toBe("pinned");
+    expect(c.worktree).toMatch(/^[0-9a-f]{40}$/);
+    expect(c.files.map((x) => x.path)).toEqual(["a.txt", "gone.txt", "wip.txt"]);
+    expect((await file(ticket.key, "side=new&path=wip.txt")).contents).toBe("never committed\n");
+    // Commits come from base..head; the snapshot commit isn't one of the branch's commits.
+    expect((await log(ticket.key)).commits.map((x) => x.subject)).toEqual(["ticket work"]);
+  });
+
+  test("nothing is pinned without changes, for done tickets, or without a branch; deleting the ticket drops its refs", async () => {
+    const { repo, wt, ticket } = await ticketWithWork("g-rules");
+    await upsert(ticket.key, { status: "done" });
+    expect(await refs(repo, ticket.id)).toBe("");
+
+    // A branch with no changes: nothing to pin, and no tab once the worktree is gone.
+    const clean = await makeRepo({ "a.txt": "a\n" });
+    const cleanWt = join(root, `wt-${seq}`);
+    await git(clean, "worktree", "add", "-q", cleanWt, "-b", "harness/g-clean");
+    const { ticket: cleanTicket } = await ticketFor(clean, { workdir: cleanWt, branch: "harness/g-clean", status: "in_progress" });
+    await upsert(cleanTicket.key);
+    expect(await refs(clean, cleanTicket.id)).toBe("");
+    await git(clean, "worktree", "remove", cleanWt);
+    expect(await hasChanges(cleanTicket.key)).toBe(false);
+    await expect(changes(cleanTicket.key)).rejects.toMatchObject({ status: 409 });
+
+    // Workdir mode (no branch) never pins.
+    const plain = await makeRepo({ "a.txt": "a\n" });
+    writeFileSync(join(plain, "a.txt"), "b\n");
+    const { ticket: plainTicket } = await ticketFor(plain, { workdir: plain, branch: null, status: "in_progress" });
+    await upsert(plainTicket.key);
+    expect(await git(plain, "for-each-ref", "refs/harness/")).toBe("");
+
+    await upsert(ticket.key, { status: "review" });
+    expect(await refs(repo, ticket.id)).toContain("base ");
+    await git(repo, "worktree", "remove", wt);
+    expect(await hasChanges(ticket.key)).toBe(true);
+    await client.deleteTicket(ticket.key);
+    await pinsSettled();
+    expect(await refs(repo, ticket.id)).toBe("");
   });
 });
 
