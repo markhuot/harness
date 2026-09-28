@@ -13,9 +13,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Watchers now take any command that prints text, plus a prompt that tells triage what you
   want done with the output (for example, "If this event is assigned to me and has actionable
-  next steps, dispatch it to an agent in PLAYR"). The command runs in your login shell, so pipes, your
-  PATH, and loops like `while true; do curl -s …; sleep 60; done` all work. Output doesn't
-  need a particular format anymore.
+  next steps, dispatch it to an agent in PLAYR"). The command runs in your login shell, so
+  pipes, your PATH, and loops like `while true; do curl -s …; sleep 60; done` all work. Output
+  doesn't need a particular format anymore.
 - Whatever a watcher prints shows up in the Inbox. In interval mode each run becomes one item,
   and in loop mode each burst of output does. Blank output is skipped, output the watcher
   already printed isn't triaged twice, and output over 16,000 characters is cut off with a
