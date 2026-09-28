@@ -66,6 +66,27 @@ async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFai
 }
 const simctl = (...a: string[]) => sh(["xcrun", "simctl", ...a], { allowFail: false });
 
+// ---------------------------------------------------------------- timing
+const started = performance.now();
+const timings: { label: string; ms: number }[] = [];
+/** Runs fn and records how long it took under label (printed, and written to timings.json at the end). */
+async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const t = performance.now();
+  try {
+    return await fn();
+  } finally {
+    timings.push({ label, ms: Math.round(performance.now() - t) });
+  }
+}
+function reportTimings() {
+  const total = Math.round(performance.now() - started);
+  const rows = [...timings].sort((a, b) => b.ms - a.ms);
+  console.log(`\ntimings (total ${(total / 1000).toFixed(1)} s):`);
+  for (const r of rows.slice(0, 40)) console.log(`  ${(r.ms / 1000).toFixed(1).padStart(6)} s  ${r.label}`);
+  mkdirSync(shots, { recursive: true });
+  writeFileSync(join(shots, "timings.json"), JSON.stringify({ args, total, timings }, null, 2) + "\n");
+}
+
 // AXe (brew install cameroncooke/axe/axe) drives taps. It looks for SimulatorKit under
 // Developer/Library/PrivateFrameworks, which Xcode 27 moved to Contents/SharedFrameworks, so give
 // it a symlinked Xcode bundle with the framework where it expects it.
@@ -331,7 +352,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   const results: [string, boolean, string][] = [];
   const check = async (name: string, fn: () => Promise<string | boolean>) => {
     try {
-      const r = await fn();
+      const r = await timed(`check: ${name}`, fn);
       results.push([name, r !== false, typeof r === "string" ? r : ""]);
     } catch (e) {
       results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -471,7 +492,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   const results: [string, boolean, string][] = [];
   const check = async (name: string, fn: () => Promise<string | boolean>) => {
     try {
-      const r = await fn();
+      const r = await timed(`check: ${name}`, fn);
       results.push([name, r !== false, typeof r === "string" ? r : ""]);
     } catch (e) {
       results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -577,7 +598,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedSti
   const results: [string, boolean, string][] = [];
   const check = async (name: string, fn: () => Promise<string | boolean>) => {
     try {
-      const r = await fn();
+      const r = await timed(`check: ${name}`, fn);
       results.push([name, r !== false, typeof r === "string" ? r : ""]);
     } catch (e) {
       results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -655,7 +676,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   const results: [string, boolean, string][] = [];
   const check = async (name: string, fn: () => Promise<string | boolean>) => {
     try {
-      const r = await fn();
+      const r = await timed(`check: ${name}`, fn);
       results.push([name, r !== false, typeof r === "string" ? r : ""]);
     } catch (e) {
       results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -763,7 +784,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   const results: [string, boolean, string][] = [];
   const check = async (name: string, fn: () => Promise<string | boolean>) => {
     try {
-      const r = await fn();
+      const r = await timed(`check: ${name}`, fn);
       results.push([name, r !== false, typeof r === "string" ? r : ""]);
     } catch (e) {
       results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -847,15 +868,15 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
-  await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
+  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000));
   token = readFileSync(join(home, "token"), "utf8").trim();
   const [udid, seeded, paged, sticky, mentioned, media] = await Promise.all([
-    pickDevice(),
-    pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly ? null : seed(),
-    pagingOnly ? seedPaging() : null,
-    stickOnly || keyboardOnly ? seedStick() : null,
-    mentionsOnly ? seedMentions() : null,
-    attachmentsOnly ? seedAttachments() : null,
+    timed("pick device", pickDevice),
+    pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly ? null : timed("seed", seed),
+    pagingOnly ? timed("seed paging", seedPaging) : null,
+    stickOnly || keyboardOnly ? timed("seed stick", seedStick) : null,
+    mentionsOnly ? timed("seed mentions", seedMentions) : null,
+    attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
   ]);
   if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
@@ -872,6 +893,7 @@ try {
     console.log("building Release (simulator)…");
     await sh(["xcodebuild", "-workspace", "ios/Harness.xcworkspace", "-scheme", "Harness", "-configuration", "Release", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "-derivedDataPath", "build/dd", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build"]);
   }
+  const installStart = performance.now();
   await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
   // Start clean: no saved servers or tokens from earlier runs.
   await sh(["xcrun", "simctl", "uninstall", udid, "com.markhuot.harness"], { allowFail: true });
@@ -883,13 +905,14 @@ try {
   await Bun.sleep(2500);
   await openUrl(udid, buildPairUrl(base, token));
   await Bun.sleep(4000);
+  timings.push({ label: "install, launch and pair", ms: Math.round(performance.now() - installStart) });
 
   mkdirSync(shots, { recursive: true });
-  if (paged) failed = !(await pagingChecks(udid, paged));
-  if (sticky && stickOnly) failed = !(await stickChecks(udid, sticky));
-  if (sticky && keyboardOnly) failed = !(await keyboardChecks(udid, sticky));
-  if (mentioned) failed = !(await mentionChecks(udid, mentioned));
-  if (media) failed = !(await attachmentChecks(udid, media));
+  if (paged) failed = !(await timed("mode: paging", () => pagingChecks(udid, paged)));
+  if (sticky && stickOnly) failed = !(await timed("mode: stick", () => stickChecks(udid, sticky)));
+  if (sticky && keyboardOnly) failed = !(await timed("mode: keyboard", () => keyboardChecks(udid, sticky)));
+  if (mentioned) failed = !(await timed("mode: mentions", () => mentionChecks(udid, mentioned)));
+  if (media) failed = !(await timed("mode: attachments", () => attachmentChecks(udid, media)));
   if (seeded) {
     const k = (t: Ticket) => encodeURIComponent(t.key);
     const screens: [string, string, number?][] = [
@@ -944,11 +967,13 @@ try {
       await simctl("ui", udid, "appearance", theme);
       for (const [name, url, wait] of screens) {
         if (only && !only.includes(name)) continue;
-        await coldOpen(udid, url === "harness://board" ? "" : url);
-        // Images, a streamed browser frame or a diff can land after the labels settle.
-        await Bun.sleep(wait ?? 1000);
         const file = join(shots, `${name}-${theme}.png`);
-        await simctl("io", udid, "screenshot", file);
+        await timed(`screen: ${name}-${theme}`, async () => {
+          await coldOpen(udid, url === "harness://board" ? "" : url);
+          // Images, a streamed browser frame or a diff can land after the labels settle.
+          await Bun.sleep(wait ?? 1000);
+          await simctl("io", udid, "screenshot", file);
+        });
         if (await running(udid)) console.log(`  ${file}`);
         else {
           console.log(`✗ ${name} (${theme}): the app crashed opening ${url}`);
@@ -963,7 +988,7 @@ try {
       const results: [string, boolean, string][] = [];
       const check = async (name: string, fn: () => Promise<string | boolean>) => {
         try {
-          const r = await fn();
+          const r = await timed(`check: ${name}`, fn);
           results.push([name, r !== false, typeof r === "string" ? r : ""]);
         } catch (e) {
           results.push([name, false, (e as Error).message.split("\n")[0]!]);
@@ -1031,6 +1056,7 @@ try {
       if (results.some((r) => !r[1])) failed = true;
     }
   }
+  reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
 } catch (e) {
   failed = true;
