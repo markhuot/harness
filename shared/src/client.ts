@@ -9,6 +9,7 @@ import type {
   DriverInfo,
   DriverModels,
   HarnessEvent,
+  Health,
   HumanReviewBody,
   ReopenBody,
   ApprovalBody,
@@ -83,7 +84,11 @@ export class HarnessClient {
   }
 
   health() {
-    return this.request<{ ok: true; version: string; pid: number }>("GET", "/health");
+    return this.request<Health>("GET", "/health");
+  }
+  /** Restart the service now (it exits and launchd starts it again). Running agents are stopped. */
+  restartService() {
+    return this.request<{ ok: true }>("POST", "/service/restart");
   }
 
   // Projects

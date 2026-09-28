@@ -339,6 +339,17 @@ export class Orchestrator {
     await Promise.race([Promise.all(actives.map((a) => this.queue.whenSessionIdle(a.run.sessionId))), Bun.sleep(5000)]);
   }
 
+  /** Nothing queued, running or starting: restarting the service now interrupts no agent. */
+  isIdle(): boolean {
+    return (
+      this.queue.pendingCount === 0 &&
+      this.queue.runningCount === 0 &&
+      this.active.size === 0 &&
+      this.starting.size === 0 &&
+      this.background.size === 0
+    );
+  }
+
   /** Resolves when no runs are queued or running (tests). */
   async idle(timeoutMs = 10_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;

@@ -15,6 +15,7 @@ import type { Driver } from "./drivers/types";
 import type { BrowserService } from "./browser/types";
 import { join, resolve } from "node:path";
 import { PluginHost, type PluginDir } from "./plugins/host";
+import { CodeWatch } from "./code-watch";
 
 /** Built-in plugins shipped with the repo. */
 export const BUILTIN_PLUGINS_DIR = resolve(import.meta.dir, "..", "..", "plugins");
@@ -40,6 +41,16 @@ export interface CreateHarnessOptions {
   log?: (msg: string) => void;
   /** Plugin search path; defaults to <repo>/plugins (builtin) then $HARNESS_HOME/plugins (user). [] disables plugins. */
   pluginDirs?: PluginDir[];
+  /**
+   * Track the service's source (daemon): /health reports it stale once the code on disk changes.
+   * Omit to not track it (tests).
+   */
+  codeWatch?: { fingerprint: () => string; intervalMs: number };
+  /**
+   * Exit so the supervisor (launchd) starts the service again: enables POST /service/restart and,
+   * with codeWatch, restarting onto new code once idle.
+   */
+  restart?: () => void;
 }
 
 export interface Harness {
@@ -53,6 +64,7 @@ export interface Harness {
   orchestrator: Orchestrator;
   network: NetworkManager;
   plugins: PluginHost;
+  codeWatch: CodeWatch | null;
   stop(): Promise<void>;
 }
 
@@ -115,7 +127,26 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     log,
     serve: (hostname, port) => Bun.serve<WsData>({ hostname, port, idleTimeout: 255, websocket: http.websocket, fetch: http.fetch as never }),
   });
-  const http = createHttpHandler({ orchestrator, bus, browser, tokens, mcp, plugins, network });
+  const codeWatch = opts.codeWatch
+    ? new CodeWatch({
+        fingerprint: opts.codeWatch.fingerprint,
+        isIdle: () => orchestrator.isIdle(),
+        onChange: (status) => bus.emit({ kind: "service.status", status }),
+        restart: opts.restart,
+        log,
+      })
+    : null;
+  const http = createHttpHandler({
+    orchestrator,
+    bus,
+    browser,
+    tokens,
+    mcp,
+    plugins,
+    network,
+    serviceStatus: codeWatch ? () => codeWatch.status() : undefined,
+    restart: opts.restart,
+  });
   try {
     await network.boot();
   } catch (err) {
@@ -127,6 +158,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   }
   const port = network.boundPort;
   baseUrl = network.loopbackUrl;
+  codeWatch?.start(opts.codeWatch!.intervalMs);
 
   let stopped = false;
   return {
@@ -141,9 +173,11 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     orchestrator,
     network,
     plugins,
+    codeWatch,
     async stop() {
       if (stopped) return;
       stopped = true;
+      codeWatch?.stop();
       await orchestrator.stop();
       await plugins.stop();
       network.stop();

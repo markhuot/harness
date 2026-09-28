@@ -11,7 +11,7 @@ import { createWsHandlers, type WsData } from "./ws";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
-import { TICKET_STATUSES, type TicketStatus } from "@harness/shared";
+import { TICKET_STATUSES, type ServiceStatus, type TicketStatus } from "@harness/shared";
 
 /** The bearer token, rotatable at runtime (POST /token/rotate). */
 export interface TokenStore {
@@ -31,6 +31,10 @@ export interface HttpServerOptions {
   plugins?: PluginHost;
   /** Listen addresses; enables /network, /pairing and live rebinds on PATCH /settings { listen }. */
   network?: NetworkManager;
+  /** Build tracking for /health; absent → { build: null, stale: false }. */
+  serviceStatus?: () => ServiceStatus;
+  /** Enables POST /service/restart: exit so launchd starts the service again. */
+  restart?: () => void;
 }
 
 export interface HttpHandler {
@@ -115,6 +119,7 @@ export interface RouteExtras {
   tokens?: TokenStore;
   /** Called after the token rotates (closes sockets authenticated with the old one). */
   onRotate?: () => void;
+  restart?: () => void;
 }
 
 /** `?status=planning,review` → validated statuses; absent/empty → undefined (no filter). */
@@ -226,6 +231,13 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     if (!network || !tokens) throw new HarnessError(404, "Pairing isn't available");
     return network.pairing(tokens.get());
   });
+  add("POST", "/service/restart", () => {
+    const restart = extras.restart;
+    if (!restart) throw new HarnessError(409, "This service isn't run by launchd, so it can't restart itself; restart it by hand");
+    // After the response is on its way: the restart stops the HTTP server.
+    setTimeout(restart, 50);
+    return ok;
+  });
   add("POST", "/token/rotate", () => {
     if (!tokens) throw new HarnessError(404, "Token rotation isn't available");
     const token = tokens.rotate();
@@ -266,6 +278,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
     network: opts.network,
     tokens: opts.tokens,
     onRotate: () => ws.closeAll(),
+    restart: opts.restart,
   });
 
   return {
@@ -295,7 +308,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return opts.plugins.serveUi(decodeURIComponent(ui[1]!), ui[2]);
       }
 
-      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid } });
+      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid, ...(opts.serviceStatus?.() ?? { build: null, stale: false }) } });
 
       // MCP: authenticated by the run-scoped token in the path. Only agents on this machine use it,
       // so it isn't offered to other hosts even when the service listens beyond loopback.
