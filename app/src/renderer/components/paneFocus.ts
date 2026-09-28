@@ -4,7 +4,7 @@
 // (the board's cursor card, a ticket's active tab), else the pane itself. Pointer focus needs none
 // of this, the click already put the focus where it belongs.
 
-import { getPanes, updatePanes, type PaneState } from "../state/panes";
+import { boardLeaf, getPanes, updatePanes, type PaneState } from "../state/panes";
 
 const lastFocused = new Map<string, HTMLElement>();
 let pending = false;
@@ -61,5 +61,7 @@ export function focusPaneBy(scope: string, fn: (s: PaneState) => PaneState) {
   const after = getPanes(scope);
   if (after !== before) return;
   pending = false;
-  if (after.focusedId) focusPaneDom(after.focusedId);
+  // Nothing focused yet (a fresh board) means the board is the pane the keyboard acts on.
+  const id = after.focusedId ?? boardLeaf(after.root)?.id;
+  if (id) focusPaneDom(id);
 }

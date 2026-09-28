@@ -69,7 +69,9 @@ function areasFrom(el: Element | null): Area[] {
 export function commandOrigin(): Element | null {
   const a = document.activeElement;
   if (a && a !== document.body && a !== document.documentElement) return a;
-  return document.querySelector(".pane.active");
+  // The pane's command area sits inside the pane, so start from it (areas are looked up outward).
+  const pane = document.querySelector(".pane.active");
+  return pane?.querySelector("[data-keys-owner]") ?? pane;
 }
 
 const TEXT = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color]), textarea, select, [contenteditable=""], [contenteditable=true]';
