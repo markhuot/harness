@@ -997,6 +997,23 @@ Settings, project settings, or on the board route the pane workspace.
   keeps it inside the window. It shifts the menu left or right at the sides and flips it above
   the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
   and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
+- **Terminals (process side).** `TerminalManager` (`main/terminals.ts`) keeps one PTY per id,
+  and the id is the renderer's pane leaf id. Each PTY runs the user's login shell (`$SHELL -l`,
+  else `/bin/zsh`) with `TERM=xterm-256color` and without `ELECTRON_*` or `NODE_OPTIONS`. The
+  preload exposes it as `window.harness.terminal` over `harness:terminal:*` IPC. `ensure(id,
+  { cwd, cols, rows })` is idempotent. It spawns on the first call (`~` expands, and a missing
+  directory falls back to home), and later calls re-attach to the same shell and return its
+  bounded scrollback (1 MiB), so a remounted pane replays what it missed. Output is coalesced
+  for a few ms, then broadcast as `terminal:data` to every window, and the exit code goes out as
+  `terminal:exit`. An exited session stays until `kill`, so the pane can show the exit. `list()`
+  lets the renderer kill sessions no pane shows any more. `kill` sends SIGHUP, then SIGKILL after
+  3 s, and every shell is killed on quit. IPC arguments are validated (id pattern, dimensions
+  1–1000, writes up to 1 MiB) because the main process trusts nothing from a renderer. node-pty
+  is an N-API addon, so its prebuilt `pty.node` loads in Electron without a rebuild. The bundle
+  keeps it external, and `package.ts` copies it unpacked beside `app.asar`, where `sign-mac.ts`
+  signs it. Its `spawn-helper` ships without the executable bit, which `package.ts` fixes (and
+  `pty.ts` fixes for dev). `scripts/terminal-check.ts [--packaged]` drives the bridge in a real
+  app over CDP.
 
 ## iPhone app (`mobile/`)
 
