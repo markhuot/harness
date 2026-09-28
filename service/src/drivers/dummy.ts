@@ -249,7 +249,7 @@ export class DummyDriver implements Driver {
           "| Step | Check | Risk |",
           "|:-----|:------|:----:|",
           "| Change | `bun run test` | low |",
-          "| Review | reviewer agent | **medium** |",
+          "| Review | The reviewer agent reads the diff against the ticket, then approves it or asks for changes | **medium** |",
         ].join("\n");
         yield* say(plan);
         yield* call("update_plan", { plan });

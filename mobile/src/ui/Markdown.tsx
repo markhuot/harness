@@ -1,9 +1,10 @@
 // Agent markdown with native <Text>: blocks and inline tokens come from the shared parser
-// (@harness/shared/state "markdown"); links open in Safari, and tables scroll sideways when wide. Nothing is ever interpreted as markup.
+// (@harness/shared/state "markdown"); links open in Safari, and wide tables scroll sideways.
+// Nothing is ever interpreted as markup.
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
-import { inlineTokens, parseBlocks, plainText, type InlineToken } from "@harness/shared/state";
+import { inlineTokens, parseBlocks, type Block, type InlineToken } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
 
@@ -95,29 +96,8 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
                 </Text>
               </View>
             );
-          case "table": {
-            const cellText: TextStyle = { fontSize: size - 1.5, lineHeight: Math.round((size - 1.5) * 1.4), color: base.color };
-            const widths = columnWidths(b.header, b.rows, size - 1.5);
-            const row = (cells: string[], head: boolean, key: number, last: boolean) => (
-              <View key={key} style={{ flexDirection: "row", backgroundColor: head ? c.bgSunken : undefined, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderColor: c.border }}>
-                {cells.map((cell, j) => (
-                  <View key={j} style={{ width: widths[j], paddingHorizontal: 8, paddingVertical: 5, borderLeftWidth: j ? StyleSheet.hairlineWidth : 0, borderColor: c.border }}>
-                    <Text style={[cellText, head && { fontWeight: "700" }, { textAlign: b.align[j] ?? "left" }]} selectable>
-                      <Inline tokens={inlineTokens(cell)} base={cellText} />
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            );
-            return (
-              <ScrollView key={i} horizontal showsHorizontalScrollIndicator={false}>
-                <View style={[styles.table, { borderColor: c.border }]}>
-                  {row(b.header, true, -1, !b.rows.length)}
-                  {b.rows.map((r, k) => row(r, false, k, k === b.rows.length - 1))}
-                </View>
-              </ScrollView>
-            );
-          }
+          case "table":
+            return <Table key={i} block={b} size={size} color={base.color as string} />;
           case "hr":
             return <View key={i} style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 4 }} />;
         }
@@ -126,16 +106,62 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
   );
 }
 
-/** React Native has no table layout, so each column gets a width from its longest cell (clamped, so
- *  a long cell wraps instead of stretching the table) and every row lays out against those widths. */
-function columnWidths(header: string[], rows: string[][], fontSize: number): number[] {
-  return header.map((_, j) => {
-    const chars = Math.max(...[header, ...rows].map((r) => plainText(r[j] ?? "").length));
-    return Math.min(240, Math.max(56, Math.ceil(chars * fontSize * 0.56) + 18));
-  });
+const MAX_COL = 240;
+
+/** React Native has no table layout. A hidden copy of each column lays out unconstrained inside the
+ *  horizontal ScrollView and reports its natural width; the visible rows then use those widths
+ *  (capped, so one long cell wraps instead of stretching the table) and line up row by row. */
+function Table({ block, size, color }: { block: Extract<Block, { t: "table" }>; size: number; color: string }) {
+  const c = useColors();
+  const [widths, setWidths] = useState<(number | undefined)[]>([]);
+  const fontSize = size - 1.5;
+  const cellText: TextStyle = { fontSize, lineHeight: Math.round(fontSize * 1.4), color };
+  const cellBox = { paddingHorizontal: 8, paddingVertical: 5 };
+  const text = (cell: string, head: boolean, j: number) => (
+    <Text style={[cellText, head && { fontWeight: "700" }, { textAlign: block.align[j] ?? "left" }]} selectable={widths.length > 0}>
+      <Inline tokens={inlineTokens(cell)} base={cellText} />
+    </Text>
+  );
+  const row = (cells: string[], head: boolean, key: number, last: boolean) => (
+    <View key={key} style={{ flexDirection: "row", backgroundColor: head ? c.bgSunken : undefined, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderColor: c.border }}>
+      {cells.map((cell, j) => (
+        <View key={j} style={[cellBox, { width: widths[j] ?? MAX_COL, borderLeftWidth: j ? StyleSheet.hairlineWidth : 0, borderColor: c.border }]}>
+          {text(cell, head, j)}
+        </View>
+      ))}
+    </View>
+  );
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={styles.measure} pointerEvents="none" aria-hidden>
+        {block.header.map((h, j) => (
+          <View
+            key={j}
+            style={{ alignSelf: "flex-start" }}
+            onLayout={(e) => {
+              const w = Math.min(MAX_COL, Math.ceil(e.nativeEvent.layout.width) + 1);
+              setWidths((prev) => (prev[j] === w ? prev : Object.assign([...prev], { [j]: w })));
+            }}
+          >
+            {[h, ...block.rows.map((r) => r[j] ?? "")].map((cell, k) => (
+              <View key={k} style={cellBox}>
+                {text(cell, k === 0, j)}
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+      <View style={[styles.table, { borderColor: c.border, opacity: widths.filter(Boolean).length === block.header.length ? 1 : 0 }]}>
+        {row(block.header, true, -1, !block.rows.length)}
+        {block.rows.map((r, k) => row(r, false, k, k === block.rows.length - 1))}
+      </View>
+    </ScrollView>
+  );
 }
 
 const styles = StyleSheet.create({
   code: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
   table: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
+  // Wide enough that no hidden column is ever squeezed; absolute, so it never sizes the scroll content.
+  measure: { position: "absolute", width: 10000, opacity: 0, flexDirection: "row", alignItems: "flex-start" },
 });
