@@ -58,7 +58,7 @@ directories (`worktrees/OLD-n`) keep their names: they're stored on the ticket, 
 progress isn't disturbed. Transcript and summary text isn't rewritten.
 
 Old keys keep working. Each rename records `OLD-n → ticket id` in `ticket_key_aliases`
-(migration 5), so bookmarks (`#/…/ticket/OLD-2`), conductors calling `get_ticket` /
+(migration 5), so bookmarks (`#/…/ticket/OLD-2`), agents calling `get_ticket`, conductors calling
 `start_ticket` / `message_ticket` / `review_ticket` / `complete_ticket` with a key they
 learned earlier, `dependsOn` inputs, triage dispatch and the CLI all still find the ticket.
 Aliases point at the ticket rather than at a key, so chained renames (`A → B → C`) resolve
@@ -161,14 +161,19 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | conductor | `{ title, description, depends_on?: string[], auto_start?: boolean }` (depends_on takes keys returned by earlier create_ticket calls) |
-| `list_tickets` | conductor | `{ scope?: "children"\|"project" }` |
-| `get_ticket` | conductor | `{ key }` |
-| `start_ticket` | conductor | `{ key }` |
-| `message_ticket` | conductor | `{ key, text }` |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
+| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
+| `move_ticket` | work, conductor | `{ key, status, position? }`: a drag on the board (`updateTicket` with status/position). `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the app; the same status with a position reorders |
+| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
+| `list_projects` | all | `{}` → each project's key, name, path and settings |
+| `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
+| `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
+| `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
+| `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | conductor | `{ key, decision, notes }` |
 | `complete_ticket` | conductor | `{ key, instructions? }` |
-| `list_projects` | all | `{}` → each project's key, name, path and settings |
 | `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
@@ -192,6 +197,53 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_eval` | ″ | `{ expression }` |
 | `browser_screenshot` | ″ | `{}` → image |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
+
+The four board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
+`HarnessOps`) only read: every run kind gets them so an agent can look up related or earlier
+work anywhere on the board, and each prompt has a short "Board" section naming them.
+
+### Board changes by agents
+
+The write tools (`service/src/tools/board-write.ts`, the `// --- board (write) ---` section of
+`HarnessOps`) let work and conductor runs do to other cards what a person does on the board.
+They call the same `Orchestrator` methods as the HTTP API, so validation and side effects
+(moving to in_progress starts a work run, a drag back from done re-opens, and so on) are shared.
+The guard rails live in the orchestrator ops, not in tool text, so a driver calling ops directly
+hits them too:
+
+- **Run kinds.** Only work and conductor runs. Plan, review, complete and triage runs don't get
+  the tools, and the ops throw for them.
+- **Never the caller's own ticket.** Its own state changes go through `block` /
+  `submit_for_review`. Keys resolve like the HTTP API (old aliases too), so an alias of the
+  caller's key is refused as well.
+- **Reviews stay with reviewers.** No move goes into review (only the ticket's own agent submits)
+  or out of it (the agent reviewer, then the human or the parent conductor via `review_ticket` /
+  `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
+  message sends it back to in progress, unless the caller is that ticket's parent conductor.
+- **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
+  (closing one that isn't needed). Anything that ran goes through review and a complete run.
+- **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a
+  message would deny it), moved to another column, started, or cancelled (nothing is running,
+  and cancelling would only strand the approval). There is no tool to answer one.
+- **Permission modes only tighten.** `update_ticket` compares the ticket's effective mode before
+  and after (`resolvePermissionMode`, order auto < ask < read_only) and refuses a looser one,
+  including `"inherit"` when the project's mode is looser.
+- **No escalation through other tickets.** A ticket an agent creates (work or conductor run)
+  runs no looser than the caller: when the caller's effective mode is stricter than what the new
+  ticket would inherit from its project, the ticket gets the caller's mode explicitly; otherwise
+  `permissionMode` stays null (inherit). (`create_ticket` with `depends_on` also checks that the
+  new ticket isn't looser, since the scheduler may start it on its own. The rule above already
+  guarantees that, so the check is a backstop.) An agent can't put work into a ticket whose
+  effective mode is looser than its own: `message_ticket`, `start_ticket`, `reopen_ticket` and
+  `move_ticket` to in_progress or planning are refused ("<KEY> runs in auto, looser than your
+  read_only; ask a human"). Nor can it edit one with `update_ticket`, whatever the field: the
+  description is the brief its next run follows and `depends_on` lets the scheduler start it.
+  The one exception is a call that only changes `permission_mode` to a stricter one, which can
+  only make the ticket safer. Equal modes are fine, so a conductor steers and edits children
+  created under its own mode.
+
+Deleting tickets isn't a board tool: `delete_ticket` is a config tool behind a human approval
+(see "Config tools").
 
 ### Config tools
 

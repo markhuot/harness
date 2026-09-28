@@ -232,18 +232,18 @@ export class FakeDriver implements Driver {
           return;
         }
         yield { type: "state", state: { ...state, turns } };
-        const children = await ops.listTickets(ctx, "children");
+        const children = (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets;
         for (const c of children) {
           if (c.status === "review" && c.agentReview === "approved" && c.humanReview === "pending") {
             await ops.reviewTicket(ctx, c.key, "approve", "ok");
           }
         }
-        for (const c of await ops.listTickets(ctx, "children")) {
+        for (const c of (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets) {
           if (c.status === "review" && c.agentReview === "approved" && c.humanReview === "approved" && !c.busy) {
             await ops.completeTicket(ctx, c.key);
           }
         }
-        const after = await ops.listTickets(ctx, "children");
+        const after = (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets;
         if (after.length && after.every((c) => c.status === "done")) await ops.submitForReview(ctx, "All children done.");
         return;
       }

@@ -287,7 +287,7 @@ export class DummyDriver implements Driver {
           state.children = keys;
         } else {
           const out: { result?: ToolResult } = {};
-          yield* call("list_tickets", { scope: "children" }, out);
+          yield* call("list_tickets", { scope: "children", limit: 200 }, out);
           let children: ChildView[] = [];
           try {
             const parsed = out.result && !out.result.isError ? JSON.parse(resultText(out.result)) : [];

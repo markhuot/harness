@@ -12,7 +12,9 @@ import type {
   RunKind,
   Session,
   Ticket,
+  TicketStatus,
   ToolResultContent,
+  TranscriptRole,
   Watcher,
 } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
@@ -46,6 +48,53 @@ export interface ToolDefinition<I = any> {
   /** MCP tool annotations. Defaults (see api/mcp.ts): readOnlyHint = group === "harness". */
   annotations?: ToolAnnotations;
   execute(input: I, ctx: ToolContext): Promise<ToolResult>;
+}
+
+export type BoardScope = "children" | "project" | "all";
+
+export interface BoardListFilter {
+  scope?: BoardScope;
+  projectKey?: string;
+  statuses?: TicketStatus[];
+  limit?: number;
+}
+
+/** A ticket plus its project's key (mirrored keys like FOO-123 don't name their project). */
+export type BoardTicket = Ticket & { projectKey: string };
+
+export interface BoardTicketDetail {
+  ticket: BoardTicket;
+  /** The old key the lookup went through, when `key` was an alias */
+  resolvedFrom: string | null;
+  parent: string | null;
+  children: string[];
+  summaries: { author: string; body: string; createdAt: number }[];
+  /** Last N text/status/error entries, oldest first; present only when requested */
+  transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
+}
+
+export interface CreateTicketInput {
+  title: string;
+  description: string;
+  dependsOn?: string[];
+  /** Start once every dependency is done. Default: true for a conductor's child, false otherwise. */
+  autoStart?: boolean;
+  /** Start now (or as soon as dependencies finish). Default false. */
+  start?: boolean;
+  /** Make the new ticket a conductor. */
+  conductor?: boolean;
+  projectKey?: string;
+  driver?: string;
+  model?: string | null;
+}
+
+export interface UpdateTicketInput {
+  title?: string;
+  description?: string;
+  driver?: string;
+  model?: string | null;
+  permissionMode?: PermissionMode | null;
+  dependsOn?: string[];
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -86,21 +135,56 @@ export interface HarnessOps {
   /** Record the agent review decision. */
   reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void>;
 
-  // --- conductor runs (act on child tickets) ---
-  createTicket(
+  // --- board (read) ---
+  // Every run kind (plan, work, review, complete, conductor, triage) may read the whole board.
+  // None of these change state. Keys resolve like the HTTP API (current key, then old aliases).
+  /**
+   * Tickets matching the filter, capped at `limit` (default 50, max 200). `total` counts every
+   * match. Scope defaults: conductor → "children"; a project_key or any other ticket run →
+   * "project"; no ticket (triage) → "all". Throws for an unknown project key.
+   */
+  listTickets(ctx: ToolContext, filter: BoardListFilter): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }>;
+  /** One ticket in any project, with summaries and optionally the last N text transcript entries. */
+  getTicket(ctx: ToolContext, key: string, opts?: { transcript?: number }): Promise<BoardTicketDetail>;
+  /** Full-text search across every status (Orchestrator.searchTickets ranking and cursors). */
+  searchTickets(
     ctx: ToolContext,
-    input: { title: string; description: string; dependsOn?: string[]; autoStart?: boolean; projectKey?: string },
-  ): Promise<Ticket>;
-  listTickets(ctx: ToolContext, scope: "children" | "project"): Promise<Ticket[]>;
-  getTicket(ctx: ToolContext, key: string): Promise<{ ticket: Ticket; summaries: { author: string; body: string; createdAt: number }[] }>;
+    input: { query: string; projectKey?: string; limit?: number; cursor?: string },
+  ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
+  /** Every project with its settings (null permissionMode → the settings default) */
+  listProjects(ctx: ToolContext): Promise<ProjectView[]>;
+
+  // --- board (write): work and conductor runs ---
+  // What a person does to cards on the board, through the same Orchestrator methods as the HTTP
+  // API. Every method refuses the caller's own ticket (it has block / submit_for_review) and
+  // throws for plan, review, complete and triage runs. See DESIGN.md "Board changes by agents".
+  /**
+   * Conductor run: a child of the conductor (autoStart default true, its driver/model by default).
+   * Work run: a top-level ticket in the run's project or `projectKey` (start default false → planning).
+   */
+  createTicket(ctx: ToolContext, input: CreateTicketInput): Promise<Ticket>;
+  /** Edit a card: PATCH /tickets/:key without status/position. Can't loosen its permission mode. */
+  updateTicket(ctx: ToolContext, key: string, patch: UpdateTicketInput): Promise<Ticket>;
+  /**
+   * Drag a card: change column and/or position, with the same effects as the board. Refuses
+   * moves into or out of review, to done from anything but planning, and tickets waiting on a
+   * tool approval.
+   */
+  moveTicket(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket>;
   startTicket(ctx: ToolContext, key: string): Promise<Ticket>;
+  /** As if a human wrote it. Refused while a tool approval is pending, and in review unless the caller is its conductor. */
   messageTicket(ctx: ToolContext, key: string, text: string): Promise<void>;
+  /** Abort the ticket's active run and drop its queued runs; status unchanged. */
+  cancelTicket(ctx: ToolContext, key: string): Promise<Ticket>;
+  /** Send a done ticket back to in progress with notes. */
+  reopenTicket(ctx: ToolContext, key: string, notes: string): Promise<Ticket>;
+
+  // --- conductor runs (act on child tickets) ---
   /** Conductor stands in for the human reviewer of its children. */
   reviewTicket(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket>;
   completeTicket(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket>;
 
   // --- triage runs ---
-  listProjects(ctx: ToolContext): Promise<ProjectView[]>;
   /** Create (and optionally start) a local ticket mirroring the external item. */
   dispatchTicket(
     ctx: ToolContext,

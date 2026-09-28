@@ -5,9 +5,11 @@ import { toolsForRun } from "./index";
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
 const NATIVE_READ = ["read_file", "list_files", "bash"];
-const CONDUCTOR = ["create_ticket", "list_tickets", "get_ticket", "start_ticket", "message_ticket", "review_ticket", "complete_ticket"];
+const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
+const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
+const CONDUCTOR = ["review_ticket", "complete_ticket"];
 
-const CONFIG_READ = ["list_projects", "list_watchers", "list_mappings", "get_settings", "list_drivers"];
+const CONFIG_READ = ["list_watchers", "list_mappings", "get_settings", "list_drivers"];
 const CONFIG_WRITE = [
   "create_watcher",
   "update_watcher",
@@ -28,12 +30,12 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
-    plan: ["post_summary", "update_plan", ...CONFIG_READ, ...BROWSER],
-    work: ["post_summary", "block", "submit_for_review", ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-    review: ["post_summary", "review_decision", ...CONFIG_READ, ...BROWSER],
-    complete: ["post_summary", ...CONFIG_READ],
-    conductor: ["post_summary", "submit_for_review", ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-    triage: ["list_projects", "dispatch_ticket", "decline_work", ...CONFIG_READ.slice(1)],
+    plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    complete: ["post_summary", ...BOARD, ...CONFIG_READ],
+    conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -71,6 +73,9 @@ describe("toolsForRun", () => {
     expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor"]);
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor"]);
+    for (const read of BOARD) expect(who(read)).toEqual(kinds);
+    for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor"]);
+    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["conductor"]);
   });
 
   test("config reads go to every run kind; config writes only to work and conductor runs", () => {

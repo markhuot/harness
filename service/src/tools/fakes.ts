@@ -3,7 +3,7 @@
 
 import type { BrowserState, RunKind, Session, Ticket } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
-import type { HarnessOps, ToolContext } from "./types";
+import type { BoardListFilter, HarnessOps, ToolContext } from "./types";
 
 export function fakeTicket(overrides: Partial<Ticket> = {}): Ticket {
   return {
@@ -65,7 +65,7 @@ type OpsImpl = { [K in keyof HarnessOps]?: (...args: any[]) => any };
 /**
  * HarnessOps that records every call (minus the ctx argument). Behaviour can be
  * overridden per method; defaults return plausible values. Children created with
- * createTicket are remembered and served by listTickets / getTicket.
+ * createTicket are remembered and served by listTickets / getTicket (project "TEST").
  */
 export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: RecordedCall[]; children: Ticket[] } {
   const calls: RecordedCall[] = [];
@@ -97,10 +97,26 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       children.push(t);
       return t;
     },
-    listTickets: async () => children,
-    getTicket: async (_ctx: ToolContext, key: string) => ({ ticket: find(key), summaries: [{ author: "agent", body: "did it", createdAt: 1 }] }),
+    listTickets: async (_ctx: ToolContext, filter: BoardListFilter) => ({
+      tickets: children.slice(0, filter.limit ?? children.length).map((t) => ({ ...t, projectKey: "TEST" })),
+      total: children.length,
+      scope: filter.scope ?? "children",
+    }),
+    getTicket: async (_ctx: ToolContext, key: string) => ({
+      ticket: { ...find(key), projectKey: "TEST" },
+      resolvedFrom: null,
+      parent: "TEST-1",
+      children: [],
+      summaries: [{ author: "agent", body: "did it", createdAt: 1 }],
+    }),
+    searchTickets: async () => ({ hits: [], nextCursor: null, total: 0 }),
+    updateTicket: async (_ctx: ToolContext, key: string, patch: Record<string, unknown>) =>
+      Object.assign(find(key), Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))),
+    moveTicket: async (_ctx: ToolContext, key: string, status: Ticket["status"]) => Object.assign(find(key), { status }),
     startTicket: async (_ctx: ToolContext, key: string) => ({ ...find(key), status: "in_progress" }),
     messageTicket: async () => {},
+    cancelTicket: async (_ctx: ToolContext, key: string) => find(key),
+    reopenTicket: async (_ctx: ToolContext, key: string) => Object.assign(find(key), { status: "in_progress" }),
     reviewTicket: async (_ctx: ToolContext, key: string, decision: string) => ({
       ...find(key),
       humanReview: decision === "approve" ? "approved" : "changes_requested",

@@ -37,14 +37,28 @@ import type {
 import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
-import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT } from "../store/search";
+import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
-import type { ApprovalMeta, HarnessOps, ProjectView, ToolContext, ToolDefinition } from "../tools/types";
+import type {
+  ApprovalMeta,
+  BoardListFilter,
+  BoardScope,
+  BoardTicket,
+  BoardTicketDetail,
+  CreateTicketInput,
+  HarnessOps,
+  ProjectView,
+  UpdateTicketInput,
+  ToolContext,
+  ToolDefinition,
+} from "../tools/types";
+import { truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
+import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
@@ -135,6 +149,11 @@ const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
+/** get_ticket include_transcript: at most this many entries, each clipped to this many characters */
+export const BOARD_TRANSCRIPT_MAX = 50;
+export const BOARD_TRANSCRIPT_CHARS = 2000;
+/** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
+export const BOARD_SEARCH_LIMIT = 20;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -157,6 +176,12 @@ export function endsWithQuestion(text: string | null | undefined): boolean {
   const stripped = text.trim().replace(/[\s*_`~)\]}>"'”’.!…\p{Extended_Pictographic}\p{Emoji_Modifier}\u200d\ufe0f]+$/u, "");
   return stripped.endsWith("?") || stripped.endsWith("？");
 }
+
+/**
+ * Higher is stricter. An agent may only raise another ticket's effective mode, and may only
+ * create or drive tickets at least as strict as its own (DESIGN.md "Board changes by agents").
+ */
+const PERMISSION_STRICTNESS: Record<PermissionMode, number> = { auto: 0, ask: 1, read_only: 2 };
 
 /** Validate a permission-mode field from a request body (null / "" → inherit). */
 function validPermissionMode(value: unknown): PermissionMode | null {
@@ -1139,9 +1164,297 @@ export class Orchestrator {
     }
   }
 
+  // --- board (read): every run kind; never changes state ---
+
+  private boardTicket(t: Ticket): BoardTicket {
+    return { ...t, projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
+  }
+
+  private boardProject(key: string): Project {
+    const project = this.store.projects.getByKey(key.trim());
+    if (!project) throw new Error(`Unknown project: ${key}. Use list_projects for the valid keys.`);
+    return project;
+  }
+
+  async listTickets_(ctx: ToolContext, filter: BoardListFilter = {}): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }> {
+    const own = ctx.ticket ? this.ctxTicket(ctx) : null;
+    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own?.kind === "conductor" ? "children" : own ? "project" : "all");
+    const statuses = filter.statuses?.length ? filter.statuses : undefined;
+    const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
+    if (bad) throw new Error(`Unknown status: ${bad}`);
+    let tickets: Ticket[];
+    if (scope === "children") {
+      if (!own) throw new Error('scope "children" needs a ticket run; use "project" with project_key, or "all"');
+      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : undefined;
+      tickets = this.store.tickets.list({ parentId: own.id, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+    } else if (scope === "project") {
+      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : own?.projectId;
+      if (!projectId) throw new Error('project_key is required for scope "project" in a run without a ticket');
+      tickets = this.store.tickets.list({ projectId, ...(statuses ? { statuses } : {}) });
+    } else if (scope === "all") {
+      if (filter.projectKey) throw new Error('scope "all" spans every project; drop project_key or use scope "project"');
+      tickets = this.store.tickets.list(statuses ? { statuses } : {});
+    } else {
+      throw new Error(`Unknown scope: ${scope}`);
+    }
+    // Board order: columns left to right; done newest-completed first so a long Done column's
+    // oldest tickets are the ones the cap drops.
+    const col = (t: Ticket) => TICKET_STATUSES.indexOf(t.status);
+    const sorted = tickets
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => col(a.t) - col(b.t) || (a.t.status === "done" ? (b.t.completedAt ?? b.t.updatedAt) - (a.t.completedAt ?? a.t.updatedAt) : 0) || a.i - b.i)
+      .map(({ t }) => t);
+    const limit = clampLimit(filter.limit, DEFAULT_PAGE_LIMIT);
+    return { tickets: sorted.slice(0, limit).map((t) => this.boardTicket(t)), total: sorted.length, scope };
+  }
+
+  async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number } = {}): Promise<BoardTicketDetail> {
+    const found = this.store.tickets.lookup(key);
+    if (!found) throw new Error(`Unknown ticket: ${key}`);
+    const t = found.ticket;
+    const detail: BoardTicketDetail = {
+      ticket: this.boardTicket(t),
+      resolvedFrom: found.alias,
+      parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
+      children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
+      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
+    };
+    const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
+    if (n > 0) {
+      detail.transcript = this.store.transcript.tail(t.sessionId, n, ["text", "status", "error"]).map((e) => ({
+        role: e.role,
+        type: e.content.type as "text" | "status" | "error",
+        text: truncateMiddle("text" in e.content ? e.content.text : "", BOARD_TRANSCRIPT_CHARS),
+        createdAt: e.createdAt,
+      }));
+    }
+    return detail;
+  }
+
+  async searchTickets_(_ctx: ToolContext, input: Parameters<HarnessOps["searchTickets"]>[1]) {
+    const projectId = input.projectKey ? this.boardProject(input.projectKey).id : undefined;
+    let page: TicketPage;
+    try {
+      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null });
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+    return {
+      hits: page.tickets.map((t) => {
+        const latest = this.store.summaries.listBySession(t.sessionId).at(-1)?.body;
+        return { ticket: this.boardTicket(t), snippet: searchSnippet([t.title, t.description, latest], input.query) };
+      }),
+      nextCursor: page.nextCursor,
+      total: page.total,
+    };
+  }
+
+  async listProjects_(_ctx: ToolContext): Promise<ProjectView[]> {
+    return this.store.projects.list().map((p) => this.projectView(p));
+  }
+
+  // --- board (write): work and conductor runs; the HTTP API's code paths plus guard rails ---
+
+  /** The caller's ticket, for a run kind that may change the board. */
+  private boardActor(ctx: ToolContext, tool: string): Ticket {
+    if (ctx.runKind !== "work" && ctx.runKind !== "conductor") throw new Error(`${tool} is only available in work and conductor runs`);
+    return this.ctxTicket(ctx);
+  }
+
+  /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
+  private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
+    const actor = this.boardActor(ctx, tool);
+    const target = this.store.tickets.lookup(String(key ?? "").trim())?.ticket;
+    if (!target) throw new Error(`Unknown ticket: ${key}`);
+    if (target.id === actor.id) {
+      throw new Error(`${target.key} is your own ticket. ${tool} acts on other tickets; use ${actor.kind === "conductor" ? "submit_for_review" : "block or submit_for_review"} to change your own.`);
+    }
+    return { actor, target };
+  }
+
+  private noPendingApproval(t: Ticket) {
+    if (t.pendingApproval) {
+      throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only a human can answer it or move it.`);
+    }
+  }
+
+  /**
+   * Starting a run on a ticket with a looser permission mode than the caller's would let a strict
+   * agent get work done that its own mode forbids.
+   */
+  private notLooserThanCaller(actor: Ticket, target: Ticket) {
+    const mine = this.permissionModeFor(actor);
+    const theirs = this.permissionModeFor(target);
+    if (PERMISSION_STRICTNESS[theirs] < PERMISSION_STRICTNESS[mine]) {
+      throw new Error(`${target.key} runs in ${theirs}, looser than your ${mine}; ask a human.`);
+    }
+  }
+
+  /** HarnessErrors (HTTP status codes) become plain tool errors with the same message. */
+  private async asTool<T>(fn: () => Promise<T> | T): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  private asToolSync<T>(fn: () => T): T {
+    try {
+      return fn();
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  async createTicket_(ctx: ToolContext, input: CreateTicketInput): Promise<Ticket> {
+    const own = this.boardActor(ctx, "create_ticket");
+    const project = input.projectKey ? this.boardProject(input.projectKey) : this.store.projects.get(own.projectId);
+    if (!project) throw new Error(`Unknown project for ${own.key}`);
+    const kind = input.conductor ? "conductor" : "task";
+    // The new ticket runs no looser than its creator: it takes the caller's mode when the project's
+    // would be looser, and otherwise keeps inheriting.
+    const mine = this.permissionModeFor(own);
+    const inherited = this.permissionModeFor(null, project);
+    const permissionMode = PERMISSION_STRICTNESS[mine] > PERMISSION_STRICTNESS[inherited] ? mine : undefined;
+    // depends_on lets the scheduler start the new ticket on its own; that must never happen under a
+    // looser mode than the caller's. Unreachable while the rule above holds; kept as the backstop.
+    const effective = permissionMode ?? inherited;
+    if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
+      throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
+    }
+    if (ctx.runKind === "conductor" && own.kind === "conductor") {
+      // A conductor's tickets are its children, on its driver/model unless it picks another.
+      return this.asTool(() =>
+        this.createTicket({
+          projectId: project.id,
+          prompt: input.description || input.title,
+          title: input.title,
+          kind,
+          dependsOn: input.dependsOn,
+          autoStart: input.autoStart ?? true,
+          parentId: own.id,
+          start: input.start ?? false,
+          driver: input.driver ?? own.driver,
+          model: input.model !== undefined ? input.model : input.driver ? null : own.model,
+          permissionMode,
+        }),
+      );
+    }
+    return this.asTool(() =>
+      this.createTicket({
+        projectId: project.id,
+        prompt: input.description || input.title,
+        title: input.title,
+        kind,
+        dependsOn: input.dependsOn,
+        autoStart: input.autoStart,
+        start: input.start ?? false,
+        driver: input.driver,
+        model: input.model,
+        permissionMode,
+      }),
+    );
+  }
+
+  async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
+    const { actor, target } = this.boardTarget(ctx, key, "update_ticket");
+    // Editing a looser ticket (its brief, dependencies, driver...) would get it to act for the caller
+    // under looser permissions. The one edit allowed on it is tightening its mode, alone.
+    const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
+    if (!(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
+    const body: UpdateTicketBody = {};
+    if (input.title !== undefined) {
+      if (!String(input.title).trim()) throw new Error("title can't be empty");
+      body.title = String(input.title).trim();
+    }
+    if (input.description !== undefined) body.description = input.description;
+    if (input.driver !== undefined) body.driver = input.driver;
+    if (input.model !== undefined) body.model = input.model;
+    if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
+    if (input.permissionMode !== undefined) {
+      // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
+      // around the approvals a human set up.
+      const mode = this.asToolSync(() => validPermissionMode(input.permissionMode));
+      const project = this.store.projects.get(target.projectId);
+      const from = resolvePermissionMode(target, project, this.settings()).mode;
+      const to = resolvePermissionMode({ permissionMode: mode }, project, this.settings()).mode;
+      if (PERMISSION_STRICTNESS[to] < PERMISSION_STRICTNESS[from]) {
+        throw new Error(`Agents can't loosen a ticket's permission mode (${target.key} runs in ${from}; ${mode ?? "inherit"} would be ${to}). Ask a human.`);
+      }
+      body.permissionMode = mode;
+    }
+    if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
+    return this.asTool(() => this.updateTicket(target.key, body));
+  }
+
+  async moveTicket_(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket> {
+    const { actor, target } = this.boardTarget(ctx, key, "move_ticket");
+    if (!(TICKET_STATUSES as readonly string[]).includes(status)) throw new Error(`Unknown status: ${status}. Use one of ${TICKET_STATUSES.join(", ")}`);
+    if (position !== undefined && (typeof position !== "number" || !Number.isInteger(position) || position < 0)) {
+      throw new Error("position must be a whole number ≥ 0 (0 = top of the column)");
+    }
+    if (status !== target.status) {
+      this.noPendingApproval(target);
+      if (target.status === "review") {
+        throw new Error(
+          `${target.key} is in review: its reviewers decide what happens next (review_ticket / complete_ticket when it's your conductor's child, otherwise a human).`,
+        );
+      }
+      if (status === "review") throw new Error(`Only ${target.key}'s own agent moves it to review (submit_for_review).`);
+      if (status === "done" && target.status !== "planning") {
+        throw new Error(`${target.key} is ${target.status}: only a ticket still in planning can be moved straight to done (to close one that isn't needed). Finished work goes through review.`);
+      }
+      if (status === "in_progress" || status === "planning") this.notLooserThanCaller(actor, target);
+    } else if (position === undefined) {
+      throw new Error(`${target.key} is already ${status}; pass position to reorder it`);
+    }
+    let pos: number | undefined;
+    if (position !== undefined) {
+      if (status === "done") throw new Error("The done column is ordered by completion time; position doesn't apply");
+      const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status] }).filter((t) => t.id !== target.id);
+      pos = positionForDrop(column, position);
+    }
+    return this.asTool(() => this.updateTicket(target.key, { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) }));
+  }
+
+  async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
+    const { actor, target } = this.boardTarget(ctx, key, "start_ticket");
+    this.noPendingApproval(target);
+    this.notLooserThanCaller(actor, target);
+    return this.asTool(() => this.startTicket(target.key));
+  }
+
+  async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
+    const { actor, target } = this.boardTarget(ctx, key, "message_ticket");
+    this.noPendingApproval(target);
+    // A message moves a ticket in review back to in progress: that's a review decision, which only
+    // its conductor (standing in for the human reviewer) may make.
+    if (target.status === "review" && target.parentId !== actor.id) {
+      throw new Error(`${target.key} is in review; messaging it would send it back to in progress. Only its reviewers can do that.`);
+    }
+    this.notLooserThanCaller(actor, target);
+    await this.asTool(() => this.sendMessage(target.key, text));
+  }
+
+  async cancelTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "cancel_ticket");
+    // Nothing runs while an approval waits; cancelling would only strand it.
+    this.noPendingApproval(target);
+    return this.asTool(() => this.cancelTicket(target.key));
+  }
+
+  async reopenTicket_(ctx: ToolContext, key: string, notes: string): Promise<Ticket> {
+    const { actor, target } = this.boardTarget(ctx, key, "reopen_ticket");
+    this.notLooserThanCaller(actor, target);
+    return this.asTool(() => this.reopenTicket(target.key, { notes }));
+  }
+
+  // --- conductor ---
+
   private conductorOf(ctx: ToolContext): Ticket {
     const c = this.ctxTicket(ctx);
-    if (c.kind !== "conductor") throw new Error("Only conductor tickets can manage other tickets");
+    if (c.kind !== "conductor") throw new Error("Only conductor tickets can review or complete other tickets");
     return c;
   }
 
@@ -1150,48 +1463,6 @@ export class Orchestrator {
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
     return t;
-  }
-
-  async createTicket_(ctx: ToolContext, input: Parameters<HarnessOps["createTicket"]>[1]): Promise<Ticket> {
-    const c = this.conductorOf(ctx);
-    const project = input.projectKey ? this.store.projects.getByKey(input.projectKey) : this.store.projects.get(c.projectId);
-    if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
-    return this.createTicket({
-      projectId: project.id,
-      prompt: input.description || input.title,
-      title: input.title,
-      dependsOn: input.dependsOn,
-      autoStart: input.autoStart ?? true,
-      parentId: c.id,
-      start: false,
-      driver: c.driver,
-      model: c.model,
-    });
-  }
-
-  async listTickets_(ctx: ToolContext, scope: "children" | "project"): Promise<Ticket[]> {
-    const c = this.ctxTicket(ctx);
-    return scope === "project" ? this.store.tickets.list({ projectId: c.projectId }) : this.store.tickets.list({ parentId: c.id });
-  }
-
-  async getTicket_(ctx: ToolContext, key: string) {
-    this.ctxTicket(ctx);
-    const t = this.store.tickets.getByKey(key);
-    if (!t) throw new Error(`Unknown ticket: ${key}`);
-    return {
-      ticket: t,
-      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
-    };
-  }
-
-  async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
-    return this.startTicket(child.key);
-  }
-
-  async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
-    const child = this.childOf(this.conductorOf(ctx), key);
-    await this.sendMessage(child.key, text);
   }
 
   async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
@@ -1209,10 +1480,6 @@ export class Orchestrator {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
     return this.completeTicket(child.key, { instructions });
-  }
-
-  async listProjects_(_ctx: ToolContext): Promise<ProjectView[]> {
-    return this.store.projects.list().map((p) => this.projectView(p));
   }
 
   private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
@@ -2048,14 +2315,23 @@ export class Orchestrator {
       block: (c, q) => this.block(c, q),
       submitForReview: (c, s) => this.submitForReview(c, s),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
+      // --- board (read) ---
+      listTickets: (c, f) => this.listTickets_(c, f),
+      getTicket: (c, k, o) => this.getTicket_(c, k, o),
+      searchTickets: (c, i) => this.searchTickets_(c, i),
+      listProjects: (c) => this.listProjects_(c),
+      // --- board (write) ---
       createTicket: (c, i) => this.createTicket_(c, i),
-      listTickets: (c, s) => this.listTickets_(c, s),
-      getTicket: (c, k) => this.getTicket_(c, k),
+      updateTicket: (c, k, p) => this.updateTicket_(c, k, p),
+      moveTicket: (c, k, st, pos) => this.moveTicket_(c, k, st, pos),
       startTicket: (c, k) => this.startTicket_(c, k),
       messageTicket: (c, k, t) => this.messageTicket_(c, k, t),
+      cancelTicket: (c, k) => this.cancelTicket_(c, k),
+      reopenTicket: (c, k, n) => this.reopenTicket_(c, k, n),
+      // --- conductor ---
       reviewTicket: (c, k, d, n) => this.reviewTicket_(c, k, d, n),
       completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
-      listProjects: (c) => this.listProjects_(c),
+      // --- triage ---
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
       declineWork: (c, r) => this.declineWork(c, r),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
