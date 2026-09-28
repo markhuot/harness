@@ -89,11 +89,23 @@ export interface PluginRouter {
   delete(path: string, handler: PluginHandler): void;
 }
 
+export interface PluginTabQuery {
+  /** The manifest tab id */
+  id: string;
+  ticket: Ticket;
+  project: Project | null;
+}
+
 export type PluginTicketEvent = { kind: "ticket.upserted"; ticket: Ticket } | { kind: "ticket.deleted"; id: string };
 
 export interface PluginDefinition {
   /** Register HTTP routes. Called once at load. */
   routes?(router: PluginRouter, ctx: PluginContext): void;
+  /**
+   * Called for a tab whose manifest `when` doesn't hold for the ticket: return true to offer the tab
+   * anyway (the git plugin keeps Changes once the worktree is removed). Errors count as false.
+   */
+  showTab?(tab: PluginTabQuery, ctx: PluginContext): boolean | Promise<boolean>;
   /** Ticket changes (created, status, busy, workdir…). Errors are logged and swallowed. */
   onTicketEvent?(event: PluginTicketEvent, ctx: PluginContext): void | Promise<void>;
   /** Called when the service stops. */

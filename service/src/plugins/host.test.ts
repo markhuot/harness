@@ -354,6 +354,44 @@ describe("plugin host over HTTP", () => {
     expect(unauth.status).toBe(401);
   });
 
+  test("showTab keeps a tab whose `when` fails; it isn't asked when `when` holds, and a throw hides the tab", async () => {
+    const { h, client, logs } = await boot((builtin) => {
+      writePlugin(builtin, "keep", { id: "keep", ui: "dist", server: "server.js", tabs: [{ id: "kept", title: "Kept", when: "workdir" }, { id: "dropped", title: "Dropped", when: "worktree" }, { id: "boom", title: "Boom", when: "worktree" }] }, {
+        "dist/index.html": "",
+        "server.js": `export default {
+          showTab(tab, ctx) {
+            (globalThis.__showTab ??= []).push(tab.id + ":" + tab.ticket.key + ":" + (tab.project?.key ?? "none") + ":" + ctx.id);
+            if (tab.id === "boom") throw new Error("showTab exploded");
+            return tab.id === "kept" && tab.ticket.title.includes("keep");
+          },
+        };`,
+      });
+    });
+    const asked = () => ((globalThis as { __showTab?: string[] }).__showTab ??= []);
+    asked().length = 0;
+    const repo = join(h.paths.home, "repo");
+    mkdirSync(repo);
+    await git(repo, "init", "-q", "-b", "main");
+    const project = await client.createProject({ path: repo, key: "KEEP" });
+    const t = await client.createTicket({ projectId: project.id, prompt: "please keep this", start: false });
+    const ids = (tabs: PluginTab[]) => tabs.map((x) => x.id);
+
+    // No workdir: `when` fails for every tab, showTab decides.
+    expect(ids(await client.ticketTabs(t.key))).toEqual(["kept"]);
+    expect(asked()).toEqual([`kept:${t.key}:KEEP:keep`, `dropped:${t.key}:KEEP:keep`, `boom:${t.key}:KEEP:keep`]);
+    expect(logs.some((l) => l.includes("[plugin:keep] showTab failed") && l.includes("showTab exploded"))).toBe(true);
+
+    // `when: workdir` holds: the tab shows without asking the plugin.
+    asked().length = 0;
+    h.store.tickets.update(t.id, { workdir: repo });
+    expect(ids(await client.ticketTabs(t.key))).toEqual(["kept"]);
+    expect(asked()).toEqual([`dropped:${t.key}:KEEP:keep`, `boom:${t.key}:KEEP:keep`]);
+
+    // A false answer hides it.
+    const other = await client.createTicket({ projectId: project.id, prompt: "nothing special", start: false });
+    expect(ids(await client.ticketTabs(other.key))).toEqual([]);
+  });
+
   test("the repo's built-in plugins load cleanly by default", async () => {
     const home = tempHome("harness-plugins-default-");
     harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
