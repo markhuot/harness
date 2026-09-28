@@ -758,6 +758,7 @@ export class Orchestrator {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
+    this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
     switch (ticket.status) {
@@ -874,6 +875,7 @@ export class Orchestrator {
       return t;
     }
     if (decision !== "request_changes") throw badRequest(`Invalid decision: ${decision}`);
+    this.notCompleting(ticket, "sent back");
     return this.requestChanges(ticket, notes, by);
   }
 
@@ -2017,6 +2019,17 @@ export class Orchestrator {
     this.enqueueRun(t.sessionId, "complete", prompts.completePrompt(t));
   }
 
+  /**
+   * Refuse to queue work behind a complete run. The work run would start after the merge, in the
+   * worktree the complete run just removed, fail, and block a ticket that is already done.
+   */
+  private notCompleting(t: Ticket, what: string) {
+    if (!this.completing(t)) return;
+    throw conflict(
+      `${t.key} is completing: its complete run is merging the branch and removing the worktree, so it can't be ${what} now. Once it's done, re-open it with notes if anything needs to change.`,
+    );
+  }
+
   /** A complete run is queued or running for the ticket. */
   private completing(t: Ticket): boolean {
     return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
@@ -2292,6 +2305,11 @@ export class Orchestrator {
     if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
     if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
+      // A done ticket stays done: a run queued before it completed can only fail on the removed worktree.
+      if (ticket.status === "done" && run.kind !== "complete") {
+        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
+        return;
+      }
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
         this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
