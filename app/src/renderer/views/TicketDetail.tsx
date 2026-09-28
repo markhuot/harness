@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
@@ -35,6 +35,7 @@ import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
+import { MentionTextarea } from "../components/MentionTextarea";
 import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket } from "../components/paneContext";
 import { dragProps } from "../components/paneDrag";
@@ -508,6 +509,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
 
   useEffect(() => {
     const el = ref.current;
@@ -532,13 +534,15 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
 
   return (
     <div className={`composer ${ticket.status === "blocked" ? "attention" : ""}`}>
-      <textarea
+      <MentionTextarea
         ref={ref}
         rows={1}
         className="composer-input"
         placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onValueChange={setText}
+        search={searchFiles}
+        placement="above"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();

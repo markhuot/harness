@@ -92,19 +92,26 @@ export function parseMentions(text: string): string[] {
 /**
  * Rank `paths` (files, and directories ending in "/") for the autocomplete, best first:
  * the path starts with the query, then its name does, then any folder name in it does, then it
- * contains the query, then the query's characters appear in order. Case-insensitive; shorter
- * paths win ties. An empty query lists the top level.
+ * contains the query. Only when none of those match do paths with the query's characters in order
+ * ("fmt" → format.ts) count. Case-insensitive; shorter paths win ties. An empty query lists the
+ * top level.
  */
 export function rankPaths(paths: readonly string[], query: string, limit = 50): string[] {
   const q = query.toLowerCase();
   const scored: { path: string; score: number }[] = [];
   for (const path of paths) {
+    // A picked folder ("src/") lists what's in it, not itself again.
+    if (q && path.toLowerCase() === q) continue;
     const score = q ? matchScore(path.toLowerCase(), q) : topLevel(path) ? 0 : -1;
     if (score >= 0) scored.push({ path, score });
   }
-  scored.sort((a, b) => a.score - b.score || a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return scored.slice(0, limit).map((s) => s.path);
+  // Loose in-order matches are noise next to real ones (every path with m…e…n…t in it).
+  const loose = scored.some((s) => s.score < LOOSE) ? scored.filter((s) => s.score < LOOSE) : scored;
+  loose.sort((a, b) => a.score - b.score || a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return loose.slice(0, limit).map((s) => s.path);
 }
+
+const LOOSE = 4;
 
 function topLevel(path: string): boolean {
   const slash = path.indexOf("/");
@@ -118,6 +125,6 @@ function matchScore(path: string, q: string): number {
   if (segments.some((s) => s.startsWith(q))) return 2;
   if (path.includes(q)) return 3;
   let i = 0;
-  for (const ch of path) if (ch === q[i] && ++i === q.length) return 4;
+  for (const ch of path) if (ch === q[i] && ++i === q.length) return LOOSE;
   return -1;
 }

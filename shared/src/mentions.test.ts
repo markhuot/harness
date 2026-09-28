@@ -87,12 +87,21 @@ describe("parseMentions", () => {
 describe("rankPaths", () => {
   const paths = ["src/", "src/app.ts", "src/lib/", "src/lib/format.ts", "app/", "app/main.ts", "README.md", "docs/formatting.md", "test/fmt.ts"];
 
-  test("path prefix beats name prefix beats folder prefix beats substring beats in-order letters", () => {
+  test("path prefix beats name prefix beats folder prefix beats substring", () => {
     expect(rankPaths(paths, "src/l")).toEqual(["src/lib/", "src/lib/format.ts"]);
     expect(rankPaths(paths, "app")).toEqual(["app/", "app/main.ts", "src/app.ts"]);
     expect(rankPaths(paths, "form")).toEqual(["src/lib/format.ts", "docs/formatting.md"]);
     expect(rankPaths(paths, "lib")).toEqual(["src/lib/", "src/lib/format.ts"]);
-    expect(rankPaths(paths, "fmt")).toEqual(["test/fmt.ts", "src/lib/format.ts", "docs/formatting.md"]);
+    expect(rankPaths(paths, "mat")).toEqual(["src/lib/format.ts", "docs/formatting.md"]);
+  });
+
+  test("in-order letters count only when nothing matches outright", () => {
+    expect(rankPaths(paths, "fmt")).toEqual(["test/fmt.ts"]);
+    expect(rankPaths(paths, "frmt")).toEqual(["src/lib/format.ts", "docs/formatting.md"]);
+  });
+
+  test("a completed folder lists its contents, not itself", () => {
+    expect(rankPaths(paths, "src/")).toEqual(["src/lib/", "src/app.ts", "src/lib/format.ts"]);
   });
 
   test("is case-insensitive", () => {
