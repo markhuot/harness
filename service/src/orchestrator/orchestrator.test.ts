@@ -745,7 +745,7 @@ describe("conductor", () => {
     const d = h.orch.ticketDetail(parentKey);
     expect(d.ticket.kind).toBe("task");
     expect(d.ticket.childCount).toBe(1);
-    expect(d.children.map((c) => [c.key, c.parentId, c.autoStart, c.status, c.humanReview])).toEqual([[keys[0], d.ticket.id, true, "done", "approved"]]);
+    expect(d.children.map((c) => [c.key, c.parentId, c.autoStart, c.status, c.humanReview])).toEqual([[keys[0]!, d.ticket.id, true, "done", "approved"]]);
     expect(submitErrors[0]).toContain(`still has child tickets that aren't done (${keys[0]}:`);
     // The parent's steering runs are work runs (full tools) with the child-update prompt, and it
     // wasn't auto-submitted while the child was open.

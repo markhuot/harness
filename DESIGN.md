@@ -120,17 +120,25 @@ Runs are serialized per session and limited globally by `settings.maxConcurrentR
 
 ### Conductor
 
-A ticket of `kind: "conductor"`. Created with `start: true` it runs **conductor** runs whose
-tools create and steer child tickets (`parentId` = conductor). Children created by a
-conductor default to `autoStart: true`: they start as soon as all `dependsOn` are done
+Any ticket with children acts as a conductor (`isConductor`: `kind: "conductor"` or
+`childCount > 0`). `kind` only decides the ticket's prompts and run kind: a `"conductor"` ticket
+runs **conductor** runs whose instructions say to split the goal into children, a `"task"` runs
+work runs. A task becomes a parent when its agent calls `create_ticket` with `child: true` (a
+conductor's default), for example because the human asked for child tickets; its work runs then
+get a "Your child tickets" section listing them. Everything below applies to both. Tickets carry
+`childCount` (a subquery in the ticket repo), and creating or deleting a child re-sends the
+parent's `ticket.upserted`, so the apps show the rollup, badge and Tickets tab as soon as a task
+takes its first child. Children default to `autoStart: true`: they start as soon as all `dependsOn` are done
 (immediately if none). Whenever a child changes status the orchestrator enqueues one
-(coalesced) conductor run describing the changes. The conductor acts as the human reviewer
+(coalesced) run of the parent's own kind (conductor or work) with `conductorUpdatePrompt`. The conductor acts as the human reviewer
 for its children (`review_ticket`) and completes them (`complete_ticket`). So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
 with the human review pending is the conductor's to act on (it stays dimmed on the board and
 isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
-are done and the conductor run ends without submitting, the orchestrator submits the
-conductor for review automatically.
+are done and the parent's run ends without submitting, the orchestrator submits it for review
+automatically; while any child isn't done, a run that ends without submitting leaves the parent in
+progress, and `submit_for_review` is refused (a parent in review or done would strand children
+whose reviews and merges are its job).
 
 ### Watchers and triage
 
@@ -204,10 +212,10 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model?, use_worktree? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree? }`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
-| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
+| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings |
@@ -216,8 +224,8 @@ Harness tools (always exposed, via MCP for claude-code):
 | `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
-| `review_ticket` | conductor | `{ key, decision, notes }` |
-| `complete_ticket` | conductor | `{ key, instructions? }` |
+| `review_ticket` | work, conductor | `{ key, decision, notes }`: only the caller's own children |
+| `complete_ticket` | work, conductor | `{ key, instructions? }`: only the caller's own children |
 | `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
@@ -355,7 +363,7 @@ client state, not service state.
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
-| Board | approve a review, request changes, re-run the agent review, complete or mark done | conductors only, for their children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
+| Board | approve a review, request changes, re-run the agent review, complete or mark done | parents only, for their own children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
@@ -628,7 +636,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |

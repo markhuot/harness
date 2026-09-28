@@ -19,6 +19,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Any ticket can act as a conductor now. If you ask a regular ticket's agent for child tickets,
+  it creates them under that ticket, then reviews and completes each one. The ticket gets the
+  Conductor badge, the progress bar on its card and the Tickets tab on the Mac and iPhone, and it
+  goes to review only after every child is done. Choosing Conductor for a new session still
+  changes how the agent starts: it splits the goal into tickets instead of doing the work itself.
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.

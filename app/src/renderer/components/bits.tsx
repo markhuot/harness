@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { ReviewState, Ticket, TicketStatus } from "@harness/shared";
+import { isConductor, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
@@ -43,7 +43,7 @@ export function ReviewMark({ who, state }: { who: "agent" | "human"; state: Revi
 }
 
 export function KindBadge({ ticket, childCount }: { ticket: Ticket; childCount?: number }) {
-  if (ticket.kind !== "conductor") return null;
+  if (!isConductor(ticket)) return null;
   return (
     <span className="badge badge-violet" title="Conductor: orchestrates child tickets">
       <Icon name="conductor" />

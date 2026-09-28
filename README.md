@@ -81,6 +81,8 @@ you answer.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
+  Any ticket can become one: ask a ticket's agent for child tickets and it creates them
+  under itself, then reviews and completes them the same way.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in

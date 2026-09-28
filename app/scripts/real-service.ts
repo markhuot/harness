@@ -126,6 +126,29 @@ try {
   // --- 7. Sub-agents: a /agents ticket's Agents tab, a sub-agent's transcript, the transcript links.
   await checkAgentsTab({ api, app, check, shot, project });
 
+  // --- 8. A plain task ticket asked for a child conducts it: badge, rollup and Tickets tab, live.
+  const parent = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Audit the PRs /child Rebase the PR", driver: "dummy", start: true });
+  await go(`#/board/${project.id}/ticket/${parent.key}`);
+  const kid = await until("child created", async () => (await api<TicketDetail>("GET", `/tickets/${parent.key}`)).children[0], 15000);
+  check("the task ticket's child has it as parent", kid.parentId === parent.id && kid.title === "Rebase the PR", `${kid.key} parent=${kid.parentId}`);
+  const card = await until("parent card shows the conductor rollup", () =>
+    js<boolean>(`!!document.querySelector('.card[data-key=${JSON.stringify(parent.key)}] [data-testid=conductor-rollup]')`),
+  ).catch(() => false);
+  check("board card of a task with a child gets the conductor rollup", card);
+  check(
+    "task with a child shows the Conductor badge",
+    await js<boolean>(`[...document.querySelectorAll('.card[data-key=${JSON.stringify(parent.key)}] .badge-violet')].some(b => b.textContent.includes("Conductor"))`),
+  );
+  await go(`#/board/${project.id}/ticket/${parent.key}/children`);
+  const row = await until("child row in the Tickets tab", () => js<boolean>(`!!document.querySelector('.child-row[data-key=${JSON.stringify(kid.key)}]')`)).catch(() => false);
+  check("task with a child gets the Tickets tab listing it", row && (await exists(".tab[data-tab=children]")));
+  const conducted = await until("parent submitted after the child is done", async () => {
+    const d = await api<TicketDetail>("GET", `/tickets/${parent.key}`);
+    return d.ticket.status === "review" && d.children.every((c) => c.status === "done") && d.ticket.kind === "task";
+  }, 30000).catch(() => false);
+  check("the task ticket reviewed and completed its child, then went to review", conducted);
+  await shot("8-task-conducts-child");
+
   await go(`#/board/${project.id}`);
   await Bun.sleep(600);
   await shot("7-board");

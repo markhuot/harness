@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Ticket, TicketStatus } from "@harness/shared";
+import { isConductor, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   CHAT_PLACEHOLDER,
@@ -111,19 +111,19 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const subagents = subagentsOf(state, ticket.sessionId);
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
-  const tab = effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents });
+  const tab = effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents });
   const openAgent = parseSubagentTab(tab);
   const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
-  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
 
   return (
     <aside className="detail">
       <DetailHeader paneId={paneId} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs">
-        {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
+        {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
@@ -170,7 +170,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
+  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
