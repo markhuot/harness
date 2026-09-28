@@ -101,12 +101,82 @@ try {
   check("the shell's output is on screen", (await screen(t1)).some((l) => l.includes(projectDir)));
   if (shots) await screenshot(join(shots, "terminal-project.png"));
 
+  // 1a. Keys: the terminal's keys are handled (default-prevented) by it; ⌘ menu
+  //     shortcuts are left unhandled so the native menu gets them (CDP key events never reach the
+  //     menu, so this checks the renderer's half).
+  const prevented = (init: string) =>
+    js<boolean>(`!document.querySelector('[data-terminal="${t1}"] .terminal-host').dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ${init} }))`);
+  check("a terminal key goes to the terminal", await prevented(`key: "ArrowLeft", code: "ArrowLeft"`)); // harmless at an empty prompt
+  check("⌘T, ⌘N and ⌘1 are left for the menu", !(await prevented(`key: "t", code: "KeyT", metaKey: true`)) && !(await prevented(`key: "n", code: "KeyN", metaKey: true`)) && !(await prevented(`key: "1", code: "Digit1", metaKey: true`)));
+
   // 2. Something interactive: less on the alternate screen, keys and all.
+  const altScreen = () => js<boolean>(`document.querySelector('[data-terminal="${t1}"] .terminal-host').harnessTerminal.buffer.active.type === "alternate"`);
+  check("the shell is on the normal screen", !(await altScreen()));
   await typeKeys("printf 'alpha\\nbeta\\n' | less\n");
-  await until("less on the alternate screen", () => js<boolean>(`document.querySelector('[data-terminal="${t1}"] .terminal-host').harnessTerminal.buffer.active.type === "alternate"`));
+  await until("less on the alternate screen", async () => (await altScreen()) && (await screen(t1)).some((l) => l === "beta"));
   await typeKeys("q");
-  await until("back from less", () => js<boolean>(`document.querySelector('[data-terminal="${t1}"] .terminal-host').harnessTerminal.buffer.active.type === "normal"`));
+  await until("back from less", async () => !(await altScreen()));
   check("a full-screen program runs and quits (alternate screen in and out)", true);
+
+  // 2a. vim: insert mode, Escape back to normal mode (it reaches vim, not the workspace), :wq.
+  await typeKeys("vim -u NONE -N vim-note.txt\n");
+  await until("vim", altScreen, 8000);
+  await typeKeys("ihello from vim");
+  // Escape is vim's: the terminal handles it, so the workspace's Escape (end a zoom, close a pane) never sees it.
+  await js(`window.__esc = 0; addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented) window.__esc++; })`);
+  await cdp("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await typeKeys(":wq\n");
+  await until("vim quit", async () => !(await altScreen()), 8000);
+  const note = await Bun.file(join(projectDir, "vim-note.txt")).text().catch(() => "");
+  check("vim edits and saves (Escape reached vim)", note.trim() === "hello from vim", JSON.stringify(note));
+  check("Escape went to vim, not the pane workspace", (await js<number>(`window.__esc`)) === 0 && (await shown()).includes(t1));
+
+  // 2b. top redraws full screen and quits on q.
+  await typeKeys("top -s 1\n");
+  await until("top", altScreen, 8000);
+  const topScreen = await until("top's header", async () => {
+    const lines = await screen(t1);
+    return lines.some((l) => /Processes:|PID/.test(l)) ? lines : null;
+  }, 10000).catch(() => [] as string[]);
+  check("top draws its screen", topScreen.some((l) => /Processes:|PID/.test(l)), topScreen.slice(0, 2).join(" | "));
+  if (shots) await screenshot(join(shots, "terminal-top.png"));
+  await typeKeys("q");
+  await until("top quit", async () => !(await altScreen()), 8000);
+
+  // 2c. Zooming the pane resizes the PTY to the bigger terminal.
+  await js(`document.querySelector('[data-terminal="${t1}"] [data-testid="pane-zoom"]').click()`);
+  const small = await size(t1);
+  await until("zoomed wider", async () => (await size(t1)).cols > small.cols || (await js<boolean>(`!!document.querySelector('[data-terminal="${t1}"]').closest(".zoomed")`)), 5000);
+  await Bun.sleep(400);
+  const big = await size(t1);
+  await typeKeys("stty size\n");
+  check("zoom reflows the terminal and the PTY follows", !!(await waitOut(t1, `${big.rows} ${big.cols}`).catch(() => "")), `${small.cols}→${big.cols} cols`);
+  await js(`document.querySelector('[data-terminal="${t1}"] [data-testid="pane-zoom"]').click()`);
+
+  // 2d. Copy (Edit → Copy / ⌘C with a selection) and paste.
+  const copied = await js<string>(`(() => { const host = document.querySelector('[data-terminal="${t1}"] .terminal-host'); const t = host.harnessTerminal;
+    t.selectAll(); const dt = new DataTransfer(); host.dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: dt }));
+    t.clearSelection(); return dt.getData("text/plain"); })()`);
+  check("copy puts the terminal's selection on the clipboard", copied.includes("stty size"), `${copied.length} chars`);
+  await js(`(() => { const dt = new DataTransfer(); dt.setData("text/plain", "echo pasted-$((20+3))\\n");
+    const t = document.querySelector('[data-terminal="${t1}"] .terminal-host').harnessTerminal;
+    (t.textarea ?? t.element).dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt })); })()`);
+  // zsh turns on bracketed paste, so the pasted newline is text, not Enter (as in any terminal).
+  await waitOut(t1, "pasted-$((20+3))");
+  await typeKeys("\n");
+  check("paste types into the shell", (await waitOut(t1, "\r\npasted-23").catch(() => "")).includes("pasted-23"));
+
+  // 2e. Switching light/dark recreates the terminal in the new colors, history intact.
+  const bgOf = () => js<string>(`document.querySelector('[data-terminal="${t1}"] .terminal-host').harnessTerminal.options.theme.background`);
+  const bg1 = await bgOf();
+  const dark = await js<boolean>(`document.documentElement.dataset.theme === "dark"`);
+  await js(`harness.setTheme({ preference: ${JSON.stringify(dark ? "light" : "dark")} })`);
+  await until("recolored", async () => (await bgOf().catch(() => bg1)) !== bg1, 8000).catch(() => false);
+  check("a theme switch recolors the terminal", (await bgOf()) !== bg1, `${bg1} → ${await bgOf()}`);
+  check("and keeps its history", (await screen(t1)).join("").includes("pasted-23"));
+  if (shots) await screenshot(join(shots, `terminal-${dark ? "light" : "dark"}.png`));
+  await js(`harness.setTheme({ preference: "system" })`);
 
   // 3. All projects: a terminal at home, via the same menu.
   await go("#/board/all");

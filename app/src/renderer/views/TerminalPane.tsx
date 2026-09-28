@@ -17,7 +17,7 @@ import { MenuButton } from "../components/bits";
 import { usePaneScope } from "../components/paneContext";
 import { MovePaneItems, PaneGrip } from "../components/paneHeader";
 import { closePane, cwdName, paneLabel, setTerminalTitle, toggleZoom, updatePanes, type TerminalContent } from "../state/panes";
-import { appOwnsKey, createAttach, exitLabel, terminalColors } from "../state/terminal";
+import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors } from "../state/terminal";
 import { currentColorTheme, currentTheme, useTheme } from "../state/theme";
 import "./terminal.css";
 
@@ -59,6 +59,11 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
     let disposed = false;
     let term: Terminal | null = null;
     const offs: (() => void)[] = [];
+    // Capture phase on the terminal's parent, so the terminal (listening on `host`) never sees these.
+    const body = host.parentElement!;
+    const keepMenuKey = (e: KeyboardEvent) => menuKey(e) && e.stopPropagation();
+    body.addEventListener("keydown", keepMenuKey, true);
+    offs.push(() => body.removeEventListener("keydown", keepMenuKey, true));
     setExit(null);
     setError(null);
     const attach = createAttach({
@@ -88,7 +93,8 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
       term.open(host);
       fit.fit();
       fit.observeResize();
-      // ghostty-web's contract is inverted from xterm's: true means "handled, don't process".
+      // ghostty-web's contract is inverted from xterm's: true means "handled, don't process". Menu
+      // keys never get here (keepMenuKey); this keeps ⌃⌘ shortcuts from the shell.
       term.attachCustomKeyEventHandler((e) => appOwnsKey(e));
       term.onData((data) => attach.isAttached && void bridge.write(sessionId, data).catch(() => {}));
       term.onResize(({ cols, rows }) => attach.isAttached && void bridge.resize(sessionId, cols, rows).catch(() => {}));

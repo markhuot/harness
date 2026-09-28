@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ALL_SCOPE } from "@harness/shared/state";
 import { THEMES } from "@harness/shared/themes";
 import type { TerminalExit, TerminalSession } from "../../main/types";
-import { appOwnsKey, createAttach, exitLabel, terminalColors, terminalCwd, terminalScope } from "./terminal";
+import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors, terminalCwd, terminalScope } from "./terminal";
 
 describe("terminalCwd", () => {
   const projects = { p1: { path: "/Users/me/Sites/harness" }, p2: { path: "" } };
@@ -146,6 +146,15 @@ test("⌘ shortcuts stay with the app, except ⌘C/⌘V; ⌃ and plain keys go t
   expect(key("KeyV", true)).toBe(false);
   expect(key("KeyC")).toBe(false); // ⌃C arrives with ctrlKey, not metaKey
   expect(key("Escape")).toBe(false);
+});
+
+test("menu shortcuts bypass the terminal; ⌃⌘ ones (the renderer's own) and copy/paste don't", () => {
+  const k = (code: string, ctrlKey = false) => menuKey({ code, metaKey: true, ctrlKey });
+  expect(k("KeyT")).toBe(true);
+  expect(k("KeyW")).toBe(true);
+  expect(k("KeyS", true)).toBe(false); // ⌃⌘S: the window listener toggles the sidebar
+  expect(k("KeyC")).toBe(false);
+  expect(menuKey({ code: "KeyT", metaKey: false, ctrlKey: true })).toBe(false); // ⌃T goes to the shell
 });
 
 describe("terminalColors", () => {

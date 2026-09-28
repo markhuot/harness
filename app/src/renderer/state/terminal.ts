@@ -114,6 +114,15 @@ export function appOwnsKey(e: Pick<KeyboardEvent, "metaKey" | "code">): boolean 
   return e.metaKey && e.code !== "KeyC" && e.code !== "KeyV";
 }
 
+/**
+ * Of the keys the app owns, the ones the terminal must not even see. The terminal marks every key
+ * it handles with preventDefault, and a prevented ⌘ key never reaches the native menu, so menu
+ * shortcuts (⌘T, ⌘N, ⌘1…) are kept from it entirely and go unhandled, as they do from a text field.
+ * ⌃⌘ keys are the renderer's own (⌃⌘S toggles the sidebar in a window listener), so those still go
+ * through it and on to that listener.
+ */
+export const menuKey = (e: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "code">): boolean => appOwnsKey(e) && !e.ctrlKey;
+
 // ---------------------------------------------------------------------------
 // Colors
 // ---------------------------------------------------------------------------
