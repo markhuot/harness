@@ -102,7 +102,7 @@ function watcherRule(prompt: string): RegExp | null {
   }
 }
 
-const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
+const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools|agents)\b[ \t]*([^\n]*)/;
 
 interface ChildView {
   key: string;
@@ -208,6 +208,31 @@ export class DummyDriver implements Driver {
       yield* say(`Ran ${calls.map((c) => c.name).join(", ")}.`);
       yield* call("submit_for_review", { summary: `Ran ${calls.length} tool call${calls.length === 1 ? "" : "s"}.` });
     }
+    // `/agents [n]`: run n sub-agents (DESIGN.md "Sub-agents"), the way claude-code reports its
+    // Agent tool: the call, a "subagent" event, the sub-agent's own tagged output, its result.
+    // From three on, the last one is started by the one before it (a nested agent).
+    async function* subagent(n: number, parentId: string | null, inner?: () => AsyncGenerator<DriverEvent>): AsyncGenerator<DriverEvent> {
+      check();
+      const id = `dummy_agent_${req.runId}_${n}`;
+      const description = `Sub-task ${n}`;
+      const input = { description, subagent_type: "general-purpose", prompt: `Look into sub-task ${n} and report back.` };
+      const from = parentId ? { subagentId: parentId } : {};
+      yield { type: "tool_call", callId: id, name: "Agent", input, ...from };
+      yield { type: "subagent", subagent: { id, parentId, description, agentType: "general-purpose", prompt: input.prompt, status: "running" } };
+      await sleep(delay * 10, req.signal);
+      yield { type: "text", text: `Looking into sub-task ${n}.`, subagentId: id };
+      const readId = `${id}_read`;
+      yield { type: "tool_call", callId: readId, name: "Read", input: { file_path: "README.md" }, subagentId: id };
+      await sleep(delay * 10, req.signal);
+      yield { type: "tool_result", callId: readId, name: "Read", result: { content: [{ type: "text", text: `(dummy) notes for sub-task ${n}` }] }, subagentId: id };
+      if (inner) yield* inner();
+      const report = `Sub-task ${n} is done.`;
+      yield { type: "text", text: report, subagentId: id };
+      check();
+      yield { type: "tool_result", callId: id, name: "Agent", result: { content: [{ type: "text", text: report }] }, ...from };
+      yield { type: "subagent", subagent: { id, status: "succeeded", result: report } };
+    }
+
     const prompt = req.prompt;
 
     switch (req.kind) {
@@ -277,6 +302,15 @@ export class DummyDriver implements Driver {
           yield* call("browser_content", { format: "text", max_chars: 2000 }, out);
           const text = out.result ? resultText(out.result) : "";
           yield* say(out.result?.isError ? `Could not read ${arg}: ${text}` : `Page content: ${text.slice(0, 500)}`);
+        } else if (directive === "agents") {
+          const count = Math.min(5, Math.max(1, Number.parseInt(arg, 10) || 2));
+          const nestLast = count >= 3;
+          for (let n = 1; n <= count - (nestLast ? 1 : 0); n++) {
+            const parent = `dummy_agent_${req.runId}_${n}`;
+            yield* subagent(n, null, nestLast && n === count - 1 ? () => subagent(count, parent) : undefined);
+          }
+          yield* say(`The ${count} sub-agent${count === 1 ? "" : "s"} finished.`);
+          yield* call("submit_for_review", { summary: `Ran ${count} sub-agent${count === 1 ? "" : "s"}.` });
         } else if (directive === "bash") {
           if (hasTool("bash")) {
             const out: { result?: ToolResult } = {};
