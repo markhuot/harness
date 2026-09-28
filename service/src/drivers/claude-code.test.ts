@@ -300,6 +300,33 @@ describe("StreamJsonParser", () => {
       expect(subagentEvents(p.handle({ type: "system", subtype: "task_updated", task_id: "t9", patch: { status: "killed" } }))).toEqual([{ id: "ag", status: "stopped" }]);
     });
 
+    // MEDL-1229: two long composer commands showed up as empty "Sub-agent" rows.
+    test("a long Bash call's tool_progress heartbeat (and its task events) is not a sub-agent", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      const evs = [
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "bash1", name: "Bash", input: { command: "composer show -a craftcms/cms" } }] } },
+        { type: "system", subtype: "task_started", task_id: "b1", tool_use_id: "bash1", description: "Show Craft requirements", is_backgrounded: false, task_type: "local_bash" },
+        // Recorded from claude 2.1.283 after 30s of a foreground Bash call.
+        { type: "tool_progress", tool_use_id: "bash1-heartbeat-0", tool_name: "Bash", parent_tool_use_id: "bash1", elapsed_time_seconds: 30, heartbeat: true },
+        // Nothing but a sub-agent's conversation counts under a parent id, even for a known call.
+        { type: "user", parent_tool_use_id: "bash1", message: { content: [{ type: "text", text: "not an agent" }] } },
+        result("bash1", "php ^8.2"),
+        { type: "system", subtype: "task_notification", task_id: "b1", tool_use_id: "bash1", status: "completed", summary: "Show Craft requirements" },
+      ].flatMap((m) => p.handle(m));
+      expect(subagentEvents(evs)).toEqual([]);
+      expect(evs.some((e) => "subagentId" in e && e.subagentId)).toBe(false);
+      expect(evs.map((e) => e.type)).toEqual(["tool_call", "tool_result"]);
+    });
+
+    test("an agent's own tool_progress and stream events are dropped, its messages kept", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      p.handle(agentCall("ag", { description: "Scan", prompt: "p" }));
+      expect(p.handle({ type: "tool_progress", tool_use_id: "ag-heartbeat-0", tool_name: "Agent", parent_tool_use_id: "ag", elapsed_time_seconds: 30 })).toEqual([]);
+      expect(p.handle({ type: "assistant", parent_tool_use_id: "ag", message: { content: [{ type: "text", text: "working" }] } })).toEqual([{ type: "text", text: "working", subagentId: "ag" }]);
+    });
+
     test("output from a sub-agent the run didn't see start still gets a sub-agent", () => {
       const p = new StreamJsonParser();
       p.handle(init("s-1"));

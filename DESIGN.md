@@ -604,8 +604,12 @@ default: the tool result only says `Async agent launched…`, and the outcome ar
 `system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
 `task_id`, mapped from `task_started`), inside the same `claude -p` process (the CLI takes
 another turn after the notification). A foreground agent's tool result is its outcome.
-`task_started` for other task types (background Bash) is ignored. Output from a sub-agent the
-parser didn't see start creates one called "Sub-agent".
+`task_started` for other task types (background Bash) is ignored. Only conversation messages
+(`assistant` / `user`) under a `parent_tool_use_id` are a sub-agent's output: anything else is
+the tool's own progress, like the `tool_progress` heartbeat a Bash call sends every 30 s while
+it runs, and is dropped. Output from a sub-agent the parser didn't see start creates one called
+"Sub-agent", unless that id is a known call of another tool. Migration 13 deleted the empty
+"Sub-agent" rows those heartbeats created before this was fixed.
 
 **Apps** (`@harness/shared/state` `subagents.ts`, `tabs.ts`). State keeps `subagents[sessionId]`
 and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).

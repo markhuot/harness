@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { HarnessEvent, Subagent } from "@harness/shared";
 import type { DriverEvent, RunRequest } from "../drivers/types";
 import { Store } from "../store";
-import { openDb } from "../db";
+import { migrate, MIGRATIONS, openDb } from "../db";
 import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 
 function setup(script: (req: RunRequest) => AsyncGenerator<DriverEvent>) {
@@ -190,4 +190,19 @@ test("service restart: a stale run's sub-agents are stopped", async () => {
   h.orch.recoverStaleRuns();
   expect(h.store.subagents.get(t.sessionId, "orphan")!.status).toBe("stopped");
   expect(events.some((e) => e.kind === "subagent.upserted" && e.subagent.id === "orphan")).toBe(true);
+});
+
+test("migration 13 drops the made-up \"Sub-agent\" rows from Bash heartbeats and keeps real ones", () => {
+  const db = openDb(":memory:");
+  const sub = (id: string, description: string, agentType: string | null, prompt: string) =>
+    db
+      .query("INSERT INTO subagents (session_id, id, description, agent_type, prompt, status, started_at, updated_at) VALUES ('s1', $id, $description, $agentType, $prompt, 'succeeded', 0, 0)")
+      .run({ id, description, agentType, prompt });
+  sub("bash-heartbeat", "Sub-agent", null, ""); // MEDL-1229's shape
+  sub("continued", "Sub-agent", null, ""); // a real one created from its own output
+  sub("agent", "Scan", "Explore", "Scan the repo");
+  db.query("INSERT INTO transcript (id, session_id, subagent_id, seq, role, content, created_at) VALUES ('e1', 's1', 'continued', 1, 'assistant', '{}', 0)").run();
+  db.exec(`PRAGMA user_version = ${MIGRATIONS.length - 1}`);
+  migrate(db);
+  expect((db.query("SELECT id FROM subagents ORDER BY id").all() as { id: string }[]).map((r) => r.id)).toEqual(["agent", "continued"]);
 });

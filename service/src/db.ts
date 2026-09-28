@@ -330,6 +330,15 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN use_worktree INTEGER;
   `,
+  // 13: drop the sub-agents claude-code's parser made up from the tool_progress heartbeat a Bash
+  //     call running over 30s sends (it names the call as parent_tool_use_id). They are the
+  //     fallback "Sub-agent" rows with no type, prompt or transcript entries of their own. A real
+  //     sub-agent always has an agent type, a prompt, or the output that created it.
+  `
+  DELETE FROM subagents
+  WHERE description = 'Sub-agent' AND agent_type IS NULL AND prompt = ''
+    AND NOT EXISTS (SELECT 1 FROM transcript t WHERE t.session_id = subagents.session_id AND t.subagent_id = subagents.id);
+  `,
 ];
 
 /**
