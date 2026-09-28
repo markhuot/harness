@@ -12,7 +12,7 @@
 //   6. --paging: only the paging checks: seeds 125+ done tickets (one old "haystack" ticket deep in
 //      the history), a conductor with done children and a ticket depending on the old one; checks
 //      child tickets are hidden by default, the Done count is the server total, the Done column
-//      scrolls into older pages, and search finds the unloaded done ticket; paging-*.png in light
+//      scrolls into older pages, and the Search tab finds the unloaded done ticket; paging-*.png in light
 //      and dark
 //
 //   7. --stick: only the stick-to-bottom checks: a ticket with a long brief and a long transcript;
@@ -296,19 +296,24 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     console.log(`  ${file}`);
   };
   const swipeUp = () => axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "220", "--duration", "0.25", "--udid", udid);
-  // The strip scrolls to follow the page, so a tap can land on a neighbour: tap until a Done card is on screen.
+  // The strip scrolls to follow the page, so a tap can land on a neighbour: tap until a Done card is on
+  // screen. Frames are in screen points and a card sits 14pt into its page, so from the Review page the
+  // Done column's first card is at x≈416, just off the right edge: only a card near the left edge counts.
   const openDone = async () => {
     const top = p.history.at(-1)!.key;
     for (let i = 0; i < 4; i++) {
       await tapWhere(udid, (l) => l.startsWith("Done,"));
       await Bun.sleep(1200);
       const card = await findElement(udid, (l) => l.startsWith(`${top} `));
-      if (card && card.frame.x >= 0 && card.frame.x < 440) return;
+      if (card && card.frame.x >= 0 && card.frame.x < 100) return;
     }
     throw new Error("couldn't open the Done column");
   };
-  // The native search field lives in the header, which AXe doesn't descend into: tap where it sits.
+  // Search is its own tab; AXe descends into neither the tab bar nor the header holding the native
+  // field, so tap where each sits.
   const tapSearch = async () => {
+    await axe("tap", "-x", "328", "-y", "821", "--udid", udid); // Search, last in the tab bar
+    await Bun.sleep(900);
     await axe("tap", "-x", "200", "-y", "139", "--udid", udid);
     await Bun.sleep(700);
   };
@@ -327,11 +332,11 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     return `newest non-child ${newest.key} on top`;
   });
   await check("Show child tickets (header menu) shows them; toggling back hides them", async () => {
-    await axe("tap", "-x", "342", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
     await Bun.sleep(900);
     await tapWhere(udid, "Show child tickets");
     await until("children visible", () => has(`${p.kids[2]!.key} `), 6000);
-    await axe("tap", "-x", "342", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
     await Bun.sleep(900);
     await tapWhere(udid, "Show child tickets");
     await until("children hidden", async () => !(await has(`${p.kids[2]!.key} `)), 6000);

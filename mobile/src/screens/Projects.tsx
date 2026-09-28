@@ -1,8 +1,9 @@
 // The desktop sidebar on a phone: Inbox, All projects and each project with its open count and a
-// settings gear; pick one to filter the board. Add a project by its path on the Mac.
+// settings gear; pick one to filter the board (or the Search tab's scope, when opened from there).
+// Add a project by its path on the Mac.
 import { useMemo } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { sortedProjects, tildify, triageSessions } from "@harness/shared/state";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -17,6 +18,7 @@ export function ProjectsScreen() {
   const act = useAction();
   const c = useColors();
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const projects = sortedProjects(state);
   const openCounts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -30,7 +32,7 @@ export function ProjectsScreen() {
     haptic("select");
     setPref("boardProject", id);
     router.dismiss();
-    router.navigate("/board");
+    router.navigate(from === "search" ? "/search" : "/board");
   };
   const addProject = () =>
     Alert.prompt("Add project", "The folder's absolute path on the Mac, e.g. /Users/you/Sites/app", async (path) => {

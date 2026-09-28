@@ -26,6 +26,12 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      {/* The search role: an iOS 26 SDK build detaches it into its own button at the trailing end of
+          the tab bar, but an iOS 27 SDK build (ours) shows an ordinary tab until react-native-screens
+          backs it with UISearchTab (software-mansion/react-native-screens#4671). */}
+      <NativeTabs.Trigger name="search" role="search">
+        <NativeTabs.Trigger.Label>Search</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
