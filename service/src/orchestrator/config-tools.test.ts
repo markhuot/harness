@@ -50,7 +50,8 @@ const watcherCall = {
   name: "create_watcher",
   input: {
     name: "jira-once",
-    command: "watch-jira --project=SITE --assigned=unassigned --once",
+    command: "/bin/zsh",
+    args: ["-lc", "watch-jira --project=SITE --assigned=unassigned --once"],
     prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ.",
     mode: "interval",
     interval_sec: 600,
@@ -67,7 +68,7 @@ describe("config tools behind human approval", () => {
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
     expect(cur.pendingApproval).toMatchObject({ toolName: "create_watcher", input: watcherCall.input, onceOnly: true, source: "policy" });
-    expect(cur.pendingApproval!.summary).toBe(`Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once`);
+    expect(cur.pendingApproval!.summary).toBe(`Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once; prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ."`);
     expect(cur.blockedReason).toBe(`Permission needed: create_watcher — ${cur.pendingApproval!.summary}`);
     expect(h.orch.listWatchers()).toEqual([]);
     const denied = toolResults(h.store.transcript.list(t.sessionId), "create_watcher");
@@ -81,7 +82,7 @@ describe("config tools behind human approval", () => {
     await h.orch.idle();
     const watchers = h.orch.listWatchers();
     expect(watchers.map((w) => [w.name, w.command, w.args, w.mode, w.intervalSec])).toEqual([
-      ["jira-once", watcherCall.input.command, [], "interval", 600],
+      ["jira-once", "/bin/zsh", watcherCall.input.args, "interval", 600],
     ]);
     // The mapping is its own approval; the watcher's grant was used up
     cur = h.orch.ticketDetail(t.key).ticket;
@@ -96,7 +97,7 @@ describe("config tools behind human approval", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(h.orch.listWatchers()).toHaveLength(1); // the approved call ran exactly once
     expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
-      `Allowed once: create_watcher (Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once)`,
+      `Allowed once: create_watcher (Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once; prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ.")`,
       "Allowed once: create_mapping (Hint that SITE keys belong in project proj)",
     ]);
   });
@@ -298,8 +299,8 @@ describe("config tools behind human approval", () => {
     ]);
     // The card spells out a prompt change
     expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
-      'Allowed once: create_watcher (Create watcher "status" (loop): curl -s https://status.test/api)',
-      'Allowed once: update_watcher (Update watcher "status": prompt=Only dispatch major outages.)',
+      'Allowed once: create_watcher (Create watcher "status" (loop): curl -s https://status.test/api; prompt: "Dispatch outages to PROJ.")',
+      'Allowed once: update_watcher (Update watcher "status": prompt: "Only dispatch major outages.")',
     ]);
   });
 

@@ -14,12 +14,13 @@ import { defineGatedTool, defineTool, json, schema } from "./util";
 // is up to the command: whatever it prints goes to the Inbox with the watcher's prompt, and the
 // triage agent decides what to do with it (HARNESS-22's generic watchers).
 const WATCHER_GUIDE = [
-  `A watcher runs a command on a schedule and sends whatever it prints to the Inbox, where a triage agent reads it and decides what to do (file a ticket in a project, send an update to an existing one, or decline it). The harness service runs the command on this machine as the user, outside any ticket sandbox.`,
-  `command: any shell command line, run through the user's login shell, so their PATH, pipes and loops work (e.g. "watch-jira --project=PLAYR --assigned=@me --once", or "curl -s https://status.example.com/api/incidents | jq -c '.incidents[]'"). Its stdout text is what goes to the Inbox, in whatever format the command prints. Put the user's options in exactly as they'd type them in a terminal.`,
-  `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." Include which project the work belongs in when the user says so.`,
-  `mode: "loop" for a command that runs for a long time or loops itself (e.g. "watch-jira --follow", or "while true; do curl -s …; sleep 60; done"); it's restarted when it exits and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10) and each run's output becomes one Inbox item.`,
-  `A command that exits non-zero is a failure: the end of its stderr becomes the watcher's last_error and a loop watcher backs off. env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
-  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run. Mappings (create_mapping) are optional routing hints for the triage agent, not required for a watcher to work.`,
+  `A watcher runs a command and sends whatever text it prints to the Inbox, together with the watcher's prompt. A triage agent reads each piece of output with that prompt and decides what to do: dispatch it to an agent in a project, send it to an existing ticket, or decline it. The output can be in any format (JSON, a table, plain lines). The harness service runs the command on this machine as the user, outside any ticket sandbox.`,
+  `command and args: run the user's shell command line through their login shell so their PATH, pipes, quoting and loops work: command "/bin/zsh", args ["-lc", "<the command line, exactly as they'd type it in a terminal>"].`,
+  `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." Name the project when the user does.`,
+  `mode: "loop" for a command that runs for a long time or loops by itself; it's restarted when it exits, and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10), and each run's output becomes one Inbox item.`,
+  `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
+  `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "/bin/zsh", "args": ["-lc", "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done"], "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "/bin/zsh", "args": ["-lc", "watch-jira --project=PLAYR --assigned=@me --once"], "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
+  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run. Mappings (create_mapping) are optional routing hints for the triage agent; a watcher works without them.`,
 ].join(" ");
 
 const watcherRefProp = { type: "string", minLength: 1, description: "The watcher's id (from list_watchers) or its exact name." };
@@ -36,9 +37,9 @@ const modelMapProp = {
 
 const watcherProps = {
   name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"jira-sprint\"." },
-  command: { type: "string", minLength: 1, description: "A shell command line whose stdout text is sent to the Inbox, e.g. \"watch-jira --project=PLAYR --once\"." },
+  command: { type: "string", minLength: 1, description: "\"/bin/zsh\", with the user's command line in args (see the description)." },
+  args: { type: "array", items: { type: "string" }, description: "[\"-lc\", \"<shell command line>\"]: the command line whose stdout text goes to the Inbox." },
   prompt: { type: "string", description: "The user's instructions to the triage agent for this watcher's output." },
-  args: { type: "array", items: { type: "string" }, description: "Legacy: with args, command is an executable run directly with them and no shell. Leave it out for new watchers." },
   cwd: { type: "string", description: "Working directory; empty for the service's." },
   env: { type: "object", description: "Environment variables (string values)." },
   mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for long-running or self-looping commands (restarted when they exit), \"interval\" for commands that print once and exit. Default \"loop\"." },
@@ -84,7 +85,7 @@ function watcherView(w: Watcher) {
     command: w.command,
     args: w.args,
     command_line: commandLine(w.command, w.args),
-    prompt: (w as Watcher & { prompt?: string }).prompt ?? "",
+    ...((w as Watcher & { prompt?: string }).prompt ? { prompt: (w as Watcher & { prompt?: string }).prompt } : {}),
     cwd: w.cwd,
     env: Object.fromEntries(Object.keys(w.env ?? {}).map((k) => [k, "(set)"])),
     mode: w.mode,
@@ -94,6 +95,11 @@ function watcherView(w: Watcher) {
     last_run_at: w.lastRunAt ? new Date(w.lastRunAt).toISOString() : null,
     last_error: w.lastError,
   };
+}
+
+/** The triage prompt is part of what the human approves: it decides what happens to the output. */
+function promptSuffix(prompt: string | undefined): string {
+  return prompt?.trim() ? `; prompt: "${prompt.trim()}"` : "";
 }
 
 function schedule(mode: string | undefined, intervalSec: number | undefined): string {
@@ -180,7 +186,7 @@ export const createWatcher = defineGatedTool<CreateWatcherInput>({
   description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_GUIDE}`,
   inputSchema: schema(watcherProps, ["name", "command"]),
   describe: (i) => ({
-    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}`,
+    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}${promptSuffix(i.prompt)}`,
     reason: WATCHER_REASON,
   }),
   check: (i, ctx) => ctx.ops.createWatcher(ctx, watcherFields(i) as NewWatcher, true),
@@ -199,8 +205,13 @@ export const updateWatcher = defineGatedTool<UpdateWatcherInput>({
   inputSchema: schema({ watcher: watcherRefProp, ...watcherProps, name: { ...watcherProps.name, description: "New display name." } }, ["watcher"]),
   describe: (i) => {
     const { watcher, ...rest } = i;
-    const cmd = i.command !== undefined || i.args !== undefined ? `; command: ${commandLine(i.command ?? "(unchanged)", i.args ?? [])}` : "";
-    return { summary: `Update watcher "${watcher}": ${fieldList(rest, ["command", "args"])}${cmd}`, reason: WATCHER_REASON };
+    const fields = fieldList(rest, ["command", "args", "prompt"]);
+    const parts = [
+      fields === "no changes" ? null : fields,
+      i.command !== undefined || i.args !== undefined ? `command: ${commandLine(i.command ?? "(unchanged)", i.args ?? [])}` : null,
+      i.prompt !== undefined ? `prompt: "${i.prompt.trim()}"` : null,
+    ].filter(Boolean);
+    return { summary: `Update watcher "${watcher}": ${parts.join("; ") || "no changes"}`, reason: WATCHER_REASON };
   },
   check: (i, ctx) => ctx.ops.updateWatcher(ctx, i.watcher, watcherFields(i), true),
   async run(i, ctx) {

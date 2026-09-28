@@ -349,6 +349,11 @@ interface SeedTicket {
 
 const byKey = (key: string) => [...tickets.values()].find((t) => t.key === key);
 
+// HARNESS-20's approval card: a looping curl watcher with a triage prompt.
+const EVENTS_LOOP = "while true; do curl -s 'https://api.example.com/events?since=1m'; sleep 60; done";
+const EVENTS_PROMPT = "If this event is assigned to me and has actionable next steps, dispatch it to an agent.";
+const EVENTS_SUMMARY = `Create watcher "events" (loop): ${EVENTS_LOOP}; prompt: "${EVENTS_PROMPT}"`;
+
 function seedTicket(s: SeedTicket): Ticket {
   const createdAt = now() - s.ageMin * 60_000;
   const key = s.key ?? `${s.project.key}-${s.project.nextSeq++}`;
@@ -501,29 +506,30 @@ function seed() {
   seedTicket({
     project: hx,
     key: "HARNESS-20",
-    title: "Watch the PLAYR sprint",
-    description: "Add a watcher that runs watch-jira --project=PLAYR --assigned=@me --open-sprints --follow. Dispatch anything assigned to me with clear next steps to this project.",
+    title: "Watch the events API",
+    description: "Add a watcher that polls https://api.example.com/events every minute. If an event is assigned to me and has actionable next steps, dispatch it to an agent.",
     status: "blocked",
     driver: "claude-code",
-    blockedReason: 'Permission needed: create_watcher — Create watcher "jira-sprint" (loop): watch-jira --project=PLAYR --assigned=@me --open-sprints --follow',
+    blockedReason: `Permission needed: create_watcher — ${EVENTS_SUMMARY}`,
     pendingApproval: {
       id: "appr_cfg",
       runId: "run_appr_cfg",
       toolName: "mcp__harness__create_watcher",
       input: {
-        name: "jira-sprint",
-        command: "watch-jira --project=PLAYR --assigned=@me --open-sprints --follow",
-        prompt: "If a ticket is assigned to me and has actionable next steps, dispatch it to an agent in HARNESS. Otherwise decline it.",
+        name: "events",
+        command: "/bin/zsh",
+        args: ["-lc", EVENTS_LOOP],
         mode: "loop",
+        prompt: EVENTS_PROMPT,
       },
       requestedAt: now() - 30_000,
       reason: "A watcher's command runs on this Mac as you, outside any ticket sandbox, every time the watcher fires.",
       source: "policy",
-      summary: 'Create watcher "jira-sprint" (loop): watch-jira --project=PLAYR --assigned=@me --open-sprints --follow',
+      summary: EVENTS_SUMMARY,
       onceOnly: true,
     },
     ageMin: 5,
-    summaries: [["agent", "Checked `watch-jira` is on your PATH. Asking to add the watcher with your triage instructions."]],
+    summaries: [["agent", "Checked the events endpoint with `curl`. Asking to add the watcher with your triage instructions."]],
   }); // HARNESS-20
   seedTicket({
     project: ny,

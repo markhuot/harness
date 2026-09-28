@@ -248,15 +248,20 @@ Deleting tickets isn't a board tool: `delete_ticket` is a config tool behind a h
 ### Config tools
 
 The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
-screens, so a ticket like "add a watcher that runs watch-jira --project=FOO --follow and dispatches
-anything assigned to me to project X" can be done end to end. Watchers are generic, so the tool
-descriptions don't teach an output format. `command` is any shell command line whose stdout text
-goes to the Inbox, `prompt` is the user's instructions to the triage agent for that output, and
-`mode` is `loop` (long-running or self-looping, like `while true; do curl …; sleep 60; done`) or
-`interval`. The tools pass `prompt` straight through to `Orchestrator.createWatcher` /
-`updateWatcher`, which own its validation and storage. `create_mapping` / `delete_mapping`
-describe mappings as optional routing hints for triage. Approval cards show a shell command line
-as typed (`commandLine` in `shared/src/commandLine.ts`) and quote legacy `command` + `args`.
+screens, so a ticket like "add a watcher that polls our events API every minute and dispatches
+anything assigned to me with next steps" can be done end to end. Watchers are generic, so the tool
+descriptions don't teach an output format: a watcher runs a shell command line (taught as
+`command: "/bin/zsh"`, `args: ["-lc", "<line>"]`, a login shell that works with the item-based
+and output-based watcher models alike). What it prints goes to the Inbox with the watcher's
+`prompt`, the user's instructions to the triage agent. `mode` is `loop` for long-running or
+self-looping commands (`while true; do curl …; sleep 60; done`) or `interval`, and a non-zero exit
+shows as the watcher's error. The tools pass `prompt` straight through to `Orchestrator.createWatcher` /
+`updateWatcher`, where HARNESS-22 validates and stores it. `list_watchers` shows it when
+set, and the approval summary includes it, since the prompt decides what happens to the output.
+`create_mapping` / `delete_mapping` describe mappings as optional routing hints for triage.
+Approval cards show a shell command line as the user wrote it (`commandLine` in
+`shared/src/commandLine.ts`: a bare command, or the line in `zsh|bash|sh -c/-lc`) and quote
+other `command` + `args`.
 
 Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
 `tools/util.ts`), because a watcher's command runs as the user outside any ticket sandbox and
@@ -267,8 +272,8 @@ gated call:
    the HTTP API), so a bad call is a tool error and never reaches a human;
 2. calls `requestApproval` with `{ summary, reason, source: "policy", onceOnly: true }` whatever
    the ticket's permission mode. Read-only tickets are denied outright; otherwise the ticket
-   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "jira-sprint" (loop):
-   watch-jira --project=PLAYR --follow`) is the card's subtitle and blocked reason;
+   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "events" (loop): while
+   true; do curl …; done; prompt: "…"`) is the card's subtitle and blocked reason;
 3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
    grant and runs the op.
 

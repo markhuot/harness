@@ -80,9 +80,15 @@ test("approval input: config tools show the watcher command line and what they a
     description: null,
     rest: { name: "status", prompt: "Dispatch outages." },
   });
-  // legacy command + args are quoted as the argv they are
-  expect(describeApprovalInput("create_watcher", { name: "jira", command: "/bin/zsh", args: ["-lc", "exec watch-jira --project=FOO --follow"], mode: "loop" })).toEqual({
-    primary: { label: "Command", value: "/bin/zsh -lc 'exec watch-jira --project=FOO --follow'", code: true },
+  // a login shell running one line shows the line itself
+  expect(describeApprovalInput("create_watcher", { command: "/bin/zsh", args: ["-lc", "while true; do curl -s 'https://x.test'; sleep 60; done"] }).primary).toEqual({
+    label: "Command",
+    value: "while true; do curl -s 'https://x.test'; sleep 60; done",
+    code: true,
+  });
+  // other command + args are quoted as the argv they are
+  expect(describeApprovalInput("create_watcher", { name: "jira", command: "/usr/local/bin/watch-jira", args: ["--project=FOO", "--jql=status = Done"], mode: "loop" })).toEqual({
+    primary: { label: "Command", value: "/usr/local/bin/watch-jira --project=FOO '--jql=status = Done'", code: true },
     description: null,
     rest: { name: "jira", mode: "loop" },
   });
