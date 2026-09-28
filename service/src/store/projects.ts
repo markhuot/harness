@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import type { PermissionMode, Project } from "@harness/shared";
 import { projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
 
 interface ProjectRow {
@@ -28,6 +30,7 @@ const toProject = (r: ProjectRow): Project => ({
   nextSeq: r.next_seq,
   defaultDriver: r.default_driver,
   useWorktrees: bool(r.use_worktrees),
+  isGit: insideGitCheckout(r.path),
   requireHumanReview: bool(r.require_human_review),
   autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
   permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
@@ -36,6 +39,18 @@ const toProject = (r: ProjectRow): Project => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
+
+/**
+ * Whether `path` is inside a git checkout: `.git` (a directory, or a file in worktrees and
+ * submodules) in it or any parent, the way git finds its repository. A few stats, so it's cheap
+ * enough to run on every read. It only drives what clients show; begin() asks git itself.
+ */
+export function insideGitCheckout(path: string): boolean {
+  for (let dir = path; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, ".git"))) return true;
+    if (dirname(dir) === dir) return false;
+  }
+}
 
 /** Normalize a user-supplied key: upper-case letters/digits, starting with a letter. */
 export function normalizeProjectKey(raw: string): string {

@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, Ticket, TicketStatus } from "@harness/shared";
 import { executeTool } from "../drivers/types";
+import { createTicket as createTicketTool } from "../tools/board-write";
 import { makeOrchestrator } from "../testing/fakes";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { toolsForRun } from "../tools";
@@ -66,6 +67,28 @@ describe("create_ticket", () => {
     expect([t.parentId, t.autoStart, t.driver, t.model]).toEqual([c.id, false, c.driver, "fake-model"]);
     const auto = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child 2", description: "do a part" });
     expect(auto.autoStart).toBe(true);
+  });
+
+  test("use_worktree: a conductor's children follow the project unless the conductor opts out", async () => {
+    const h = await setup();
+    const repo = join(h.home, "proj", "repo");
+    mkdirSync(repo, { recursive: true });
+    const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+    Bun.spawnSync(["git", "init", "-q", "-b", "main"], { cwd: repo, env });
+    Bun.spawnSync(["git", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo, env });
+    const proj = h.orch.createProject({ path: repo, key: "REPO" });
+    const c = await h.make("conduct", { kind: "conductor", status: "in_progress", projectId: proj.id });
+    // Through the tool itself, so the snake_case input is what's checked.
+    const create = async (input: Record<string, unknown>) => {
+      const r = await executeTool([createTicketTool], "create_ticket", { description: "do a part", ...input }, h.ctx("conductor", h.get(c)));
+      expect(r.isError).toBeFalsy();
+      return h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
+    };
+    const inRoot = await create({ title: "in the root", use_worktree: false });
+    const followsProject = await create({ title: "follows the project" });
+    await h.orch.idle();
+    expect([h.get(inRoot).workdir, h.get(inRoot).branch]).toEqual([repo, null]);
+    expect(h.get(followsProject).branch).toBe(`harness/${followsProject.key.toLowerCase()}`);
   });
 
   test("validation errors from the shared create path reach the model", async () => {

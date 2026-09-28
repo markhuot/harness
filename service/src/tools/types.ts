@@ -102,6 +102,8 @@ export interface CreateTicketInput {
   projectKey?: string;
   driver?: string;
   model?: string | null;
+  /** false → the project checkout, true → its own worktree; omitted → the project's setting. */
+  useWorktree?: boolean;
 }
 
 export interface UpdateTicketInput {

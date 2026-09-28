@@ -206,6 +206,13 @@ function validPermissionMode(value: unknown): PermissionMode | null {
   return value as PermissionMode;
 }
 
+/** Validate a ticket's worktree choice from a request body (null / omitted → the project's). */
+function validUseWorktree(value: unknown): boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") throw badRequest("useWorktree must be true, false or null");
+  return value;
+}
+
 /** Validate a project color from a request body: a preset id or "#rrggbb" (null / "" → none). */
 function validProjectColor(value: unknown): string | null {
   const color = normalizeProjectColor(value);
@@ -610,6 +617,7 @@ export class Orchestrator {
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
     const model = validateModelId("model", body.model);
     const permissionMode = validPermissionMode(body.permissionMode);
+    const useWorktree = validUseWorktree(body.useWorktree);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -645,6 +653,7 @@ export class Orchestrator {
         externalRef: body.externalRef ?? null,
         workdir: null,
         model,
+        useWorktree,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -1381,6 +1390,7 @@ export class Orchestrator {
           driver: input.driver ?? own.driver,
           model: input.model !== undefined ? input.model : input.driver ? null : own.model,
           permissionMode,
+          useWorktree: input.useWorktree,
         }),
       );
     }
@@ -1396,6 +1406,7 @@ export class Orchestrator {
         driver: input.driver,
         model: input.model,
         permissionMode,
+        useWorktree: input.useWorktree,
       }),
     );
   }
@@ -1952,7 +1963,7 @@ export class Orchestrator {
         branch = null;
         const project = this.store.projects.get(ticket.projectId)!;
         workdir = project.path;
-        if (project.useWorktrees && (await isGitRepo(project.path))) {
+        if ((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path))) {
           try {
             ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
           } catch (err) {

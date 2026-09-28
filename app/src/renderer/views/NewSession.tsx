@@ -48,6 +48,15 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
     if (!touchedDriver.current) setDriver(defaultDriver);
   }, [defaultDriver]);
 
+  // Same for the worktree switch, which only shows for git projects (elsewhere there's no worktree to make).
+  const projectWorktrees = project?.useWorktrees ?? true;
+  const [worktree, setWorktree] = useState(projectWorktrees);
+  const touchedWorktree = useRef(false);
+  useEffect(() => {
+    if (!touchedWorktree.current) setWorktree(projectWorktrees);
+  }, [projectWorktrees]);
+  const canWorktree = project?.isGit !== false;
+
   const addProject = async () => {
     const path = await window.harness?.pickDirectory();
     if (!path) return;
@@ -59,7 +68,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const submit = async () => {
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode }));
+    const useWorktree = canWorktree ? worktree : null;
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode, useWorktree }));
     setBusy(false);
     if (!t) return;
     try {
@@ -137,7 +147,20 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
         <ModelSelect compact driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />
         <PermissionModeSelect compact value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />
         <div className="new-session-actions">
-          <Switch checked={start} onChange={setStart} label="Start immediately" />
+          <div className="new-session-options">
+            <Switch checked={start} onChange={setStart} label="Start immediately" />
+            {canWorktree && (
+              <Switch
+                checked={worktree}
+                onChange={(v) => {
+                  touchedWorktree.current = true;
+                  setWorktree(v);
+                }}
+                label="Use worktree"
+                title="Off: the agent works directly in the project directory"
+              />
+            )}
+          </div>
           <button className="btn btn-primary" disabled={!prompt.trim() || !projectId || busy} onClick={submit}>
             {busy ? <span className="spinner" /> : null}
             {start ? "Start session" : "Plan first"}

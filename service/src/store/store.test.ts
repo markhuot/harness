@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { MIGRATIONS, migrate, openDb, SCHEMA_VERSION } from "../db";
 import type { ExternalRef } from "@harness/shared";
 import { Store } from "./index";
+import { insideGitCheckout } from "./projects";
 
 const mk = () => new Store(openDb(":memory:"));
 
@@ -135,6 +136,19 @@ describe("projects", () => {
     expect(u.key).toBe("FOO");
     expect(u.name).toBe("Foo");
     expect(u.useWorktrees).toBe(false);
+  });
+
+  test("isGit: true in a repo and below its root (a .git dir or a worktree's .git file), false elsewhere", () => {
+    const plain = mkdtempSync(join(tmpdir(), "harness-nogit-"));
+    const repo = mkdtempSync(join(tmpdir(), "harness-git-"));
+    mkdirSync(join(repo, ".git"));
+    mkdirSync(join(repo, "packages", "app"), { recursive: true });
+    const worktree = mkdtempSync(join(tmpdir(), "harness-wt-"));
+    writeFileSync(join(worktree, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
+    expect([plain, repo, join(repo, "packages", "app"), worktree].map(insideGitCheckout)).toEqual([false, true, true, true]);
+    const s = mk();
+    expect(s.projects.create({ path: plain, name: "p" }).isGit).toBe(false);
+    expect(s.projects.create({ path: join(repo, "packages", "app"), name: "a" }).isGit).toBe(true);
   });
 
   test("derived keys skip the reserved TRIAGE prefix", () => {
@@ -314,6 +328,18 @@ describe("ticket key aliases", () => {
 });
 
 describe("tickets", () => {
+  test("useWorktree keeps null (follow the project) apart from false (the project checkout)", () => {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/foo", name: "foo" });
+    const make = (key: string, useWorktree: boolean | null | undefined) => {
+      const session = s.sessions.create({ key, kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: key });
+      const base = { projectId: p.id, kind: "task", title: key, description: "", status: "planning", sessionId: session.id, driver: "dummy", parentId: null, autoStart: false, externalRef: null, workdir: null } as const;
+      return s.tickets.create({ ...base, dependsOn: [], key, useWorktree }).id;
+    };
+    const ids = [make("FOO-1", undefined), make("FOO-2", null), make("FOO-3", false), make("FOO-4", true)];
+    expect(ids.map((id) => s.tickets.get(id)!.useWorktree)).toEqual([null, null, false, true]);
+  });
+
   test("round-trip dependsOn in order, busy derived from runs, unique keys", () => {
     const s = mk();
     const p = s.projects.create({ path: "/a/foo", name: "foo" });

@@ -1014,11 +1014,18 @@
   flex-wrap: wrap;
   row-gap: 8px;
 }
+/* Own row under the pickers: the switches on the left, the submit button on the right. */
 .new-session-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  flex-basis: 100%;
+}
+.new-session-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-right: auto;
 }
 .new-session-prompt {
   width: 100%;

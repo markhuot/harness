@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- New session has a **Use worktree** switch next to **Start immediately**, on the Mac and the
+  iPhone. It starts out matching the project's Worktree per ticket setting. Turn it off and the
+  agent works directly in the project folder instead of its own worktree and branch. The switch
+  only appears for projects in a git repository. On the Mac, the two switches now sit on their own
+  row with the start button.
+
 ## [app-20260928.1438](https://github.com/markhuot/harness/releases/tag/app-20260928.1438) - 2026-09-28
 
 ### Fixed

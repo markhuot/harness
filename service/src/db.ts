@@ -324,6 +324,12 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX subagents_run ON subagents(run_id, status);
   `,
+  // 12: tickets.use_worktree: the per-ticket worktree choice from the composer or create_ticket
+  //     (1: own worktree, 0: the project checkout). NULL (every existing ticket) follows the
+  //     project's use_worktrees when work starts.
+  `
+  ALTER TABLE tickets ADD COLUMN use_worktree INTEGER;
+  `,
 ];
 
 /**
