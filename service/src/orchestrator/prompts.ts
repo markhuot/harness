@@ -89,6 +89,12 @@ const BROWSER = section(
   `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\`. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
 );
 
+/** Read-only board tools, given to every run kind (tools/board.ts). */
+const BOARD = section(
+  "Board",
+  `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), and \`list_projects\` gives the project keys. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
+);
+
 /**
  * File tools over the shell. Claude Code's auto mode tells the model shell edits (sed, heredocs)
  * are fine; in ask mode those need a human's approval where Edit/Write in the workdir don't, and
@@ -281,6 +287,7 @@ export function systemPrompt(info: PromptInfo): string {
     instructions,
     ticketRun && filesSection(kind, info.builtinTools ?? true),
     ticketRun && SUMMARIES,
+    BOARD,
     (kind === "work" || kind === "complete" || kind === "conductor") && approvals(kind),
     browser && BROWSER,
   );
