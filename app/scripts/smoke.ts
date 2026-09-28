@@ -162,33 +162,7 @@ try {
     await js(`[...document.querySelectorAll(".column-body")].forEach(b => b.scrollTop = 0)`);
   }
 
-  // 1b. Reorder within a column: drop HARNESS-2 above NYTIMES-4 in Review.
   type T = { key: string; status: string; position: number; allowedTools: string[]; pendingApproval: unknown };
-  const reviewOrder = () =>
-    js<string[]>(`[...[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Review").querySelectorAll(".card-key")].map(e => e.textContent)`);
-  const before = await reviewOrder();
-  await js(`(() => {
-    const col = [...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Review");
-    const card = [...col.querySelectorAll(".card")].find(c => c.dataset.key === "HARNESS-2");
-    const target = [...col.querySelectorAll(".card")].find(c => c.dataset.key === "NYTIMES-4");
-    const y = target.getBoundingClientRect().top + 4;
-    const dt = new DataTransfer();
-    card.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
-    col.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y }));
-    col.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt, clientY: y }));
-    card.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));
-  })()`);
-  const reordered = await until("reorder persisted", async () => {
-    const all = await api<T[]>("GET", "/tickets");
-    const a = all.find((t) => t.key === "HARNESS-2")!;
-    const b = all.find((t) => t.key === "NYTIMES-4")!;
-    return a.position < b.position && a.status === "review";
-  });
-  const after = await until("reorder rendered", async () => {
-    const o = await reviewOrder();
-    return o[0] === "HARNESS-2" && o;
-  });
-  check("reorder within a column sends position", reordered && before[0] === "NYTIMES-4", `${before.join(",")} → ${after.join(",")}`);
 
   // 1c. Tool approval: badge on the board, card in the detail, "Always allow" answers it.
   const badge = await js<string>(`[...document.querySelectorAll(".card")].find(c => c.dataset.key === "HARNESS-9")?.querySelector(".card-approval")?.textContent ?? ""`);
@@ -218,18 +192,24 @@ try {
   check("transcript shows permission decisions as a shield row", audit.startsWith("Allowed") && audit.includes("read-only command") && audit.includes("policy"), audit);
   await js(`location.hash = "#/board/all"`);
 
-  // 2. Drag NYTIMES-2 (planning) onto In progress.
-  await js(`(() => {
+  // 2. Cards can't be dragged between columns (agents move them): a synthetic drop is a no-op.
+  // Then move NYTIMES-2 (planning) to In progress through the API and watch the board follow.
+  const dragged = await js<{ draggable: number; accepted: boolean }>(`(() => {
     const card = [...document.querySelectorAll(".card")].find(c => c.querySelector(".card-key")?.textContent === "NYTIMES-2");
     const col = [...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "In progress");
     const dt = new DataTransfer();
+    dt.setData("application/x-harness-ticket", "NYTIMES-2");
     card.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer: dt }));
-    col.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    // A drop target cancels dragover; nothing on the board should.
+    const accepted = !col.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
     col.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
     card.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));
+    return { draggable: document.querySelectorAll(".card[draggable=true]").length, accepted };
   })()`);
-  const moved = await until("drag to in_progress", async () => (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-2")).ticket.status === "in_progress");
-  check("drag & drop updates ticket status", moved);
+  await new Promise((r) => setTimeout(r, 300));
+  const stayed = (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-2")).ticket.status === "planning";
+  check("board cards aren't draggable and a drop on a column does nothing", dragged.draggable === 0 && !dragged.accepted && stayed, JSON.stringify({ ...dragged, stayed }));
+  await api("PATCH", "/tickets/NYTIMES-2", { status: "in_progress" });
   const inColumn = await until("card re-rendered in column", () =>
     js<boolean>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "In progress")?.textContent.includes("NYTIMES-2")`),
   );
