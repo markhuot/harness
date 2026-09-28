@@ -1,7 +1,7 @@
 // The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
 // notifications and triage. Implements HarnessOps for tools.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import type {
@@ -849,6 +849,7 @@ export class Orchestrator {
       this.store.sessions.delete(ticket.sessionId);
     });
     removeAttachmentFiles(files);
+    rmSync(join(this.paths.scratchDir, ticket.sessionId), { recursive: true, force: true });
     this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
     this.bus.emit({ kind: "session.deleted", id: ticket.sessionId });
     this.kickScheduler();
@@ -1986,6 +1987,13 @@ export class Orchestrator {
     return classifier;
   }
 
+  /** HarnessOps.fileOutputScope: review runs only read too, whatever the ticket's mode. */
+  async fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }> {
+    const ticket = ctx.ticket ? (this.store.tickets.get(ctx.ticket.id) ?? null) : null;
+    const readOnly = READ_ONLY_RUNS.includes(ctx.runKind) || ctx.runKind === "review" || this.permissionModeFor(ticket) === "read_only";
+    return { scratchDir: join(this.paths.scratchDir, ctx.session.id), readOnly };
+  }
+
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
@@ -2576,6 +2584,7 @@ export class Orchestrator {
       declineWork: (c, r, title) => this.declineWork(c, r, title),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
+      fileOutputScope: (c) => this.fileOutputScope(c),
       listWatchers: (c) => this.listWatchers_(c),
       getSettings: (c) => this.getSettings_(c),
       listDrivers: (c) => this.listDrivers_(c),

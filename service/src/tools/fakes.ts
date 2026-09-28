@@ -1,6 +1,8 @@
 // Test doubles for tool and driver tests: a recording HarnessOps, a recording
 // BrowserService, and a ToolContext builder. Not used at runtime.
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BrowserState, RunKind, Session, Ticket } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 import type { BoardListFilter, HarnessOps, ToolContext } from "./types";
@@ -129,6 +131,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     declineWork: async () => {},
     requestApproval: async (_ctx: ToolContext, _tool: string, input: unknown) => ({ behavior: "allow", updatedInput: input }),
     checkPermission: async () => ({ behavior: "allow" }),
+    fileOutputScope: async (ctx: ToolContext) => ({ scratchDir: join(tmpdir(), "harness-fake-scratch", ctx.session.id), readOnly: false }),
     listWatchers: async () => [],
     getSettings: async () => ({}),
     listDrivers: async () => [],

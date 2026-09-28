@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { HarnessEvent, Ticket } from "@harness/shared";
+import type { HarnessEvent, RunKind, Ticket } from "@harness/shared";
 import type { RunRequest } from "../drivers/types";
 import { makeOrchestrator } from "../testing/fakes";
 import { gif, mp4, png } from "../testing/media";
@@ -125,6 +125,36 @@ describe("submit_for_review attachments", () => {
 
     const detail = await h.orch.ops.getTicket(h.ctx(h.store.tickets.get(t.id)!), t.key);
     expect(detail.summaries[0]!.attachments).toEqual([{ name: "after.png", kind: "image", path }]);
+  });
+});
+
+describe("fileOutputScope (browser_screenshot save_to)", () => {
+  test("read-only follows the run kind and the effective mode (ticket → project → settings)", async () => {
+    const h = await setup();
+    const t = await h.make();
+    const scope = (kind: RunKind, ticket = h.store.tickets.get(t.id)!) => h.orch.ops.fileOutputScope({ ...h.ctx(ticket), runKind: kind });
+    expect(await scope("work")).toEqual({ scratchDir: join(h.paths.scratchDir, t.sessionId), readOnly: false });
+    for (const kind of ["plan", "review", "chat"] as RunKind[]) expect((await scope(kind)).readOnly).toBe(true);
+
+    h.store.settings.set({ permissionMode: "read_only" });
+    expect((await scope("work")).readOnly).toBe(true);
+    h.store.projects.setPermissionMode(h.project.id, "ask");
+    expect((await scope("work")).readOnly).toBe(false);
+    h.store.tickets.update(t.id, { permissionMode: "read_only" });
+    expect((await scope("work")).readOnly).toBe(true);
+  });
+
+  test("a read-only run's relative save_to lands in its scratch folder, which goes with the ticket", async () => {
+    const h = await setup();
+    const t = await h.make();
+    h.store.tickets.update(t.id, { permissionMode: "read_only" });
+    const ctx = h.ctx(h.store.tickets.get(t.id)!);
+    await tool("browser_screenshot").execute({ save_to: "shot.png" }, ctx);
+    const scratch = join(h.paths.scratchDir, t.sessionId);
+    expect(existsSync(join(scratch, "shot.png"))).toBe(true);
+    expect(existsSync(join(h.dir, "shot.png"))).toBe(false);
+    await h.orch.deleteTicket(t.key);
+    expect(existsSync(scratch)).toBe(false);
   });
 });
 

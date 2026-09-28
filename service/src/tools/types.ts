@@ -250,6 +250,12 @@ export interface HarnessOps {
    * (soft deny / ask mode), exactly like requestApproval.
    */
   checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }>;
+  /**
+   * Where a tool that saves an output file (browser_screenshot save_to) may write: the run's
+   * harness-owned scratch folder, and the working directory unless the run is read-only (a
+   * plan/review/triage/chat run, or read_only as the effective mode).
+   */
+  fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }>;
 
   // --- config (Settings / Project Settings; DESIGN.md "Config tools") ---
   // Reads work in every ticket run and triage. Mutations are for work and conductor runs only

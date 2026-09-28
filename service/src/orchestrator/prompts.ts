@@ -74,8 +74,13 @@ const LIFECYCLE = section(
 function summariesSection(kind: RunKind, browser: boolean): string {
   const submits = kind === "work" || kind === "conductor";
   const tools = submits ? "`post_summary` and `submit_for_review` take" : "`post_summary` takes";
+  // Mirrors fileOutputScope: these run kinds may only save into their scratch folder.
+  const readOnly = kind === "plan" || kind === "review" || kind === "chat";
+  const where = readOnly
+    ? "a relative path goes to this run's scratch folder, and the result gives the full path to attach"
+    : "inside your working directory, or this run's scratch folder when the ticket is read-only; the result gives the full path";
   const capture = browser
-    ? "`browser_screenshot` with `save_to` writes the page to a file, and a simulator or app screenshot or a short screen recording works too."
+    ? `\`browser_screenshot\` with \`save_to\` writes the page to a file (${where}), and a simulator or app screenshot or a short screen recording works too.`
     : "a simulator or app screenshot or a short screen recording works well.";
   return section(
     "Summaries",

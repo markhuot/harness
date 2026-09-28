@@ -19,6 +19,8 @@ export interface HarnessPaths {
   serviceJsonPath: string;
   /** Summary attachments, stored as <id>.<ext> */
   attachmentsDir: string;
+  /** Per-session scratch folders (tmp/<sessionId>/) for files tools save, e.g. screenshots */
+  scratchDir: string;
 }
 
 export interface ServiceInfo {
@@ -53,6 +55,7 @@ export function harnessPaths(home: string): HarnessPaths {
     chromeProfileDir: join(home, "chrome-profile"),
     serviceJsonPath: join(home, "service.json"),
     attachmentsDir: join(home, "attachments"),
+    scratchDir: join(home, "tmp"),
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
 import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
@@ -369,19 +369,70 @@ describe("browser tools → BrowserService", () => {
     ]);
   });
 
-  test("browser_screenshot save_to writes the PNG (creating folders) and says where", async () => {
-    const cwd = tempDir("harness-shot-");
-    const ctx = fakeContext({ browser: fakeBrowser(), cwd });
-    const rel = await tool("browser_screenshot").execute({ save_to: "shots/deep/after.png" }, ctx);
-    const saved = join(cwd, "shots/deep/after.png");
-    expect(readFileSync(saved)).toEqual(Buffer.from("iVBORw0KGgo=", "base64"));
-    expect(rel.content).toEqual([
-      { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
-      { type: "text", text: `Saved the screenshot to ${saved}` },
-    ]);
-    const abs = join(tempDir("harness-shot-"), "x.png");
-    expect(text(await tool("browser_screenshot").execute({ save_to: abs }, ctx))).toContain(`Saved the screenshot to ${abs}`);
-    expect(existsSync(abs)).toBe(true);
+  describe("browser_screenshot save_to", () => {
+    const SHOT = Buffer.from("iVBORw0KGgo=", "base64"); // the fake browser's PNG signature bytes
+    function setup(readOnly = false) {
+      // realpath: macOS temp dirs live behind the /var → /private/var symlink
+      const cwd = realpathSync(tempDir("harness-shot-"));
+      const scratchDir = join(realpathSync(tempDir("harness-scratch-")), "s_1");
+      const browser = fakeBrowser();
+      const ctx = fakeContext({ browser, cwd, ops: fakeOps({ fileOutputScope: () => ({ scratchDir, readOnly }) }) });
+      const shoot = (save_to: string) => tool("browser_screenshot").execute({ save_to }, ctx);
+      return { cwd, scratchDir, browser, shoot };
+    }
+
+    test("a relative path writes under the working directory, creating folders, and says where", async () => {
+      const { cwd, shoot } = setup();
+      const r = await shoot("shots/deep/after.png");
+      const saved = join(cwd, "shots/deep/after.png");
+      expect(readFileSync(saved)).toEqual(SHOT);
+      expect(r.content).toEqual([
+        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+        { type: "text", text: `Saved the screenshot to ${saved}` }, // no scratch-folder note in the cwd
+      ]);
+      // an existing PNG is replaced
+      expect(text(await shoot("shots/deep/after.png"))).toContain(`Saved the screenshot to ${saved}`);
+    });
+
+    test("an absolute path in the scratch folder works; one outside both roots is refused before the shot", async () => {
+      const { scratchDir, browser, shoot } = setup();
+      expect(text(await shoot(join(scratchDir, "a.png")))).toContain(`Saved the screenshot to ${join(scratchDir, "a.png")}`);
+      const outside = join(tempDir("harness-elsewhere-"), "x.png");
+      await expect(shoot(outside)).rejects.toThrow("save_to must be inside your working directory");
+      await expect(shoot("../escape.png")).rejects.toThrow("save_to must be inside your working directory");
+      expect(existsSync(outside)).toBe(false);
+      expect(browser.calls.filter((c) => c.method === "screenshot")).toHaveLength(1);
+    });
+
+    test("a symlink inside the working directory can't lead out of it", async () => {
+      const { cwd, shoot } = setup();
+      const outside = tempDir("harness-elsewhere-");
+      symlinkSync(outside, join(cwd, "link"));
+      await expect(shoot("link/x.png")).rejects.toThrow("save_to must be inside your working directory");
+      expect(existsSync(join(outside, "x.png"))).toBe(false);
+      symlinkSync(join(outside, "nothing-here.png"), join(cwd, "dangling.png"));
+      await expect(shoot("dangling.png")).rejects.toThrow("is a symlink that points nowhere");
+      expect(existsSync(join(outside, "nothing-here.png"))).toBe(false);
+    });
+
+    test("an existing file that isn't a PNG is never overwritten", async () => {
+      const { cwd, shoot } = setup();
+      writeFileSync(join(cwd, "notes.png"), "my notes");
+      await expect(shoot("notes.png")).rejects.toThrow("a file that isn't a PNG is already there");
+      expect(readFileSync(join(cwd, "notes.png"), "utf8")).toBe("my notes");
+      mkdirSync(join(cwd, "folder.png"));
+      await expect(shoot("folder.png")).rejects.toThrow("it is a folder");
+    });
+
+    test("read-only: a relative path lands in the scratch folder, and the working directory is refused", async () => {
+      const { cwd, scratchDir, shoot } = setup(true);
+      const r = await shoot("shot.png");
+      expect(text(r)).toContain(`Saved the screenshot to ${join(scratchDir, "shot.png")} (this run's scratch folder)`);
+      expect(readFileSync(join(scratchDir, "shot.png"))).toEqual(SHOT);
+      expect(existsSync(join(cwd, "shot.png"))).toBe(false);
+      await expect(shoot(join(cwd, "shot.png"))).rejects.toThrow("this run is read-only, so screenshots go in its scratch folder");
+      expect(existsSync(join(cwd, "shot.png"))).toBe(false);
+    });
   });
 
   test("browser_content validates format and max_chars", async () => {

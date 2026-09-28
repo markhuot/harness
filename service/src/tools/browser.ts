@@ -1,8 +1,8 @@
 // Browser tools: drive this session's tab in the harness's headless Chrome.
 // The human can watch (and take over) the same tab from the app.
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ToolResultContent } from "@harness/shared";
 import { defineTool, schema } from "./util";
 
@@ -75,25 +75,97 @@ export const browserEval = defineTool<{ expression: string }>({
   },
 });
 
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const lexists = (p: string) => {
+  try {
+    lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * `path` with its deepest existing ancestor (or itself) resolved through symlinks. A dangling
+ * symlink counts as existing and fails, since writing through it could land anywhere.
+ */
+function realTarget(path: string): string {
+  const rest: string[] = [];
+  let dir = path;
+  while (!lexists(dir)) {
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    rest.unshift(basename(dir));
+    dir = parent;
+  }
+  try {
+    return join(realpathSync(dir), ...rest);
+  } catch {
+    throw new Error(`Can't save the screenshot to ${path}: ${dir} is a symlink that points nowhere.`);
+  }
+}
+
+const inside = (root: string, path: string) => {
+  const rel = relative(root, path);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+};
+
+/**
+ * Where browser_screenshot's save_to may write. The real path (symlinks resolved) has to be under
+ * the run's scratch folder, or under its working directory unless the run is read-only; in a
+ * read-only run a relative path resolves under the scratch folder. An existing file is only
+ * replaced when it is already a PNG. Throws, before anything is written, when the path isn't allowed.
+ */
+export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: string; readOnly: boolean }): string {
+  mkdirSync(scope.scratchDir, { recursive: true });
+  const base = scope.readOnly ? scope.scratchDir : scope.cwd;
+  const target = realTarget(isAbsolute(saveTo) ? resolve(saveTo) : resolve(base, saveTo));
+  const scratch = realpathSync(scope.scratchDir);
+  const roots = scope.readOnly ? [scratch] : [scratch, realTarget(resolve(scope.cwd))];
+  if (!roots.some((root) => inside(root, target))) {
+    const where = scope.readOnly
+      ? `this run is read-only, so screenshots go in its scratch folder ${scratch} (a relative save_to lands there)`
+      : `save_to must be inside your working directory ${scope.cwd} or the scratch folder ${scratch}`;
+    throw new Error(`Can't save the screenshot to ${saveTo}: ${where}.`);
+  }
+  if (existsSync(target)) {
+    if (statSync(target).isDirectory()) throw new Error(`Can't save the screenshot to ${saveTo}: it is a folder.`);
+    const fd = openSync(target, "r");
+    const head = Buffer.alloc(PNG_MAGIC.length);
+    try {
+      readSync(fd, head, 0, head.length, 0);
+    } finally {
+      closeSync(fd);
+    }
+    if (!head.equals(PNG_MAGIC)) throw new Error(`Can't save the screenshot to ${saveTo}: a file that isn't a PNG is already there.`);
+  }
+  return target;
+}
+
 export const browserScreenshot = defineTool<{ save_to?: string }>({
   name: "browser_screenshot",
   description:
-    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to that path, so you can attach it to post_summary or submit_for_review.",
+    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can attach it to post_summary or submit_for_review.",
   inputSchema: schema({
     save_to: {
       type: "string",
       minLength: 1,
-      description: "Also save the PNG here: an absolute path or one relative to your working directory, e.g. \"screenshots/after.png\". Parent folders are created.",
+      description:
+        "Also save the PNG here, e.g. \"screenshots/after.png\". It must be inside your working directory or this run's scratch folder, and a relative path resolves against the working directory. In read-only runs (plan, review, or a read-only ticket) only the scratch folder is allowed and relative paths resolve there. Parent folders are created; an existing file is replaced only if it is a PNG.",
     },
   }),
   async run({ save_to }, ctx) {
+    // Check the path before taking the shot, so a refused save_to costs nothing.
+    const scope = save_to ? await ctx.ops.fileOutputScope(ctx) : null;
+    const path = save_to && scope ? resolveSaveTo(save_to, { cwd: ctx.cwd, ...scope }) : null;
     const data = await ctx.browser.screenshot(ctx.session.id);
     const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
-    if (save_to) {
-      const path = isAbsolute(save_to) ? save_to : resolve(ctx.cwd, save_to);
+    if (path && scope) {
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, Buffer.from(data, "base64"));
-      content.push({ type: "text", text: `Saved the screenshot to ${path}` });
+      const inScratch = inside(realpathSync(scope.scratchDir), path);
+      content.push({ type: "text", text: `Saved the screenshot to ${path}${inScratch ? " (this run's scratch folder)" : ""}` });
     }
     return { content };
   },

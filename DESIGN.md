@@ -79,7 +79,8 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
   `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`),
-  `attachments/<id>.<ext>` (summary attachments, see "Summary attachments").
+  `attachments/<id>.<ext>` (summary attachments, see "Summary attachments"), `tmp/<sessionId>/`
+  (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
   runs `bun <repo>/service/src/daemon.ts`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
@@ -237,7 +238,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_click` | ″ | `{ selector }` |
 | `browser_type` | ″ | `{ selector, text, submit? }` |
 | `browser_eval` | ″ | `{ expression }` |
-| `browser_screenshot` | ″ | `{ save_to? }` → image; with `save_to` (absolute, or relative to the run's cwd) the PNG is also written there, parent folders created, and the text result names the path |
+| `browser_screenshot` | ″ | `{ save_to? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -681,6 +682,18 @@ Agents show their work by attaching images and videos to `post_summary` and
 `submit_for_review` (`attachments: string[]`, file paths, absolute or relative to the run's
 cwd). The prompts' Summaries section asks for a screenshot or short recording whenever the work
 has a visible result, and `browser_screenshot { save_to }` writes one to a file for that.
+
+- **Where `save_to` may write** (`resolveSaveTo` in `service/src/tools/browser.ts`, scope from
+  `HarnessOps.fileOutputScope`). The permission gate never sees this write, so the tool confines
+  it itself. The target, with its deepest existing ancestor resolved through `realpath` (a
+  dangling symlink is refused), has to be inside the run's scratch folder
+  `$HARNESS_HOME/tmp/<sessionId>/` or its working directory. A read-only run (plan, review or
+  chat, or `read_only` as the effective mode, ticket → project → settings) gets only the scratch
+  folder, and its relative paths resolve there, so `save_to: "shot.png"` still works for a
+  reviewer. Other runs resolve relative paths against the cwd. An existing target is replaced
+  only when it already starts with the PNG signature. A refused path fails the call before the
+  screenshot is taken, and nothing is written. The result says where the file went, noting the
+  scratch folder when it landed there.
 
 - **Validation** (`service/src/attachments.ts`) runs over every path before anything is stored,
   so a bad list fails the tool call and posts nothing (for `submit_for_review`, the ticket stays
