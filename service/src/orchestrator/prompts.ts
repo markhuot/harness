@@ -212,6 +212,15 @@ Style preferences alone are not grounds for request_changes.`,
   );
 }
 
+function chatInstructions(ticket: Ticket | null): string {
+  const status = ticket ? ` The ticket stays in ${ticket.status} whatever you say or do.` : "";
+  return section(
+    "This run: chat",
+    `The human wants to talk about the ticket in its current state, not to move it along.${status} Answer their message in text: explain what was done or planned, answer questions, discuss options and tradeoffs.
+Investigate read-only when it helps: read files, search, run non-destructive commands such as git log, git diff or the tests. Do not create, modify or delete files, commit, or change the plan. There are no lifecycle tools in this run, so there is nothing to submit and nothing to block on: a question for the human can go at the end of your answer. If they ask for a change, say what you would do; they can send it as a regular message, which moves the ticket to in progress.`,
+  );
+}
+
 function completeInstructions(project: Project | null, ticket: Ticket | null): string {
   const main = project?.path ?? "the main project checkout";
   const body = ticket?.branch
@@ -284,7 +293,7 @@ Then call one of these and stop. When the output holds several separate items (f
 export function systemPrompt(info: PromptInfo): string {
   const { kind } = info;
   const ticketRun = kind !== "triage";
-  const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor";
+  const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
   let instructions: string;
   switch (kind) {
     case "plan":
@@ -304,6 +313,9 @@ export function systemPrompt(info: PromptInfo): string {
       break;
     case "triage":
       instructions = triageInstructions();
+      break;
+    case "chat":
+      instructions = chatInstructions(info.ticket);
       break;
   }
   return join(
