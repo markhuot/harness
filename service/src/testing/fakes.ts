@@ -293,6 +293,8 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     classifier: opts.classifier === undefined ? null : opts.classifier,
     autoModeRules: opts.autoModeRules,
     classifierTimeoutMs: opts.classifierTimeoutMs,
+    // Tests drive reconcileRuns() directly unless they ask for the timer.
+    reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
   });
   store.settings.set({ defaultDriver: driver.id });
   return { orch, store, bus, driver, browser, paths, home };

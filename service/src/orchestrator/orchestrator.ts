@@ -110,6 +110,8 @@ export interface OrchestratorOptions {
   /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
   autoModeRules?: AutoModeRulesProvider;
   classifierTimeoutMs?: number;
+  /** How often start() re-checks for runs no live job owns (default 60s; 0 disables) */
+  reconcileIntervalMs?: number;
 }
 
 interface ActiveRun {
@@ -258,6 +260,8 @@ export class Orchestrator {
   private starting = new Set<string>();
   private watcherRunner: WatcherSupervisor | null;
   private stopping = false;
+  private reconcileIntervalMs: number;
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -291,8 +295,12 @@ export class Orchestrator {
     this.queue = new RunQueue({
       limit: () => this.settings().maxConcurrentRuns,
       execute: (job) => this.execute(job),
-      onError: (job, err) => this.log(`run ${job.runId} crashed: ${errMsg(err)}`),
+      onError: (job, err) => {
+        this.log(`run ${job.runId} crashed: ${errMsg(err)}`);
+        this.failCrashedRun(job.runId, errMsg(err));
+      },
     });
+    this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver });
@@ -314,28 +322,65 @@ export class Orchestrator {
     const stale = this.recoverStaleRuns();
     if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
     this.syncWatchers();
+    if (this.reconcileIntervalMs > 0) {
+      this.reconcileTimer = setInterval(() => {
+        try {
+          const n = this.reconcileRuns();
+          if (n) this.log(`marked ${n} orphaned run(s) as failed`);
+        } catch (err) {
+          this.log(`run reconciliation failed: ${errMsg(err)}`);
+        }
+      }, this.reconcileIntervalMs);
+      this.reconcileTimer.unref?.();
+    }
   }
 
   /** Runs left queued/running by a previous process become failed ("service restarted"). */
   recoverStaleRuns(): number {
-    const stale = this.store.runs.listUnfinished();
-    for (const run of stale) {
-      if (this.active.has(run.id)) continue;
-      const r = this.store.runs.finish(run.id, "failed", "service restarted");
-      this.bus.emit({ kind: "run.upserted", run: r });
-      for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
-      this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): service restarted`);
-      const session = this.store.sessions.get(run.sessionId);
-      if (session?.kind === "triage" && session.triageStatus === "triaging") {
-        this.store.sessions.update(session.id, { triageStatus: "failed", outcome: "Interrupted: service restarted" });
-      }
-      this.touchSession(run.sessionId);
+    return this.failOrphanedRuns("service restarted");
+  }
+
+  /**
+   * Runs the database still has as queued/running that no live job owns become failed. A run
+   * ends up like that when recording its end threw (a full disk fails every SQLite write), so
+   * the record is repaired once writes work again rather than on the next restart.
+   */
+  reconcileRuns(): number {
+    return this.failOrphanedRuns("the run ended without recording a result");
+  }
+
+  private failOrphanedRuns(reason: string): number {
+    const orphans = this.store.runs.listUnfinished().filter((r) => !this.active.has(r.id) && !this.queue.has(r.id));
+    for (const run of orphans) this.interruptRun(run, reason);
+    return orphans.length;
+  }
+
+  /** A run that threw out of execute(): record it failed now, or leave it to reconcileRuns. */
+  private failCrashedRun(runId: string, message: string) {
+    try {
+      const run = this.store.runs.get(runId);
+      if (run && (run.status === "queued" || run.status === "running")) this.interruptRun(run, message);
+    } catch (err) {
+      this.log(`couldn't record crashed run ${runId} as failed (${errMsg(err)}); will retry`);
     }
-    return stale.length;
+  }
+
+  private interruptRun(run: Run, reason: string) {
+    const r = this.store.runs.finish(run.id, "failed", reason);
+    this.bus.emit({ kind: "run.upserted", run: r });
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
+    const session = this.store.sessions.get(run.sessionId);
+    if (session?.kind === "triage" && session.triageStatus === "triaging") {
+      this.store.sessions.update(session.id, { triageStatus: "failed", outcome: `Interrupted: ${reason}` });
+    }
+    this.touchSession(run.sessionId);
   }
 
   async stop() {
     this.stopping = true;
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
     this.queue.pause();
     await this.watcherRunner?.stopAll().catch(() => {});
     const actives = [...this.active.values()];
@@ -2150,7 +2195,49 @@ export class Orchestrator {
       offeredGrants: [],
     };
     this.active.set(run.id, active);
-    run = this.store.runs.markRunning(run.id);
+    let error: string | null;
+    try {
+      error = await this.drive(active, session, ticket, project, driver);
+    } catch (err) {
+      // Bookkeeping threw (e.g. a full disk fails every SQLite write): stop the agent, fail the run.
+      controller.abort();
+      error = errMsg(err);
+    }
+
+    const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
+    try {
+      run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
+    } finally {
+      // Even when the write fails, the run is over: reconcileRuns fails the row once it can.
+      this.active.delete(run.id);
+    }
+    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
+    // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
+    // input), and a grant left over would put every later run in ask mode (planGrants). A failed
+    // or cancelled run may not have reached the call, so its grants carry over to the next run.
+    if (status === "succeeded" && ticket && active.offeredGrants.length) this.store.tickets.dropGrants(ticket.id, active.offeredGrants);
+    this.bus.emit({ kind: "run.upserted", run });
+    this.appendStatus(
+      session.id,
+      run.id,
+      status === "succeeded" ? `Run finished (${run.kind})` : status === "cancelled" ? `Run cancelled (${run.kind})` : `Run failed (${run.kind}): ${error}`,
+    );
+    this.touchSession(session.id);
+    if (this.stopping) return;
+    try {
+      await this.afterRun(run, active, error);
+    } catch (err) {
+      this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
+    }
+    this.kickScheduler();
+  }
+
+  /** Start the driver and consume its events; returns the run error, if any. */
+  private async drive(active: ActiveRun, session: Session, ticket: Ticket | null, project: Project | null, driver: Driver | undefined): Promise<string | null> {
+    const { controller } = active;
+    const run = this.store.runs.markRunning(active.run.id);
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
     const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
@@ -2201,31 +2288,7 @@ export class Orchestrator {
         active.mcpToken = null;
       }
     }
-
-    const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
-    run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
-    this.active.delete(run.id);
-    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
-    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
-    // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
-    // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
-    // input), and a grant left over would put every later run in ask mode (planGrants). A failed
-    // or cancelled run may not have reached the call, so its grants carry over to the next run.
-    if (status === "succeeded" && ticket && active.offeredGrants.length) this.store.tickets.dropGrants(ticket.id, active.offeredGrants);
-    this.bus.emit({ kind: "run.upserted", run });
-    this.appendStatus(
-      session.id,
-      run.id,
-      status === "succeeded" ? `Run finished (${run.kind})` : status === "cancelled" ? `Run cancelled (${run.kind})` : `Run failed (${run.kind}): ${error}`,
-    );
-    this.touchSession(session.id);
-    if (this.stopping) return;
-    try {
-      await this.afterRun(run, active, error);
-    } catch (err) {
-      this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
-    }
-    this.kickScheduler();
+    return error;
   }
 
   /** Iterate driver events until done or aborted; returns the run error, if any. */
@@ -2244,7 +2307,15 @@ export class Orchestrator {
         return error;
       }
       if (next.done) return error;
-      const e = this.handleEvent(active, next.value);
+      let e: string | null;
+      try {
+        e = this.handleEvent(active, next.value);
+      } catch (err) {
+        // Recording the event failed: close the driver so its finally stops the agent process.
+        const r = it.return?.();
+        if (r) r.catch(() => {});
+        throw err;
+      }
       if (e) error = e;
     }
   }
