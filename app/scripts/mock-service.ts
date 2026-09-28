@@ -232,7 +232,7 @@ function appendEntry(sessionId: string, runId: string | null, role: TranscriptRo
 }
 
 function addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
-  const summary: Summary = { id: newId("sum"), sessionId, ticketId, author, body, createdAt: now() };
+  const summary: Summary = { id: newId("sum"), sessionId, ticketId, author, body, createdAt: now(), attachments: [] };
   summaries.push(summary);
   broadcast({ kind: "summary.added", summary });
   return summary;
@@ -448,7 +448,7 @@ function seedTicket(s: SeedTicket): Ticket {
   const seeded: [SummaryAuthor, string][] = [...(s.summaries ?? [])];
   if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", `Blocked: ${s.blockedReason}`]);
   for (const [i, [author, body]] of seeded.entries()) {
-    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000 });
+    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000, attachments: [] });
   }
   return t;
 }

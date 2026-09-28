@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { HarnessEvent, Subagent } from "@harness/shared";
 import type { DriverEvent, RunRequest } from "../drivers/types";
 import { Store } from "../store";
+import { Database } from "bun:sqlite";
 import { migrate, MIGRATIONS, openDb } from "../db";
 import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 
@@ -193,7 +194,11 @@ test("service restart: a stale run's sub-agents are stopped", async () => {
 });
 
 test("migration 13 drops the made-up \"Sub-agent\" rows from Bash heartbeats and keeps real ones", () => {
-  const db = openDb(":memory:");
+  const db = new Database(":memory:", { strict: true });
+  for (const [v, sql] of MIGRATIONS.slice(0, 12).entries()) {
+    db.exec(sql);
+    db.exec(`PRAGMA user_version = ${v + 1}`);
+  }
   const sub = (id: string, description: string, agentType: string | null, prompt: string) =>
     db
       .query("INSERT INTO subagents (session_id, id, description, agent_type, prompt, status, started_at, updated_at) VALUES ('s1', $id, $description, $agentType, $prompt, 'succeeded', 0, 0)")
@@ -202,7 +207,6 @@ test("migration 13 drops the made-up \"Sub-agent\" rows from Bash heartbeats and
   sub("continued", "Sub-agent", null, ""); // a real one created from its own output
   sub("agent", "Scan", "Explore", "Scan the repo");
   db.query("INSERT INTO transcript (id, session_id, subagent_id, seq, role, content, created_at) VALUES ('e1', 's1', 'continued', 1, 'assistant', '{}', 0)").run();
-  db.exec(`PRAGMA user_version = ${MIGRATIONS.length - 1}`);
   migrate(db);
   expect((db.query("SELECT id FROM subagents ORDER BY id").all() as { id: string }[]).map((r) => r.id)).toEqual(["agent", "continued"]);
 });

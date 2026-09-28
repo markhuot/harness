@@ -78,7 +78,9 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
 ## Runtime paths
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
-  `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`).
+  `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`),
+  `attachments/<id>.<ext>` (summary attachments, see "Summary attachments"), `tmp/<sessionId>/`
+  (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
   runs `bun <repo>/service/src/daemon.ts`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
@@ -199,16 +201,16 @@ Harness tools (always exposed, via MCP for claude-code):
 
 | Tool | Run kinds | Input |
 | --- | --- | --- |
-| `post_summary` | all ticket kinds | `{ summary }` |
+| `post_summary` | all ticket kinds | `{ summary, attachments?: string[] }` (image/video paths, see "Summary attachments") |
 | `update_plan` | plan | `{ plan, title? }` |
 | `block` | work | `{ question }` |
-| `submit_for_review` | work, conductor | `{ summary }` |
+| `submit_for_review` | work, conductor | `{ summary, attachments?: string[] }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model?, use_worktree? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -236,7 +238,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_click` | ″ | `{ selector }` |
 | `browser_type` | ″ | `{ selector, text, submit? }` |
 | `browser_eval` | ″ | `{ expression }` |
-| `browser_screenshot` | ″ | `{}` → image |
+| `browser_screenshot` | ″ | `{ save_to? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -637,7 +639,9 @@ Directives are read from the run prompt:
 ## HTTP API
 
 All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health` and
-the static plugin UIs under `/plugins/:id/ui/`. That holds for loopback and remote clients alike;
+the static plugin UIs under `/plugins/:id/ui/`. `GET /attachments/:id` also takes the token as
+`?token=`, because `<img>` and `<video>` can't send headers; no other HTTP route reads it from
+the query. That holds for loopback and remote clients alike;
 `/mcp/:runToken` is additionally refused (403) to anything but loopback.
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
@@ -651,7 +655,8 @@ GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPa
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 POST   /tickets/:key/start | /messages {text, chat?} | /review | /reopen | /complete | /cancel | /agent-review
-GET    /tickets/:key/summaries
+GET    /tickets/:key/summaries   → Summary[] (each with attachments)
+GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
@@ -670,6 +675,52 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+### Summary attachments
+
+Agents show their work by attaching images and videos to `post_summary` and
+`submit_for_review` (`attachments: string[]`, file paths, absolute or relative to the run's
+cwd). The prompts' Summaries section asks for a screenshot or short recording whenever the work
+has a visible result, and `browser_screenshot { save_to }` writes one to a file for that.
+
+- **Where `save_to` may write** (`resolveSaveTo` in `service/src/tools/browser.ts`, scope from
+  `HarnessOps.fileOutputScope`). The permission gate never sees this write, so the tool confines
+  it itself. The target, with its deepest existing ancestor resolved through `realpath` (a
+  dangling symlink is refused), has to be inside the run's scratch folder
+  `$HARNESS_HOME/tmp/<sessionId>/` or its working directory. A read-only run (plan, review or
+  chat, or `read_only` as the effective mode, ticket → project → settings) gets only the scratch
+  folder, and its relative paths resolve there, so `save_to: "shot.png"` still works for a
+  reviewer. Other runs resolve relative paths against the cwd. An existing target is replaced
+  only when it already starts with the PNG signature. A refused path fails the call before the
+  screenshot is taken, and nothing is written. The result says where the file went, noting the
+  scratch folder when it landed there.
+
+- **Validation** (`service/src/attachments.ts`) runs over every path before anything is stored,
+  so a bad list fails the tool call and posts nothing (for `submit_for_review`, the ticket stays
+  in progress). The limits are 10 files per summary and 100 MB per file. Allowed types are png,
+  jpg/jpeg, gif and webp (kind `image`) and mp4, webm and mov (kind `video`). The extension picks
+  the type, and the first bytes have to match it (PNG signature, JPEG SOI, `GIF8`, `RIFF…WEBP`,
+  an ISO-BMFF `ftyp` box, EBML, QuickTime atoms). Width and height come from the PNG, GIF, JPEG
+  or WebP header, when it has them.
+- **Storage.** Each file is copied to `$HARNESS_HOME/attachments/<id>.<ext>` at post time,
+  because worktrees are deleted after the merge. The original path is never referenced again.
+  Metadata lives in `summary_attachments` (migration 14: `summary_id` → `summaries` ON DELETE
+  CASCADE, `ord` for the order given, `kind`, `mime_type`, `name`, `size`, `width`, `height`,
+  `created_at`). `SummaryRepo` loads a session's attachments in one query next to its
+  summaries.
+- **Wire.** `Summary.attachments: SummaryAttachment[]` (`{ id, kind, mimeType, name, size,
+  width?, height? }`, `[]` when there are none) is in `summary.added`,
+  `GET /tickets/:key/summaries` and `TicketDetail.summaries`. `HarnessClient.attachmentUrl(id)`
+  builds `…/attachments/<id>?token=<token>` for `<img>`, `<video>` and AVPlayer.
+- **Serving.** `GET /attachments/:id` streams the file with its `Content-Type`,
+  `Content-Length`, `Cache-Control: private, max-age=31536000, immutable` and
+  `Accept-Ranges: bytes`. A single `Range: bytes=a-b` / `a-` / `-n` gets a 206 with
+  `Content-Range` (416 past the end), so players can seek. Unknown ids, and ids whose file is
+  missing, get a 404.
+- **Agents.** `get_ticket` and the review prompt list each summary's attachments with name, kind
+  and the stored absolute path, so reviewer and conductor agents can open them with a file tool.
+- **Deletion.** Deleting a ticket (so also a project) collects its attachment files, deletes the
+  rows with the session, then removes the files.
 
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is

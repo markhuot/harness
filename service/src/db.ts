@@ -339,6 +339,24 @@ export const MIGRATIONS: string[] = [
   WHERE description = 'Sub-agent' AND agent_type IS NULL AND prompt = ''
     AND NOT EXISTS (SELECT 1 FROM transcript t WHERE t.session_id = subagents.session_id AND t.subagent_id = subagents.id);
   `,
+  // 14: summary attachments (DESIGN.md "Summary attachments"): images and videos an agent attached
+  //     to a summary, in the order it listed them (ord). The files live in
+  //     $HARNESS_HOME/attachments/<id>.<ext>; deleting the summary deletes its rows.
+  `
+  CREATE TABLE summary_attachments (
+    id TEXT PRIMARY KEY,
+    summary_id TEXT NOT NULL REFERENCES summaries(id) ON DELETE CASCADE,
+    ord INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX summary_attachments_summary ON summary_attachments(summary_id, ord);
+  `,
 ];
 
 /**

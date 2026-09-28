@@ -285,6 +285,23 @@ export type ToolResultContent =
 
 export type SummaryAuthor = "agent" | "human" | "system";
 
+export type AttachmentKind = "image" | "video";
+
+/** A file an agent attached to a summary; served at GET /attachments/:id. */
+export interface SummaryAttachment {
+  id: string;
+  kind: AttachmentKind;
+  /** e.g. "image/png", "video/mp4" */
+  mimeType: string;
+  /** The original file name, e.g. "after.png" */
+  name: string;
+  /** Bytes */
+  size: number;
+  /** Pixels, when known from the file header (images only) */
+  width?: number;
+  height?: number;
+}
+
 export interface Summary {
   id: string;
   sessionId: string;
@@ -293,6 +310,8 @@ export interface Summary {
   /** Short markdown update, e.g. "Implemented X; tests pass; next: Y" */
   body: string;
   createdAt: number;
+  /** In the order the agent listed them; [] when there are none */
+  attachments: SummaryAttachment[];
 }
 
 export interface Watcher {

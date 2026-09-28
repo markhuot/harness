@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type HarnessEvent } from "@harness/shared";
 import { onTempCleanup } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, stubBrowser, tempHome } from "../testing/fakes";
+import { mp4, png } from "../testing/media";
+import { fakeContext, fakeSession } from "../tools/fakes";
+import { parseRange } from "./http";
 
 let harness: Harness | null = null;
 afterEach(async () => {
@@ -493,5 +496,101 @@ describe("ticket paging + search over http", () => {
     ]);
     await expect(client.projectFiles("nope", "a")).rejects.toMatchObject({ status: 404 });
     await expect(client.ticketFiles("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("GET /attachments/:id", () => {
+  async function withAttachments() {
+    const b = await boot();
+    const video = Buffer.concat([mp4(), Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 251))]);
+    writeFileSync(join(b.dir, "after.png"), png(40, 30));
+    writeFileSync(join(b.dir, "flow.mp4"), video);
+    const p = await b.client.createProject({ path: b.dir });
+    const t = await b.client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const { events, ready } = collect(b.client);
+    await ready;
+    const ctx = fakeContext({ ticket: t, cwd: b.dir, session: fakeSession({ id: t.sessionId, key: t.key, ticketId: t.id }), ops: b.h.orchestrator.ops });
+    await b.h.orchestrator.ops.postSummary(ctx, "shots", ["after.png", "flow.mp4"]);
+    await until(() => events.some((e) => e.kind === "summary.added"));
+    const [summary] = await b.client.listSummaries(t.key);
+    return { ...b, t, video, events, summary: summary! };
+  }
+
+  test("summaries over REST and summary.added carry the attachments", async () => {
+    const { summary, events } = await withAttachments();
+    expect(summary.attachments.map((a) => [a.name, a.kind, a.mimeType, a.width, a.height])).toEqual([
+      ["after.png", "image", "image/png", 40, 30],
+      ["flow.mp4", "video", "video/mp4", undefined, undefined],
+    ]);
+    const added = events.find((e) => e.kind === "summary.added");
+    expect(added).toMatchObject({ summary: { attachments: summary.attachments } });
+  });
+
+  test("header token or query token; a bad token is 401 and an unknown id 404", async () => {
+    const { h, client, summary } = await withAttachments();
+    const [image] = summary.attachments;
+    const viaHeader = await fetch(`${h.url}/attachments/${image!.id}`, { headers: { authorization: `Bearer ${h.token}` } });
+    expect(viaHeader.status).toBe(200);
+    expect(viaHeader.headers.get("content-type")).toBe("image/png");
+    expect(viaHeader.headers.get("content-length")).toBe(String(image!.size));
+    expect(viaHeader.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+    expect(Buffer.from(await viaHeader.arrayBuffer())).toEqual(png(40, 30));
+
+    const viaQuery = await fetch(client.attachmentUrl(image!.id));
+    expect(viaQuery.status).toBe(200);
+    expect(Buffer.from(await viaQuery.arrayBuffer())).toEqual(png(40, 30));
+
+    expect((await fetch(`${h.url}/attachments/${image!.id}?token=${"x".repeat(64)}`)).status).toBe(401);
+    expect((await fetch(`${h.url}/attachments/${image!.id}`)).status).toBe(401);
+    expect((await fetch(client.attachmentUrl("nope"))).status).toBe(404);
+  });
+
+  test("the query token works on no other route", async () => {
+    const { h, t } = await withAttachments();
+    for (const path of ["/projects", `/tickets/${t.key}/summaries`, "/settings"]) {
+      expect((await fetch(`${h.url}${path}?token=${encodeURIComponent(h.token)}`)).status).toBe(401);
+    }
+  });
+
+  test("Range requests get 206 with exactly the asked-for bytes", async () => {
+    const { client, summary, video } = await withAttachments();
+    const url = client.attachmentUrl(summary.attachments[1]!.id);
+    const mid = await fetch(url, { headers: { range: "bytes=100-199" } });
+    expect(mid.status).toBe(206);
+    expect(mid.headers.get("content-range")).toBe(`bytes 100-199/${video.length}`);
+    expect(mid.headers.get("content-length")).toBe("100");
+    expect(mid.headers.get("content-type")).toBe("video/mp4");
+    expect(Buffer.from(await mid.arrayBuffer())).toEqual(video.subarray(100, 200));
+
+    const open = await fetch(url, { headers: { range: `bytes=${video.length - 10}-` } });
+    expect(open.status).toBe(206);
+    expect(Buffer.from(await open.arrayBuffer())).toEqual(video.subarray(video.length - 10));
+
+    const suffix = await fetch(url, { headers: { range: "bytes=-5" } });
+    expect(Buffer.from(await suffix.arrayBuffer())).toEqual(video.subarray(video.length - 5));
+
+    const past = await fetch(url, { headers: { range: `bytes=${video.length}-` } });
+    expect(past.status).toBe(416);
+    expect(past.headers.get("content-range")).toBe(`bytes */${video.length}`);
+  });
+
+  test("the file is gone once its ticket is deleted", async () => {
+    const { client, t, summary, h } = await withAttachments();
+    await client.deleteTicket(t.key);
+    for (const a of summary.attachments) expect((await fetch(client.attachmentUrl(a.id))).status).toBe(404);
+    expect(readdirSync(h.paths.attachmentsDir)).toEqual([]);
+  });
+});
+
+describe("parseRange", () => {
+  test("clamps the end, handles suffix and open ranges, and ignores what it can't serve", () => {
+    expect(parseRange("bytes=0-99", 50)).toEqual({ start: 0, end: 49 });
+    expect(parseRange("bytes=-100", 50)).toEqual({ start: 0, end: 49 });
+    expect(parseRange("bytes=10-", 50)).toEqual({ start: 10, end: 49 });
+    expect(parseRange("bytes=20-10", 50)).toBe("unsatisfiable");
+    expect(parseRange("bytes=-0", 50)).toBe("unsatisfiable");
+    expect(parseRange("bytes=0-1,5-6", 50)).toBeNull();
+    expect(parseRange("items=0-1", 50)).toBeNull();
+    expect(parseRange(null, 50)).toBeNull();
   });
 });

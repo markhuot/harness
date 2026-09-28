@@ -1,7 +1,7 @@
 // The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
 // notifications and triage. Implements HarnessOps for tools.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import type {
@@ -23,6 +23,7 @@ import type {
   Session,
   Settings,
   Summary,
+  SummaryAttachment,
   SummaryAuthor,
   Ticket,
   TicketDetail,
@@ -68,6 +69,7 @@ import { attachMentions, searchPaths } from "./files";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
 import { resolveRunModel } from "./models";
+import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 import { PermissionGate } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
@@ -692,6 +694,19 @@ export class Orchestrator {
     return this.store.summaries.listBySession(this.requireTicket(key).sessionId);
   }
 
+  /** Where an attachment's stored copy lives (agents read it from there). */
+  attachmentFilePath(a: Pick<SummaryAttachment, "id" | "mimeType">): string {
+    return attachmentPath(this.paths.attachmentsDir, a);
+  }
+
+  /** A summary attachment and its stored file for GET /attachments/:id, or null when either is gone. */
+  attachmentFile(id: string): { attachment: SummaryAttachment; path: string } | null {
+    const attachment = this.store.summaries.attachment(id);
+    if (!attachment) return null;
+    const path = this.attachmentFilePath(attachment);
+    return existsSync(path) ? { attachment, path } : null;
+  }
+
   async createTicket(body: CreateTicketBody): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     const project = this.store.projects.get(body.projectId);
@@ -835,10 +850,13 @@ export class Orchestrator {
     }
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
+    const files = this.store.summaries.attachmentsBySession(ticket.sessionId).map((a) => attachmentPath(this.paths.attachmentsDir, a));
     this.store.transaction(() => {
       this.store.tickets.delete(ticket.id);
       this.store.sessions.delete(ticket.sessionId);
     });
+    removeAttachmentFiles(files);
+    rmSync(join(this.paths.scratchDir, ticket.sessionId), { recursive: true, force: true });
     this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
     this.bus.emit({ kind: "session.deleted", id: ticket.sessionId });
     this.kickScheduler();
@@ -1231,9 +1249,10 @@ export class Orchestrator {
     return this.active.get(ctx.runId);
   }
 
-  async postSummary(ctx: ToolContext, body: string): Promise<void> {
+  async postSummary(ctx: ToolContext, body: string, attachments?: string[]): Promise<void> {
     if (!body?.trim()) throw new Error("summary is empty");
-    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim());
+    const prepared = prepareAttachments(attachments, ctx.cwd);
+    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim(), storeAttachments(this.paths.attachmentsDir, prepared));
   }
 
   async updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void> {
@@ -1257,10 +1276,11 @@ export class Orchestrator {
     if (a) a.blocked = true;
   }
 
-  async submitForReview(ctx: ToolContext, summary: string): Promise<void> {
+  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
-    this.submit(t, summary?.trim() || "Work submitted for review.", "agent");
+    const prepared = prepareAttachments(attachments, ctx.cwd);
+    this.submit(t, summary?.trim() || "Work submitted for review.", "agent", storeAttachments(this.paths.attachmentsDir, prepared));
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
@@ -1354,7 +1374,12 @@ export class Orchestrator {
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
       children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
-      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
+      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({
+        author: s.author,
+        body: s.body,
+        createdAt: s.createdAt,
+        attachments: s.attachments.map((a) => ({ name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
+      })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
@@ -1978,6 +2003,13 @@ export class Orchestrator {
     return classifier;
   }
 
+  /** HarnessOps.fileOutputScope: review runs only read too, whatever the ticket's mode. */
+  async fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }> {
+    const ticket = ctx.ticket ? (this.store.tickets.get(ctx.ticket.id) ?? null) : null;
+    const readOnly = READ_ONLY_RUNS.includes(ctx.runKind) || ctx.runKind === "review" || this.permissionModeFor(ticket) === "read_only";
+    return { scratchDir: join(this.paths.scratchDir, ctx.session.id), readOnly };
+  }
+
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
@@ -2113,10 +2145,10 @@ export class Orchestrator {
     return t;
   }
 
-  private submit(ticket: Ticket, summary: string, author: SummaryAuthor) {
+  private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
     const project = this.store.projects.get(ticket.projectId);
     const humanReview = project && !project.requireHumanReview ? "approved" : "pending";
-    this.addSummary(ticket.sessionId, ticket.id, author, summary);
+    this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
     this.transition(ticket, "review", { agentReview: "pending", humanReview, blockedReason: null }, "Moved to review", summary);
   }
 
@@ -2166,7 +2198,7 @@ export class Orchestrator {
   }
 
   private enqueueReview(t: Ticket) {
-    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId)));
+    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
   }
 
   private allChildrenDone(t: Ticket): boolean {
@@ -2541,10 +2573,10 @@ export class Orchestrator {
 
   private buildOps(): HarnessOps {
     return {
-      postSummary: (c, b) => this.postSummary(c, b),
+      postSummary: (c, b, a) => this.postSummary(c, b, a),
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
-      submitForReview: (c, s) => this.submitForReview(c, s),
+      submitForReview: (c, s, a) => this.submitForReview(c, s, a),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),
@@ -2568,6 +2600,7 @@ export class Orchestrator {
       declineWork: (c, r, title) => this.declineWork(c, r, title),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
+      fileOutputScope: (c) => this.fileOutputScope(c),
       listWatchers: (c) => this.listWatchers_(c),
       getSettings: (c) => this.getSettings_(c),
       listDrivers: (c) => this.listDrivers_(c),
@@ -2602,8 +2635,14 @@ export class Orchestrator {
     return this.append(sessionId, runId, "system", { type: "status", text });
   }
 
-  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
-    const summary = this.store.summaries.add({ sessionId, ticketId, author, body });
+  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string, attachments: SummaryAttachment[] = []) {
+    let summary: Summary;
+    try {
+      summary = this.store.summaries.add({ sessionId, ticketId, author, body, attachments });
+    } catch (err) {
+      removeAttachmentFiles(attachments.map((a) => attachmentPath(this.paths.attachmentsDir, a)));
+      throw err;
+    }
     this.bus.emit({ kind: "summary.added", summary });
     return summary;
   }
