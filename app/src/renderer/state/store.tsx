@@ -11,6 +11,7 @@ import {
   LIVE_STATUSES,
   needsFirstDonePage,
   reducer,
+  ALL_SCOPE,
   scopeOf,
   scopeProject,
   SEARCH_DEBOUNCE_MS,
@@ -20,8 +21,8 @@ import {
   type Snapshot,
   type State,
 } from "@harness/shared/state";
-import { formatRoute, mirrorRoute, parseRoute, type Route } from "./route";
-import { focusedTicket, getPanes, openTicket, updatePanes, usePanes } from "./panes";
+import { formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
+import { focusedTicket, forgetProjectPanes, getPanes, openTicket, pruneTickets, retainPaneScopes, updateAllPanes, updatePanes, usePanes } from "./panes";
 import type { HarnessBridge } from "../../main/types";
 
 declare global {
@@ -65,9 +66,9 @@ export function useStore(): Store {
   return s;
 }
 
-/** Arriving at a board link to a ticket opens it in a pane (or focuses the pane it's already in). */
+/** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
 function openFromRoute(r: Route) {
-  if (r.view === "board" && r.ticketKey) updatePanes((s) => openTicket(s, r.ticketKey!, r.tab));
+  if (r.view === "board" && r.ticketKey) updatePanes(paneScopeOf(r)!, (s) => openTicket(s, r.ticketKey!, r.tab));
 }
 
 export function useRoute() {
@@ -87,13 +88,16 @@ export function useRoute() {
   }, []);
   // On the board the hash mirrors the focused ticket pane. replaceState adds no history entry and
   // fires no hashchange, and opening the focused ticket again is a no-op, so the two never fight.
-  const focused = focusedTicket(usePanes());
-  const mirror = route.view === "board" ? formatRoute(mirrorRoute(route, focused)) : null;
+  // Each board has its own panes, so this follows the route's scope (leaving for Inbox and coming
+  // back, or switching projects, shows that board's panes again).
+  const scope = paneScopeOf(route);
+  const focused = focusedTicket(usePanes(scope ?? ALL_SCOPE));
+  const mirror = scope ? formatRoute(mirrorRoute(route, focused)) : null;
   useEffect(() => {
-    if (!mirror || location.hash === mirror) return;
+    if (!mirror || !scope || location.hash === mirror) return;
     // The panes changed after this render (the initial open above runs in the same commit): the
     // re-render that's coming mirrors them, so don't drop the ticket from the hash in between.
-    if (formatRoute(mirrorRoute(route, focusedTicket(getPanes()))) !== mirror) return;
+    if (formatRoute(mirrorRoute(route, focusedTicket(getPanes(scope)))) !== mirror) return;
     history.replaceState(history.state, "", mirror);
     setRoute(parseRoute(mirror));
   }, [mirror]);
@@ -172,6 +176,11 @@ export function StoreProvider({
     try {
       const snapshot = await loadSnapshot(client, scopeRef.current);
       dispatch({ type: "snapshot", snapshot });
+      // Panes of boards whose project is gone (removed while the app was closed) go, except the
+      // one on screen: a link to a missing project still shows a board.
+      const known = new Set(snapshot.projects.map((p) => p.id));
+      const shown = paneScopeOf(parseRoute(location.hash));
+      retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope));
       // Board cards show the latest summary; backfill for tickets that are still moving
       // (and the most recent done ones). Live summary.added events keep them fresh after.
       const done = snapshot.donePage?.page.tickets.slice(0, 12) ?? snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
@@ -189,6 +198,13 @@ export function StoreProvider({
     let first = true;
     return client.connect({
       onEvent: (e) => {
+        // Panes of every board follow deletions (read before the reducer forgets the key).
+        if (e.kind === "ticket.deleted") {
+          const key = stateRef.current.tickets[e.id]?.key;
+          if (key) updateAllPanes((s) => pruneTickets(s, (k) => k !== key));
+        } else if (e.kind === "project.deleted") {
+          forgetProjectPanes(e.id, stateRef.current.projects[e.id]?.key ?? null);
+        }
         if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
         for (const fn of listeners.current) fn(e);
       },

@@ -928,10 +928,31 @@ Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The l
 collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows Inbox,
 Settings, project settings, or on the board route the pane workspace.
 
-- **Pane workspace.** A tmux-style split tree (`state/panes.ts`, persisted as `harness.panes`):
-  leaves show content (`{ kind: "board" }` or `{ kind: "ticket", ticketKey, tab }`), splits lay
-  their children out side by side (`row`) or stacked (`column`) with sizes that sum to 1. There's
-  always exactly one board pane and a ticket is open in at most one pane. `PaneWorkspace.tsx`
+- **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
+  board has its own, and All projects has one too. `harness.panes` stores
+  `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`: the project id, or
+  `ALL_SCOPE` = `"*"`), and a board with no entry shows a bare board. The operations work on one
+  scope's `PaneState`. The store takes the scope (`usePanes(scope)`, `updatePanes(scope, fn)`),
+  and `updateAllPanes` covers the edits that reach every board: a deleted ticket (`ticket.deleted`
+  runs `pruneTickets`) and a renamed key (`renameTicketKey`). Removing a project, from the sidebar
+  or through `project.deleted`, drops its scope and closes its tickets on All projects
+  (`forgetProject`). A snapshot drops the scopes of projects that no longer exist, apart from the
+  one on screen. The single tree stored before scopes existed migrates into All projects. It was
+  shared by every board, and All projects is the board that can show all of its tickets; project
+  boards start bare. Parsing drops a scope entry it can't read. Pane ids are unique across all
+  scopes, because content is keyed by leaf id (and a terminal pane's id will name its PTY
+  session): loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
+  that repeats an id gets a new one, and a scope that isn't stored yet gets the fixed board id
+  `b:<scope>`, so re-reading the store (another window wrote it) doesn't remount that board.
+  `paneScopeOf(route)` (`state/route.ts`) is the route's scope. `PaneWorkspace` takes it as a
+  prop and provides it to the panes (`usePaneScope`, `components/paneContext.ts`). Switching
+  scope unmounts the other board's panes rather than keeping every board mounted. Leaves mount
+  again by id when you come back, and content that lives outside the renderer (a terminal's PTY)
+  can reattach by that id. Keeping every board mounted would mean running a board per project,
+  each with its own search. Leaves show content (`{ kind: "board" }` or
+  `{ kind: "ticket", ticketKey, tab }`), splits lay their children out side by side (`row`) or
+  stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board pane, and
+  a ticket is open in at most one of its panes. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -982,8 +1003,10 @@ Settings, project settings, or on the board route the pane workspace.
   in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
   hash alone. After that the hash mirrors the focused ticket
   pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
-  board. Opening an already focused ticket is a no-op, so the two never fight. Leaving for Inbox
-  or Settings and coming back restores the saved panes.
+  board. Opening an already focused ticket is a no-op, so the two never fight. All of this is per
+  scope: `#/board/<project>/ticket/<KEY>` opens the ticket in that project's panes, and the mirror
+  reads the route's scope. Leaving for Inbox or Settings, or for another project, and coming back
+  restores that board's panes.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a

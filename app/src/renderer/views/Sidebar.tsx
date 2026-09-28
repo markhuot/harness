@@ -5,6 +5,7 @@ import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MOD } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
+import { forgetProjectPanes } from "../state/panes";
 
 export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession: (projectId?: string) => void; collapsed?: boolean; ref?: Ref<HTMLElement> }) {
   const { state, route, navigate, client } = useStore();
@@ -40,6 +41,9 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
     if (!confirm(`Remove ${p.name} (${p.key}) from Harness?\n\nThis deletes ${what}. Files on disk, branches and worktrees are left alone.`)) return;
     const ok = await act(() => client.deleteProject(p.id), "Project removed");
+    // Its board's panes go, and its tickets close on All projects (project.deleted does the same
+    // when another client removes it).
+    if (ok) forgetProjectPanes(p.id, p.key);
     if (ok && ((route.view === "board" && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id))) {
       navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
     }

@@ -17,6 +17,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   only appears for projects in a git repository. On the Mac, the two switches now sit on their own
   row with the start button.
 
+### Changed
+
+- On the Mac, each project remembers its own panes, and so does All projects. Open a ticket
+  beside one project's board, switch to another project, and you'll see that project's panes (or
+  just its board the first time). Switch back and the first project's panes are where you left
+  them. The panes you had open before this update stay on All projects.
+
+### Fixed
+
+- On the Mac, deleting a ticket now closes its pane on every board, and removing a project closes
+  its tickets' panes on All projects.
+
 ## [app-20260928.1438](https://github.com/markhuot/harness/releases/tag/app-20260928.1438) - 2026-09-28
 
 ### Fixed

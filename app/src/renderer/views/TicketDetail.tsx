@@ -36,13 +36,14 @@ import { AgentsTab, SubagentView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
-import { useOpenTicket } from "../components/paneContext";
+import { useOpenTicket, usePaneScope } from "../components/paneContext";
 import { dragProps } from "../components/paneDrag";
-import { closePane, leaves, movePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes, usePanes, type DropZone } from "../state/panes";
+import { closePane, leaves, movePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes, usePanes, type DropZone } from "../state/panes";
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
 export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
   const { state, client, dispatch, epoch } = useStore();
+  const scope = usePaneScope();
   const [missing, setMissing] = useState(false);
   // By key, or by an old key the service already resolved (the effect below redirects to the new one).
   const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]);
@@ -56,8 +57,9 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
       .then((detail) => {
         if (cancelled) return;
         dispatch({ type: "detail", detail, requestedKey: ticketKey });
-        // An old key (from before a project rename) resolves to the ticket's current key; follow it.
-        if (detail.ticket.key !== ticketKey) updatePanes((s) => renameTicketKey(s, ticketKey, detail.ticket.key));
+        // An old key (from before a project rename) resolves to the ticket's current key; follow it
+        // on every board (another board's panes may have it open under the old key too).
+        if (detail.ticket.key !== ticketKey) updateAllPanes((s) => renameTicketKey(s, ticketKey, detail.ticket.key));
       })
       .catch(() => !cancelled && setMissing(true));
     return () => {
@@ -66,8 +68,8 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   }, [client, dispatch, ticketKey, epoch]);
 
   // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
-  const close = () => updatePanes((s) => closePane(s, paneId));
-  const zoom = () => updatePanes((s) => toggleZoom(s, paneId));
+  const close = () => updatePanes(scope, (s) => closePane(s, paneId));
+  const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
 
   if (!ticket) {
     return (
@@ -103,7 +105,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const tab = effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents });
   const openAgent = parseSubagentTab(tab);
   const stripTab = tabStripTab(tab);
-  const setTab = (t: TicketTab) => updatePanes((s) => setPaneTab(s, paneId, t));
+  const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
@@ -165,7 +167,8 @@ const MOVES: [DropZone, string, string][] = [
  * do what dragging the header grip does. The board is always a target, so there's always a row.
  */
 function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () => void }) {
-  const targets = leaves(usePanes().root).filter((l) => l.id !== paneId);
+  const scope = usePaneScope();
+  const targets = leaves(usePanes(scope).root).filter((l) => l.id !== paneId);
   return (
     <>
       <div className="menu-caption">Move pane</div>
@@ -180,7 +183,7 @@ function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () => void 
                 data-testid={`move-pane-${zone}-${t.id}`}
                 aria-label={`Move pane ${word} ${name}`}
                 title={`Move pane ${word} ${name}`}
-                onClick={() => (onDone(), updatePanes((s) => movePane(s, paneId, t.id, zone)))}
+                onClick={() => (onDone(), updatePanes(scope, (s) => movePane(s, paneId, t.id, zone)))}
               >
                 {glyph}
               </button>
