@@ -4,7 +4,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { nodePtySpawn } from "./pty";
 import { ensureService, reloadToken } from "./service";
+import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
 import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
 
@@ -360,6 +362,23 @@ ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
   if (typeof url === "string" && /^(https?|mailto):/.test(url)) await shell.openExternal(url);
 });
 
+// Terminals: PTYs live here, keyed by the renderer's pane leaf id, and outlive pane remounts.
+// Output and exits go to every window; the renderer picks its ids. node-pty loads on first use.
+const broadcast = (channel: string, ...args: unknown[]) => {
+  for (const w of BrowserWindow.getAllWindows()) if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
+};
+let terminalManager: TerminalManager | null = null;
+const terminals = () =>
+  (terminalManager ??= new TerminalManager({
+    spawn: nodePtySpawn(),
+    events: { data: (id, data) => broadcast("terminal:data", id, data), exit: (id, exit) => broadcast("terminal:exit", id, exit) },
+  }));
+ipcMain.handle("harness:terminal:ensure", (_e, id: unknown, opts: unknown) => terminals().ensure(id, opts));
+ipcMain.handle("harness:terminal:write", (_e, id: unknown, data: unknown) => terminals().write(id, data));
+ipcMain.handle("harness:terminal:resize", (_e, id: unknown, cols: unknown, rows: unknown) => terminals().resize(id, cols, rows));
+ipcMain.handle("harness:terminal:kill", (_e, id: unknown) => terminalManager?.kill(id) ?? false);
+ipcMain.handle("harness:terminal:list", () => terminalManager?.list() ?? []);
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -380,6 +399,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// Never leave shells behind: SIGHUP every PTY on the way out (closing the PTYs hangs up the rest).
+app.on("will-quit", () => terminalManager?.killAll());
+process.on("exit", () => terminalManager?.killAll());
 
 app.on("window-all-closed", () => {
   // macOS convention: keep the app alive without windows. Agents live in the service anyway.
