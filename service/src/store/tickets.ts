@@ -33,6 +33,7 @@ interface TicketRow {
   use_worktree: number | null;
   completed_at: number | null;
   busy: number;
+  child_count: number;
 }
 
 /**
@@ -69,7 +70,10 @@ export function canonicalJson(value: unknown): string {
 }
 
 const BUSY = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.status IN ('queued','running')) AS busy`;
-const SELECT = `SELECT t.*, ${BUSY} FROM tickets t`;
+const CHILD_COUNT = `(SELECT COUNT(*) FROM tickets c WHERE c.parent_id = t.id) AS child_count`;
+/** Columns computed per row on top of `t.*`. */
+const DERIVED = `${BUSY}, ${CHILD_COUNT}`;
+const SELECT = `SELECT t.*, ${DERIVED} FROM tickets t`;
 
 type SqlParams = Record<string, string | number | null>;
 
@@ -172,6 +176,7 @@ export class TicketRepo {
       blockedReason: r.blocked_reason,
       permissionMode: (r.permission_mode as PermissionMode | null) ?? null,
       busy: bool(r.busy),
+      childCount: r.child_count ?? 0,
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
       model: r.model ?? null,
@@ -292,7 +297,7 @@ export class TicketRepo {
       }
     }
     const order = done ? "t.completed_at DESC, t.id DESC" : "t.position, t.created_at, t.id";
-    const rows = this.db.query(`${cte} SELECT t.*, ${BUSY} FROM tickets t WHERE ${keyed.join(" AND ")} ORDER BY ${order} LIMIT $limit`).all(pageParams) as TicketRow[];
+    const rows = this.db.query(`${cte} SELECT t.*, ${DERIVED} FROM tickets t WHERE ${keyed.join(" AND ")} ORDER BY ${order} LIMIT $limit`).all(pageParams) as TicketRow[];
     const more = rows.length > limit;
     const pageRows = rows.slice(0, limit);
     const last = pageRows[pageRows.length - 1];
@@ -327,7 +332,7 @@ export class TicketRepo {
       Object.assign(pageParams, { cR: rank!, cT: created!, cId: id! });
     }
     const rows = this.db
-      .query(`${cte} SELECT t.*, ${BUSY}, h.rank AS rank ${from} WHERE ${where.join(" AND ")} ORDER BY h.rank, t.created_at DESC, t.id DESC LIMIT $limit`)
+      .query(`${cte} SELECT t.*, ${DERIVED}, h.rank AS rank ${from} WHERE ${where.join(" AND ")} ORDER BY h.rank, t.created_at DESC, t.id DESC LIMIT $limit`)
       .all(pageParams) as (TicketRow & { rank: number })[];
     const more = rows.length > limit;
     const pageRows = rows.slice(0, limit);

@@ -101,9 +101,9 @@ const boardChanges = (kind: RunKind) =>
     `You can change other tickets the way a person does on the board. ${
       kind === "conductor"
         ? "Beyond creating, starting and messaging your children (above), you"
-        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
+        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, child?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. When the human asks for child tickets of this one, pass child true: the child starts on its own once its depends_on are done, and this ticket becomes its conductor, so you review it with `review_ticket` and finalize it with `complete_ticket` once its agent review is approved. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
     } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on? }, move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
-Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide${kind === "conductor" ? " (for your children, that's you with review_ticket and complete_ticket)" : ""}. Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
+Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide (for your children, that's you with review_ticket and complete_ticket). Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
   );
 
 /**
@@ -268,6 +268,22 @@ ${current}`,
   );
 }
 
+/**
+ * A task ticket that has taken children conducts them too (conductor runs list theirs in their
+ * instructions). Only the steering half of the conductor instructions applies.
+ */
+function childrenSection(children: Ticket[]): string {
+  return section(
+    "Your child tickets",
+    `This ticket conducts child tickets. You are re-invoked with a message whenever one changes status: handle every change, then end the run; do not wait or poll.
+* Child in review: once its agent review is approved, you are its human reviewer. Inspect it and call \`review_ticket\` { key, decision, notes }.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it.
+* Child blocked: answer it with \`message_ticket\` { key, text } when you can.
+\`submit_for_review\` is refused until every child is done.
+${children.map(childLine).join("\n")}`,
+  );
+}
+
 function triageInstructions(): string {
   // Ticket lookup tools are named only when triage runs actually have them.
   const triageTools = toolsForRun("triage", { hasBuiltinTools: true, usesPermissionPromptTool: false });
@@ -324,6 +340,7 @@ export function systemPrompt(info: PromptInfo): string {
     contextSection(info),
     ticketRun && LIFECYCLE,
     instructions,
+    kind === "work" && !!info.children?.length && childrenSection(info.children),
     ticketRun && filesSection(kind, info.builtinTools ?? true),
     ticketRun && SUMMARIES,
     BOARD,

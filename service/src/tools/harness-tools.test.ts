@@ -26,7 +26,7 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
     expect(props("update_ticket")).toEqual(["depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);

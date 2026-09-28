@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
-import type { ReviewState, Ticket, TicketStatus } from "@harness/shared";
+import { isConductor, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { projectKeyColors } from "@harness/shared/themes";
 import { useColors } from "../state/app";
@@ -109,7 +109,7 @@ export function DriverBadge({ driver }: { driver: string }) {
 }
 
 export function KindBadge({ ticket, childCount }: { ticket: Ticket; childCount?: number }) {
-  if (ticket.kind !== "conductor") return null;
+  if (!isConductor(ticket)) return null;
   return (
     <Badge tone="violet" icon="conductor">
       {`Conductor${childCount ? ` · ${childCount}` : ""}`}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { Ticket, TicketStatus } from "@harness/shared";
+import { isConductor, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   CHAT_PLACEHOLDER,
@@ -114,10 +114,10 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const owner = `ticket:${paneId}`;
   const asideRef = useRef<HTMLElement>(null);
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
-  const tabs = ticket ? visibleTabs({ conductor: ticket.kind === "conductor", subagents, pluginTabs }) : [];
+  const tabs = ticket ? visibleTabs({ conductor: isConductor(ticket), subagents, pluginTabs }) : [];
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
-  const tab = ticket ? effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents }) : paneTab;
+  const tab = ticket ? effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents }) : paneTab;
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {
@@ -188,7 +188,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
-  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
 
   // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→.
@@ -204,7 +204,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
     <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
       <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
-        {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
+        {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
@@ -266,7 +266,7 @@ function DetailHeader({
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
+  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);

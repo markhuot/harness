@@ -17,6 +17,7 @@ import type {
   TranscriptEntry,
   Watcher,
 } from "../index";
+import { isConductor } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
 import { adjustDoneTotals, doneColumn, mergeTickets, pagingFromPage, reducePaging, type DonePaging, type PagingAction, type SearchState } from "./paging";
@@ -316,7 +317,7 @@ export function reducer(state: State, action: Action): State {
         tickets,
         keyAliases,
         missingKeys: asked && state.missingKeys[asked] ? without(state.missingKeys, asked) : state.missingKeys,
-        childrenLoaded: d.ticket.kind === "conductor" ? { ...state.childrenLoaded, [d.ticket.id]: true } : state.childrenLoaded,
+        childrenLoaded: isConductor(d.ticket) ? { ...state.childrenLoaded, [d.ticket.id]: true } : state.childrenLoaded,
         dependents: { ...state.dependents, [d.ticket.id]: d.dependents },
         runs,
         sessions: { ...state.sessions, [d.session.id]: d.session },
@@ -447,7 +448,7 @@ export function unresolvedKeys(state: State, extra: string[] = []): string[] {
 /** Conductors on hand whose child list may be partial (no detail yet): fetch their details. */
 export function conductorsNeedingChildren(state: State): Ticket[] {
   if (!state.ready) return [];
-  return Object.values(state.tickets).filter((t) => t.kind === "conductor" && !state.childrenLoaded[t.id]);
+  return Object.values(state.tickets).filter((t) => isConductor(t) && !state.childrenLoaded[t.id]);
 }
 
 /**

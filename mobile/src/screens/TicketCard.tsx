@@ -4,7 +4,7 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO, RADIUS } from "../theme/tokens";
@@ -27,8 +27,8 @@ export interface CardProps {
 export const TicketCard = memo(function TicketCard({ ticket: t, state, showProject, onMove, onOpenKey }: CardProps) {
   const c = useColors();
   const deps = dependencyStates(state, t);
-  const children = t.kind === "conductor" ? childrenOf(state, t.id) : [];
-  const progress = t.kind === "conductor" ? progressOf(children) : null;
+  const children = isConductor(t) ? childrenOf(state, t.id) : [];
+  const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
   const ready = isReady(t);
@@ -160,7 +160,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
   if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
-  if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
+  if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || isConductor(a.ticket) || a.ticket.parentId)) return false;
   return true;
 }
 

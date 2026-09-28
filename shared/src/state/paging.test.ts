@@ -306,6 +306,17 @@ describe("tickets that aren't loaded", () => {
     expect(boardColumns(s, "p1").done.length).toBe(2); // nextCursor null → everything loaded shows
   });
 
+  test("a task ticket that takes a child conducts it too: its children get loaded", () => {
+    const task = tk("task", { kind: "task", status: "in_progress" });
+    let s = run(initialState, snapshot([task], { scope: "p1", page: page([], null, 0) }));
+    expect(conductorsNeedingChildren(s)).toEqual([]);
+    // The service re-sends the parent with its childCount when a child is created.
+    s = run(s, upsert({ ...task, childCount: 1 }));
+    expect(conductorsNeedingChildren(s).map((t) => t.id)).toEqual(["task"]);
+    s = run(s, { type: "detail", detail: detail({ ...task, childCount: 1 }, { children: [tk("k1", { parentId: "task" })] }) });
+    expect(conductorsNeedingChildren(s)).toEqual([]);
+  });
+
   test("dependents merge the detail's list (unloaded done ones) with live dependents", () => {
     const t = tk("base", { key: "B-1", status: "in_progress" });
     const liveDep = tk("l", { key: "L-1", dependsOn: ["B-1"] });

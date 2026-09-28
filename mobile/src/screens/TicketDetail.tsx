@@ -7,7 +7,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextIn
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Ticket } from "@harness/shared";
+import { isConductor, type Ticket } from "@harness/shared";
 import {
   CHAT_PLACEHOLDER,
   chatHint,
@@ -104,7 +104,7 @@ export function TicketDetailScreen() {
     );
   }
 
-  const shown = effectiveTab(tab, { conductor: ticket.kind === "conductor", pluginTabs, subagents: subagentsOf(state, ticket.sessionId) });
+  const shown = effectiveTab(tab, { conductor: isConductor(ticket), pluginTabs, subagents: subagentsOf(state, ticket.sessionId) });
   const openAgent = parseSubagentTab(shown);
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const activePlugin = (() => {
@@ -178,7 +178,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
+  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
@@ -243,14 +243,14 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
 function TabStrip({ ticket, tab, onTab, pluginTabs }: { ticket: Ticket; tab: TicketTab; onTab: (t: TicketTab) => void; pluginTabs: ReturnType<typeof usePluginTabs> }) {
   const { state } = useStore();
   const c = useColors();
-  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
   const summaryCount = state.summaries[ticket.sessionId]?.length ?? 0;
   const subagents = subagentsOf(state, ticket.sessionId);
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
   // A sub-agent's transcript sits under Agents.
   const stripTab = tabStripTab(tab);
   const items: { id: TicketTab; label: string; count?: number; live?: boolean; icon?: string }[] = [
-    ...TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => ({
+    ...TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => ({
       id: t as TicketTab,
       label: TAB_LABEL[t],
       count: t === "summaries" ? summaryCount : t === "children" ? childCount : t === "agents" ? subagents?.length : undefined,

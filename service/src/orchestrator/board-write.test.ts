@@ -129,15 +129,19 @@ describe("guard rails", () => {
     expect([h.get(me).status, h.get(me).title]).toEqual(["in_progress", "me"]);
   });
 
-  test("a conductor can't target itself either, and review/complete stay conductor-only", async () => {
+  test("a conductor can't target itself either, and review/complete only reach the caller's own children", async () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     const plain = await h.make("plain", { status: "review" });
     await expect(h.orch.ops.moveTicket(h.ctx("conductor", c), c.key, "planning")).rejects.toThrow("use submit_for_review to change your own");
     const me = await h.make("me", { status: "in_progress" });
-    await expect(h.orch.ops.reviewTicket(h.ctx("work", me), plain.key, "approve", "")).rejects.toThrow("Only conductor tickets");
-    await expect(h.orch.ops.completeTicket(h.ctx("work", me), plain.key)).rejects.toThrow("Only conductor tickets");
+    await expect(h.orch.ops.reviewTicket(h.ctx("work", me), plain.key, "approve", "")).rejects.toThrow(`${plain.key} is not a child of ${me.key}`);
+    await expect(h.orch.ops.completeTicket(h.ctx("work", me), plain.key)).rejects.toThrow(`${plain.key} is not a child of ${me.key}`);
+    // A review run can't stand in for the parent even on its own child.
+    const kid = await h.make("kid", { parentId: me.id, status: "review" });
+    await expect(h.orch.ops.reviewTicket(h.ctx("review", me), kid.key, "approve", "")).rejects.toThrow("only available in work and conductor runs");
     expect(h.get(plain).humanReview).toBe("pending");
+    expect(h.get(kid).humanReview).toBe("pending");
   });
 
   test("done is only reachable from planning; review can't be entered or left by a move", async () => {

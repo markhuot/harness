@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { isConductor, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import {
   boardColumns,
@@ -329,8 +329,8 @@ const TicketCard = memo(function TicketCard({
   onHoverConductor: (id: string | null) => void;
 }) {
   const deps = dependencyStates(state, t);
-  const children = t.kind === "conductor" ? childrenOf(state, t.id) : [];
-  const progress = t.kind === "conductor" ? progressOf(children) : null;
+  const children = isConductor(t) ? childrenOf(state, t.id) : [];
+  const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
   const ready = isReady(t);
@@ -344,8 +344,8 @@ const TicketCard = memo(function TicketCard({
       className={`card ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
-      onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
-      onMouseLeave={t.kind === "conductor" ? () => onHoverConductor(null) : undefined}
+      onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
+      onMouseLeave={isConductor(t) ? () => onHoverConductor(null) : undefined}
       onClick={() => onOpen(t.key)}
       // Drag onto a half of the board or an open ticket to open it in a split there.
       {...dragProps(t.key, t.title)}
@@ -436,7 +436,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
   if (s1.keyAliases !== s2.keyAliases || s1.missingKeys !== s2.missingKeys) return false;
   // Deps, children and the parent live in the tickets map.
-  if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
+  if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || isConductor(a.ticket) || a.ticket.parentId)) return false;
   return true;
 }
 

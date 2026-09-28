@@ -34,7 +34,7 @@ import type {
   Watcher,
   WatcherLive,
 } from "@harness/shared";
-import { checkProjectKey, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isConductor, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -748,6 +748,7 @@ export class Orchestrator {
     const p2 = this.store.projects.get(project.id);
     if (p2) this.bus.emit({ kind: "project.upserted", project: p2 });
     this.touchSession(ticket.sessionId);
+    if (parentId) this.touchTicket(parentId); // its childCount changed
     this.appendStatus(ticket.sessionId, null, "Ticket created");
 
     const depsDone = this.depsDone(ticket);
@@ -841,6 +842,7 @@ export class Orchestrator {
     });
     this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
     this.bus.emit({ kind: "session.deleted", id: ticket.sessionId });
+    if (ticket.parentId) this.touchTicket(ticket.parentId); // its childCount changed
     this.kickScheduler();
   }
 
@@ -1260,6 +1262,13 @@ export class Orchestrator {
   async submitForReview(ctx: ToolContext, summary: string): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
+    // A parent in review (or done) would strand its children: their reviews and merges are its job.
+    const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
+    if (open.length) {
+      throw new Error(
+        `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
+      );
+    }
     this.submit(t, summary?.trim() || "Work submitted for review.", "agent");
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
@@ -1315,7 +1324,7 @@ export class Orchestrator {
 
   async listTickets_(ctx: ToolContext, filter: BoardListFilter = {}): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }> {
     const own = ctx.ticket ? this.ctxTicket(ctx) : null;
-    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own?.kind === "conductor" ? "children" : own ? "project" : "all");
+    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own && isConductor(own) ? "children" : own ? "project" : "all");
     const statuses = filter.statuses?.length ? filter.statuses : undefined;
     const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
     if (bad) throw new Error(`Unknown status: ${bad}`);
@@ -1484,8 +1493,9 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
-    if (ctx.runKind === "conductor" && own.kind === "conductor") {
-      // A conductor's tickets are its children, on its driver/model unless it picks another.
+    if (input.child ?? own.kind === "conductor") {
+      // Children run on the parent's driver/model unless it picks another. Any ticket can take
+      // children; having one makes it act as a conductor (isConductor).
       return this.asTool(() =>
         this.createTicket({
           projectId: project.id,
@@ -1615,10 +1625,9 @@ export class Orchestrator {
 
   // --- conductor ---
 
-  private conductorOf(ctx: ToolContext): Ticket {
-    const c = this.ctxTicket(ctx);
-    if (c.kind !== "conductor") throw new Error("Only conductor tickets can review or complete other tickets");
-    return c;
+  /** The caller, standing in for its children's human reviewer. Any ticket may: childOf checks the parent. */
+  private conductorOf(ctx: ToolContext, tool: string): Ticket {
+    return this.boardActor(ctx, tool);
   }
 
   private childOf(conductor: Ticket, key: string): Ticket {
@@ -1629,7 +1638,7 @@ export class Orchestrator {
   }
 
   async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
+    const child = this.childOf(this.conductorOf(ctx, "review_ticket"), key);
     try {
       return this.applyReview(child, decision, notes ?? "", "conductor");
     } catch (err) {
@@ -1638,7 +1647,7 @@ export class Orchestrator {
   }
 
   async completeTicket_(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
+    const child = this.childOf(this.conductorOf(ctx, "complete_ticket"), key);
     if (child.status !== "review" || child.agentReview !== "approved" || child.humanReview !== "approved") {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
@@ -2107,7 +2116,7 @@ export class Orchestrator {
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
       }
-      if (t.kind === "conductor" && to === "in_progress") queueMicrotask(() => this.flushConductor(t.id));
+      if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
       if (to === "done") this.kickScheduler();
     }
     return t;
@@ -2217,7 +2226,7 @@ export class Orchestrator {
     // Busy conductors are flushed from afterRun (which runs after the run left `active`).
     if ([...this.active.values()].some((a) => a.run.sessionId === c.sessionId) || this.queue.pendingFor(c.sessionId).length) return;
     this.conductorBuffer.delete(conductorId);
-    this.enqueueRun(c.sessionId, "conductor", prompts.conductorUpdatePrompt(buf));
+    this.enqueueRun(c.sessionId, this.workKind(c), prompts.conductorUpdatePrompt(buf));
   }
 
   // =========================================================================
@@ -2331,7 +2340,7 @@ export class Orchestrator {
       active.mcpToken = token;
       try {
         const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
-        const children = ticket?.kind === "conductor" ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
+        const children = ticket ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
         const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
         const req: RunRequest = {
           runId: run.id,
@@ -2511,12 +2520,12 @@ export class Orchestrator {
             const question = active.lastText!.trim();
             this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
             this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
-          } else if (!moreWork && (run.kind === "work" || this.allChildrenDone(ticket))) {
+          } else if (!moreWork && this.allChildrenDone(ticket)) {
             this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
             this.enqueueReview(this.store.tickets.get(ticket.id)!);
           }
         }
-        if (run.kind === "conductor") this.flushConductor(ticket.id);
+        this.flushConductor(ticket.id);
         break;
       }
       case "complete":

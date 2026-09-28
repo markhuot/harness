@@ -39,15 +39,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-<<<<<<< HEAD
 - ⌘W closes the focused ticket or terminal pane (File ▸ Close Pane). With the board focused it
   still closes the window.
-=======
 - On the all-projects board, a card's project key now sits in front of its ticket key
   ("HAR HARNESS-39") instead of at the bottom of the card. Cards no longer carry a Conductor
   badge either, since a conductor's progress bar already marks it. Both changes apply on the Mac
   and the iPhone. The ticket page still shows the Conductor badge.
->>>>>>> harness/harness-59
+- Any ticket can act as a conductor now. If you ask a regular ticket's agent for child tickets,
+  it creates them under that ticket, then reviews and completes each one. The ticket gets the
+  progress bar on its card, and the Conductor badge and Tickets tab on its page, on the Mac and
+  iPhone. It goes to review only after every child is done. Choosing Conductor for a new session
+  still changes how the agent starts: it splits the goal into tickets instead of doing the work
+  itself.
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.
