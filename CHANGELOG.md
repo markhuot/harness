@@ -11,6 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- When a ticket's agent hands part of its work to sub-agents (Claude Code's Agent tool), the
+  ticket gets an Agents tab on the Mac and iPhone, next to Transcript. It lists each sub-agent
+  with its task, its type, how long it has run and whether it's still going, finished, failed or
+  stopped. A dot on the tab means one is running. Tap a sub-agent to read its own conversation,
+  with the task it was given at the top and a way back through any agent that started it. The
+  ticket's transcript no longer mixes in sub-agent output. Each Agent call in the transcript now
+  links to that sub-agent's conversation instead.
+
 - Each file in the Changes tab has a Viewed checkbox in its header, like a pull request review on
   GitHub. Checking it folds that file's diff down to its header, the file list marks it with a
   check, and the toolbar counts how many files you've viewed. The arrow at the left of the header
