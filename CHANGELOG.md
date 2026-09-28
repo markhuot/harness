@@ -33,6 +33,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   follow the alignment the agent asked for, and a wide table scrolls sideways. Board cards show a
   table's rows as plain text.
 
+### Fixed
+
+- The Agents tab no longer lists an empty "Sub-agent" for every command the agent ran for more
+  than 30 seconds. Those rows weren't sub-agents, and they're gone from existing tickets too.
+
 ## [app-20260928.1702](https://github.com/markhuot/harness/releases/tag/app-20260928.1702) - 2026-09-28
 
 ### Added

@@ -274,6 +274,8 @@ const str = (v: unknown): string | undefined => (typeof v === "string" ? v : und
  * task_notification (or task_updated, by task id) reports it later. Sub-agents' streaming deltas
  * are dropped (their full blocks still arrive), and their classifier denials are logged in their
  * transcript but never become the run's pending approval: the sub-agent reports back to the agent.
+ * Anything else carrying parent_tool_use_id (tool_progress heartbeats of a long Bash call,
+ * sub-agent stream events) is dropped.
  */
 export class StreamJsonParser {
   sessionId: string | null = null;
@@ -312,8 +314,16 @@ export class StreamJsonParser {
         events.push({ type: "state", state: { sessionId: id, costUsd: this.priorCost() } satisfies ClaudeCodeState });
       }
     };
-    const subagentId = typeof msg.parent_tool_use_id === "string" && msg.parent_tool_use_id ? msg.parent_tool_use_id : null;
+    const parentId = typeof msg.parent_tool_use_id === "string" && msg.parent_tool_use_id ? msg.parent_tool_use_id : null;
+    // parent_tool_use_id means "inside that tool call". Only conversation messages (assistant /
+    // user) under it are a sub-agent's output; the rest is the tool's own progress, e.g. the
+    // tool_progress heartbeat a long-running Bash call sends every 30s (claude 2.1.283).
+    if (parentId && msg.type !== "assistant" && msg.type !== "user") return [];
+    const subagentId = parentId;
     if (subagentId && !this.subagents.has(subagentId)) {
+      // A known call that isn't an agent tool never runs a sub-agent.
+      const known = this.toolNames.get(subagentId);
+      if (known !== undefined && !AGENT_TOOLS.has(known)) return [];
       // Output from a sub-agent this run didn't see start (e.g. one continued from an earlier run).
       this.subagents.add(subagentId);
       events.push({ type: "subagent", subagent: { id: subagentId, description: "Sub-agent" } });
@@ -322,7 +332,6 @@ export class StreamJsonParser {
 
     switch (msg.type) {
       case "system":
-        if (subagentId) break;
         if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string") {
           const callId = msg.tool_use_id;
           // Background Bash commands are tasks too; only agents are sub-agents.
@@ -356,7 +365,6 @@ export class StreamJsonParser {
         }
         break;
       case "stream_event": {
-        if (subagentId) break;
         const ev = msg.event;
         if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta" && typeof ev.delta.text === "string") {
           events.push({ type: "text_delta", text: ev.delta.text });
@@ -433,7 +441,6 @@ export class StreamJsonParser {
         break;
       }
       case "result": {
-        if (subagentId) break;
         noteSession(msg.session_id);
         const total = typeof msg.total_cost_usd === "number" ? msg.total_cost_usd : undefined;
         // total_cost_usd is cumulative across --resume; report this run's share.
