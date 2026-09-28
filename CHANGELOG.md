@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Agents can attach screenshots and short screen recordings to the summaries they post, so a
+  ticket can show what changed (a UI before and after, or a browser flow) along with the
+  description. They're asked to do this whenever their work has a visible result, especially
+  when they submit it for review.
+
 - When the harness service is running older code than the Mac app, a banner under the board says
   so, and it stays until the service restarts. Actions the older service doesn't know about fail
   with a plain "Not found" until it restarts (re-opening a done ticket was one), so the banner

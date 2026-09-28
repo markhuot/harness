@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
 import { allTools } from "./index";
 import type { ToolResult } from "./types";
@@ -51,6 +54,20 @@ describe("ticket tools → HarnessOps", () => {
     const r = await tool("post_summary").execute({ summary: "did X" }, fakeContext({ ops }));
     expect(r.isError).toBeUndefined();
     expect(ops.calls).toEqual([{ method: "postSummary", args: ["did X"] }]);
+  });
+
+  test("post_summary and submit_for_review pass attachments through and reject a non-list", async () => {
+    const ops = fakeOps();
+    const posted = await tool("post_summary").execute({ summary: "shots", attachments: ["a.png", "b.mp4"] }, fakeContext({ ops }));
+    expect(text(posted)).toBe("Summary posted with 2 attachments.");
+    await tool("submit_for_review").execute({ summary: "done", attachments: ["c.png"] }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([
+      { method: "postSummary", args: ["shots", ["a.png", "b.mp4"]] },
+      { method: "submitForReview", args: ["done", ["c.png"]] },
+    ]);
+    const bad = await tool("post_summary").execute({ summary: "x", attachments: "a.png" } as any, fakeContext({ ops }));
+    expect(bad.isError).toBe(true);
+    expect(ops.calls).toHaveLength(2);
   });
 
   test("update_plan passes the optional title through", async () => {
@@ -350,6 +367,21 @@ describe("browser tools → BrowserService", () => {
       { method: "evaluate", args: ["s_1", "6*7"] },
       { method: "screenshot", args: ["s_1"] },
     ]);
+  });
+
+  test("browser_screenshot save_to writes the PNG (creating folders) and says where", async () => {
+    const cwd = tempDir("harness-shot-");
+    const ctx = fakeContext({ browser: fakeBrowser(), cwd });
+    const rel = await tool("browser_screenshot").execute({ save_to: "shots/deep/after.png" }, ctx);
+    const saved = join(cwd, "shots/deep/after.png");
+    expect(readFileSync(saved)).toEqual(Buffer.from("iVBORw0KGgo=", "base64"));
+    expect(rel.content).toEqual([
+      { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+      { type: "text", text: `Saved the screenshot to ${saved}` },
+    ]);
+    const abs = join(tempDir("harness-shot-"), "x.png");
+    expect(text(await tool("browser_screenshot").execute({ save_to: abs }, ctx))).toContain(`Saved the screenshot to ${abs}`);
+    expect(existsSync(abs)).toBe(true);
   });
 
   test("browser_content validates format and max_chars", async () => {
