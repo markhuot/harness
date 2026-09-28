@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage } from "@harness/shared";
+import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 
 const here = resolve(import.meta.dir, "..");
@@ -225,9 +225,20 @@ async function seed() {
   await until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000);
   // A watcher-less triage item for the Inbox.
   await api("POST", "/mappings", { pattern: "FOO", projectId: project.id, notes: "Jira FOO board" });
-  await api("POST", "/watchers/inject", { source: "jira", item: { key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" } });
+  const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent.";
+  await api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt });
+  // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
+  const watcher = await api<Watcher>("POST", "/watchers", {
+    name: "jira",
+    command: "while true; do curl -s https://example.com/api/events | jq -c '.[]'; sleep 60; done",
+    args: [],
+    prompt,
+    mode: "loop",
+    enabled: false,
+    driver: "dummy",
+  });
   await Bun.sleep(1500);
-  return { project, other, hello, changes, conductor, browse, approval, blocked, plan };
+  return { project, other, hello, changes, conductor, browse, approval, blocked, plan, watcher };
 }
 
 /** --paging: a long Done history on its own project, a conductor with done children, and a dependency on an old done ticket. */
@@ -616,6 +627,8 @@ try {
       ["new-session", "harness://new"],
       ["inbox", "harness://inbox"],
       ["settings", "harness://settings"],
+      ["watcher-new", "harness://watcher"],
+      ["watcher-edit", `harness://watcher?id=${encodeURIComponent(seeded.watcher.id)}`],
       ["project-settings", `harness://project/${seeded.project.id}`],
       ["connect", "harness://connect"],
     ];
