@@ -164,12 +164,10 @@ describe("http api", () => {
     expect((await client.getTicket(t.key)).ticket.status).toBe("review");
   });
 
-  test("triage via /watchers/inject dispatches with the external key; mappings CRUD", async () => {
+  test("triage via /watchers/inject dispatches to the prompt's project with the external key", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const m = await client.createMapping({ pattern: "FOO", projectId: p.id, notes: "foo team" });
-    expect((await client.listMappings()).map((x) => x.id)).toEqual([m.id]);
-    const s = await client.injectOutput("jira", { key: "FOO-7", summary: "Fix search", url: "https://jira/FOO-7", updated: "t1" }, "Dispatch bugs");
+    const s = await client.injectOutput("jira", { key: "FOO-7", summary: "Fix search", url: "https://jira/FOO-7", updated: "t1" }, `Dispatch bugs to ${p.key}. [dummy:project ${p.key}]`);
     expect(s!.key).toBe("TRIAGE-1");
     await h.orchestrator.idle();
     const triaged = await client.getSession(s!.id);
@@ -184,8 +182,6 @@ describe("http api", () => {
     const declined = await client.injectOutput("jira", "ZED-1: nobody's");
     await h.orchestrator.idle();
     expect((await client.getSession(declined!.id)).triageStatus).toBe("declined");
-    await client.deleteMapping(m.id);
-    expect(await client.listMappings()).toEqual([]);
   });
 
   test("/watchers/inject takes { source, text, prompt } and still accepts a legacy item", async () => {

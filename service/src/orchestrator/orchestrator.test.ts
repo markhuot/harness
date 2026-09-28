@@ -590,15 +590,16 @@ describe("conductor", () => {
 describe("triage", () => {
   const lastTriagePrompt = (h: ReturnType<typeof setup>) => h.driver.calls.filter((c) => c.kind === "triage").at(-1)!.prompt;
 
-  test("output mentioning a mapped key dispatches to that project with the key", async () => {
+  const ROUTE = "Dispatch Jira work. [dummy:project ACME]";
+
+  test("the watcher's prompt names the project; the output's key becomes the ticket key", async () => {
     const h = setup();
-    h.orch.createMapping({ pattern: "FOO", projectId: h.project.id });
-    const s = await h.orch.injectOutput("jira", { key: "FOO-123", summary: "Fix login", url: "https://x/FOO-123", updated: "1" });
+    const s = await h.orch.injectOutput("jira", { key: "FOO-123", summary: "Fix login", url: "https://x/FOO-123", updated: "1" }, ROUTE);
     expect(s!.key).toBe("TRIAGE-1");
     expect(s!.kind).toBe("triage");
     expect(s!.triageStatus).toBe("triaging");
     expect(s!.title).toBe('{"key":"FOO-123","summary":"Fix login","url":"https://x/FOO-123","updated":"1"}'); // objects arrive as one JSON line
-    expect(s!.cwd).toBe(h.project.path); // the hinted project
+    expect(s!.cwd).toBe(h.paths.home); // triage isn't in any project until it dispatches
     await h.orch.idle();
     const session = h.orch.getSession(s!.id);
     expect(session.triageStatus).toBe("dispatched");
@@ -611,14 +612,14 @@ describe("triage", () => {
     expect(h.orch.listSessions("triage").map((x) => x.key)).toEqual(["TRIAGE-1"]);
   });
 
-  test("plain text with a prompt reaches the triage prompt; unmapped output is declined", async () => {
+  test("plain text with a prompt reaches the triage prompt; a prompt naming no project is declined", async () => {
     const h = setup();
     const s = await h.orch.injectOutput("status", "  Deploy failed on staging\nsee logs  \n", "Only failures on production matter.");
     expect(s!.title).toBe("Deploy failed on staging");
     const prompt = lastTriagePrompt(h);
     expect(prompt).toContain("Deploy failed on staging\nsee logs");
     expect(prompt).toContain("Only failures on production matter.");
-    expect(prompt).toContain("Mapping hint: none");
+    expect(prompt).toContain("Pick the project from the human's prompt and the output.");
     await h.orch.idle();
     expect(h.orch.getSession(s!.id).triageStatus).toBe("declined");
     expect(h.orch.getSession(s!.id).outcome).toMatch(/^Declined: /);
@@ -654,12 +655,11 @@ describe("triage", () => {
 
   test("an existing ticket mentioned in the output gets a message instead of a duplicate", async () => {
     const h = setup();
-    h.orch.createMapping({ pattern: "/^FOO-\\d+$/", projectId: h.project.id });
-    await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v1", updated: "1" });
+    await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v1", updated: "1" }, ROUTE);
     await h.orch.idle();
     const before = h.orch.ticketDetail("FOO-9");
     expect(before.ticket.status).toBe("review");
-    const s2 = await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v2", updated: "2" });
+    const s2 = await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v2", updated: "2" }, ROUTE);
     expect(lastTriagePrompt(h)).toMatch(/## Existing tickets\n[^\n]*\n\* FOO-9 "Work for FOO-9", status review/);
     await h.orch.idle();
     expect(h.orch.getSession(s2!.id).outcome).toBe("Sent update to existing FOO-9");
@@ -719,8 +719,7 @@ describe("triage", () => {
 
   test("[big] output dispatches as conductor tickets; triage run without a decision fails", async () => {
     const h = setup();
-    h.orch.createMapping({ pattern: "FOO", projectId: h.project.id });
-    await h.orch.injectOutput("jira", { key: "FOO-50", summary: "[big] migrate everything" });
+    await h.orch.injectOutput("jira", { key: "FOO-50", summary: "[big] migrate everything" }, ROUTE);
     await Bun.sleep(20);
     expect(h.orch.ticketDetail("FOO-50").ticket.kind).toBe("conductor");
     await h.orch.idle(20_000);

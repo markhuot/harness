@@ -15,7 +15,6 @@ import type {
   HarnessEvent,
   ListenMode,
   ListenSetting,
-  Mapping,
   NetworkStatus,
   Project,
   PublicSettings,
@@ -53,7 +52,6 @@ const runs = new Map<string, Run>();
 const summaries: Summary[] = [];
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
-const mappings = new Map<string, Mapping>();
 const browserStates = new Map<string, BrowserState>();
 let triageSeq = 0;
 let idSeq = 0;
@@ -668,14 +666,14 @@ function seed() {
   child({
     key: "HARNESS-10",
     title: "Settings screen for drivers and watchers",
-    description: "Driver login state, watcher CRUD, key mappings.",
+    description: "Driver login state and watcher CRUD.",
     status: "review",
     driver: "claude-code",
     dependsOn: ["HARNESS-5"],
     agentReview: "approved",
     humanReview: "pending",
     ageMin: 80,
-    summaries: [["agent", "Settings has Drivers, Watchers and Mappings sections; each saves on blur."]],
+    summaries: [["agent", "Settings has Drivers and Watchers sections; each saves on blur."]],
   });
   hx.nextSeq = 11;
 
@@ -729,7 +727,7 @@ function seed() {
   t1.triageStatus = "dispatched";
   t1.outcome = "Dispatched to NYTIMES as FOO-123 (started).";
   transcripts.get(t1.id)!.push(
-    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-123 Paywall meter counts AMP pageviews twice\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-123 → NYTIMES" }, createdAt: t1.createdAt },
+    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-123 Paywall meter counts AMP pageviews twice\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project." }, createdAt: t1.createdAt },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 2, role: "assistant", content: { type: "tool_call", callId: "c1", name: "dispatch_ticket", input: { project_key: "NYTIMES", key: "FOO-123", title: "Paywall meter counts AMP pageviews twice", start: true } }, createdAt: t1.createdAt + 5000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 3, role: "tool", content: { type: "tool_result", callId: "c1", name: "dispatch_ticket", output: [{ type: "text", text: "Created FOO-123" }], isError: false }, createdAt: t1.createdAt + 6000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 4, role: "system", content: { type: "status", text: "Dispatched to NYTIMES" }, createdAt: t1.createdAt + 7000 },
@@ -737,14 +735,14 @@ function seed() {
   const t2 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Recipe card print styles broken in Safari", now() - 2 * 60_000);
   t2.triageStatus = "triaging";
   t2.busy = true;
-  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-131 → NYTIMES" }, createdAt: t2.createdAt });
+  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project." }, createdAt: t2.createdAt });
 
   const w: Watcher = {
     id: newId("w"),
     name: "jira",
     command: "~/Sites/Jira/watch-jira.js",
     args: [],
-    prompt: "If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.",
+    prompt: "If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project.",
     cwd: null,
     env: {},
     mode: "loop",
@@ -766,8 +764,6 @@ function seed() {
     lastRunAt: now() - 4 * 60_000,
   };
   watchers.set(status.id, status);
-  const m: Mapping = { id: newId("map"), pattern: "FOO", projectId: ny.id, notes: "Client Jira project → nytimes repo", createdAt: now() - 86400_000 };
-  mappings.set(m.id, m);
 }
 seed();
 
@@ -1276,24 +1272,6 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "DELETE") {
       watchers.delete(w.id);
       broadcast({ kind: "watcher.deleted", id: w.id });
-      return ok({ ok: true });
-    }
-  }
-
-  // Mappings
-  if (a === "mappings") {
-    if (!b && method === "GET") return ok([...mappings.values()]);
-    if (!b && method === "POST") {
-      const body = await readBody(req);
-      if (!body.pattern || !body.projectId) throw new HttpError(400, "pattern and projectId are required");
-      const m: Mapping = { id: newId("map"), pattern: body.pattern, projectId: body.projectId, notes: body.notes ?? "", createdAt: now() };
-      mappings.set(m.id, m);
-      broadcast({ kind: "mapping.upserted", mapping: m });
-      return ok(m, 201);
-    }
-    if (b && method === "DELETE") {
-      if (!mappings.delete(b)) throw new HttpError(404, "Mapping not found");
-      broadcast({ kind: "mapping.deleted", id: b });
       return ok({ ok: true });
     }
   }

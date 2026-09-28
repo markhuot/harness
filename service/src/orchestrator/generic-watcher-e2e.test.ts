@@ -124,6 +124,29 @@ describe("generic watcher, end to end", () => {
     expect(triage()).toHaveLength(3);
   }, 60_000);
 
+  test("routing lives in the prompt: two watchers on the same events send them to different projects", async () => {
+    const h = setup();
+    const infra = h.orch.listProjects().find((p) => p.key === "INFRA")!;
+    const loop = (name: string) =>
+      `while true; do '${process.execPath}' '${FIXTURE}' --state '${join(h.home, `${name}-state`)}'; sleep 0.5; done`;
+    const toInfra = 'Dispatch what is assigned to sam to INFRA. [dummy:dispatch-if /"assignee":"sam"/] [dummy:project INFRA]';
+    h.orch.createWatcher({ name: "mine", command: loop("mine"), prompt: PROMPT, mode: "loop" });
+    h.orch.createWatcher({ name: "sams", command: loop("sams"), prompt: toInfra, mode: "loop" });
+
+    const triage = () => h.orch.listSessions("triage");
+    await until("six triaged sessions", () => triage().length === 6 && triage().every((s) => s.triageStatus !== "triaging" && !s.busy));
+    await h.orch.idle();
+    const where = h.orch
+      .listTickets()
+      .map((t) => [EVENTS.find((e) => t.title.startsWith(`{"id":"${e.id}"`))?.id, t.projectId])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    // The same three events reached both watchers; each prompt picked its own event and project
+    expect(where).toEqual([
+      ["E1", h.shop.id],
+      ["E2", infra.id],
+    ]);
+  }, 60_000);
+
   test("a failing command shows up as the watcher's error, with its stderr", async () => {
     const h = setup();
     const w = h.orch.createWatcher({

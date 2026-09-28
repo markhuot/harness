@@ -88,8 +88,8 @@ you answer.
   loop mode, each burst of output does. Output identical to something the watcher already
   printed is skipped. Each item starts a triage session in the Inbox. The triage agent reads
   the output and your prompt, then either dispatches it to a ticket in the right project or
-  declines it. Mappings (a key prefix like `FOO`, or a `/regex/`, pointing at a project) help
-  it pick the project for keys like `FOO-123`. An update about an existing ticket is sent to
+  declines it. Say in the prompt which project the work goes to ("dispatch it to the PLAYR
+  project"); triage declines output whose project it can't tell. An update about an existing ticket is sent to
   that ticket as a message.
 
 ## Plugins
@@ -106,7 +106,7 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
 cd app && bun test        # routes, theme resolution, CSS var coverage
-cd mobile && bun run test # pairing links, connection probe, browser touch mapping, servers, prefs/theme pickers, install page
+cd mobile && bun run test # pairing links, connection probe, browser touch → page coordinates, servers, prefs/theme pickers, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service

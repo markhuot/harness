@@ -1,4 +1,4 @@
-// Config tools end to end: a work run configures watchers/mappings/projects/settings through
+// Config tools end to end: a work run configures watchers/projects/settings through
 // tools, and every mutation waits for a human (approval card → allow once → the same call runs).
 
 import { describe, expect, test } from "bun:test";
@@ -56,12 +56,13 @@ const watcherCall = {
     interval_sec: 600,
   },
 };
-const mappingCall = { name: "create_mapping", input: { pattern: "SITE", project_key: "proj", notes: "Jira SITE board" } };
+const routeCall = { name: "update_watcher", input: { watcher: "jira-once", prompt: "Dispatch SITE tickets assigned to me to PROJ; decline the rest." } };
+const ROUTE_SUMMARY = 'Update watcher "jira-once": prompt: "Dispatch SITE tickets assigned to me to PROJ; decline the rest."';
 
 describe("config tools behind human approval", () => {
-  test("a work run creates a watcher and a mapping, each after its own allow-once", async () => {
+  test("a work run creates a watcher and then re-routes it, each call after its own allow-once", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: `set it up /tools ${JSON.stringify([watcherCall, mappingCall])}` });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: `set it up /tools ${JSON.stringify([watcherCall, routeCall])}` });
     await h.orch.idle();
 
     let cur = h.orch.ticketDetail(t.key).ticket;
@@ -83,21 +84,21 @@ describe("config tools behind human approval", () => {
     expect(watchers.map((w) => [w.name, w.command, w.args, w.mode, w.intervalSec])).toEqual([
       ["jira-once", watcherCall.input.command, [], "interval", 600],
     ]);
-    // The mapping is its own approval; the watcher's grant was used up
+    // The update is its own approval; the create's grant was used up
     cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
-    expect(cur.pendingApproval).toMatchObject({ toolName: "create_mapping", summary: "Hint that SITE keys belong in project proj" });
-    expect(h.orch.listMappings()).toEqual([]);
+    expect(cur.pendingApproval).toMatchObject({ toolName: "update_watcher", summary: ROUTE_SUMMARY });
+    expect(watchers[0]!.prompt).toBe(watcherCall.input.prompt);
     expect(h.store.tickets.listGrants(t.id)).toEqual([]);
 
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
-    expect(h.orch.listMappings().map((m) => [m.pattern, m.projectId, m.notes])).toEqual([["SITE", h.project.id, "Jira SITE board"]]);
+    expect(h.orch.listWatchers().map((w) => w.prompt)).toEqual([routeCall.input.prompt]);
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(h.orch.listWatchers()).toHaveLength(1); // the approved call ran exactly once
     expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
       `Allowed once: create_watcher (Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once; prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ.")`,
-      "Allowed once: create_mapping (Hint that SITE keys belong in project proj)",
+      `Allowed once: update_watcher (${ROUTE_SUMMARY})`,
     ]);
   });
 
@@ -117,27 +118,27 @@ describe("config tools behind human approval", () => {
 
   test("gated grants aren't handed to the driver, and allowedTools never unlocks a gated tool", async () => {
     const h = scripted(async (req, call) => {
-      if (req.kind === "work") await call("delete_mapping", { id: "nope" });
+      if (req.kind === "work") await call("delete_watcher", { watcher: "nope" });
     });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
     await h.orch.idle();
-    // Unknown mapping: rejected before any human is asked
-    expect(text(h.results[0]!.result)).toBe("Unknown mapping: nope. Use list_mappings.");
+    // Unknown watcher: rejected before any human is asked
+    expect(text(h.results[0]!.result)).toBe("Unknown watcher: nope. Use list_watchers.");
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval).toBeNull();
 
-    const m = h.orch.createMapping({ pattern: "FOO", projectId: h.project.id });
-    h.store.tickets.update(t.id, { allowedTools: ["delete_mapping", "WebFetch"] });
+    const w = h.orch.createWatcher({ name: "foo", command: "/bin/echo" });
+    h.store.tickets.update(t.id, { allowedTools: ["delete_watcher", "WebFetch"] });
     h.driver.script = async function* (req) {
-      if (req.kind === "work") h.results.push({ kind: req.kind, name: "delete_mapping", result: await executeTool(req.tools, "delete_mapping", { id: m.id }, req.toolContext) });
+      if (req.kind === "work") h.results.push({ kind: req.kind, name: "delete_watcher", result: await executeTool(req.tools, "delete_watcher", { watcher: w.id }, req.toolContext) });
     };
     await h.orch.humanReview(t.key, { decision: "request_changes", notes: "delete FOO" });
     await h.orch.idle();
-    expect(h.orch.listMappings()).toHaveLength(1);
-    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval).toMatchObject({ toolName: "delete_mapping", onceOnly: true });
+    expect(h.orch.listWatchers()).toHaveLength(1);
+    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval).toMatchObject({ toolName: "delete_watcher", onceOnly: true });
 
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
-    expect(h.orch.listMappings()).toEqual([]);
+    expect(h.orch.listWatchers()).toEqual([]);
     const retry = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect(retry.grants).toEqual({ tools: ["WebFetch"], once: [] });
   });
@@ -159,8 +160,6 @@ describe("config tools behind human approval", () => {
     const h = scripted(async (req, call) => {
       if (req.kind !== "work") return;
       await call("create_watcher", { name: "w", command: "/bin/echo", driver: "nope" });
-      await call("create_mapping", { pattern: "FOO", project_key: "MISSING" });
-      await call("create_mapping", { pattern: "/(/", project_key: "PROJ" });
       await call("create_project", { path: "/definitely/not/here" });
       await call("update_settings", { max_concurrent_runs: 0 });
       await call("update_settings", { listen: { mode: "custom" } });
@@ -170,8 +169,6 @@ describe("config tools behind human approval", () => {
     await h.orch.idle();
     expect(h.results.map((r) => [r.name, r.result.isError, text(r.result)])).toEqual([
       ["create_watcher", true, "Unknown driver: nope"],
-      ["create_mapping", true, "Unknown project: MISSING. Use list_projects for the keys."],
-      ["create_mapping", true, expect.stringMatching(/^Invalid regex:/)],
       ["create_project", true, "Not a directory: /definitely/not/here"],
       ["update_settings", true, 'Invalid input for update_settings: "max_concurrent_runs" must be >= 1.'],
       ["update_settings", true, "listen.host is required for custom mode"],

@@ -50,7 +50,7 @@ export const allTools: ToolDefinition[] = [
   ...nativeTools,
 ];
 
-// Config reads (watchers, mappings, settings, drivers) go to every run kind, like the board reads.
+// Config reads (watchers, settings, drivers) go to every run kind, like the board reads.
 // Config writes, all human-gated, go to work and conductor runs only: plan/review/triage have no
 // human in the loop to approve them.
 

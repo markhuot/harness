@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /**
  * The pre-PermissionMode setting (claude-code CLI modes), still accepted from older clients.
- * Same mapping as migration 4: auto → auto, dontAsk → read_only (it denies anything not
+ * Same translation as migration 4: auto → auto, dontAsk → read_only (it denies anything not
  * pre-approved, i.e. every write), acceptEdits / bypassPermissions / anything else → ask.
  */
 export function legacyPermissionMode(value: unknown): Settings["permissionMode"] {

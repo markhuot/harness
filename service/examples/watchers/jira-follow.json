@@ -2,7 +2,7 @@
   "name": "jira-sprint",
   "command": "watch-jira --project=PLAYR,MEDL,RFAWC,CEPFR --assigned=@me --open-sprints --follow --interval=300",
   "args": [],
-  "prompt": "These are Jira tickets assigned to me. Dispatch each one that is well scoped to the project its key maps to; decline the rest and say what is missing.",
+  "prompt": "These are Jira tickets assigned to me. Dispatch each one that is well scoped to the project with the same key as its Jira project (PLAYR-12 goes to PLAYR, MEDL-3 to MEDL, and so on); decline the rest and say what is missing.",
   "cwd": null,
   "env": {},
   "mode": "loop",

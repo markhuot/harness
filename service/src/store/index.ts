@@ -6,7 +6,6 @@ import { RunRepo } from "./runs";
 import { TranscriptRepo } from "./transcript";
 import { SummaryRepo } from "./summaries";
 import { WatcherRepo } from "./watchers";
-import { MappingRepo } from "./mappings";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
 
 export class Store {
@@ -17,7 +16,6 @@ export class Store {
   readonly transcript: TranscriptRepo;
   readonly summaries: SummaryRepo;
   readonly watchers: WatcherRepo;
-  readonly mappings: MappingRepo;
   readonly seen: SeenRepo;
   readonly settings: SettingsRepo;
   readonly counters: CounterRepo;
@@ -30,7 +28,6 @@ export class Store {
     this.transcript = new TranscriptRepo(db);
     this.summaries = new SummaryRepo(db);
     this.watchers = new WatcherRepo(db);
-    this.mappings = new MappingRepo(db);
     this.seen = new SeenRepo(db);
     this.settings = new SettingsRepo(db);
     this.counters = new CounterRepo(db);
@@ -41,5 +38,5 @@ export class Store {
   }
 }
 
-export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, SummaryRepo, WatcherRepo, MappingRepo, SeenRepo, SettingsRepo, CounterRepo };
+export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, SummaryRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo };
 export { normalizeProjectKey } from "./projects";

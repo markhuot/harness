@@ -1,5 +1,5 @@
 // Settings: connection (saved servers, token rotation), network, appearance, drivers + login,
-// general, models, permissions, watchers, mappings, projects.
+// general, models, permissions, watchers, projects.
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -52,7 +52,6 @@ export function SettingsScreen() {
       {state.settings && <ModelsSection settings={state.settings} />}
       {state.settings && <PermissionsSection settings={state.settings} />}
       <WatchersSection />
-      <MappingsSection />
       <ProjectsSection />
     </ScrollView>
   );
@@ -432,63 +431,6 @@ function WatchersSection() {
           <SSwitch label={`Enable ${w.name}`} value={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
         </SRow>
       ))}
-    </Group>
-  );
-}
-
-function MappingsSection() {
-  const { state, client } = useStore();
-  const act = useAction();
-  const c = useColors();
-  const inputStyle = useInputStyle();
-  const projects = sortedProjects(state);
-  const [pattern, setPattern] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [notes, setNotes] = useState("");
-  const mappings = Object.values(state.mappings).sort((a, b) => a.pattern.localeCompare(b.pattern));
-  const pid = projectId || projects[0]?.id || "";
-  const add = async () => {
-    if (!pattern.trim() || !pid) return;
-    const ok = await act(() => client.createMapping({ pattern: pattern.trim(), projectId: pid, notes: notes.trim() }), "Mapping added");
-    if (ok) {
-      setPattern("");
-      setNotes("");
-    }
-  };
-  const chooseProject = async () => {
-    const v = await pick({ title: "Project", selected: pid, choices: projects.map((p) => ({ value: p.id, label: `${p.key} · ${p.name}` })) });
-    if (v) setProjectId(v);
-  };
-  return (
-    <Group title="Mappings" footer="Routing hints for triage: when watcher output mentions a matching key, triage is pointed at that project. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
-      {mappings.length === 0 && <SRow title={<Text style={{ color: c.text3, fontSize: 15 }}>No mappings. Triage picks a project on its own.</Text>} />}
-      {mappings.map((m) => {
-        const p = state.projects[m.projectId];
-        return (
-          <SRow
-            key={m.id}
-            title={<Text style={{ color: c.text, fontFamily: MONO, fontSize: 15 }}>{m.pattern}</Text>}
-            sub={`${p ? `${p.key} · ${p.name}` : "Unknown project"}${m.notes ? ` — ${m.notes}` : ""}`}
-            onPress={async () => {
-              if (await confirm(`Delete mapping ${m.pattern}?`, "", "Delete")) void act(() => client.deleteMapping(m.id));
-            }}
-          >
-            <Icon name="trash" size={15} color={c.red} />
-          </SRow>
-        );
-      })}
-      <SRow title="Add mapping" stacked last>
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TextInput style={[inputStyle, { flex: 1, fontFamily: MONO, fontSize: 14 }]} placeholder="FOO or /^FOO-\d+/" placeholderTextColor={c.text3} value={pattern} onChangeText={setPattern} autoCapitalize="characters" autoCorrect={false} />
-            <PickerButton label={state.projects[pid]?.key ?? "Project"} onPress={() => void chooseProject()} disabled={!projects.length} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TextInput style={[inputStyle, { flex: 1 }]} placeholder="Notes (optional)" placeholderTextColor={c.text3} value={notes} onChangeText={setNotes} />
-            <Button title="Add" variant="primary" disabled={!pattern.trim() || !pid} onPress={() => void add()} />
-          </View>
-        </View>
-      </SRow>
     </Group>
   );
 }

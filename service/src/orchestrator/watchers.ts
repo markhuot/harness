@@ -1,7 +1,6 @@
 // Watchers: long-lived or periodic commands whose text output becomes Inbox items. Any
 // command works; nothing about the output's shape is required. This module turns stdout into
-// output chunks, resolves external keys to project mappings (hints for triage), and supervises
-// the processes.
+// output chunks, finds the external keys they mention, and supervises the processes.
 //
 // Chunking: interval mode delivers one chunk per run (everything it printed); loop mode
 // delivers one chunk per burst of output (lines that arrive close together, see batchIdleMs /
@@ -11,7 +10,7 @@
 // Exit codes follow watch-jira: 0 = ok, 4 = nothing to report (--once / --timeout), anything
 // else = failure.
 
-import type { Mapping, Watcher } from "@harness/shared";
+import type { Watcher } from "@harness/shared";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -48,52 +47,6 @@ export function findKeys(text: string, max = 20): string[] {
     if (out.length >= max) break;
   }
   return out;
-}
-
-// ---------------------------------------------------------------------------
-// Mappings
-// ---------------------------------------------------------------------------
-
-const REGEX_PATTERN = /^\/(.+)\/([a-z]*)$/;
-
-/**
- * Resolve an external key to a mapping.
- *  - Prefix patterns ("FOO", or "FOO-") match case-insensitively on a `PREFIX-` boundary:
- *    FOO matches FOO-1 but not FOOBAR-1. The longest matching prefix wins.
- *  - Regex patterns ("/^OPS-\d+$/i") are tried after all prefixes, in list order.
- *    Invalid regexes are ignored.
- */
-export function matchMapping(key: string, mappings: Mapping[]): Mapping | null {
-  const upperKey = key.trim().toUpperCase();
-  let best: { mapping: Mapping; len: number } | null = null;
-  const regexes: { mapping: Mapping; body: string; flags: string }[] = [];
-
-  for (const mapping of mappings) {
-    const pattern = mapping.pattern.trim();
-    const rx = REGEX_PATTERN.exec(pattern);
-    if (rx) {
-      regexes.push({ mapping, body: rx[1]!, flags: rx[2]! });
-      continue;
-    }
-    const prefix = pattern.replace(/-+$/, "").toUpperCase();
-    if (!prefix) continue;
-    if (upperKey.startsWith(prefix + "-") && (!best || prefix.length > best.len)) {
-      best = { mapping, len: prefix.length };
-    }
-  }
-  if (best) return best.mapping;
-
-  for (const { mapping, body, flags } of regexes) {
-    let re: RegExp;
-    try {
-      // Drop g/y: they make .test() stateful, which is never what a mapping means.
-      re = new RegExp(body, flags.replace(/[gy]/g, ""));
-    } catch {
-      continue;
-    }
-    if (re.test(key.trim())) return mapping;
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------

@@ -80,18 +80,26 @@ function watcherOutput(prompt: string): string {
   return end < 0 ? body : body.slice(0, end);
 }
 
-/** A `[dummy:dispatch-if /re/flags]` rule (and `[dummy:project KEY]`) from the watcher's prompt. */
-function watcherRule(prompt: string): { test: RegExp; project: string | null } | null {
+/** The `[dummy:project KEY]` a watcher's prompt names, if any. Only the watcher's prompt counts. */
+export function watcherProject(prompt: string): string | null {
+  return promptSection(prompt, "What the human wants").match(/\[dummy:project ([A-Za-z0-9_]+)\]/)?.[1] ?? null;
+}
+
+/** The first external key (FOO-123) in the watcher's output: the key a dispatch mirrors. */
+export function outputKey(prompt: string): string | undefined {
+  return watcherOutput(prompt).match(/\b[A-Z][A-Z0-9_]*-\d+\b/)?.[0];
+}
+
+/** A `[dummy:dispatch-if /re/flags]` rule from the watcher's prompt. */
+function watcherRule(prompt: string): RegExp | null {
   const wants = promptSection(prompt, "What the human wants");
   const m = wants.match(/\[dummy:dispatch-if \/(.+?)\/([a-z]*)\]/);
   if (!m) return null;
-  let test: RegExp;
   try {
-    test = new RegExp(m[1]!, m[2]);
+    return new RegExp(m[1]!, m[2]);
   } catch {
     return null;
   }
-  return { test, project: wants.match(/\[dummy:project ([A-Za-z0-9_]+)\]/)?.[1] ?? null };
 }
 
 const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
@@ -353,24 +361,16 @@ export class DummyDriver implements Driver {
       }
 
       case "triage": {
-        // The first mapping hint picks the project and the key to mirror. Only the hint lines
-        // right after the first line count; the output and the prompt come later and can't add one.
-        const lines = prompt.split("\n");
-        let end = 1;
-        while (end < lines.length && lines[end]!.startsWith("Mapping hint:")) end++;
-        const hint = lines
-          .slice(1, end)
-          .map((l) => l.match(/^Mapping hint:[ \t]*(\S+)[ \t]*→[ \t]*([A-Za-z0-9_]+)/))
-          .find(Boolean);
-        const key = hint?.[1];
-        const suggestion = hint?.[2];
+        // The watcher's prompt names the project (`[dummy:project KEY]`); the output can't. The
+        // first external key in the output is the key to mirror.
+        const project = watcherProject(prompt);
+        const key = outputKey(prompt);
         const title = prompt.match(/^Inbox title:[ \t]*"(.+)"$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
-        // A watcher prompt can carry a rule: `[dummy:dispatch-if /regex/flags]` (+ optional
-        // `[dummy:project KEY]`). Only the watcher's prompt sets it and only the output is matched.
+        // A watcher prompt can also carry a rule: `[dummy:dispatch-if /regex/flags]`. Only the
+        // watcher's prompt sets it and only the output is matched.
         const rule = watcherRule(prompt);
         if (rule) {
-          const project = rule.project ?? suggestion;
-          if (!rule.test.test(watcherOutput(prompt))) {
+          if (!rule.test(watcherOutput(prompt))) {
             yield* say("This output doesn't match the watcher's rule.");
             yield* call("decline_work", { reason: "The output doesn't match the watcher's prompt.", title });
           } else if (!project) {
@@ -385,13 +385,13 @@ export class DummyDriver implements Driver {
         } else if (prompt.includes("[unscoped]")) {
           yield* say("This item is not scoped well enough to work on.");
           yield* call("decline_work", { reason: "The item is marked [unscoped]." });
-        } else if (!suggestion) {
+        } else if (!project) {
           yield* say("No project matches this item.");
-          yield* call("decline_work", { reason: "No mapping hint for this output." });
+          yield* call("decline_work", { reason: "The watcher's prompt names no project for this output." });
         } else {
           const big = prompt.includes("[big]");
-          yield* say(`Dispatching to ${suggestion}${big ? " as a conductor ticket" : ""}.`);
-          const input: Record<string, unknown> = { project_key: suggestion, title, description: `Dispatched by the dummy triager.\n\n${title}` };
+          yield* say(`Dispatching to ${project}${big ? " as a conductor ticket" : ""}.`);
+          const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}` };
           if (key) input.key = key;
           input.start = true;
           if (big) input.conductor = true;

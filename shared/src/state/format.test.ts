@@ -141,7 +141,7 @@ test("tabs: plugin tab ids; the Tickets tab only on conductors; plugin tabs that
   expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: null })).toBe("plugin:git:log");
 });
 
-test("browser: URL normalization and letterboxed touch → page mapping", () => {
+test("browser: URL normalization and letterboxed touch → page coordinates", () => {
   expect(normalizeUrl("  example.com/x ")).toBe("https://example.com/x");
   expect(normalizeUrl("http://a.b")).toBe("http://a.b");
   expect(normalizeUrl("about:blank")).toBe("about:blank");

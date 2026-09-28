@@ -2,7 +2,7 @@
   "name": "jira",
   "command": "watch-jira --project=PLAYR --assigned=@me --status='To Do'",
   "args": [],
-  "prompt": "PLAYR tickets assigned to me in To Do. Dispatch the ones with clear acceptance criteria.",
+  "prompt": "PLAYR tickets assigned to me in To Do. Dispatch the ones with clear acceptance criteria to the PLAYR project.",
   "cwd": null,
   "env": {},
   "mode": "loop",

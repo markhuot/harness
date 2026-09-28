@@ -72,7 +72,7 @@ function harness(opts: { lag?: boolean } = {}) {
   const snapshot = (open: Ticket[], donePage: TicketPage | null, scope = ALL_SCOPE) => {
     dispatch({
       type: "snapshot",
-      snapshot: { projects: [], tickets: open, sessions: [], watchers: [], mappings: [], settings: null, drivers: [], ...(donePage ? { donePage: { scope, page: donePage } } : {}) },
+      snapshot: { projects: [], tickets: open, sessions: [], watchers: [], settings: null, drivers: [], ...(donePage ? { donePage: { scope, page: donePage } } : {}) },
     });
     loader.snapshotApplied();
   };

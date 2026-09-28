@@ -4,7 +4,6 @@
 import type {
   DriverInfo,
   HarnessEvent,
-  Mapping,
   Project,
   PublicSettings,
   Run,
@@ -42,7 +41,6 @@ export interface State {
   /** In-flight streaming assistant text: deltas[sessionId][runId] */
   deltas: Record<string, Record<string, string>>;
   watchers: Record<string, Watcher>;
-  mappings: Record<string, Mapping>;
   settings: PublicSettings | null;
   drivers: DriverInfo[];
   /** Done paging per board scope (project id or ALL_SCOPE); see paging.ts */
@@ -72,7 +70,6 @@ export const initialState: State = {
   transcripts: {},
   deltas: {},
   watchers: {},
-  mappings: {},
   settings: null,
   drivers: [],
   donePaging: {},
@@ -89,7 +86,6 @@ export interface Snapshot {
   tickets: Ticket[];
   sessions: Session[];
   watchers: Watcher[];
-  mappings: Mapping[];
   settings: PublicSettings | null;
   drivers: DriverInfo[];
   /** The first done page for the board's current scope (tickets holds every non-done ticket) */
@@ -182,9 +178,7 @@ export function applyEvent(state: State, event: HarnessEvent): State {
     case "project.deleted": {
       const tickets: Record<string, Ticket> = {};
       for (const t of Object.values(state.tickets)) if (t.projectId !== event.id) tickets[t.id] = t;
-      const mappings: Record<string, Mapping> = {};
-      for (const m of Object.values(state.mappings)) if (m.projectId !== event.id) mappings[m.id] = m;
-      return { ...state, projects: without(state.projects, event.id), tickets, mappings };
+      return { ...state, projects: without(state.projects, event.id), tickets };
     }
     case "ticket.upserted":
       return {
@@ -236,10 +230,6 @@ export function applyEvent(state: State, event: HarnessEvent): State {
       return { ...state, watchers: { ...state.watchers, [event.watcher.id]: event.watcher } };
     case "watcher.deleted":
       return { ...state, watchers: without(state.watchers, event.id) };
-    case "mapping.upserted":
-      return { ...state, mappings: { ...state.mappings, [event.mapping.id]: event.mapping } };
-    case "mapping.deleted":
-      return { ...state, mappings: without(state.mappings, event.id) };
     case "settings.updated":
       return { ...state, settings: event.settings };
     case "browser.frame":
@@ -279,7 +269,6 @@ export function reducer(state: State, action: Action): State {
         ticketsAsOf: all.reduce((n, t) => Math.max(n, t.createdAt), 0),
         sessions: preferNewer(byId(s.sessions), state.sessions),
         watchers: byId(s.watchers),
-        mappings: byId(s.mappings),
         settings: s.settings,
         drivers: s.drivers,
       };

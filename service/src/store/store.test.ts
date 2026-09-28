@@ -73,6 +73,27 @@ describe("db", () => {
     expect(w.args).toEqual(["watch-jira.js", "--project", "FOO"]);
   });
 
+  test("migration 9 drops the mappings table and its rows, leaving projects and watchers alone", () => {
+    const db = new Database(":memory:", { strict: true });
+    db.exec("PRAGMA foreign_keys = ON;");
+    for (const [v, sql] of MIGRATIONS.slice(0, 8).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'FOO', 'Foo', '/tmp/foo', 0, 0)`);
+    db.exec(`INSERT INTO watchers (id, name, command, prompt, created_at, updated_at) VALUES ('w1', 'jira', 'node', 'Dispatch to FOO', 0, 0)`);
+    db.exec(`INSERT INTO mappings (id, pattern, project_id, notes, created_at) VALUES ('m1', 'FOO', 'p1', 'foo team', 0), ('m2', '/^BAR-/', 'p1', '', 0)`);
+    migrate(db);
+    expect((db.query("PRAGMA user_version").get() as any).user_version).toBe(9);
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'mappings'").get()).toBeNull();
+    const store = new Store(db);
+    expect(store.projects.get("p1")!.key).toBe("FOO");
+    expect(store.watchers.get("w1")!.prompt).toBe("Dispatch to FOO");
+    // The rows that pointed at p1 are gone with the table, so the project still deletes cleanly.
+    store.projects.delete("p1");
+    expect(store.projects.get("p1")).toBeNull();
+  });
+
   test("refuses a database from a newer schema", () => {
     const db = new Database(":memory:");
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);

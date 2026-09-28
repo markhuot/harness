@@ -15,7 +15,6 @@ import type {
   DriverInfo,
   HumanReviewBody,
   ReopenBody,
-  Mapping,
   Project,
   PublicSettings,
   Run,
@@ -60,7 +59,7 @@ import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
 import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
-import { findKeys, matchMapping, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
+import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { ensureWorktree, isGitRepo } from "./worktree";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
@@ -528,10 +527,6 @@ export class Orchestrator {
   async deleteProject(id: string) {
     if (!this.store.projects.get(id)) throw notFound(`Unknown project: ${id}`);
     for (const t of this.store.tickets.list({ projectId: id })) await this.deleteTicket(t.key);
-    for (const m of this.store.mappings.list().filter((m) => m.projectId === id)) {
-      this.store.mappings.delete(m.id);
-      this.bus.emit({ kind: "mapping.deleted", id: m.id });
-    }
     this.store.projects.delete(id);
     this.bus.emit({ kind: "project.deleted", id });
   }
@@ -942,7 +937,7 @@ export class Orchestrator {
   }
 
   // =========================================================================
-  // Watchers, mappings, triage
+  // Watchers, triage
   // =========================================================================
 
   listWatchers() {
@@ -1023,37 +1018,6 @@ export class Orchestrator {
     this.watcherRunner?.sync(this.store.watchers.list());
   }
 
-  listMappings() {
-    return this.store.mappings.list();
-  }
-
-  createMapping(body: { pattern: string; projectId: string; notes?: string }): Mapping {
-    const m = this.store.mappings.create(this.validateMapping(body));
-    this.bus.emit({ kind: "mapping.upserted", mapping: m });
-    return m;
-  }
-
-  private validateMapping(body: { pattern: string; projectId: string; notes?: string }) {
-    if (!body || typeof body.pattern !== "string" || !body.pattern.trim()) throw badRequest("pattern is required");
-    const pattern = body.pattern.trim();
-    const rx = /^\/(.+)\/([a-z]*)$/.exec(pattern);
-    if (rx) {
-      try {
-        new RegExp(rx[1]!, rx[2]);
-      } catch (err) {
-        throw badRequest(`Invalid regex: ${errMsg(err)}`);
-      }
-    }
-    if (!this.store.projects.get(body.projectId)) throw badRequest(`Unknown project: ${body.projectId}`);
-    return { pattern, projectId: body.projectId, notes: body.notes };
-  }
-
-  deleteMapping(id: string) {
-    if (!this.store.mappings.get(id)) throw notFound(`Unknown mapping: ${id}`);
-    this.store.mappings.delete(id);
-    this.bus.emit({ kind: "mapping.deleted", id });
-  }
-
   /**
    * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON).
    * `prompt` plays the watcher's prompt. Null when deduped or when the text is only whitespace.
@@ -1078,14 +1042,7 @@ export class Orchestrator {
   triage(input: Omit<IngestInput, "sourceId">): Session {
     const { source, output, prompt, driver } = input;
     const projects = this.store.projects.list();
-    const mappings = this.store.mappings.list();
     const keys = findKeys(output.text);
-    // Routing hints: keys in the output that a mapping points at a project.
-    const hints = keys.flatMap((key) => {
-      const mapping = matchMapping(key, mappings);
-      const project = mapping ? projects.find((p) => p.id === mapping.projectId) : undefined;
-      return mapping && project ? [{ key, mapping, project }] : [];
-    });
     const existingTickets = keys.flatMap((key) => {
       const t = this.store.tickets.getByKey(key);
       return t ? [t] : [];
@@ -1097,7 +1054,7 @@ export class Orchestrator {
       kind: "triage",
       ticketId: null,
       driver: driver ?? this.settings().defaultDriver,
-      cwd: hints[0]?.project.path ?? this.paths.home,
+      cwd: this.paths.home,
       title,
       triageStatus: "triaging",
       meta: { source, text: output.text, truncated: output.truncated, prompt } satisfies TriageMeta,
@@ -1107,7 +1064,7 @@ export class Orchestrator {
     this.enqueueRun(
       session.id,
       "triage",
-      prompts.triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, hints, projects, mappings, existingTickets }),
+      prompts.triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, projects, existingTickets }),
     );
     return this.store.sessions.get(session.id)!;
   }
@@ -1640,10 +1597,6 @@ export class Orchestrator {
     return this.listWatchers();
   }
 
-  async listMappings_(_ctx: ToolContext) {
-    return this.listMappings().map((m) => ({ ...m, projectKey: this.store.projects.get(m.projectId)?.key ?? null }));
-  }
-
   async getSettings_(_ctx: ToolContext): Promise<PublicSettings> {
     return this.publicSettings();
   }
@@ -1692,20 +1645,6 @@ export class Orchestrator {
     if (!this.watcherRunner) throw new Error("Watchers are disabled in this service.");
     if (!dryRun) await this.runWatcher(w.id);
     return w;
-  }
-
-  async createMapping_(ctx: ToolContext, input: { pattern: string; projectKey: string; notes?: string }, dryRun = false): Promise<Mapping | null> {
-    this.configWriter(ctx);
-    const body = { pattern: input.pattern, projectId: this.projectByKey(input.projectKey).id, notes: input.notes };
-    return this.asToolError(() => (dryRun ? (this.validateMapping(body), null) : this.createMapping(body)));
-  }
-
-  async deleteMapping_(ctx: ToolContext, id: string, dryRun = false): Promise<Mapping> {
-    this.configWriter(ctx);
-    const m = this.store.mappings.get(id);
-    if (!m) throw new Error(`Unknown mapping: ${id}. Use list_mappings.`);
-    if (!dryRun) this.deleteMapping(id);
-    return m;
   }
 
   async createProject_(ctx: ToolContext, input: CreateProjectBody, dryRun = false): Promise<ProjectView | null> {
@@ -2416,15 +2355,12 @@ export class Orchestrator {
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
       listWatchers: (c) => this.listWatchers_(c),
-      listMappings: (c) => this.listMappings_(c),
       getSettings: (c) => this.getSettings_(c),
       listDrivers: (c) => this.listDrivers_(c),
       createWatcher: (c, i, d) => this.createWatcher_(c, i, d),
       updateWatcher: (c, r, i, d) => this.updateWatcher_(c, r, i, d),
       deleteWatcher: (c, r, d) => this.deleteWatcher_(c, r, d),
       runWatcher: (c, r, d) => this.runWatcher_(c, r, d),
-      createMapping: (c, i, d) => this.createMapping_(c, i, d),
-      deleteMapping: (c, id, d) => this.deleteMapping_(c, id, d),
       createProject: (c, i, d) => this.createProject_(c, i, d),
       updateProject: (c, k, i, d) => this.updateProject_(c, k, i, d),
       deleteProject: (c, k, d) => this.deleteProject_(c, k, d),

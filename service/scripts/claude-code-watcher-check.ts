@@ -6,7 +6,7 @@
 // Boots service/src/daemon.ts with a throwaway HARNESS_HOME (never ~/.harness) and a temp
 // project SHOP, then asks an agent in plain English for a watcher around a curl-style loop
 // (src/orchestrator/__fixtures__/events-api.ts stands in for the API). It approves the agent's
-// watcher/mapping approval cards the way a human would and checks that:
+// watcher approval cards the way a human would and checks that:
 //   the watcher wraps the fixture and its prompt carries the rule;
 //   each of the fixture's three events becomes an Inbox triage session carrying that prompt;
 //   triage (claude-code too) dispatches E1 to SHOP and declines E2 and E3.
@@ -82,7 +82,7 @@ try {
   const ticket = await call<Ticket>("POST", "/tickets", { projectId: shop.id, prompt, title: "Add an events watcher", start: true, ...(model ? { model } : {}) });
   console.log(`Created ${ticket.key}; waiting for the agent (claude-code${model ? `, ${model}` : ""})…`);
 
-  // Approve the agent's watcher and mapping calls like a human would; deny anything else.
+  // Approve the agent's watcher calls like a human would; deny anything else.
   const approved: string[] = [];
   const denied: string[] = [];
   const settled = await until(
@@ -92,7 +92,7 @@ try {
       const t = d.ticket;
       const pa = t.pendingApproval;
       if (pa) {
-        const ok = /^(mcp__harness__)?(create_watcher|update_watcher|run_watcher|create_mapping)$/.test(pa.toolName);
+        const ok = /^(mcp__harness__)?(create_watcher|update_watcher|run_watcher)$/.test(pa.toolName);
         (ok ? approved : denied).push(`${pa.toolName}: ${pa.summary ?? JSON.stringify(pa.input)}`);
         await call("POST", `/tickets/${ticket.key}/approval`, ok ? { decision: "allow_once" } : { decision: "deny", message: "Not needed for this watcher." });
         return undefined;

@@ -17,14 +17,13 @@ describe("watchers → triage", () => {
     const dir = join(h.home, "foo");
     mkdirSync(dir);
     const p = h.orch.createProject({ path: dir });
-    h.orch.createMapping({ pattern: "FOO", projectId: p.id });
     const lines = [
       { key: "FOO-1", summary: "one", updated: "a" },
       { key: "FOO-2", summary: "two", updated: "a" },
     ]
       .map((l) => JSON.stringify(l))
       .join("\n");
-    const w = h.orch.createWatcher({ name: "jira", command: "/bin/echo", args: [lines], mode: "loop", driver: "other", prompt: "Dispatch mine" });
+    const w = h.orch.createWatcher({ name: "jira", command: "/bin/echo", args: [lines], mode: "loop", driver: "other", prompt: "Dispatch mine to FOO [dummy:project FOO]" });
     const waitForSessions = async (n: number) => {
       const deadline = Date.now() + 5000;
       while (h.orch.listSessions("triage").length < n && Date.now() < deadline) await Bun.sleep(10);
@@ -35,10 +34,9 @@ describe("watchers → triage", () => {
     expect(triage).toHaveLength(1); // one run, one burst, one item
     expect(triage[0]!.driver).toBe("other");
     const prompt = other.calls.find((c) => c.kind === "triage")!.prompt;
-    expect(prompt).toContain("Mapping hint: FOO-1 → FOO\nMapping hint: FOO-2 → FOO");
-    expect(prompt).toContain("Dispatch mine");
+    expect(prompt).toContain("## What the human wants (their prompt for this watcher)\nDispatch mine to FOO [dummy:project FOO]");
     expect(prompt).toContain(lines);
-    expect(h.orch.listTickets().map((t) => t.key)).toEqual(["FOO-1"]); // the fake dispatches the first hint
+    expect(h.orch.listTickets().map((t) => [t.key, t.projectId])).toEqual([["FOO-1", p.id]]); // the prompt's project, with the first key in the output
     expect(h.store.watchers.get(w.id)!.lastRunAt).not.toBeNull();
 
     // Re-running prints the same text: nothing new is triaged
