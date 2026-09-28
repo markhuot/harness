@@ -16,7 +16,7 @@ import { nativeTools, readOnlyNativeTools } from "../tools";
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
-const CONDUCTOR_ONLY = ["review_ticket", "complete_ticket"];
+const CHILD_TOOLS = ["review_ticket", "complete_ticket"];
 const CONFIG_READ = ["list_watchers", "get_settings", "list_drivers"];
 const CONFIG_WRITE = [
   "create_watcher",
@@ -31,10 +31,10 @@ const CONFIG_WRITE = [
 ];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_summary", ...BOARD, ...CONFIG_READ],
-  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
   chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
 };
@@ -131,9 +131,9 @@ describe("systemPrompt tool references", () => {
     });
   }
 
-  test("work runs never mention conductor or triage tools", () => {
+  test("work runs never mention triage, review or plan tools", () => {
     const text = sys("work");
-    for (const name of [...CONDUCTOR_ONLY, "dispatch_ticket", "review_decision", "update_plan"]) {
+    for (const name of ["dispatch_ticket", "review_decision", "update_plan"]) {
       expect(text).not.toContain(`\`${name}\``);
     }
   });
@@ -205,6 +205,17 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).toContain('NYT-5 "API": blocked, depends on NYT-4, asks: "Which auth?"');
     expect(text).toContain("keys returned by your earlier `create_ticket` calls");
     expect(sys("conductor", ticket({ kind: "conductor" }))).toContain("no children yet");
+  });
+
+  test("a task ticket with children steers them in its work runs; without children it gets no such section", () => {
+    const children = [ticket({ key: "NYT-4", title: "Rebase PR", status: "review", agentReview: "approved" })];
+    const text = sys("work", ticket(worktree), { children });
+    expect(text).toContain("## Your child tickets");
+    expect(text).toContain('NYT-4 "Rebase PR": review, agent review approved');
+    expect(text).toContain("`submit_for_review` is refused until every child is done");
+    expect(text).toContain("## This run: work"); // still the work prompt, not the conductor's
+    expect(sys("work", ticket(worktree), { children: [] })).not.toContain("Your child tickets");
+    expect(sys("conductor", ticket({ kind: "conductor" }), { children })).not.toContain("Your child tickets");
   });
 
   test("child tickets name their parent conductor", () => {
@@ -349,7 +360,8 @@ describe("run prompts", () => {
     expect(text).toContain("Summary: Added tables\n   Migrations run");
     expect(text).toContain('NYT-5 "API": in_progress → blocked');
     expect(text).not.toMatch(/^- /m);
-    expect(toolsMentioned(text).every((n) => TOOLS.conductor.includes(n))).toBe(true);
+    // A task ticket with children gets the same update prompt in a work run.
+    expect(toolsMentioned(text).every((n) => TOOLS.conductor.includes(n) && TOOLS.work.includes(n))).toBe(true);
     expect(conductorUpdatePrompt([])).toContain("`list_tickets`");
   });
 

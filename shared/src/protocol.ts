@@ -102,6 +102,11 @@ export interface Ticket {
   driver: string;
   /** Conductor that owns this ticket, if any */
   parentId: string | null;
+  /**
+   * How many tickets have this one as their parent. Any ticket with children acts as a conductor
+   * (see `isConductor`), whatever its kind. Optional only so older services and fixtures type-check.
+   */
+  childCount?: number;
   /** Keys of tickets that must be done before this one can start */
   dependsOn: string[];
   /** Start automatically once every dependency is done (used by conductors) */
@@ -141,6 +146,14 @@ export interface Ticket {
   completedAt?: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * A ticket acts as a conductor (steers child tickets, shows their rollup and Tickets tab) when it
+ * was created as one or once it has children. `kind` only picks the ticket's first prompt.
+ */
+export function isConductor(t: Pick<Ticket, "kind" | "childCount">): boolean {
+  return t.kind === "conductor" || (t.childCount ?? 0) > 0;
 }
 
 /**

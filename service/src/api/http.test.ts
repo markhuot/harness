@@ -365,6 +365,22 @@ describe("http api", () => {
     expect(d.ticket.agentReview).toBe("approved");
   }, 40_000);
 
+  test("a plain task ticket that makes a child with the real dummy driver conducts it to done", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir, requireHumanReview: true });
+    const t = await client.createTicket({ projectId: p.id, prompt: "Audit the PRs /child Rebase the PR" });
+    await h.orchestrator.idle(30_000);
+    const d = await client.getTicket(t.key);
+    expect(d.ticket.kind).toBe("task");
+    expect(d.ticket.childCount).toBe(1);
+    expect(d.children.map((x) => [x.title, x.status, x.humanReview])).toEqual([["Rebase the PR", "done", "approved"]]);
+    expect(d.ticket.status).toBe("review");
+    // The child's move to review re-invoked the parent, which approved and completed it.
+    expect(d.runs.some((r) => r.kind === "work" && r.prompt.startsWith("Child ticket updates:") && r.prompt.includes("in_progress → review"))).toBe(true);
+    // Every run on the parent was a work run: its kind picked the prompt, the children made it conduct.
+    expect(new Set(d.runs.map((r) => r.kind))).toEqual(new Set(["work", "review"]));
+  }, 40_000);
+
   test("CORS: preflight 204 on any route; ACAO echoed only for file://, null and localhost origins", async () => {
     const { h } = await boot();
     for (const origin of ["null", "file://", "http://localhost:5173", "https://127.0.0.1:9"]) {

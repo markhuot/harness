@@ -29,7 +29,7 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
     plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
     complete: ["post_summary", ...BOARD, ...CONFIG_READ],
     conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
@@ -77,7 +77,7 @@ describe("toolsForRun", () => {
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor", "chat"]);
     for (const read of BOARD) expect(who(read)).toEqual(kinds);
     for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor"]);
-    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["conductor"]);
+    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["work", "conductor"]);
   });
 
   test("config reads go to every run kind; config writes only to work and conductor runs", () => {

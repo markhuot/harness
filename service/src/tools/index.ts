@@ -29,6 +29,7 @@ export const browserTools: ToolDefinition[] = [browserOpen, browserContent, brow
 export const boardTools: ToolDefinition[] = [listTickets, getTicket, searchTickets, listProjects, listInbox];
 /** Board tools that change other tickets: work and conductor runs only (DESIGN.md "Board changes by agents"). */
 export const boardWriteTools: ToolDefinition[] = [createTicket, updateTicket, moveTicket, startTicket, messageTicket, cancelTicket, reopenTicket];
+/** Reviewing and completing the caller's own children: work and conductor runs (any ticket may have children). */
 export const conductorTools: ToolDefinition[] = [reviewTicket, completeTicket];
 export const triageTools: ToolDefinition[] = [dispatchTicket, declineWork];
 
@@ -65,7 +66,7 @@ export const allTools: ToolDefinition[] = [
  */
 const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
+  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
   review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postSummary, ...boardTools, ...configReadTools], native: "full" },
   conductor: {

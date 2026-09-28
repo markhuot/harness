@@ -99,6 +99,8 @@ export interface CreateTicketInput {
   start?: boolean;
   /** Make the new ticket a conductor. */
   conductor?: boolean;
+  /** Make it a child of the caller's ticket. Default: true for a conductor ticket, false otherwise. */
+  child?: boolean;
   projectKey?: string;
   driver?: string;
   model?: string | null;

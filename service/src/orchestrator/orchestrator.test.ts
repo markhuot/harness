@@ -708,23 +708,106 @@ describe("conductor", () => {
     expect(secondRun.startedAt!).toBeGreaterThanOrEqual(firstDone.endedAt!);
   });
 
-  test("review_ticket and complete_ticket reject non-conductor callers and non-children", async () => {
+  test("a task ticket asked for a child conducts it: work runs are notified, review + complete it, then submit", async () => {
+    const h = setup();
+    const keys: string[] = [];
+    const submitErrors: string[] = [];
+    const parentPrompts: string[] = [];
+    let parentKey = "";
+    let submitted = false;
+    h.driver.script = async function* (req) {
+      const ctx = req.toolContext;
+      const ops = ctx.ops;
+      if (req.kind === "review") return void (await ops.reviewDecision(ctx, "approve", ""));
+      if (req.kind === "complete" || req.kind === "plan") return;
+      if (ctx.ticket?.key !== parentKey) return void (await ops.submitForReview(ctx, "child done"));
+      parentPrompts.push(req.prompt);
+      if (!keys.length) {
+        keys.push((await ops.createTicket(ctx, { title: "Rebase PR", description: "Bring the PR up to date", child: true })).key);
+        await ops.submitForReview(ctx, "too early").catch((e) => submitErrors.push(String(e)));
+        return;
+      }
+      const child = (await ops.getTicket(ctx, keys[0]!)).ticket;
+      if (child.status === "review" && child.agentReview === "approved" && child.humanReview === "pending") {
+        await ops.reviewTicket(ctx, child.key, "approve", "looks right");
+        await ops.completeTicket(ctx, child.key);
+      } else if (child.status === "done" && !submitted) {
+        submitted = true;
+        await ops.submitForReview(ctx, "the child is merged");
+      }
+    };
+    const draft = await h.orch.createTicket({ projectId: h.project.id, prompt: "Audit the PRs", start: false });
+    parentKey = draft.key;
+    await h.orch.idle();
+    await h.orch.startTicket(parentKey);
+    await h.orch.idle(20_000);
+
+    const d = h.orch.ticketDetail(parentKey);
+    expect(d.ticket.kind).toBe("task");
+    expect(d.ticket.childCount).toBe(1);
+    expect(d.children.map((c) => [c.key, c.parentId, c.autoStart, c.status, c.humanReview])).toEqual([[keys[0], d.ticket.id, true, "done", "approved"]]);
+    expect(submitErrors[0]).toContain(`still has child tickets that aren't done (${keys[0]}:`);
+    // The parent's steering runs are work runs (full tools) with the child-update prompt, and it
+    // wasn't auto-submitted while the child was open.
+    expect(runKinds(h, d.ticket).filter((k) => !k.startsWith("plan"))).toEqual([
+      ...Array(parentPrompts.length).fill("work:succeeded"),
+      "review:succeeded",
+    ]);
+    expect(parentPrompts.slice(1).some((p) => p.includes("Child ticket updates:") && p.includes("in_progress → review"))).toBe(true);
+    expect(d.ticket.status).toBe("review");
+    expect(d.summaries.some((s) => s.body === "the child is merged")).toBe(true);
+    // Clients learn the parent now has children from its own upsert.
+    const upserts = h.events.filter((e) => e.kind === "ticket.upserted" && e.ticket.key === parentKey) as { ticket: Ticket }[];
+    expect(upserts.some((e) => e.ticket.childCount === 1)).toBe(true);
+  });
+
+  test("a task ticket with children defaults list_tickets to its children; without child it files top-level tickets", async () => {
+    const h = setup();
+    const scopes: string[][] = [];
+    let made: Ticket[] = [];
+    h.driver.script = async function* (req) {
+      const ctx = req.toolContext;
+      if (req.kind !== "work" || ctx.ticket?.title !== "parent") return;
+      made = [
+        await ctx.ops.createTicket(ctx, { title: "top", description: "x" }),
+        await ctx.ops.createTicket(ctx, { title: "kid", description: "x", child: true, autoStart: false }),
+      ];
+      scopes.push((await ctx.ops.listTickets(ctx, {})).tickets.map((t) => t.title));
+    };
+    const p = await h.orch.createTicket({ projectId: h.project.id, prompt: "parent", title: "parent" });
+    await h.orch.idle();
+    expect(made.map((t) => [t.title, t.parentId, t.status])).toEqual([
+      ["top", null, "planning"],
+      ["kid", p.id, "planning"],
+    ]);
+    expect(scopes).toEqual([["kid"]]);
+    expect(h.orch.ticketDetail(p.key).ticket.status).toBe("in_progress"); // open child → no auto-submit
+    await h.orch.deleteTicket(made[1]!.key);
+    expect(h.orch.ticketDetail(p.key).ticket.childCount).toBe(0);
+  });
+
+  test("review_ticket and complete_ticket reject tickets that aren't the caller's children", async () => {
     const h = setup();
     const other = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
-    const errs: string[] = [];
+    const errs: Record<string, string[]> = {};
     h.driver.script = async function* (req) {
       const ctx = req.toolContext;
       if (ctx.ticket?.key === other.key) return;
       for (const call of [() => ctx.ops.reviewTicket(ctx, other.key, "approve", ""), () => ctx.ops.completeTicket(ctx, other.key)]) {
-        await call().catch((e) => errs.push(String(e)));
+        await call().catch((e) => (errs[req.kind] ??= []).push(String(e)));
       }
     };
     await h.orch.idle();
     await h.orch.createTicket({ projectId: h.project.id, prompt: "work" });
     await h.orch.createTicket({ projectId: h.project.id, prompt: "conduct", kind: "conductor" });
     await h.orch.idle();
-    expect(errs.slice(0, 2).every((e) => /Only conductor tickets/.test(e))).toBe(true);
-    expect(errs.slice(-2).every((e) => e.includes(`${other.key} is not a child of`))).toBe(true);
+    // A task ticket may conduct its own children, but never someone else's.
+    for (const kind of ["work", "conductor"]) {
+      expect(errs[kind]!.length).toBe(2);
+      expect(errs[kind]!.every((e) => e.includes(`${other.key} is not a child of`))).toBe(true);
+    }
+    // Their review runs can't stand in for anyone.
+    expect(errs.review!.every((e) => e.includes("only available in work and conductor runs"))).toBe(true);
   });
 });
 
