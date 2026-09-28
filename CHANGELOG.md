@@ -16,6 +16,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   with a plain "Not found" until it restarts (re-opening a done ticket was one), so the banner
   explains those errors. Restart now restarts the service right away. If agents are running, it
   asks first, since restarting stops them.
+- The Inbox, on the Mac and the iPhone, lists your watchers at the top with what each one is
+  doing right now: running (and since when), waiting for its next run, or failed and waiting to
+  retry, with the error. Click the error to read all of it, and use Retry now to restart a failed
+  watcher without waiting out its backoff. The status updates live. Paused watchers are shown
+  dimmed.
 
 ### Changed
 
@@ -32,6 +37,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   tables on the Mac and the iPhone, instead of rows of `| pipes |` and `---` dashes. Columns
   follow the alignment the agent asked for, and a wide table scrolls sideways. Board cards show a
   table's rows as plain text.
+- A loop watcher's old error now goes away once its process starts again. Before, a watcher that
+  failed once and then ran fine for hours kept showing that first failure in Settings.
 
 ### Fixed
 

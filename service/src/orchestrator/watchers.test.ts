@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Watcher } from "@harness/shared";
+import type { Watcher, WatcherLive } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import {
   findKeys,
@@ -171,6 +171,7 @@ function harness(
 ) {
   const outputs: { watcher: Watcher; text: string; truncated: boolean }[] = [];
   const statuses: { id: string; patch: StatusPatch }[] = [];
+  const lives: { id: string; live: WatcherLive }[] = [];
   const runner = new WatcherRunner({
     spawn,
     timing,
@@ -178,10 +179,15 @@ function harness(
     maxOutputChars,
     onOutput: onOutput ?? ((w, o) => void outputs.push({ watcher: w, ...o })),
     onStatus: (id, patch) => void statuses.push({ id, patch }),
+    onLive: (id, live) => void lives.push({ id, live }),
   });
+  /** The sequence of reported states for one watcher */
+  const states = (id = "w1") => lives.filter((l) => l.id === id).map((l) => l.live.state);
   const errors = () => statuses.filter((s) => "lastError" in s.patch).map((s) => s.patch.lastError);
+  /** Only the errors that were set, not the clears */
+  const failures = () => errors().filter((e): e is string => typeof e === "string");
   const texts = () => outputs.map((o) => o.text);
-  return { runner, outputs, texts, statuses, errors };
+  return { runner, outputs, texts, statuses, errors, failures, lives, states };
 }
 
 let active: WatcherRunner[] = [];
@@ -207,7 +213,7 @@ describe("WatcherRunner loop mode", () => {
     h.runner.sync([watcher()]);
     await waitFor(() => procs.length >= 2, 2000, "restart");
     expect(h.texts()).toEqual(['{"key":"A-1","summary":"one"}\nplain text, not json']);
-    expect(h.errors()).toEqual([null]);
+    expect(h.failures()).toEqual([]);
     expect(h.statuses.filter((s) => s.patch.lastRunAt !== undefined).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -383,12 +389,12 @@ describe("WatcherRunner loop mode", () => {
     );
     h.runner.sync([watcher()]);
     await waitFor(() => seen.length >= 3, 2000, "later deliveries");
-    expect(h.errors()[0]).toBe("Failed to handle output: db locked");
+    expect(h.failures()[0]).toBe("Failed to handle output: db locked");
     // The run whose delivery failed must not clear its own error on exit 0: between the
-    // first and second run starts, the only error patch is the failure.
+    // first and second run starts, the only error patches are the clear at spawn and the failure.
     const starts = h.statuses.flatMap((s, i) => (s.patch.lastRunAt !== undefined ? [i] : []));
     const firstRun = h.statuses.slice(starts[0], starts[1]).filter((s) => "lastError" in s.patch);
-    expect(firstRun.map((s) => s.patch.lastError)).toEqual(["Failed to handle output: db locked"]);
+    expect(firstRun.map((s) => s.patch.lastError)).toEqual([null, "Failed to handle output: db locked"]);
     expect(h.errors().at(-1)).toBeNull();
     expect(procs.length).toBeGreaterThanOrEqual(3);
   });
@@ -402,8 +408,8 @@ describe("WatcherRunner loop mode", () => {
       throw new Error("async boom");
     }));
     h.runner.sync([watcher()]);
-    await waitFor(() => h.errors().length > 0, 1000, "error");
-    expect(h.errors()[0]).toContain("async boom");
+    await waitFor(() => h.failures().length > 0, 1000, "error");
+    expect(h.failures()[0]).toContain("async boom");
   });
 
   test("runNow kills a blocking child and restarts at once without an error", async () => {
@@ -421,7 +427,7 @@ describe("WatcherRunner loop mode", () => {
     const { spawn, procs } = fakeSpawn((p, n) => (n === 0 ? p.exit(1) : undefined));
     const h = track(harness(spawn, { ...FAST, backoffBaseMs: 60_000 }));
     h.runner.sync([watcher()]);
-    await waitFor(() => h.errors().length === 1, 1000, "failure");
+    await waitFor(() => h.failures().length === 1, 1000, "failure");
     await sleep(10);
     await h.runner.runNow("w1");
     await waitFor(() => procs.length === 2, 1000, "immediate re-run");
@@ -599,6 +605,129 @@ describe("WatcherRunner sync", () => {
   });
 });
 
+describe("WatcherRunner live state", () => {
+  test("loop: a spawned process is running; a failed exit waits out the backoff with the failure count", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn, { ...FAST, backoffBaseMs: 5000, backoffMaxMs: 10_000 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => h.runner.live("w1")?.state === "running", 1000, "running");
+    const before = Date.now();
+    procs[0]!.writeErr("boom\n");
+    procs[0]!.exit(1);
+    await waitFor(() => h.runner.live("w1")?.state === "waiting", 1000, "backoff");
+    const live = h.runner.live("w1")!;
+    expect(live.failures).toBe(1);
+    // Backoff, not the 10ms restart delay
+    expect(live.nextRunAt! - before).toBeGreaterThanOrEqual(4900);
+    expect(h.failures()).toEqual(["Command exited with code 1: boom"]);
+    expect(h.states()).toEqual(["waiting", "running", "waiting"]);
+    expect(procs).toHaveLength(1);
+  });
+
+  test("loop: a process that stays up clears a stale error from an earlier run", async () => {
+    // The jira-sprint case: an old failure kept showing while the new process ran fine.
+    const { spawn } = fakeSpawn(); // never exits
+    const h = track(harness(spawn));
+    h.runner.sync([watcher({ lastError: "Failed to start …: ENOENT" })]);
+    await waitFor(() => h.runner.live("w1")?.state === "running", 1000, "running");
+    expect(h.errors()).toEqual([null]);
+  });
+
+  test("loop: a clean exit resets the failure count", async () => {
+    const { spawn } = fakeSpawn((p, n) => p.exit(n === 0 ? 1 : 0));
+    const h = track(harness(spawn, { ...FAST, backoffBaseMs: 20, restartDelayMs: 5000 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => h.lives.filter((l) => l.live.state === "waiting").length >= 3, 1000, "second wait");
+    expect(h.lives.filter((l) => l.live.state === "waiting").map((l) => l.live.failures)).toEqual([0, 1, 0]);
+  });
+
+  test("a spawn failure is an error and a wait, never running", async () => {
+    const spawn: SpawnFn = () => {
+      throw new Error("ENOENT: no such file or directory, posix_spawn 'nope'");
+    };
+    const h = track(harness(spawn, { ...FAST, backoffBaseMs: 5000, backoffMaxMs: 10_000 }));
+    h.runner.sync([watcher({ command: "nope" })]);
+    await waitFor(() => h.runner.live("w1")?.failures === 1, 1000, "failure");
+    expect(h.runner.live("w1")).toMatchObject({ state: "waiting", failures: 1 });
+    expect(h.runner.live("w1")!.nextRunAt).toBeGreaterThan(Date.now() + 4000);
+    expect(h.states()).not.toContain("running");
+    expect(h.failures()[0]).toContain("Failed to start nope: ENOENT");
+  });
+
+  test("interval: running during a run, then waiting for the next tick; failures count across runs", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn, { ...FAST, minIntervalMs: 0 }));
+    const start = Date.now();
+    h.runner.sync([watcher({ mode: "interval", intervalSec: 60 })]);
+    await waitFor(() => procs.length === 1, 1000, "spawn");
+    expect(h.runner.live("w1")?.state).toBe("running");
+    procs[0]!.exit(2);
+    await waitFor(() => h.runner.live("w1")?.state === "waiting", 1000, "waiting");
+    const live = h.runner.live("w1")!;
+    expect(live.failures).toBe(1);
+    expect(live.nextRunAt! - start).toBeGreaterThanOrEqual(60_000);
+    expect(live.nextRunAt! - start).toBeLessThan(61_000);
+    // An interval run's error isn't cleared when the next run starts, only when one succeeds.
+    await h.runner.runNow("w1");
+    await waitFor(() => procs.length === 2, 1000, "second run");
+    expect(h.errors()).toEqual(["Command exited with code 2"]);
+    procs[1]!.exit(0);
+    await waitFor(() => h.runner.live("w1")?.failures === 0, 1000, "reset");
+    expect(h.errors().at(-1)).toBeNull();
+  });
+
+  test("disabling or removing stops it; a disabled watcher is stopped from the start", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn));
+    h.runner.sync([watcher(), watcher({ id: "off", enabled: false })]);
+    await waitFor(() => h.runner.live("w1")?.state === "running", 1000, "running");
+    expect(h.runner.live("off")).toMatchObject({ state: "stopped", nextRunAt: null });
+    h.runner.sync([watcher({ enabled: false }), watcher({ id: "off", enabled: false })]);
+    expect(h.runner.live("w1")?.state).toBe("stopped");
+    await waitFor(() => procs[0]!.killed, 1000, "kill");
+    await sleep(30);
+    expect(h.states().at(-1)).toBe("stopped"); // the killed process's exit doesn't report a wait
+    h.runner.sync([]);
+    expect(h.runner.live("w1")).toBeUndefined();
+  });
+
+  test("a restart on a command change reports the new process, not the old one's exit", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn));
+    h.runner.sync([watcher()]);
+    await waitFor(() => procs.length === 1, 1000, "first");
+    h.runner.sync([watcher({ command: "watch --v2" })]);
+    await waitFor(() => procs.length === 2, 1000, "second");
+    await sleep(30);
+    expect(procs[0]!.killed).toBe(true);
+    expect(h.runner.live("w1")?.state).toBe("running");
+    expect(h.states()).not.toContain("stopped");
+  });
+
+  test("a one-off run of a disabled watcher is running, then stopped again", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn));
+    h.runner.sync([watcher({ enabled: false, mode: "interval" })]);
+    await h.runner.runNow("w1");
+    await waitFor(() => procs.length === 1, 1000, "spawn");
+    expect(h.runner.live("w1")?.state).toBe("running");
+    procs[0]!.exit(0);
+    await waitFor(() => h.runner.live("w1")?.state === "stopped", 1000, "stopped");
+    expect(h.states()).toEqual(["stopped", "running", "stopped"]);
+  });
+
+  test("stopAll reports every watcher stopped", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = harness(spawn);
+    h.runner.sync([watcher({ id: "a" }), watcher({ id: "b", mode: "interval" })]);
+    await waitFor(() => procs.length === 2, 1000, "spawns");
+    await h.runner.stopAll();
+    await sleep(30);
+    expect([h.runner.live("a")?.state, h.runner.live("b")?.state]).toEqual(["stopped", "stopped"]);
+    expect([h.states("a").at(-1), h.states("b").at(-1)]).toEqual(["stopped", "stopped"]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Real processes
 // ---------------------------------------------------------------------------
@@ -681,7 +810,7 @@ process.exit(4);
     const errors: (string | null | undefined)[] = [];
     const runner = new WatcherRunner({
       onOutput: () => {},
-      onStatus: (_id, patch) => void ("lastError" in patch && errors.push(patch.lastError)),
+      onStatus: (_id, patch) => void (patch.lastError && errors.push(patch.lastError)),
       timing: { ...FAST, backoffBaseMs: 60_000 },
     });
     active.push(runner);

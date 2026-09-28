@@ -32,6 +32,7 @@ import type {
   TranscriptRole,
   UpdateTicketBody,
   Watcher,
+  WatcherLive,
 } from "@harness/shared";
 import { checkProjectKey, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
@@ -87,6 +88,8 @@ export interface WatcherSupervisor {
   sync(watchers: Watcher[]): void;
   runNow(id: string): Promise<void>;
   stopAll(): Promise<void>;
+  /** The watcher's process state, when the supervisor tracks it */
+  live?(id: string): WatcherLive | undefined;
 }
 
 export interface OrchestratorOptions {
@@ -313,7 +316,11 @@ export class Orchestrator {
       },
       onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
         const w = this.store.watchers.update(id, patch);
-        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: w });
+        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
+      },
+      onLive: (id: string) => {
+        const w = this.store.watchers.get(id);
+        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
     this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner(handlers);
@@ -1062,23 +1069,32 @@ export class Orchestrator {
   // Watchers, triage
   // =========================================================================
 
-  listWatchers() {
-    return this.store.watchers.list();
+  listWatchers(): Watcher[] {
+    return this.store.watchers.list().map((w) => this.withLive(w));
+  }
+
+  /** The stored watcher plus what its process is doing now (see WatcherLive). */
+  private withLive(w: Watcher): Watcher {
+    const live = this.watcherRunner?.live?.(w.id);
+    return live ? { ...w, live } : w;
   }
 
   createWatcher(body: WatcherInput & { name: string; command: string }): Watcher {
     const input = this.validateWatcher(body, true) as WatcherInput & { name: string; command: string };
-    const w = this.store.watchers.create(input);
-    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    const created = this.store.watchers.create(input);
+    // Sync first so the event (and the response) carry the new process state.
     this.syncWatchers();
+    const w = this.withLive(this.store.watchers.get(created.id) ?? created);
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
     return w;
   }
 
   updateWatcher(id: string, body: WatcherInput): Watcher {
     if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
-    const w = this.store.watchers.update(id, this.validateWatcher(body, false))!;
-    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    this.store.watchers.update(id, this.validateWatcher(body, false));
     this.syncWatchers();
+    const w = this.withLive(this.store.watchers.get(id)!);
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
     return w;
   }
 

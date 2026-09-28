@@ -250,6 +250,10 @@ async function seed() {
     enabled: false,
     driver: "dummy",
   });
+  // Live watchers for the Inbox's watcher strip: one whose process stays up (and prints nothing),
+  // one that fails at once and sits in its backoff with the error.
+  await api<Watcher>("POST", "/watchers", { name: "heartbeat", command: "while true; do sleep 3600; done", mode: "loop", driver: "dummy" });
+  await api<Watcher>("POST", "/watchers", { name: "jira-sprint", command: "echo 'watch-jira: 401 Unauthorized (check JIRA_TOKEN)' >&2; exit 1", mode: "loop", driver: "dummy" });
   await Bun.sleep(1500);
   return { project, other, hello, changes, conductor, browse, approval, configApproval, blocked, plan, watcher, agents, nestedAgent };
 }

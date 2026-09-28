@@ -79,6 +79,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
+  { name: "inbox-watcher-error", route: "#/inbox", setup: `document.querySelector(".watcher-error")?.click()` },
   { name: "settings", route: "#/settings" },
   { name: "appearance", route: "#/settings/appearance" },
   { name: "watchers", route: "#/settings/watchers" },

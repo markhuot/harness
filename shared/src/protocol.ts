@@ -325,6 +325,26 @@ export interface Watcher {
   lastError: string | null;
   createdAt: number;
   updatedAt: number;
+  /**
+   * What the watcher's process is doing right now. Not stored: the service fills it in from its
+   * supervisor. Absent from services that don't report it (older builds, watchers switched off).
+   */
+  live?: WatcherLive;
+}
+
+/**
+ * A watcher's process state. `running`: a process is alive (since `since`). `waiting`: between
+ * runs; `nextRunAt` is the next interval tick or the loop's restart after its delay or failure
+ * backoff (null while it waits on a previous process to stop). `stopped`: not supervised (disabled,
+ * deleted, or the service is shutting down). Whether the last run failed is `Watcher.lastError`.
+ */
+export interface WatcherLive {
+  state: "running" | "waiting" | "stopped";
+  /** When this state began (ms) */
+  since: number;
+  nextRunAt: number | null;
+  /** Consecutive failed runs; 0 after a clean exit */
+  failures: number;
 }
 
 export interface DriverInfo {
