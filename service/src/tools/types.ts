@@ -68,7 +68,8 @@ export interface BoardTicketDetail {
   resolvedFrom: string | null;
   parent: string | null;
   children: string[];
-  summaries: { author: string; body: string; createdAt: number }[];
+  /** attachments[].path: the stored copy, readable with a file tool */
+  summaries: { author: string; body: string; createdAt: number; attachments: { name: string; kind: "image" | "video"; path: string }[] }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
 }
@@ -138,8 +139,11 @@ export interface ToolContext {
  */
 export interface HarnessOps {
   // --- any ticket run ---
-  /** Post a short progress/result summary on the ticket (or triage session). */
-  postSummary(ctx: ToolContext, body: string): Promise<void>;
+  /**
+   * Post a short progress/result summary on the ticket (or triage session). `attachments` are
+   * image/video paths (relative ones resolve against ctx.cwd); all are validated before any is stored.
+   */
+  postSummary(ctx: ToolContext, body: string, attachments?: string[]): Promise<void>;
 
   // --- plan runs ---
   /** Replace the ticket brief/plan (planning agent). */
@@ -149,7 +153,7 @@ export interface HarnessOps {
   /** Move ticket to blocked with a question for the human. The run should end after this. */
   block(ctx: ToolContext, question: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
-  submitForReview(ctx: ToolContext, summary: string): Promise<void>;
+  submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void>;
 
   // --- review runs ---
   /** Record the agent review decision. */
@@ -248,6 +252,12 @@ export interface HarnessOps {
    * (soft deny / ask mode), exactly like requestApproval.
    */
   checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }>;
+  /**
+   * Where a tool that saves an output file (browser_screenshot save_to) may write: the run's
+   * harness-owned scratch folder, and the working directory unless the run is read-only (a
+   * plan/review/triage/chat run, or read_only as the effective mode).
+   */
+  fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }>;
 
   // --- config (Settings / Project Settings; DESIGN.md "Config tools") ---
   // Reads work in every ticket run and triage. Mutations are for work and conductor runs only

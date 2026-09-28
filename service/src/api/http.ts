@@ -107,6 +107,48 @@ export function tokenMatches(given: string | null | undefined, token: string): b
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * The byte range a `Range: bytes=…` header asks for within `size` bytes, "unsatisfiable" when it
+ * falls outside, or null to send the whole file (no header, or one we don't handle, such as
+ * several ranges).
+ */
+export function parseRange(header: string | null, size: number): { start: number; end: number } | "unsatisfiable" | null {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  let start: number;
+  let end: number;
+  if (m[1] === "") {
+    // suffix range: the last N bytes
+    const n = Number(m[2]);
+    if (n === 0) return "unsatisfiable";
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  }
+  if (start >= size || start > end) return "unsatisfiable";
+  return { start, end };
+}
+
+const ATTACHMENT_CACHE = "private, max-age=31536000, immutable";
+
+function serveFile(req: Request, path: string, mimeType: string): Response {
+  const file = Bun.file(path);
+  const size = file.size;
+  const headers: Record<string, string> = { "content-type": mimeType, "cache-control": ATTACHMENT_CACHE, "accept-ranges": "bytes" };
+  const range = parseRange(req.headers.get("range"), size);
+  if (range === "unsatisfiable") return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
+  const head = req.method === "HEAD";
+  if (!range) return new Response(head ? null : file, { status: 200, headers: { ...headers, "content-length": String(size) } });
+  const length = range.end - range.start + 1;
+  return new Response(head ? null : file.slice(range.start, range.end + 1), {
+    status: 206,
+    headers: { ...headers, "content-length": String(length), "content-range": `bytes ${range.start}-${range.end}/${size}` },
+  });
+}
+
 function bearer(req: Request): string | null {
   const h = req.headers.get("authorization");
   const m = h ? /^Bearer\s+(.+)$/i.exec(h) : null;
@@ -331,6 +373,17 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         if (!tokenMatches(url.searchParams.get("token"), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
         if (server.upgrade(req, { data: ws.newData() })) return undefined;
         return json({ error: "WebSocket upgrade required" }, 400);
+      }
+
+      // Summary attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
+      // No other route takes the token from the query.
+      const attachment = /^\/attachments\/([^/]+)$/.exec(path);
+      if (attachment && (req.method === "GET" || req.method === "HEAD")) {
+        const token = opts.tokens.get();
+        if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
+        const found = opts.orchestrator.attachmentFile(decodeURIComponent(attachment[1]!));
+        if (!found) return json({ error: "Not found" }, 404);
+        return serveFile(req, found.path, found.attachment.mimeType);
       }
 
       // Every other route needs the bearer token, from loopback and remote hosts alike.
