@@ -268,6 +268,7 @@ function buildMenu() {
       label: "File",
       submenu: [
         { label: "New Session", accelerator: "CmdOrCtrl+N", click: () => sendMenu("new-session") },
+        { label: "New Terminal", accelerator: "CmdOrCtrl+T", click: () => sendMenu("new-terminal") },
         { type: "separator" },
         { label: "Board", accelerator: "CmdOrCtrl+1", click: () => sendMenu("board") },
         { label: "Inbox", accelerator: "CmdOrCtrl+2", click: () => sendMenu("inbox") },

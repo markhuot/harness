@@ -21,7 +21,7 @@ export interface ConnectionError {
 
 export type ConnectionResult = Connection | ConnectionError;
 
-export type MenuCommand = "new-session" | "settings" | "inbox" | "board" | "toggle-sidebar";
+export type MenuCommand = "new-session" | "new-terminal" | "settings" | "inbox" | "board" | "toggle-sidebar";
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =

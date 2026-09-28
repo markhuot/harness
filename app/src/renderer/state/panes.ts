@@ -1,15 +1,16 @@
 // The pane layout: everything right of the left nav is a tmux-style split tree of panes. The board
-// is one pane, each open ticket is another, and panes sit side by side (a "row" split) or stacked
+// is one pane, each open ticket or terminal is another, and panes sit side by side (a "row" split) or stacked
 // (a "column" split). The pure helpers (the click-a-card rule, docking, closing, resizing, parsing)
 // are tested in panes.test.ts; the store at the bottom persists to localStorage like layout.ts.
 //
 // Each board scope (a project, or ALL_SCOPE for "All projects") has its own tree: the operations
 // work on one scope's PaneState, and the store keeps a PaneState per scope. Pane ids are unique
-// across every scope, since a pane's id is what its content is keyed by (and, for terminal panes,
-// the session they reattach to).
+// across every scope, since a pane's id is what its content is keyed by. A terminal pane's shell is
+// keyed by its content's `sessionId` rather than the pane id: pane ids come from a per-window
+// counter and can be re-minted on load, and a shell must never be handed to the wrong pane.
 //
 // Every operation returns a new, normalized state (see `normalize`), so these always hold:
-//   • exactly one board leaf, and a ticket key is open in at most one leaf;
+//   • exactly one board leaf, a ticket key is open in at most one leaf, and so is a terminal session;
 //   • no split has fewer than 2 children, and no split directly holds a split with the same dir;
 //   • a split's sizes are positive fractions that sum to 1;
 //   • focusedId/zoomedId name an existing leaf, or are null.
@@ -17,8 +18,19 @@
 import { useSyncExternalStore } from "react";
 import { ALL_SCOPE, isTicketTab, type TicketTab } from "@harness/shared/state";
 
-/** What a pane shows. Terminal panes will join this union later. */
-export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab };
+/**
+ * A shell in the main process (window.harness.terminal), started in `cwd` (`~` = home). `sessionId`
+ * names the PTY, so a remounted pane re-attaches to the same shell; `title` is the last one the
+ * shell set (OSC 0/2), if any.
+ */
+export interface TerminalContent {
+  kind: "terminal";
+  sessionId: string;
+  cwd: string;
+  title?: string;
+}
+/** What a pane shows. */
+export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent;
 export interface PaneLeaf {
   type: "leaf";
   id: string;
@@ -99,6 +111,28 @@ export const findLeaf = (root: PaneNode, id: string): PaneLeaf | null => leaves(
 export const boardLeaf = (root: PaneNode): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "board") ?? null;
 export const ticketLeafByKey = (root: PaneNode, key: string): PaneLeaf | null =>
   leaves(root).find((l) => l.content.kind === "ticket" && l.content.ticketKey === key) ?? null;
+export const terminalLeafBySession = (root: PaneNode, sessionId: string): PaneLeaf | null =>
+  leaves(root).find((l) => l.content.kind === "terminal" && l.content.sessionId === sessionId) ?? null;
+
+/** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a terminal session), if any. */
+function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
+  if (content.kind === "board") return boardLeaf(root);
+  return content.kind === "ticket" ? ticketLeafByKey(root, content.ticketKey) : terminalLeafBySession(root, content.sessionId);
+}
+
+/** How menus and drag chips name a pane: "the board", a ticket's key, a terminal's title or folder. */
+export function paneLabel(content: PaneContent): string {
+  if (content.kind === "board") return "the board";
+  if (content.kind === "ticket") return content.ticketKey;
+  return content.title || cwdName(content.cwd);
+}
+
+/** A directory's last component, for a terminal that hasn't set a title (`~` for home). */
+export function cwdName(cwd: string): string {
+  const trimmed = cwd.replace(/\/+$/, "");
+  if (trimmed === "~" || trimmed === "") return cwd.startsWith("/") ? "/" : "~";
+  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+}
 
 type PathStep = { split: PaneSplit; index: number };
 
@@ -191,22 +225,34 @@ function uniqueIds(root: PaneNode, reserved: ReadonlySet<string>): PaneNode {
 }
 
 /**
- * Repair a state so every invariant holds: later duplicate boards and duplicate ticket keys are
- * dropped, a missing board comes back on the left, the tree is collapsed/flattened, sizes are fixed,
- * ids are made unique (and kept clear of `reserved`, e.g. other scopes' ids), and a focus/zoom
- * pointing at no leaf becomes null.
+ * Repair a state so every invariant holds: later duplicate boards, ticket keys and terminal sessions
+ * are dropped, a missing board comes back on the left, the tree is collapsed/flattened, sizes are
+ * fixed, ids are made unique (and kept clear of `reserved`, e.g. other scopes' ids), and a focus/zoom
+ * pointing at no leaf becomes null. Terminal sessions in `claimedSessions` (other scopes' terminals)
+ * are dropped too, and the ones kept are added to it.
  */
-export function normalize(s: { root: PaneNode | null; focusedId?: string | null; zoomedId?: string | null }, reserved: ReadonlySet<string> = new Set()): PaneState {
+export function normalize(
+  s: { root: PaneNode | null; focusedId?: string | null; zoomedId?: string | null },
+  reserved: ReadonlySet<string> = new Set(),
+  claimedSessions: Set<string> = new Set(),
+): PaneState {
   let sawBoard = false;
   const keys = new Set<string>();
+  const sessions = new Set<string>();
   let root =
     s.root &&
     prune(s.root, (l) => {
       if (l.content.kind === "board") return sawBoard ? false : (sawBoard = true);
+      if (l.content.kind === "terminal") {
+        if (sessions.has(l.content.sessionId) || claimedSessions.has(l.content.sessionId)) return false;
+        sessions.add(l.content.sessionId);
+        return true;
+      }
       if (keys.has(l.content.ticketKey)) return false;
       keys.add(l.content.ticketKey);
       return true;
     });
+  for (const id of sessions) claimedSessions.add(id);
   root = root && normalizeNode(root);
   if (!root || !sawBoard) {
     const board: PaneLeaf = { type: "leaf", id: "", content: { kind: "board" } };
@@ -225,7 +271,12 @@ export function checkPanes(state: PaneState): string[] {
   const boards = all.filter((l) => l.content.kind === "board").length;
   if (boards !== 1) errors.push(`${boards} board leaves`);
   const keys = new Set<string>();
+  const sessions = new Set<string>();
   for (const l of all) {
+    if (l.content.kind === "terminal") {
+      if (sessions.has(l.content.sessionId)) errors.push(`terminal ${l.content.sessionId} is open twice`);
+      sessions.add(l.content.sessionId);
+    }
     if (l.content.kind !== "ticket") continue;
     if (keys.has(l.content.ticketKey)) errors.push(`ticket ${l.content.ticketKey} is open twice`);
     keys.add(l.content.ticketKey);
@@ -359,6 +410,26 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
 }
 
 /**
+ * A new terminal pane's content: a shell in `cwd` under a fresh, collision-proof session id (two
+ * windows can mint the same pane id before either sees the other's write, but never the same UUID).
+ */
+export function newTerminalContent(cwd: string, uuid: () => string = () => crypto.randomUUID()): TerminalContent {
+  return { kind: "terminal", sessionId: `t:${uuid()}`, cwd };
+}
+
+/**
+ * Open a terminal beside `fromLeafId`, else the focused pane, else the board (splitTarget), on its
+ * right: half of that pane's space, or the ticket's 40% beside the board. The new pane is focused.
+ * Every call adds a pane (terminals aren't one-per-anything), unless `content`'s session is already
+ * open, which just focuses it.
+ */
+export function openTerminal(state: PaneState, content: TerminalContent, fromLeafId: string | null = null): PaneState {
+  const existing = terminalLeafBySession(state.root, content.sessionId);
+  if (existing) return focusPane(state, existing.id);
+  return dock(state, null, splitTarget(state, fromLeafId), "right", content);
+}
+
+/**
  * Dock `moving` (an existing leaf, re-docked with `content`) or a new leaf showing `content` on the
  * `zone` half of `targetId`, splitting the target's space 50/50. Docking against the board leaves
  * it BOARD_SHARE instead, the same split a card click makes. Ends any zoom.
@@ -380,11 +451,10 @@ function dock(state: PaneState, moving: PaneLeaf | null, targetId: string, zone:
 
 /**
  * Drop a card (or the board) on the `zone` half of a pane. Content that's already open (the board,
- * or a ticket in another pane) moves there rather than opening twice.
+ * a ticket or a terminal session in another pane) moves there rather than opening twice.
  */
 export function dropContent(state: PaneState, targetLeafId: string, zone: DropZone, content: PaneContent): PaneState {
-  const existing = content.kind === "board" ? boardLeaf(state.root) : ticketLeafByKey(state.root, content.ticketKey);
-  return dock(state, existing, targetLeafId, zone, content);
+  return dock(state, leafShowing(state.root, content), targetLeafId, zone, content);
 }
 
 /** Re-dock an existing pane on the `zone` half of another (dragging a pane by its header). */
@@ -414,6 +484,14 @@ export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneSt
   return { ...state, root: setLeafContent(state.root, leafId, { ...leaf.content, tab }) };
 }
 
+/** A terminal's shell set its title (OSC 0/2): keep it with the pane, so the header has it after a remount. Empty clears it. */
+export function setTerminalTitle(state: PaneState, leafId: string, title: string): PaneState {
+  const leaf = findLeaf(state.root, leafId);
+  if (!leaf || leaf.content.kind !== "terminal" || (leaf.content.title ?? "") === title) return state;
+  const { title: _old, ...rest } = leaf.content;
+  return { ...state, root: setLeafContent(state.root, leafId, title ? { ...rest, title } : rest) };
+}
+
 /**
  * Navigate inside a pane (e.g. opening a child from a conductor's Tickets tab). Content already open
  * in another pane is focused there instead (switching its tab to the requested one). The board pane
@@ -422,8 +500,7 @@ export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneSt
 export function replaceContent(state: PaneState, leafId: string, content: PaneContent): PaneState {
   const leaf = findLeaf(state.root, leafId);
   if (!leaf || leaf.content.kind === "board") return state;
-  const existing = content.kind === "board" ? boardLeaf(state.root) : ticketLeafByKey(state.root, content.ticketKey);
-  const target = existing ?? leaf;
+  const target = leafShowing(state.root, content) ?? leaf;
   return normalize({ root: setLeafContent(state.root, target.id, content), focusedId: target.id, zoomedId: zoomFor(state, target.id) });
 }
 
@@ -650,8 +727,8 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 // Resizing
 // ---------------------------------------------------------------------------
 
-/** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs. */
-export const PANE_MIN_WIDTH = { board: 320, ticket: 360 } as const;
+/** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns. */
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320 } as const;
 /** The shortest any pane may get in a column split. */
 export const PANE_MIN_HEIGHT = 200;
 
@@ -700,6 +777,9 @@ export function keySplit(key: string, shift: boolean, dir: SplitDir, sizes: read
 // Persistence
 // ---------------------------------------------------------------------------
 
+/** What the main process accepts as a terminal id (terminals.ts ID_PATTERN); anything else could never attach. */
+const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 function parseContent(v: unknown): PaneContent | null {
@@ -707,6 +787,11 @@ function parseContent(v: unknown): PaneContent | null {
   if (v.kind === "board") return { kind: "board" };
   if (v.kind === "ticket" && typeof v.ticketKey === "string" && v.ticketKey) {
     return { kind: "ticket", ticketKey: v.ticketKey, tab: typeof v.tab === "string" && isTicketTab(v.tab) ? v.tab : "summaries" };
+  }
+  if (v.kind === "terminal" && typeof v.sessionId === "string" && SESSION_ID.test(v.sessionId) && typeof v.cwd === "string" && v.cwd) {
+    const t: TerminalContent = { kind: "terminal", sessionId: v.sessionId, cwd: v.cwd };
+    if (typeof v.title === "string" && v.title) t.title = v.title;
+    return t;
   }
   return null; // unknown kinds (e.g. from a newer build) are dropped
 }
@@ -771,9 +856,10 @@ export function parsePaneStore(raw: string | null | undefined): PaneStore {
   });
   seedPaneIds(parsed.flatMap((p) => [...allIds(p.root)]));
   const taken = new Set<string>();
+  const sessions = new Set<string>();
   const scopes: Record<string, PaneState> = {};
   for (const { scope, ...s } of parsed) {
-    const state = normalize(s, taken);
+    const state = normalize(s, taken, sessions);
     allIds(state.root, taken);
     scopes[scope] = state;
   }
@@ -800,6 +886,20 @@ export function mapScopes(store: PaneStore, fn: (s: PaneState, scope: string) =>
 export function retainScopes(store: PaneStore, keep: (scope: string) => boolean): PaneStore {
   const scopes = Object.fromEntries(Object.entries(store.scopes).filter(([scope]) => keep(scope)));
   return Object.keys(scopes).length === Object.keys(store.scopes).length ? store : { scopes };
+}
+
+/** Every terminal session open in any scope: the shells that must stay alive. */
+export function terminalSessions(store: PaneStore): Set<string> {
+  const out = new Set<string>();
+  for (const s of Object.values(store.scopes)) for (const l of leaves(s.root)) if (l.content.kind === "terminal") out.add(l.content.sessionId);
+  return out;
+}
+
+/** The sessions open in `before` but in no scope of `after`: the shells to kill. A pane that only moved (even to another scope) keeps its shell. */
+export function closedSessions(before: PaneStore, after: PaneStore): string[] {
+  if (before === after) return [];
+  const still = terminalSessions(after);
+  return [...terminalSessions(before)].filter((id) => !still.has(id));
 }
 
 /**
@@ -874,12 +974,30 @@ export function forgetProjectPanes(projectId: string, projectKey: string | null)
 /** Re-read the stored panes (another window wrote them). */
 export const reloadPanes = () => publish(load());
 
+/** The whole store (every scope), for things that span scopes like the terminal lifecycle. */
+export const getPaneStore = (): PaneStore => getStore();
+
+/**
+ * Call `fn(before, after)` whenever the store changes (in this window, or re-read after another
+ * window wrote it). Returns an unsubscribe.
+ */
+export function watchPaneStore(fn: (before: PaneStore, after: PaneStore) => void): () => void {
+  let prev = getStore();
+  return subscribe(() => {
+    const next = getStore();
+    if (next === prev) return;
+    const before = prev;
+    prev = next;
+    fn(before, next);
+  });
+}
+
 let started = false;
 function subscribe(fn: () => void) {
   if (!started) {
     started = true;
     // Another window (or a test/screenshot setup) changed it: follow.
-    window.addEventListener("storage", (e: StorageEvent) => {
+    globalThis.addEventListener?.("storage", (e: StorageEvent) => {
       if (e.key === PANES_KEY || e.key === null) reloadPanes();
     });
   }

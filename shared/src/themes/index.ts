@@ -9,7 +9,7 @@ import * as p from "./palettes";
 import { CSS_VAR, TOKEN_KEYS, type Theme, type ThemeAppearance, type ThemeTokens } from "./types";
 
 export * from "./types";
-export { alpha, contrast, distance, mix, over, parseColor, isColor } from "./color";
+export { alpha, contrast, distance, mix, over, parseColor, isColor, toHex } from "./color";
 export { harnessDark, harnessLight } from "./harness";
 export { projectKeyColors, type ProjectKeyColors } from "./projectColor";
 

@@ -81,15 +81,42 @@
   overflow-y: auto;
   padding: 0 10px 10px;
 }
-.new-session-btn {
-  width: 100%;
-  height: 32px;
+/* New session ⌘N, split with a chevron that opens New session / New terminal. */
+.new-session-split {
+  display: flex;
   margin-bottom: 14px;
+}
+.new-session-btn {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
   justify-content: flex-start;
   font-weight: 500;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .new-session-btn svg {
   color: var(--accent);
+}
+.new-session-more {
+  display: flex;
+}
+.new-session-chevron {
+  width: 26px;
+  height: 32px;
+  padding: 0;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  color: var(--text-3);
+}
+.new-session-chevron:hover:not(:disabled),
+.new-session-chevron[aria-expanded="true"] {
+  color: var(--text);
+  z-index: 1;
+}
+.menu .kbd {
+  margin-left: 12px;
 }
 .nav {
   display: flex;

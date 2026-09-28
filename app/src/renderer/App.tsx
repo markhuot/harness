@@ -132,7 +132,10 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
 const isSidebarShortcut = (e: KeyboardEvent) => e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "KeyS";
 
 function Shell() {
-  const { route, state } = useStore();
+  const { route, state, openTerminal } = useStore();
+  // The menu listener is registered once; the action it calls is the current one.
+  const openTerminalRef = useRef(() => openTerminal());
+  openTerminalRef.current = () => openTerminal();
   const layout = useLayout();
   const appRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -159,11 +162,12 @@ function Shell() {
       if (cmd === "toggle-sidebar") {
         if (Date.now() - keyToggledAt > 400) toggleSidebar();
       } else if (cmd === "new-session") setComposer(true);
+      else if (cmd === "new-terminal") openTerminalRef.current();
       else if (cmd === "settings") location.hash = "#/settings";
       else if (cmd === "inbox") location.hash = "#/inbox";
       else if (cmd === "board") location.hash = "#/board/all";
     });
-    // Outside Electron the menu accelerator doesn't exist; handle ⌘N here.
+    // Outside Electron the menu accelerators don't exist; handle ⌘N here (a terminal needs Electron anyway).
     const key = (e: KeyboardEvent) => {
       if (isSidebarShortcut(e)) {
         e.preventDefault();
@@ -202,7 +206,12 @@ function Shell() {
         <Icon name="sidebar" />
       </button>
       <div className="sidebar-slot">
-        <Sidebar ref={sidebarRef} collapsed={layout.sidebarCollapsed} onNewSession={(projectId) => setComposer(true, projectId ?? null)} />
+        <Sidebar
+          ref={sidebarRef}
+          collapsed={layout.sidebarCollapsed}
+          onNewSession={(projectId) => setComposer(true, projectId ?? null)}
+          onNewTerminal={openTerminal}
+        />
         {!layout.sidebarCollapsed && (
           <ResizeHandle
             className="sidebar-resizer"

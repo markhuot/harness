@@ -22,7 +22,25 @@ import {
   type State,
 } from "@harness/shared/state";
 import { formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
-import { focusedTicket, forgetProjectPanes, getPanes, openTicket, pruneTickets, retainPaneScopes, updateAllPanes, updatePanes, usePanes } from "./panes";
+import {
+  closedSessions,
+  focusedTicket,
+  forgetProjectPanes,
+  getPanes,
+  getPaneStore,
+  newTerminalContent,
+  openTerminal as openTerminalPane,
+  openTicket,
+  pruneTickets,
+  reloadPanes,
+  retainPaneScopes,
+  terminalSessions,
+  updateAllPanes,
+  updatePanes,
+  usePanes,
+  watchPaneStore,
+} from "./panes";
+import { terminalCwd, terminalScope } from "./terminal";
 import type { HarnessBridge } from "../../main/types";
 
 declare global {
@@ -56,6 +74,12 @@ export interface Store {
   setSearch: (q: string) => void;
   /** Next page of search results */
   loadMoreSearch: () => void;
+  /**
+   * Open a terminal pane on a board, in that board's folder (home on All projects): `projectId`'s
+   * board, All projects for null, or when omitted the board on screen (from elsewhere, the board
+   * last shown). Goes to that board if it isn't the one on screen.
+   */
+  openTerminal: (projectId?: string | null) => void;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -64,6 +88,36 @@ export function useStore(): Store {
   const s = useContext(Ctx);
   if (!s) throw new Error("useStore outside provider");
   return s;
+}
+
+/**
+ * Keep the shells in the main process in step with the terminal panes: when a change (closing a
+ * pane, removing a project, another window's edit) leaves a session in no scope, its shell is
+ * killed. At startup, shells no stored pane shows (left over from before a reload) are killed too.
+ * Every window does this against the same stored panes, so a second kill of a session is a no-op.
+ */
+function useTerminalLifecycle() {
+  useEffect(() => {
+    const terminal = window.harness?.terminal;
+    if (!terminal) return;
+    const kill = (id: string) => void terminal.kill(id).catch(() => {});
+    const unwatch = watchPaneStore((before, after) => closedSessions(before, after).forEach(kill));
+    let live = true;
+    void terminal
+      .list()
+      .then((ids) => {
+        if (!live) return;
+        // Re-read first: another window may have stored a terminal this one hasn't heard about yet.
+        reloadPanes();
+        const open = terminalSessions(getPaneStore());
+        for (const id of ids) if (!open.has(id)) kill(id);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      unwatch();
+    };
+  }, []);
 }
 
 /** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
@@ -341,9 +395,22 @@ export function StoreProvider({
     await onTokenRotated(rotated);
   }, [onTokenRotated]);
 
+  // --- Terminals ---------------------------------------------------------------------------
+  useTerminalLifecycle();
+  const openTerminal = useCallback(
+    (projectId?: string | null) => {
+      const r = parseRoute(location.hash);
+      // scopeRef is the board on screen, or the last one shown while elsewhere.
+      const scope = projectId === undefined ? terminalScope(r, scopeRef.current) : scopeOf(projectId);
+      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(terminalCwd(scope, stateRef.current.projects))));
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+    },
+    [navigate],
+  );
+
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch],
+    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, openTerminal }),
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, openTerminal],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
