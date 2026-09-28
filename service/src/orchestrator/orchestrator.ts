@@ -32,7 +32,7 @@ import type {
   UpdateTicketBody,
   Watcher,
 } from "@harness/shared";
-import { checkProjectKey, isTicketKey, outputTitle, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -204,6 +204,13 @@ function validPermissionMode(value: unknown): PermissionMode | null {
   if (value === undefined || value === null || value === "") return null;
   if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
   return value as PermissionMode;
+}
+
+/** Validate a project color from a request body: a preset id or "#rrggbb" (null / "" → none). */
+function validProjectColor(value: unknown): string | null {
+  const color = normalizeProjectColor(value);
+  if (color === undefined) throw badRequest(`color must be one of ${PROJECT_COLORS.map((c) => c.id).join(", ")}, a #rrggbb hex, or null`);
+  return color;
 }
 
 function errMsg(err: unknown) {
@@ -440,6 +447,7 @@ export class Orchestrator {
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
       autoComplete: body.autoComplete,
+      color: body.color !== undefined ? validProjectColor(body.color) : null,
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     };
@@ -518,10 +526,11 @@ export class Orchestrator {
       }
     }
     const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
-    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, ...rest } = body;
+    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, ...rest } = body;
+    const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest, path, defaultModels };
+    return { newKey, permissionMode, rest: { ...rest, color }, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -1567,6 +1576,7 @@ export class Orchestrator {
       requireHumanReview: p.requireHumanReview,
       autoComplete: p.autoComplete,
       permissionMode: p.permissionMode,
+      color: p.color,
     };
   }
 

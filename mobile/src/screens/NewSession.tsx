@@ -74,7 +74,7 @@ export function NewSessionScreen() {
       />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {project && <ProjectKey k={project.key} />}
+          {project && <ProjectKey k={project.key} color={project.color} />}
           <Select
             value={projectId}
             options={projects.map((p) => ({ value: p.id, label: `${p.name} (${p.key})` }))}

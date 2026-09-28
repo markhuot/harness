@@ -197,3 +197,53 @@
 .project-settings .settings-row-main {
   max-width: 460px;
 }
+.settings-control:has(.color-picker) {
+  width: auto;
+  max-width: 60%;
+}
+.color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.color-swatch {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.color-swatch[aria-checked="true"] {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.color-swatch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Default: the theme's accent badge */
+.color-swatch.default {
+  margin-right: 6px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent-text);
+}
+/* Custom: a hue wheel until a custom color is set, then that color */
+.color-swatch.custom {
+  display: block;
+  margin-left: 6px;
+  background: conic-gradient(#e5484d, #f5c400, #30a46c, #00a2c7, #3e63dd, #d6409f, #e5484d);
+}
+.color-swatch.custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}

@@ -9,6 +9,7 @@ import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime, Switch } from "../components/bits";
+import { ProjectKey } from "../components/ProjectKey";
 import { ModelsSection } from "./settings/ModelSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
@@ -548,7 +549,7 @@ function ProjectsSection() {
         {projects.length === 0 && <div className="empty">No projects yet. Add one from the sidebar.</div>}
         {projects.map((p) => (
           <button key={p.id} className="settings-row link" onClick={() => navigate({ view: "project", projectId: p.id })}>
-            <span className="project-key lg">{p.key.slice(0, 3)}</span>
+            <ProjectKey project={p} size="lg" />
             <div className="settings-row-main">
               <div className="settings-row-title">
                 {p.name}

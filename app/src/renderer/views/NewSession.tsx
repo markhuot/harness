@@ -6,6 +6,7 @@ import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects 
 import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
+import { ProjectKey } from "../components/ProjectKey";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -72,7 +73,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
     <Modal onClose={onClose} width={680}>
       <div className="modal-head new-session-head">
         <div className="project-picker">
-          {project && <span className="project-key">{project.key.slice(0, 3)}</span>}
+          {project && <ProjectKey project={project} />}
           <select
             className="select bare"
             value={projectId}

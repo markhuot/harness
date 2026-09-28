@@ -470,7 +470,7 @@ function ProjectsSection() {
           onPress={() => router.push({ pathname: "/project/[id]", params: { id: p.id } })}
           title={
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <ProjectKey k={p.key} />
+              <ProjectKey k={p.key} color={p.color} />
               <Text style={{ color: c.text, fontSize: 16 }}>{p.name}</Text>
             </View>
           }

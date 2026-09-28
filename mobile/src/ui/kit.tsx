@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type TextProps, type TextStyle, type ViewStyle } from "react-native";
 import type { ReviewState, Ticket, TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
+import { projectKeyColors } from "@harness/shared/themes";
 import { useColors } from "../state/app";
 import { CLAUDE_ORANGE, MONO, RADIUS, type Palette } from "../theme/tokens";
 import { Icon, type IconName } from "./Icon";
@@ -67,12 +68,14 @@ export function StatusPill({ status }: { status: TicketStatus }) {
   );
 }
 
-export function ProjectKey({ k, size = "md" }: { k: string; size?: "sm" | "md" | "lg" }) {
+/** The project's key badge ("HAR") in the project's color (null → the theme accent). */
+export function ProjectKey({ k, color, size = "md" }: { k: string; color: string | null; size?: "sm" | "md" | "lg" }) {
   const c = useColors();
+  const { bg, fg } = projectKeyColors(color, c);
   const dims = size === "sm" ? { h: 16, fs: 9, w: 24 } : size === "lg" ? { h: 24, fs: 11, w: 34 } : { h: 19, fs: 10, w: 28 };
   return (
-    <View style={{ minWidth: dims.w, height: dims.h, borderRadius: 4, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", backgroundColor: c.accentSoft }}>
-      <Text style={{ fontSize: dims.fs, fontWeight: "700", letterSpacing: 0.3, color: c.accentText }} maxFontSizeMultiplier={1.3}>
+    <View style={{ minWidth: dims.w, height: dims.h, borderRadius: 4, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", backgroundColor: bg }}>
+      <Text style={{ fontSize: dims.fs, fontWeight: "700", letterSpacing: 0.3, color: fg }} maxFontSizeMultiplier={1.3}>
         {k.slice(0, 3)}
       </Text>
     </View>

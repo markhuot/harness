@@ -11,6 +11,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Projects can have a color. Pick one of eleven presets (or Custom for any color you like) in
+  project settings, and the project's key badge takes that color in the sidebar, on cards, in
+  the board header and on tickets. On the Mac, Custom opens the system color panel. On iPhone it
+  opens a grid of shades with a hex field for an exact value. Projects without a color keep the
+  theme's accent, and every color is adjusted so its badge stays readable in light and dark
+  themes.
+- Ticket details now show the project's key badge next to the ticket's other badges.
 - Watchers now take any command that prints text, plus a prompt that tells triage what you
   want done with the output (for example, "If this event is assigned to me and has actionable
   next steps, dispatch it to an agent in PLAYR"). The command runs in your login shell, so

@@ -32,7 +32,7 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, LISTEN_MODES, outputTitle } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle } from "@harness/shared";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -281,7 +281,7 @@ function simulateRun(t: Ticket, kind: RunKind, prompt: string, text: string, aft
 // Seed
 // ---------------------------------------------------------------------------
 
-function seedProject(key: string, name: string, path: string, requireHumanReview = true): Project {
+function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null): Project {
   const p: Project = {
     id: newId("proj"),
     key,
@@ -294,6 +294,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     requireHumanReview,
     autoComplete: true,
     permissionMode: null,
+    color,
     createdAt: now() - 86400_000 * 7,
     updatedAt: now() - 86400_000 * 7,
   };
@@ -445,7 +446,7 @@ function seedTicket(s: SeedTicket): Ticket {
 }
 
 function seed() {
-  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes");
+  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes", true, "blue");
   const hx = seedProject("HARNESS", "harness", "/Users/markhuot/Sites/harness", false);
 
   seedTicket({
@@ -678,7 +679,7 @@ function seed() {
   hx.nextSeq = 11;
 
   // A project whose key was derived from a long folder name (Project settings → Identifier).
-  const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness");
+  const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness", true, "#e0569b");
   for (const [title, status, ageMin] of [
     ["Scaffold the hello world page", "done", 3000],
     ["Add a greeting API route", "done", 2400],
@@ -700,7 +701,7 @@ function seed() {
   // A long-lived project with a deep Done column (paging, search): 130 done tickets, completed
   // over the last ~65 minutes (so they fill the first Done pages, newest first), renumbered from
   // an old WWW key (WWW-n → SITE-n resolve as aliases).
-  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site");
+  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange");
   const verbs = ["Fix", "Refactor", "Polish", "Document", "Speed up", "Test", "Localize", "Harden"];
   const nouns = ["hero banner", "pricing table", "footer links", "blog index", "contact form", "sitemap", "RSS feed", "404 page", "cookie notice", "search page", "case studies grid", "team page", "careers list"];
   for (let i = 1; i <= 130; i++) {
@@ -1010,6 +1011,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         requireHumanReview: body.requireHumanReview ?? true,
         autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
+        color: normalizeProjectColor(body.color ?? null) ?? null,
         createdAt: now(),
         updatedAt: now(),
       };
@@ -1027,6 +1029,11 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (key !== p.key) renameProjectKey(p, key); // throws 409 on collisions
       }
       if (body.defaultModels !== undefined) body.defaultModels = mergeModels(p.defaultModels, body.defaultModels);
+      if (body.color !== undefined) {
+        const color = normalizeProjectColor(body.color);
+        if (color === undefined) throw new HttpError(400, `Invalid color ${JSON.stringify(body.color)}`);
+        body.color = color;
+      }
       Object.assign(p, body, { id: p.id, key: p.key, updatedAt: now() });
       broadcast({ kind: "project.upserted", project: p });
       return ok(p);

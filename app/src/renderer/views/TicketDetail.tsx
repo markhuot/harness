@@ -14,6 +14,7 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ResizeHandle } from "../components/ResizeHandle";
+import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
 import { detailBounds, updateLayout, useLayout } from "../state/layout";
 
@@ -179,6 +180,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
+  const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
   const k = ticket.key;
 
@@ -236,6 +238,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
         {parent && <ParentCrumb parent={parent} onOpen={(key) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "children" })} />}
         <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
+          {project && <ProjectKey project={project} />}
           {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
           <KindBadge ticket={ticket} childCount={children.length} />
           {ticket.branch && (

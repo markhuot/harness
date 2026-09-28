@@ -1,4 +1,4 @@
-// Project settings: name, identifier (rename with the desktop's live validation + preview),
+// Project settings: name, identifier (rename with the desktop's live validation + preview), color,
 // folder path (a text field: there's no folder picker on the phone), default driver / models /
 // permission mode, worktrees, human review, remove.
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +10,8 @@ import { PERMISSION_MODE_LABELS } from "@harness/shared";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
-import { Button, Empty } from "../ui/kit";
+import { Button, Empty, ProjectKey } from "../ui/kit";
+import { ProjectColorPicker } from "../ui/ProjectColor";
 import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
@@ -83,6 +84,9 @@ function ProjectSettings({ project }: { project: Project }) {
           <DraftField value={project.name} onCommit={(v) => v.trim() && void save({ name: v.trim() })} />
         </SRow>
         <KeyRow project={project} />
+        <SRow title={<View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text style={{ color: c.text, fontSize: 16 }}>Color</Text><ProjectKey k={project.key} color={project.color} /></View>} sub="Tints the project's key badge on cards, tickets and lists." stacked>
+          <ProjectColorPicker value={project.color} onChange={(color) => void save({ color })} />
+        </SRow>
         <SRow title="Folder" sub="Absolute path on the Mac" stacked last>
           <TextInput style={[inputStyle, { fontFamily: MONO, fontSize: 14 }]} value={path} onChangeText={setPath} onBlur={() => void savePath()} onSubmitEditing={() => void savePath()} autoCapitalize="none" autoCorrect={false} returnKeyType="done" />
         </SRow>
