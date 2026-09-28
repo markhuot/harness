@@ -68,6 +68,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the Mac, ticket details now open in panes you can resize, instead of in a fixed panel on
+  the right. Clicking a card still opens the ticket beside the board, and clicking another card
+  swaps it in. Drag the divider between panes to resize them (double-click it to make them
+  equal), and your layout is still there after a restart. Links inside a ticket, like a
+  conductor's child tickets or the "Part of" link, open in the same pane. Maximize (the button
+  that used to expand the panel) fills the window with one pane until you press it again or
+  hit Escape. Escape closes the ticket pane you're working in.
 - In the New session window on the Mac, "Add project…" is now the last choice in the project
   dropdown instead of a separate button, and the "New session" label in the corner is gone.
 - The watcher form on Mac and iPhone has a single Command field and a new Prompt field in

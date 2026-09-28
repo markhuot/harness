@@ -4,6 +4,7 @@ import type { PluginTab, Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import { createPluginHostBridge, pluginUiUrl } from "@harness/shared/state";
 import { currentPluginTheme } from "../state/theme";
+import { useOpenTicket } from "../components/paneContext";
 import "./plugin.css";
 
 /** Plugin tabs for this ticket; null while loading. Refetched when the workdir/branch changes or on reconnect. */
@@ -26,13 +27,15 @@ export function usePluginTabs(ticket: Ticket | undefined): PluginTab[] | null {
 }
 
 export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab }) {
-  const { client, navigate, route } = useStore();
+  const { client } = useStore();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   const src = pluginUiUrl(client.baseUrl, tab.pluginId, tab.id);
 
-  const routeRef = useRef(route);
-  routeRef.current = route;
+  // The bridge lives as long as the frame; it reads the latest opener (this pane may be navigated).
+  const openTicket = useOpenTicket();
+  const openRef = useRef(openTicket);
+  openRef.current = openTicket;
   const bridge = useMemo(
     () =>
       createPluginHostBridge({
@@ -44,12 +47,9 @@ export function PluginFrame({ ticket, tab }: { ticket: Ticket; tab: PluginTab })
         theme: () => currentPluginTheme(),
         onReady: () => setReady(true),
         onOpenExternal: (url) => void window.harness?.openExternal(url),
-        onNavigate: (key) => {
-          const r = routeRef.current;
-          navigate({ view: "board", projectId: r.view === "board" ? r.projectId : null, ticketKey: key, tab: "summaries" });
-        },
+        onNavigate: (key) => openRef.current(key),
       }),
-    [client, ticket.key, tab.id, navigate],
+    [client, ticket.key, tab.id],
   );
 
   useEffect(() => {

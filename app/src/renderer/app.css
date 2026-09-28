@@ -205,13 +205,7 @@
 
 /* ------------------------------------------------------------------ board */
 
-.board-layout {
-  display: flex;
-  height: 100%;
-  min-height: 0;
-}
 .board-pane {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -308,9 +302,13 @@
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
+/* Open in the focused pane (selected), or in another pane (open). */
 .card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+}
+.card.open {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 .card-top {
   display: flex;
@@ -388,33 +386,17 @@
 
 /* ------------------------------------------------------------------ ticket detail */
 
+/* A ticket pane (sized by the pane workspace, see panes.css). */
 .detail {
-  /* The dragged width (--detail-width, see panes.css), else a responsive default; always ≥360px,
-     ≤80% of the window, and leaving the board at least 320px. */
-  width: clamp(360px, var(--detail-width, clamp(440px, 40vw, 680px)), min(80vw, 100% - 320px));
-  flex: none;
-  border-left: 1px solid var(--border);
   background: var(--bg-elev);
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
-  animation: slide-in 0.16s ease-out;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.04);
+  animation: pane-in 0.16s ease-out;
 }
-.detail.wide {
-  flex: 1;
-  width: auto;
-}
-.board-layout:has(.detail.wide) .board-pane {
-  display: none;
-}
-.detail.wide {
-  border-left: 0;
-  animation: none;
-}
-@keyframes slide-in {
+@keyframes pane-in {
   from {
-    transform: translateX(16px);
     opacity: 0;
   }
 }
@@ -422,6 +404,10 @@
   gap: 8px;
   padding: 0 12px 0 20px;
   border-bottom: 0;
+}
+.detail-titlebar > :is(.detail-key, .status-pill) {
+  flex: none;
+  white-space: nowrap;
 }
 .detail-key {
   font-family: var(--mono);

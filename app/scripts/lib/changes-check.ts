@@ -135,8 +135,8 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   await shot("8-changes");
   check("narrow panel hides the tree behind a toggle", await frame.js<boolean>(`document.getElementById("app").classList.contains("narrow")`));
 
-  // Expanded detail panel: the tree sits beside the diffs.
-  await app.js(`document.querySelector('.detail-titlebar button[title^="Expand"]')?.click()`);
+  // Maximized ticket pane: the tree sits beside the diffs.
+  await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
   const wide = await until("plugin goes wide", () => frame.js<boolean>(`!document.getElementById("app").classList.contains("narrow")`), 5000).catch(() => false);
   check("expanded panel shows the file tree beside the diffs", !!wide);
   await Bun.sleep(800);
@@ -165,12 +165,12 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
     await shot("8-changes-wide-mocha");
     await app.js(`window.harness.setTheme({ darkTheme: "harness-dark" })`);
     await until("plugin back to Harness Dark", () => frame.js<boolean>(`document.documentElement.dataset.themeId === "harness-dark"`), 5000).catch(() => false);
-    await app.js(`document.querySelector('.detail-titlebar button[title="Show the board"]')?.click()`);
+    await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
     await Bun.sleep(700);
     await shot("8-changes-dark");
     await opts.setTheme("light");
   } else {
-    await app.js(`document.querySelector('.detail-titlebar button[title="Show the board"]')?.click()`);
+    await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
     const t = await frame.js<string>(`document.documentElement.dataset.theme`);
     const host = await app.js<string>(`document.documentElement.dataset.theme`);
     check("plugin iframe uses the app's resolved theme", t === host, `${t} vs ${host}`);

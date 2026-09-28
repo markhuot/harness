@@ -3,12 +3,12 @@ import type { ConnectionError, ConnectionResult } from "../main/types";
 import { StoreProvider, useStore } from "./state/store";
 import { Icon } from "./components/Icon";
 import { Sidebar } from "./views/Sidebar";
-import { BoardView } from "./views/Board";
 import { InboxView } from "./views/Inbox";
 import { SettingsView } from "./views/Settings";
 import { NewSessionModal } from "./views/NewSession";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
+import { PaneWorkspace } from "./components/PaneWorkspace";
 import { sidebarBounds, toggleSidebar, updateLayout, useLayout } from "./state/layout";
 
 interface Toast {
@@ -206,7 +206,6 @@ function Shell() {
           <ResizeHandle
             className="sidebar-resizer"
             testId="sidebar-resizer"
-            edge="right"
             label="Resize sidebar"
             target={sidebarRef}
             bounds={sidebarBounds}
@@ -231,7 +230,7 @@ function Shell() {
         ) : route.view === "project" ? (
           <ProjectSettingsView />
         ) : (
-          <BoardView />
+          <PaneWorkspace />
         )}
       </main>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}

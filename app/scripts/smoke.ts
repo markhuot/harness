@@ -560,10 +560,15 @@ try {
     check("a child's status change regroups it live", regrouped);
     check("progress header follows live", (await until("progress 2/8", async () => (await progressText()).startsWith("2/8 done") && (await progressText()))) === "2/8 done · 1 in progress · 2 blocked · 2 review · 1 up next");
 
-    // Row → child; the breadcrumb leads back to the conductor's Tickets tab.
+    // Row → child, in the same pane; the breadcrumb leads back to the conductor's Tickets tab.
+    const conductorPane = await js<string>(`document.querySelector(".pane-ticket")?.dataset.paneId ?? ""`);
     await js(`document.querySelector('.child-row[data-key="HARNESS-6"]').click()`);
     const crumb = await until("parent crumb", () => js<string>(`location.hash.endsWith("/ticket/HARNESS-6") && document.querySelector("[data-testid=parent-crumb]")?.textContent`));
     check("child detail shows the Part of breadcrumb", crumb === "Part ofHARNESS-1Build the harness desktop app", crumb);
+    check(
+      "a child row navigates its own pane (no new pane)",
+      !!conductorPane && (await js<string[]>(`[...document.querySelectorAll(".pane-ticket")].map(p => p.dataset.paneId)`)).join(",") === conductorPane,
+    );
     await js(`document.querySelector("[data-testid=parent-crumb]").click()`);
     const back = await until("back to conductor", () => js<string>(`location.hash`).then((h) => h.endsWith("/ticket/HARNESS-1/children") && h));
     check("breadcrumb opens the conductor's Tickets tab", !!back, back);
@@ -632,7 +637,7 @@ try {
     check("switching it back on shows every child again", ["HARNESS-2", "HARNESS-5", "HARNESS-6"].every((k) => shown.includes(k)), shown.join(","));
   }
 
-  // 6c. Layout: collapsible + resizable sidebar, resizable ticket panel; all persisted.
+  // 6c. Layout: collapsible + resizable sidebar, the pane workspace (dividers, zoom, close); all persisted.
   {
     await js(`location.hash = "#/board/all"`);
     await until("board", () => exists(".board-pane .view-header"));
@@ -705,60 +710,117 @@ try {
     await dblclick("[data-testid=sidebar-resizer]");
     check("double-clicking the sidebar handle resets its width", (await settled(".sidebar", open)) && (await stored()).sidebarWidth === null, String(await width(".sidebar")));
 
-    // Ticket panel: drag its left edge across an iframe (iframes swallow pointer events without the overlay).
+    // Ticket panes: a card's ticket opens beside the board (60/40); the divider between them drags
+    // across an iframe (iframes swallow pointer events without the overlay).
+    const panes = () => js<{ root: { type: string; sizes?: number[]; children?: unknown[] }; focusedId: string | null; zoomedId: string | null }>(`JSON.parse(localStorage.getItem("harness.panes") ?? "null")`);
+    const setPanes = (st: object) =>
+      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify(st))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
+    const leftOf = (sel: string) => js<number>(`Math.round(document.querySelector(${JSON.stringify(sel)})?.getBoundingClientRect().left ?? -1)`);
+    const padLeft = (sel: string) => js<number>(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(sel)})).paddingLeft)`);
+    const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+    const divider = "[data-testid=pane-divider]";
+    await setPanes({ root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null });
     await js(`location.hash = "#/board/all/ticket/NYTIMES-4"`);
-    await until("detail", () => exists("[data-testid=detail-resizer]"));
+    await until("ticket pane", () => exists(".pane-ticket .detail-titlebar"));
     await Bun.sleep(300);
-    const def = await width(".detail");
+    const ws = await width(".pane-workspace");
+    const def = await width(".pane-ticket");
+    check("a ticket opens in a pane right of the board, taking 40%", near(def, ws * 0.4) && (await leftOf(".pane-ticket")) > (await leftOf(".pane-board")), `${def} of ${ws}`);
     await js(`(() => { const f = document.createElement("iframe"); f.id = "smoke-iframe"; f.srcdoc = "<body style='margin:0;background:#f0f'>";
-      const x = document.querySelector("[data-testid=detail-resizer]").getBoundingClientRect().x;
-      Object.assign(f.style, { position: "fixed", top: "0", left: "0", width: (x - 10) + "px", height: "100vh", border: "0", zIndex: "15", opacity: "0.01" });
+      const x = document.querySelector("[data-testid=pane-divider]").getBoundingClientRect().x;
+      Object.assign(f.style, { position: "fixed", top: "0", left: "0", width: (x - 10) + "px", height: "100vh", border: "0", zIndex: "25", opacity: "0.01" });
       document.body.appendChild(f); })()`);
     let overlayOnTop = false;
-    await drag("[data-testid=detail-resizer]", -200, async () => {
+    await drag(divider, -200, async () => {
       overlayOnTop = await js<boolean>(`document.elementFromPoint(40, 300)?.dataset.testid === "resize-overlay"`);
     });
-    const grown = await width(".detail");
-    check("dragging over an iframe still resizes the ticket panel", grown === def + 200, `${def} → ${grown}`);
+    const grown = await width(".pane-ticket");
+    check("dragging the divider over an iframe still resizes the panes", near(grown, def + 200), `${def} → ${grown}`);
     check("a full-window overlay covers iframes mid-drag and goes away after", overlayOnTop && !(await exists(".resize-overlay")));
     await js(`document.getElementById("smoke-iframe")?.remove()`);
-    check("ticket panel width is persisted", (await stored()).detailWidth === grown);
-    const bounds = await js<{ max: number }>(`(() => ({ max: Math.floor(Math.min(innerWidth * 0.8, document.querySelector(".board-layout").clientWidth - 320)) }))()`);
-    await drag("[data-testid=detail-resizer]", -3000);
-    const maxed = await width(".detail");
-    check("ticket panel stops at its maximum and the board keeps ≥320px", maxed === bounds.max && (await width(".board-pane")) >= 319, `${maxed} vs ${bounds.max}, board ${await width(".board-pane")}`);
-    await drag("[data-testid=detail-resizer]", 3000);
-    check("ticket panel stops at 360px", (await width(".detail")) === 360, String(await width(".detail")));
-    await drag("[data-testid=detail-resizer]", -(grown - 360));
-    await reload("[data-testid=detail-resizer]");
-    check("ticket panel width survives a reload", (await width(".detail")) === grown, String(await width(".detail")));
-    await js(`document.querySelector("[data-testid=detail-resizer]").focus()`);
+    check("pane sizes are persisted", near(((await panes()).root.sizes?.[1] ?? 0) * ws, grown), JSON.stringify((await panes()).root.sizes));
+    await drag(divider, -3000);
+    check("the board pane stops at 320px", near(await width(".pane-board"), 320), String(await width(".pane-board")));
+    await drag(divider, 3000);
+    check("a ticket pane stops at 360px", near(await width(".pane-ticket"), 360), String(await width(".pane-ticket")));
+    await drag(divider, -(grown - (await width(".pane-ticket"))));
+    await reload(".pane-ticket .detail-titlebar");
+    check("pane sizes survive a reload", near(await width(".pane-ticket"), grown), String(await width(".pane-ticket")));
+    await js(`document.querySelector("[data-testid=pane-divider]").focus()`);
     await app!.key("ArrowLeft", "ArrowLeft", 37);
-    check("ArrowLeft on the panel's handle widens it", (await width(".detail")) === grown + 16);
-    await app!.key("ArrowRight", "ArrowRight", 39);
+    check("ArrowLeft on the focused divider widens the ticket pane", near(await width(".pane-ticket"), grown + 16), String(await width(".pane-ticket")));
+    await dblclick(divider);
+    check("double-clicking the divider makes the panes equal", near(await width(".pane-ticket"), ws / 2) && near(await width(".pane-board"), ws / 2), `${await width(".pane-board")} | ${await width(".pane-ticket")}`);
 
-    // Expand = full width; restore = the dragged width.
-    await js(`document.querySelector(".detail-titlebar button[title^='Expand']").click()`);
-    await until("wide", () => exists(".detail.wide"));
-    const full = await width(".detail");
-    check("Expand takes the full width and hides the handle", full === (await width(".main")) && !(await exists("[data-testid=detail-resizer]")), `${full}`);
-    await js(`document.querySelector(".detail-titlebar button[title='Show the board']").click()`);
-    await until("not wide", async () => !(await exists(".detail.wide")));
-    check("restoring from Expand returns to the dragged width", (await width(".detail")) === grown, String(await width(".detail")));
-    await dblclick("[data-testid=detail-resizer]");
-    check("double-clicking the panel handle resets it", (await width(".detail")) === def && (await stored()).detailWidth === null, `${await width(".detail")} vs ${def}`);
+    // Two tickets side by side (stored state), the hash mirroring the focused one; zoom; close.
+    const ticketLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "summaries" } });
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, ticketLeaf("t1", "NYTIMES-4"), ticketLeaf("t2", "NYTIMES-3")], sizes: [0.4, 0.3, 0.3] },
+      focusedId: "t2",
+      zoomedId: null,
+    });
+    const keysShown = () => js<string[]>(`[...document.querySelectorAll(".pane-ticket")].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(p => p.querySelector(".detail-key")?.textContent ?? "")`);
+    const two = await until("two ticket panes", async () => {
+      const k = await keysShown();
+      return k.length === 2 && k.every(Boolean) && k;
+    });
+    check("two ticket panes sit side by side", two.join(",") === "NYTIMES-4,NYTIMES-3" && (await js<number>(`document.querySelectorAll(".detail").length`)) === 2, two.join(","));
+    check("the hash mirrors the focused ticket pane", (await js<string>("location.hash")) === "#/board/all/ticket/NYTIMES-3");
+    check(
+      "cards show which tickets are open (the focused one strongest)",
+      (await js<boolean>(`document.querySelector('.card[data-key="NYTIMES-3"]').classList.contains("selected") && document.querySelector('.card[data-key="NYTIMES-4"]').classList.contains("open")`)),
+    );
+    await js(`document.querySelector("[data-pane-id=t1] .detail-body").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
+    const refocused = await until("focus follows a click", () => js<string>("location.hash").then((h) => h === "#/board/all/ticket/NYTIMES-4" && h)).catch(() => "");
+    check("clicking in a pane focuses it (and the hash follows)", !!refocused && (await exists("[data-pane-id=t1].focused")));
+    await js(`document.querySelector("[data-pane-id=t2] [data-testid=pane-zoom]").click()`);
+    await until("zoomed", () => exists(".pane.zoomed"));
+    check(
+      "Maximize fills the workspace and hides the other panes and dividers",
+      near(await width(".pane.zoomed"), ws) && (await js<number>(`document.querySelectorAll(".pane.covered").length`)) === 2 && !(await exists(divider)),
+      String(await width(".pane.zoomed")),
+    );
+    await app!.key("Escape", "Escape", 27);
+    await until("unzoomed", async () => !(await exists(".pane.zoomed")));
+    check("Escape restores a maximized pane (and closes nothing)", (await keysShown()).length === 2 && (await panes()).zoomedId === null);
+    await js(`document.querySelector("[data-pane-id=t2] [data-testid=pane-close]").click()`);
+    const left = await until("one ticket pane", async () => {
+      const k = await keysShown();
+      return k.length === 1 && k;
+    });
+    check("closing a pane gives its room to its neighbour", left.join(",") === "NYTIMES-4" && near((await width(".pane-board")) + (await width(".pane-ticket")), ws), left.join(","));
 
-    // The browser canvas follows the panel: the service gets the new viewport size.
+    // Collapsed sidebar: only the top-left pane's header clears the traffic lights (the zoomed one while zoomed).
+    await js(`document.querySelector("[data-testid=sidebar-toggle]").click()`);
+    await until("sidebar collapsed", async () => (await width(".sidebar")) === 0);
+    await Bun.sleep(300);
+    const toggleEnd = await js<number>(`document.querySelector("[data-testid=sidebar-toggle]").getBoundingClientRect().right`);
+    check(
+      "collapsed: the board pane's header is inset, the ticket pane's isn't",
+      (await padLeft(".pane-board .board-pane > .view-header")) > toggleEnd && (await padLeft(".pane-ticket .detail-titlebar")) < toggleEnd,
+    );
+    await js(`document.querySelector(".pane-ticket [data-testid=pane-zoom]").click()`);
+    await until("zoomed", () => exists(".pane.zoomed"));
+    await Bun.sleep(300);
+    check("a maximized ticket pane's header clears the traffic lights", (await padLeft(".pane-ticket .detail-titlebar")) > toggleEnd);
+    await js(`document.querySelector(".pane-ticket [data-testid=pane-zoom]").click()`);
+    await js(`document.querySelector("[data-testid=sidebar-toggle]").click()`);
+    await until("sidebar back", async () => (await width(".sidebar")) === open);
+    await app!.key("Escape", "Escape", 27);
+    const closed = await until("Escape closes the focused pane", async () => !(await exists(".pane-ticket")) && (await js<string>("location.hash")));
+    check("Escape closes the focused ticket pane and the hash drops the ticket", closed === "#/board/all", String(closed));
+
+    // The browser canvas follows its pane: the service gets the new viewport size.
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
     await until("browser stage", () => exists(".browser-canvas"));
     await Bun.sleep(600);
-    await drag("[data-testid=detail-resizer]", -120);
+    await drag(divider, -120);
     const stageW = await until("stage resized", async () => {
       const w = await js<number>(`Math.round(document.querySelector(".browser-stage").clientWidth)`);
       return inputs.some((l) => l.includes('"type":"resize"') && l.includes(`"width":${w}`)) && w;
     }).catch(() => 0);
-    check("dragging the panel resizes the browser viewport", stageW > 0, String(stageW));
-    await dblclick("[data-testid=detail-resizer]");
+    check("dragging a divider resizes the browser viewport", stageW > 0, String(stageW));
+    await setPanes({ root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null });
     await js(`location.hash = "#/board/all"`);
   }
 

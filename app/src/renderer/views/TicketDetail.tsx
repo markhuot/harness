@@ -13,41 +13,15 @@ import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { ParentCrumb } from "../components/Conductor";
-import { ResizeHandle } from "../components/ResizeHandle";
 import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
-import { detailBounds, updateLayout, useLayout } from "../state/layout";
+import { useOpenTicket } from "../components/paneContext";
+import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes } from "../state/panes";
 
-
-
-const WIDE_KEY = "harness.detailWide";
-function readWide() {
-  try {
-    return localStorage.getItem(WIDE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function TicketDetail({ ticketKey }: { ticketKey: string }) {
-  const { state, client, dispatch, epoch, route, navigate } = useStore();
+/** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
+export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
+  const { state, client, dispatch, epoch } = useStore();
   const [missing, setMissing] = useState(false);
-  const [wide, setWide] = useState(readWide);
-  // Expand = the full width; restoring goes back to the dragged width (layout.detailWidth).
-  const { detailWidth } = useLayout();
-  const panel = useRef<HTMLElement>(null);
-  const setWidthVar = (w: number | null) => {
-    if (w === null) panel.current?.style.removeProperty("--detail-width");
-    else panel.current?.style.setProperty("--detail-width", `${w}px`);
-  };
-  const toggleWide = () => {
-    setWide((w) => {
-      try {
-        localStorage.setItem(WIDE_KEY, w ? "0" : "1");
-      } catch {}
-      return !w;
-    });
-  };
   // By key, or by an old key the service already resolved (the effect below redirects to the new one).
   const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]);
   const pluginTabs = usePluginTabs(ticket);
@@ -61,7 +35,7 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
         if (cancelled) return;
         dispatch({ type: "detail", detail, requestedKey: ticketKey });
         // An old key (from before a project rename) resolves to the ticket's current key; follow it.
-        if (detail.ticket.key !== ticketKey && route.view === "board") navigate({ ...route, ticketKey: detail.ticket.key });
+        if (detail.ticket.key !== ticketKey) updatePanes((s) => renameTicketKey(s, ticketKey, detail.ticket.key));
       })
       .catch(() => !cancelled && setMissing(true));
     return () => {
@@ -69,22 +43,17 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     };
   }, [client, dispatch, ticketKey, epoch]);
 
-  const close = () => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: null, tab: "summaries" });
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (e.key === "Escape" && !el.closest("input, textarea, .modal, canvas")) close();
-    };
-    addEventListener("keydown", on);
-    return () => removeEventListener("keydown", on);
-  });
+  // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
+  const close = () => updatePanes((s) => closePane(s, paneId));
+  const zoom = () => updatePanes((s) => toggleZoom(s, paneId));
 
   if (!ticket) {
     return (
       <aside className="detail">
-        <div className="view-header">
+        <div className="view-header detail-titlebar">
+          <span className="detail-key">{ticketKey}</span>
           <div className="grow" />
-          <button className="btn btn-ghost btn-icon" onClick={close}>
+          <button className="btn btn-ghost btn-icon" onClick={close} title="Close (Esc)" aria-label="Close pane">
             <Icon name="x" />
           </button>
         </div>
@@ -103,38 +72,17 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     );
   }
 
-  const routeTab = route.view === "board" ? route.tab : "summaries";
-  const wantPlugin = parsePluginTab(routeTab);
+  const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket.
-  const tab: TicketTab = (wantPlugin && !activePlugin && pluginTabs) || (routeTab === "children" && ticket.kind !== "conductor") ? "summaries" : routeTab;
-  const setTab = (t: TicketTab) => route.view === "board" && navigate({ ...route, tab: t });
+  const tab: TicketTab = (wantPlugin && !activePlugin && pluginTabs) || (paneTab === "children" && ticket.kind !== "conductor") ? "summaries" : paneTab;
+  const setTab = (t: TicketTab) => updatePanes((s) => setPaneTab(s, paneId, t));
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
 
   return (
-    <aside
-      ref={panel}
-      className={`detail ${wide ? "wide" : ""}`}
-      style={detailWidth ? ({ "--detail-width": `${detailWidth}px` } as React.CSSProperties) : undefined}
-    >
-      {!wide && (
-        <ResizeHandle
-          className="detail-resizer"
-          testId="detail-resizer"
-          edge="left"
-          label="Resize ticket panel"
-          target={panel}
-          bounds={() => detailBounds(window.innerWidth, panel.current?.parentElement?.clientWidth ?? window.innerWidth)}
-          onPreview={setWidthVar}
-          onCommit={(w) => updateLayout({ detailWidth: w })}
-          onReset={() => {
-            setWidthVar(null);
-            updateLayout({ detailWidth: null });
-          }}
-        />
-      )}
-      <DetailHeader ticket={ticket} onClose={close} wide={wide} onToggleWide={toggleWide} />
+    <aside className="detail">
+      <DetailHeader ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs">
         {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
           <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
@@ -172,8 +120,9 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
   );
 }
 
-function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket; onClose: () => void; wide: boolean; onToggleWide: () => void }) {
-  const { state, client, navigate, route } = useStore();
+function DetailHeader({ ticket, onClose, zoomed, onToggleZoom }: { ticket: Ticket; onClose: () => void; zoomed: boolean; onToggleZoom: () => void }) {
+  const { state, client } = useStore();
+  const openTicket = useOpenTicket();
   const act = useAction();
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -187,7 +136,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const remove = async () => {
     if (!confirm(`Delete ${k}? Its transcript and summaries are removed too.`)) return;
     const ok = await act(() => client.deleteTicket(k), `${k} deleted`);
-    if (ok) navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: null, tab: "summaries" });
+    if (ok) onClose();
   };
 
   return (
@@ -226,16 +175,23 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
             </>
           )}
         </MenuButton>
-        <button className="btn btn-ghost btn-icon" onClick={onToggleWide} title={wide ? "Show the board" : "Expand to full width"}>
-          <Icon name={wide ? "sidebar" : "expand"} />
+        <button
+          className="btn btn-ghost btn-icon"
+          data-testid="pane-zoom"
+          aria-pressed={zoomed}
+          onClick={onToggleZoom}
+          title={zoomed ? "Restore pane (Esc)" : "Maximize pane"}
+          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+        >
+          <Icon name={zoomed ? "shrink" : "expand"} />
         </button>
-        <button className="btn btn-ghost btn-icon" onClick={onClose} title="Close (Esc)">
+        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={onClose} title="Close (Esc)" aria-label="Close pane">
           <Icon name="x" />
         </button>
       </div>
 
       <div className="detail-hero">
-        {parent && <ParentCrumb parent={parent} onOpen={(key) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "children" })} />}
+        {parent && <ParentCrumb parent={parent} onOpen={(key) => openTicket(key, "children")} />}
         <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
           {project && <ProjectKey project={project} />}

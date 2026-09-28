@@ -20,7 +20,8 @@ import {
   type Snapshot,
   type State,
 } from "@harness/shared/state";
-import { formatRoute, parseRoute, type Route } from "./route";
+import { formatRoute, mirrorRoute, parseRoute, type Route } from "./route";
+import { focusedTicket, openTicket, updatePanes, usePanes } from "./panes";
 import type { HarnessBridge } from "../../main/types";
 
 declare global {
@@ -64,13 +65,28 @@ export function useStore(): Store {
   return s;
 }
 
+/** Arriving at a board link to a ticket opens it in a pane (or focuses the pane it's already in). */
+function openFromRoute(r: Route): Route {
+  if (r.view === "board" && r.ticketKey) updatePanes((s) => openTicket(s, r.ticketKey!, r.tab));
+  return r;
+}
+
 export function useRoute() {
-  const [route, setRoute] = useState(() => parseRoute(location.hash));
+  const [route, setRoute] = useState(() => openFromRoute(parseRoute(location.hash)));
   useEffect(() => {
-    const on = () => setRoute(parseRoute(location.hash));
+    const on = () => setRoute(openFromRoute(parseRoute(location.hash)));
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
+  // On the board the hash mirrors the focused ticket pane. replaceState adds no history entry and
+  // fires no hashchange, and opening the focused ticket again is a no-op, so the two never fight.
+  const focused = focusedTicket(usePanes());
+  const mirror = route.view === "board" ? formatRoute(mirrorRoute(route, focused)) : null;
+  useEffect(() => {
+    if (!mirror || location.hash === mirror) return;
+    history.replaceState(history.state, "", mirror);
+    setRoute(parseRoute(mirror));
+  }, [mirror]);
   const navigate = useCallback((r: Route) => {
     const h = formatRoute(r);
     if (location.hash !== h) location.hash = h;

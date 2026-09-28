@@ -94,7 +94,7 @@ you answer.
 
 ## Plugins
 
-Plugins add tabs to the ticket panel, with optional server routes. The built-in **git** plugin
+Plugins add tabs to ticket panes, with optional server routes. The built-in **git** plugin
 adds a **Changes** tab that shows everything a ticket changed: its branch against the base branch,
 including uncommitted and untracked files. Drop your own plugins in `~/.harness/plugins/`. See
 [plugins/README.md](plugins/README.md) for how to write one. `bun run plugins:build` builds the

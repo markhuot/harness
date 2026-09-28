@@ -365,7 +365,7 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
-| Local | appearance and themes, layout, board project filter, show or hide children, last-used project | none | client preferences, not service state |
+| Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
 dummy driver: a work run creates a looping `zsh -lc` watcher around
@@ -870,6 +870,47 @@ don't emit ticket events), and has a refresh button. Below 720 px the tree becom
 driver is tested against a fake `claude` executable that replays stream-json. Browser tests
 use the local Chrome and skip when it is missing. End-to-end tests boot the service on an
 ephemeral port with a temp `HARNESS_HOME` and drive it through `HarnessClient`.
+
+## Desktop app (`app/`)
+
+Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The left sidebar
+collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows Inbox,
+Settings, project settings, or on the board route the pane workspace.
+
+- **Pane workspace.** A tmux-style split tree (`state/panes.ts`, persisted as `harness.panes`):
+  leaves show content (`{ kind: "board" }` or `{ kind: "ticket", ticketKey, tab }`), splits lay
+  their children out side by side (`row`) or stacked (`column`) with sizes that sum to 1. There's
+  always exactly one board pane and a ticket is open in at most one pane. `PaneWorkspace.tsx`
+  renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
+  boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
+  a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
+  workspace while the others stay mounted underneath, hidden.
+- **Opening tickets.** Clicking a card runs `openTicket`: an open ticket gets focused, otherwise
+  it replaces the ticket pane just right of the board, or the board splits 60/40 with the ticket
+  on the right. Links inside a ticket pane (child rows, the parent crumb, dependency links, a
+  plugin's open-ticket request) replace that pane's content through `useOpenTicket`
+  (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
+  highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
+  straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
+  Home/End, double-click to make the panes equal. While dragging, a full-window overlay
+  (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
+  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, any pane 200 px tall.
+- **Focus, close, zoom.** Clicking or tabbing into a pane focuses it (a faint header tint). ✕
+  closes a ticket pane and its neighbours take its room; the board can't be closed. Maximize
+  zooms a pane. Escape ends a zoom, or else closes the focused ticket pane (never while a text
+  field, modal or menu has it). Deleting a ticket closes its pane, and a renamed key follows the
+  rename.
+- **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
+  still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
+  opens the ticket the way a card click does. After that the hash mirrors the focused ticket
+  pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
+  board. Opening an already focused ticket is a no-op, so the two never fight. Leaving for Inbox
+  or Settings and coming back restores the saved panes.
+- **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
+  the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
+  edge drag the window, apart from their controls. The board header sheds extras through a
+  container query when its pane is narrow.
 
 ## iPhone app (`mobile/`)
 

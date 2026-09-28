@@ -25,13 +25,17 @@ import {
 import { Icon } from "../components/Icon";
 import { DriverBadge, KindBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
-import { TicketDetail } from "./TicketDetail";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
+import { focusedTicket, leaves, openTicket, updatePanes, usePanes } from "../state/panes";
 import "./board.css";
 
-export function BoardView() {
-  const { state, route, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
+/** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
+type CardSelection = "focused" | "open" | null;
+
+/** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
+export function BoardPane() {
+  const { state, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
@@ -39,7 +43,10 @@ export function BoardView() {
   useEffect(() => () => setSearch(""), [setSearch]);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
-  if (route.view !== "board") return null;
+  const panes = usePanes();
+  const focusedKey = focusedTicket(panes)?.ticketKey ?? null;
+  const openKeys = useMemo(() => new Set(leaves(panes.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []))), [panes.root]);
+  const selection = (key: string): CardSelection => (key === focusedKey ? "focused" : openKeys.has(key) ? "open" : null);
 
   const projectId = boardProjectId;
   const project = projectId ? state.projects[projectId] : null;
@@ -52,135 +59,130 @@ export function BoardView() {
   const doneTotal = searching ? columns.done.length : doneCount(state, projectId, columns.done.length);
   const paging = searching ? undefined : state.donePaging[scopeOf(projectId)];
 
-  const open = (key: string) => navigate({ view: "board", projectId, ticketKey: key, tab: "summaries" });
-
-
   return (
-    <div className="board-layout">
-      <div className="board-pane">
-        <header className="view-header">
-          <div className="view-title">
-            {project ? (
-              <>
-                <ProjectKey project={project} size="lg" />
-                {project.name}
-              </>
-            ) : (
-              <>
-                <Icon name="layers" />
-                All projects
-              </>
-            )}
-          </div>
-          {project && (
-            <span className="muted mono truncate header-path" title={project.path}>
-              {project.path.replace(/^\/Users\/[^/]+/, "~")}
-            </span>
+    <div className="board-pane">
+      <header className="view-header">
+        <div className="view-title">
+          {project ? (
+            <>
+              <ProjectKey project={project} size="lg" />
+              {project.name}
+            </>
+          ) : (
+            <>
+              <Icon name="layers" />
+              All projects
+            </>
           )}
-          {project && (
-            <button className="btn btn-ghost btn-icon btn-sm" title="Project settings" aria-label="Project settings" onClick={() => navigate({ view: "project", projectId: project.id })}>
-              <Icon name="settings" size={13} />
-            </button>
-          )}
-          <div className="grow" />
-          <div className="search no-drag">
-            <Icon name="hash" size={12} />
-            <input
-              placeholder="Search"
-              aria-label="Search tickets"
-              data-testid="board-search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && filter && (e.stopPropagation(), setFilter(""))}
-            />
-            {filter && (
-              <button className="search-clear" aria-label="Clear search" title="Clear search" onClick={() => setFilter("")}>
-                <Icon name="x" size={11} />
-              </button>
-            )}
-            <MenuButton
-              className="search-options"
-              trigger={(toggle, open) => (
-                <button
-                  type="button"
-                  className={`search-options-btn ${hideChildren ? "" : "active"}`}
-                  aria-label="Search options"
-                  aria-haspopup="menu"
-                  aria-expanded={open}
-                  title="Search options"
-                  data-testid="search-options"
-                  onClick={toggle}
-                >
-                  <Icon name="filter" size={12} />
-                </button>
-              )}
-            >
-              {() => (
-                // Stays open on toggle so the board visibly updates underneath.
-                <MenuCheckbox checked={!hideChildren} onToggle={toggleHideChildren} testId="show-children" title="Child tickets that need you always show">
-                  Show child tickets
-                </MenuCheckbox>
-              )}
-            </MenuButton>
-          </div>
-        </header>
-        {searching && (
-          <div className="search-status" data-testid="search-status" role="status">
-            {!search || search.ids === null ? <span className="spinner" /> : <Icon name="hash" size={12} />}
-            <span>{search ? searchStatusText(search) : "Searching…"}</span>
-            {search && canLoadMoreSearch(search) && (
-              <button className="btn btn-sm" data-testid="search-load-more" onClick={loadMoreSearch}>
-                Load more
-              </button>
-            )}
-            {search?.loading && search.ids !== null && <span className="spinner" />}
-            <div className="grow" />
-            <button className="btn btn-ghost btn-sm" onClick={() => setFilter("")}>
-              Clear
-            </button>
-          </div>
-        )}
-        <div className="board">
-          {TICKET_STATUSES.map((status) => {
-            const tickets = columns[status].filter(visible);
-            return (
-              <section key={status} className="column">
-                <div className="column-head">
-                  <StatusDot status={status} />
-                  <span className="column-title">{STATUS_LABEL[status]}</span>
-                  <span className="column-count" data-testid={`count-${status}`}>{status === "done" && !searching ? doneTotal : tickets.length}</span>
-                </div>
-                <div className="column-body">
-                  {tickets.map((t) => (
-                    <TicketCard
-                      key={t.id}
-                      ticket={t}
-                      state={state}
-                      selected={route.ticketKey === t.key}
-                      showProject={!projectId}
-                      related={!!hoverConductor && t.parentId === hoverConductor}
-                      onHoverConductor={setHoverConductor}
-                      onOpen={open}
-                    />
-                  ))}
-                  {tickets.length === 0 && !(status === "done" && paging?.nextCursor) && (
-                    <div className="column-empty">{searching ? (search?.ids ? "No matches" : "Searching…") : COLUMN_EMPTY_TEXT[status]}</div>
-                  )}
-                  {status === "done" && paging && (paging.nextCursor !== null || paging.error) && (
-                    <LoadMore key={tickets.length} loading={paging.loading} error={paging.error} onLoad={loadMoreDone} />
-                  )}
-                </div>
-              </section>
-            );
-          })}
         </div>
+        {project && (
+          <span className="muted mono truncate header-path" title={project.path}>
+            {project.path.replace(/^\/Users\/[^/]+/, "~")}
+          </span>
+        )}
+        {project && (
+          <button className="btn btn-ghost btn-icon btn-sm" title="Project settings" aria-label="Project settings" onClick={() => navigate({ view: "project", projectId: project.id })}>
+            <Icon name="settings" size={13} />
+          </button>
+        )}
+        <div className="grow" />
+        <div className="search no-drag">
+          <Icon name="hash" size={12} />
+          <input
+            placeholder="Search"
+            aria-label="Search tickets"
+            data-testid="board-search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && filter && (e.stopPropagation(), setFilter(""))}
+          />
+          {filter && (
+            <button className="search-clear" aria-label="Clear search" title="Clear search" onClick={() => setFilter("")}>
+              <Icon name="x" size={11} />
+            </button>
+          )}
+          <MenuButton
+            className="search-options"
+            trigger={(toggle, open) => (
+              <button
+                type="button"
+                className={`search-options-btn ${hideChildren ? "" : "active"}`}
+                aria-label="Search options"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                title="Search options"
+                data-testid="search-options"
+                onClick={toggle}
+              >
+                <Icon name="filter" size={12} />
+              </button>
+            )}
+          >
+            {() => (
+              // Stays open on toggle so the board visibly updates underneath.
+              <MenuCheckbox checked={!hideChildren} onToggle={toggleHideChildren} testId="show-children" title="Child tickets that need you always show">
+                Show child tickets
+              </MenuCheckbox>
+            )}
+          </MenuButton>
+        </div>
+      </header>
+      {searching && (
+        <div className="search-status" data-testid="search-status" role="status">
+          {!search || search.ids === null ? <span className="spinner" /> : <Icon name="hash" size={12} />}
+          <span>{search ? searchStatusText(search) : "Searching…"}</span>
+          {search && canLoadMoreSearch(search) && (
+            <button className="btn btn-sm" data-testid="search-load-more" onClick={loadMoreSearch}>
+              Load more
+            </button>
+          )}
+          {search?.loading && search.ids !== null && <span className="spinner" />}
+          <div className="grow" />
+          <button className="btn btn-ghost btn-sm" onClick={() => setFilter("")}>
+            Clear
+          </button>
+        </div>
+      )}
+      <div className="board">
+        {TICKET_STATUSES.map((status) => {
+          const tickets = columns[status].filter(visible);
+          return (
+            <section key={status} className="column">
+              <div className="column-head">
+                <StatusDot status={status} />
+                <span className="column-title">{STATUS_LABEL[status]}</span>
+                <span className="column-count" data-testid={`count-${status}`}>{status === "done" && !searching ? doneTotal : tickets.length}</span>
+              </div>
+              <div className="column-body">
+                {tickets.map((t) => (
+                  <TicketCard
+                    key={t.id}
+                    ticket={t}
+                    state={state}
+                    selected={selection(t.key)}
+                    showProject={!projectId}
+                    related={!!hoverConductor && t.parentId === hoverConductor}
+                    onHoverConductor={setHoverConductor}
+                    onOpen={openCard}
+                  />
+                ))}
+                {tickets.length === 0 && !(status === "done" && paging?.nextCursor) && (
+                  <div className="column-empty">{searching ? (search?.ids ? "No matches" : "Searching…") : COLUMN_EMPTY_TEXT[status]}</div>
+                )}
+                {status === "done" && paging && (paging.nextCursor !== null || paging.error) && (
+                  <LoadMore key={tickets.length} loading={paging.loading} error={paging.error} onLoad={loadMoreDone} />
+                )}
+              </div>
+            </section>
+          );
+        })}
       </div>
-      {route.ticketKey && <TicketDetail key={route.ticketKey} ticketKey={route.ticketKey} />}
     </div>
   );
 }
 
-
+/** The click-a-card rule (panes.ts openTicket): reuse the ticket pane beside the board, or split. */
+const openCard = (key: string) => updatePanes((s) => openTicket(s, key));
 
 /** A checkable menu row (the check sits in a fixed gutter so labels line up). */
 function MenuCheckbox({ checked, onToggle, testId, title, children }: { checked: boolean; onToggle: () => void; testId?: string; title?: string; children: ReactNode }) {
@@ -237,7 +239,7 @@ const TicketCard = memo(function TicketCard({
 }: {
   ticket: Ticket;
   state: State;
-  selected: boolean;
+  selected: CardSelection;
   showProject: boolean;
   onOpen: (key: string) => void;
   related: boolean;
@@ -254,7 +256,7 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
+      className={`card ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
@@ -330,7 +332,7 @@ const TicketCard = memo(function TicketCard({
   );
 }, cardPropsEqual);
 
-type CardProps = { ticket: Ticket; state: State; selected: boolean; showProject: boolean; related: boolean };
+type CardProps = { ticket: Ticket; state: State; selected: CardSelection; showProject: boolean; related: boolean };
 function cardPropsEqual(a: CardProps, b: CardProps) {
   if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.related !== b.related) return false;
   const s1 = a.state;
