@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.1418](https://github.com/markhuot/harness/releases/tag/app-20260928.1418) - 2026-09-28
+
 ### Added
 
 - On the Mac, you can drag a card onto the left, right, top or bottom half of the board or an
@@ -133,6 +135,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   opens a dropdown menu next to the field, with a checkmark on the current choice, instead of a
   sheet of buttons at the bottom of the screen. Permission modes show
   their description under each name, and drivers that aren't signed in say so.
+- On iPhone, board search has its own Search tab. The Board tab no longer has a search bar at
+  the top. Search looks through every column and has a Projects button to narrow the results
+  to one project.
 - On the Mac board, Show child tickets moved from the header into a menu on the search box.
   Click the filter button at the right end of the search box to turn it on or off. The button
   stays highlighted while child tickets are showing.
