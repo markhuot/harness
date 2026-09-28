@@ -227,8 +227,9 @@ async function seed() {
   await settle(browse.key, (t) => !t.busy, 90000);
   await until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000);
   // A watcher-less triage item for the Inbox.
-  const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent. FOO issues belong to GREET.";
-  await api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt });
+  // The prompt names the project; the dummy triager reads the [dummy:project KEY] marker.
+  const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent in GREET.";
+  await api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt: `${prompt} [dummy:project ${project.key}]` });
   // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
   const watcher = await api<Watcher>("POST", "/watchers", {
     name: "jira",
