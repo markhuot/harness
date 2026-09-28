@@ -29,6 +29,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   ticket can show what changed (a UI before and after, or a browser flow) along with the
   description. They're asked to do this whenever their work has a visible result, especially
   when they submit it for review.
+- On the Mac, a summary's screenshots and recordings show as thumbnails under its text, and a
+  video thumbnail carries a play badge. Click one to see it at full window size (videos play
+  with controls). Use ← and → or the side arrows to move between a summary's attachments, and
+  Esc or a click outside to close it. A file that can't be loaded shows its name instead of a
+  broken image. A conductor's Tickets tab notes when a child's latest summary has attachments.
 
 - When the harness service is running older code than the Mac app, a banner under the board says
   so, and it stays until the service restarts. Actions the older service doesn't know about fail
@@ -43,15 +48,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-<<<<<<< HEAD
 - ⌘W closes the focused ticket or terminal pane (File ▸ Close Pane). With the board focused it
   still closes the window.
-=======
 - On the all-projects board, a card's project key now sits in front of its ticket key
   ("HAR HARNESS-39") instead of at the bottom of the card. Cards no longer carry a Conductor
   badge either, since a conductor's progress bar already marks it. Both changes apply on the Mac
   and the iPhone. The ticket page still shows the Conductor badge.
->>>>>>> harness/harness-59
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.

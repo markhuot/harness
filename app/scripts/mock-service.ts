@@ -4,6 +4,7 @@
 //   bun app/scripts/mock-service.ts        (MOCK_PORT=7799 MOCK_TOKEN=mock-token MOCK_QUIET=1)
 //   HARNESS_URL=http://127.0.0.1:7799 HARNESS_TOKEN=mock-token bun run --cwd app dev
 
+import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
 import type {
@@ -23,6 +24,7 @@ import type {
   ServerMessage,
   Session,
   Summary,
+  SummaryAttachment,
   SummaryAuthor,
   Ticket,
   TicketDetail,
@@ -57,6 +59,8 @@ const keyAliases = new Map<string, string>();
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
 const summaries: Summary[] = [];
+/** Attachment bytes by id, served at GET /attachments/:id (an attachment seeded without bytes 404s). Rendered on first request. */
+const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Array }>();
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
 const browserStates = new Map<string, BrowserState>();
@@ -350,7 +354,7 @@ interface SeedTicket {
   permissionMode?: Ticket["permissionMode"];
   externalRef?: Ticket["externalRef"];
   autoStart?: boolean;
-  summaries?: [SummaryAuthor, string][];
+  summaries?: [SummaryAuthor, string, SummaryAttachment[]?][];
   ageMin: number;
 }
 
@@ -445,10 +449,10 @@ function seedTicket(s: SeedTicket): Ticket {
   if (s.status !== "planning" && s.status !== "in_progress") push("system", { type: "status", text: `Moved to ${s.status.replace("_", " ")}` });
 
   // Like the service's block tool: the question lands on the Summary tab (the detail view has no callout).
-  const seeded: [SummaryAuthor, string][] = [...(s.summaries ?? [])];
+  const seeded: [SummaryAuthor, string, SummaryAttachment[]?][] = [...(s.summaries ?? [])];
   if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", `Blocked: ${s.blockedReason}`]);
-  for (const [i, [author, body]] of seeded.entries()) {
-    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000, attachments: [] });
+  for (const [i, [author, body, attachments = []]] of seeded.entries()) {
+    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000, attachments });
   }
   return t;
 }
@@ -598,7 +602,19 @@ function seed() {
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 110,
-    summaries: [["agent", "Board renders all five columns; drag and drop calls `updateTicket({ status })`."]],
+    summaries: [
+      [
+        "agent",
+        "Board renders all five columns; drag and drop calls `updateTicket({ status })`. Screenshots of the board in both themes, the narrow layout, and a recording of a drag.",
+        [
+          mockScreenshot("board-light.png", 1440, 900, 215, false),
+          mockScreenshot("board-dark.png", 1440, 900, 265, true),
+          mockScreenshot("board-narrow.png", 390, 844, 150, false),
+          ...mockVideo("drag.mp4"),
+          { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 },
+        ],
+      ],
+    ],
   }); // HARNESS-2
   seedTicket({
     project: hx,
@@ -1562,6 +1578,45 @@ function encodePng(width: number, height: number, rgb: Uint8Array): Uint8Array {
   return out;
 }
 
+/** A fake app screenshot (header bar, sidebar, card columns) stored as an attachment. */
+function mockScreenshot(name: string, w: number, h: number, hue: number, dark: boolean): SummaryAttachment {
+  const id = newId("att");
+  let png: Uint8Array | undefined;
+  attachmentFiles.set(id, { mimeType: "image/png", bytes: () => (png ??= renderScreenshot(w, h, hue, dark)) });
+  return { id, kind: "image", mimeType: "image/png", name, size: w * h, width: w, height: h };
+}
+
+function renderScreenshot(w: number, h: number, hue: number, dark: boolean): Uint8Array {
+  const px = new Uint8Array(w * h * 3);
+  const rect = (x0: number, y0: number, rw: number, rh: number, [r, g, b]: [number, number, number]) => {
+    for (let y = Math.max(0, y0); y < Math.min(h, y0 + rh); y++) {
+      for (let x = Math.max(0, x0); x < Math.min(w, x0 + rw); x++) px.set([r, g, b], (y * w + x) * 3);
+    }
+  };
+  const bg: [number, number, number] = dark ? [28, 29, 34] : [246, 246, 248];
+  const card: [number, number, number] = dark ? [44, 46, 54] : [255, 255, 255];
+  rect(0, 0, w, h, bg);
+  rect(0, 0, w, 56, hsl(hue, 0.55, dark ? 0.35 : 0.5));
+  const side = w > 600 ? 220 : 0;
+  if (side) rect(0, 56, side, h - 56, dark ? [36, 37, 43] : [236, 236, 240]);
+  const cols = Math.max(1, Math.floor((w - side - 24) / 240));
+  const colW = Math.floor((w - side - 24) / cols) - 16;
+  for (let c = 0; c < cols; c++) {
+    for (let i = 0; i < 5 - (c % 3); i++) rect(side + 24 + c * (colW + 16), 88 + i * 110, colW, 94, card);
+  }
+  return encodePng(w, h, px);
+}
+
+/** MOCK_VIDEO=/path/to/clip.mp4 adds that clip as a video attachment; without it, nothing. */
+function mockVideo(name: string): SummaryAttachment[] {
+  const path = process.env.MOCK_VIDEO;
+  if (!path) return [];
+  const bytes = new Uint8Array(readFileSync(path));
+  const id = newId("att");
+  attachmentFiles.set(id, { mimeType: "video/mp4", bytes: () => bytes });
+  return [{ id, kind: "video", mimeType: "video/mp4", name, size: bytes.length }];
+}
+
 function renderFrame(sessionId: string, tick: number): { data: string; width: number; height: number } {
   const s = sim(sessionId);
   const { width: w, height: h } = s;
@@ -1695,6 +1750,14 @@ const server = Bun.serve<WsData>({
       if (url.searchParams.get("token") !== TOKEN) return fail(401, "Unauthorized");
       if (srv.upgrade(req, { data: { subs: new Set<string>() } })) return undefined as unknown as Response;
       return fail(400, "Expected a WebSocket upgrade");
+    }
+    // Like the service: attachments also take ?token=, since <img>/<video> can't send headers.
+    const att = url.pathname.match(/^\/attachments\/([^/]+)$/);
+    if (att && req.method === "GET") {
+      if (url.searchParams.get("token") !== TOKEN && req.headers.get("authorization") !== `Bearer ${TOKEN}`) return fail(401, "Unauthorized");
+      const file = attachmentFiles.get(decodeURIComponent(att[1]!));
+      if (!file) return fail(404, "No such attachment");
+      return new Response(Buffer.from(file.bytes()), { headers: { ...CORS, "content-type": file.mimeType, "cache-control": "private, max-age=31536000, immutable" } });
     }
     if (req.headers.get("authorization") !== `Bearer ${TOKEN}`) return fail(401, "Unauthorized");
     try {
