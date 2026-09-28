@@ -290,15 +290,24 @@ export class DummyDriver implements Driver {
       }
 
       case "triage": {
-        const suggestion = prompt.match(/Suggested project:[ \t]*([A-Za-z0-9_]+)/)?.[1];
-        const key = prompt.match(/^Key:[ \t]*(\S+)/m)?.[1];
-        const title = prompt.match(/^Title:[ \t]*(.+)$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
+        // The first mapping hint picks the project and the key to mirror. Only the hint lines
+        // right after the first line count; the output and the prompt come later and can't add one.
+        const lines = prompt.split("\n");
+        let end = 1;
+        while (end < lines.length && lines[end]!.startsWith("Mapping hint:")) end++;
+        const hint = lines
+          .slice(1, end)
+          .map((l) => l.match(/^Mapping hint:[ \t]*(\S+)[ \t]*→[ \t]*([A-Za-z0-9_]+)/))
+          .find(Boolean);
+        const key = hint?.[1];
+        const suggestion = hint?.[2];
+        const title = prompt.match(/^Inbox title:[ \t]*"(.+)"$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
         if (prompt.includes("[unscoped]")) {
           yield* say("This item is not scoped well enough to work on.");
           yield* call("decline_work", { reason: "The item is marked [unscoped]." });
-        } else if (!suggestion || suggestion.toLowerCase() === "none") {
+        } else if (!suggestion) {
           yield* say("No project matches this item.");
-          yield* call("decline_work", { reason: "No suggested project for this item." });
+          yield* call("decline_work", { reason: "No mapping hint for this output." });
         } else {
           const big = prompt.includes("[big]");
           yield* say(`Dispatching to ${suggestion}${big ? " as a conductor ticket" : ""}.`);

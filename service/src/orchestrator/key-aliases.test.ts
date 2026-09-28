@@ -85,7 +85,7 @@ describe("old ticket keys after a project rename", () => {
     await h.orch.idle();
     h.orch.updateProject(h.project.id, { key: "NEW" });
     h.orch.createMapping({ pattern: "OLD", projectId: h.project.id });
-    const s = await h.orch.injectWorkItem("jira", { key: "OLD-1", summary: "follow-up", updated: "1" });
+    const s = await h.orch.injectOutput("jira", { key: "OLD-1", summary: "follow-up", updated: "1" });
     await h.orch.idle();
     expect(h.orch.getSession(s!.id).outcome).toBe("Sent update to existing NEW-1");
     expect(h.orch.listTickets().map((x) => x.id)).toEqual([t.id]);

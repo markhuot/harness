@@ -248,15 +248,17 @@ export class FakeDriver implements Driver {
         return;
       }
       case "triage": {
-        const suggested = /Suggested project: (\S+)/.exec(p)?.[1];
-        const key = /Key: (\S+)/.exec(p)?.[1];
-        if (p.includes("[unscoped]") || !suggested || suggested === "none") {
+        const hint = /^[^\n]*\nMapping hint: (\S+) → (\S+)/.exec(p); // the first hint line only
+        const key = hint?.[1];
+        const suggested = hint?.[2];
+        if (p.includes("[unscoped]") || !suggested) {
           await ops.declineWork(ctx, "No project for this item");
           return;
         }
         await ops.dispatchTicket(ctx, {
           projectKey: suggested,
           key,
+          url: /https?:\/\/[^\s"`]+/.exec(p)?.[0],
           title: `Work for ${key}`,
           description: `Handle ${key}`,
           start: true,

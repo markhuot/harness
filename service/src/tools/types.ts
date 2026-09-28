@@ -92,9 +92,10 @@ export interface HarnessOps {
   /** Create (and optionally start) a local ticket mirroring the external item. */
   dispatchTicket(
     ctx: ToolContext,
-    input: { projectKey: string; key?: string; title: string; description: string; start?: boolean; conductor?: boolean },
+    input: { projectKey: string; key?: string; url?: string; title: string; description: string; start?: boolean; conductor?: boolean },
   ): Promise<Ticket>;
-  declineWork(ctx: ToolContext, reason: string): Promise<void>;
+  /** `title` replaces the Inbox title derived from the raw output. */
+  declineWork(ctx: ToolContext, reason: string, title?: string): Promise<void>;
 
   // --- permission prompts (claude-code --permission-prompt-tool) ---
   /**

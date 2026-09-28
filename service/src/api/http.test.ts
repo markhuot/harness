@@ -169,7 +169,7 @@ describe("http api", () => {
     const p = await client.createProject({ path: dir });
     const m = await client.createMapping({ pattern: "FOO", projectId: p.id, notes: "foo team" });
     expect((await client.listMappings()).map((x) => x.id)).toEqual([m.id]);
-    const s = await client.injectWorkItem("jira", { key: "FOO-7", summary: "Fix search", url: "https://jira/FOO-7", updated: "t1" });
+    const s = await client.injectOutput("jira", { key: "FOO-7", summary: "Fix search", url: "https://jira/FOO-7", updated: "t1" }, "Dispatch bugs");
     expect(s!.key).toBe("TRIAGE-1");
     await h.orchestrator.idle();
     const triaged = await client.getSession(s!.id);
@@ -177,22 +177,42 @@ describe("http api", () => {
     const ticket = (await client.getTicket("FOO-7")).ticket;
     expect(ticket.projectId).toBe(p.id);
     expect(ticket.externalRef?.source).toBe("jira");
-    expect(await client.injectWorkItem("jira", { key: "FOO-7", summary: "Fix search", updated: "t1" })).toBeNull();
+    // The same text again is a duplicate, whether sent as an object or as its JSON text.
+    expect(await client.injectOutput("jira", '{"key":"FOO-7","summary":"Fix search","url":"https://jira/FOO-7","updated":"t1"}')).toBeNull();
     expect((await client.listSessions("triage")).length).toBe(1);
 
-    const declined = await client.injectWorkItem("jira", { key: "ZED-1", summary: "nobody's" });
+    const declined = await client.injectOutput("jira", "ZED-1: nobody's");
     await h.orchestrator.idle();
     expect((await client.getSession(declined!.id)).triageStatus).toBe("declined");
     await client.deleteMapping(m.id);
     expect(await client.listMappings()).toEqual([]);
   });
 
+  test("/watchers/inject takes { source, text, prompt } and still accepts a legacy item", async () => {
+    const { client, h } = await boot();
+    const s = await client.injectOutput("events", '{"event":"assigned","to":"mark"}', "Dispatch what is assigned to me");
+    expect(s!.title).toBe('{"event":"assigned","to":"mark"}');
+    const first = (await client.transcript(s!.id)).find((e) => e.role === "user")!;
+    const prompt = (first.content as { text: string }).text;
+    expect(prompt).toContain('{"event":"assigned","to":"mark"}');
+    expect(prompt).toContain("Dispatch what is assigned to me");
+    const legacy = await client.request<{ title: string } | null>("POST", "/watchers/inject", { source: "jira", item: { key: "OLD-1", summary: "legacy" } });
+    expect(legacy!.title).toBe('{"key":"OLD-1","summary":"legacy"}');
+    await expect(client.request("POST", "/watchers/inject", { source: "jira" })).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("POST", "/watchers/inject", { source: "jira", text: "x", prompt: 3 })).rejects.toMatchObject({ status: 400 });
+    await h.orchestrator.idle();
+  });
+
   test("watchers CRUD without starting processes", async () => {
     const { client } = await boot();
     const w = await client.createWatcher({ name: "jira", command: "node", args: ["watch.js"], enabled: false });
     expect(w.mode).toBe("loop");
-    const u = await client.updateWatcher(w.id, { mode: "interval", intervalSec: 60 });
-    expect([u.mode, u.intervalSec]).toEqual(["interval", 60]);
+    expect(w.prompt).toBe("");
+    const u = await client.updateWatcher(w.id, { mode: "interval", intervalSec: 60, prompt: "  Only mine  " });
+    expect([u.mode, u.intervalSec, u.prompt]).toEqual(["interval", 60, "Only mine"]);
+    const shell = await client.updateWatcher(w.id, { command: "while true; do curl -s x; sleep 60; done", args: [] });
+    expect([shell.command, shell.args, shell.prompt]).toEqual(["while true; do curl -s x; sleep 60; done", [], "Only mine"]);
+    await expect(client.updateWatcher(w.id, { prompt: 5 as unknown as string })).rejects.toMatchObject({ status: 400 });
     await expect(client.createWatcher({ name: "", command: "x" })).rejects.toMatchObject({ status: 400 });
     await expect(client.runWatcher(w.id)).rejects.toMatchObject({ status: 400 }); // watchers disabled in this harness
     await client.deleteWatcher(w.id);
