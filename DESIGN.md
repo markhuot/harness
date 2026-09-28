@@ -1310,6 +1310,17 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   (`mobile/src/lib/browserInput.ts`). A hidden `TextInput` carries the keyboard (diffed into text
   inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
   only on real changes.
+- **Summary attachments.** `AttachmentRow` (`mobile/src/ui/Attachments.tsx`) puts a summary's
+  attachments in a horizontal row under its body, loading each from `client.attachmentUrl(id)`
+  (the query token, since `Image` and AVPlayer fetch on their own). Thumbnails are 120 pt tall
+  and as wide as the stored width/height allows, clamped (`mobile/src/lib/attachments.ts`), so
+  nothing jumps as they load. A video thumbnail is a muted, paused `expo-video` player showing
+  its first frame. A tap opens `AttachmentViewer`, a transparent full-screen `Modal`: a paging
+  `ScrollView` over the summary's attachments, images in a zooming `ScrollView` (pinch, or
+  double-tap for 2.5×) sized to fit without upscaling, and a `VideoView` with native controls
+  for the page that's showing (only that page holds a player, so paging away stops it). A
+  `PanResponder` that captures mostly-vertical downward drags (not while zoomed) closes it past a
+  distance or on a flick. A load or decode error shows a placeholder in the thumb and the page.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
   Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.
