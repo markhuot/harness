@@ -319,7 +319,11 @@ gated call:
    subtitle and blocked reason. Watcher summaries name `env` keys and a non-empty `cwd`, since
    both change what the command does (`ZDOTDIR` changes what the login shell runs), but never
    env values; `update_watcher` lists keys set and keys removed separately and says
-   `cwd: service default` when it's cleared;
+   `cwd: service default` when it's cleared. The card's "Other input" row
+   (`describeApprovalInput` in `shared/src/state/format.ts`) deliberately shows env values
+   unmasked: the approver has to see exactly what they authorize (`ZDOTDIR=/tmp/x`, a `PATH`
+   override), and the proposing agent already knows every value, so masking would hide it only
+   from the human. Values stay hidden from agents in `list_watchers`;
 3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
    grant and runs the op.
 
