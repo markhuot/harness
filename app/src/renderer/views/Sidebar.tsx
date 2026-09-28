@@ -1,4 +1,4 @@
-import { useMemo, type Ref } from "react";
+import { useCallback, useMemo, useRef, type Ref } from "react";
 import type { Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "@harness/shared/state";
@@ -6,6 +6,8 @@ import { Icon } from "../components/Icon";
 import { MenuButton, MOD } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
 import { forgetProjectPanes } from "../state/panes";
+import { keysArea, runCommand, useCommands } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
 
 export function Sidebar({
   onNewSession,
@@ -22,6 +24,20 @@ export function Sidebar({
   const { state, route, navigate, client } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
+
+  // One roving list: New session, the nav items, each project and Settings are j/k stops; the
+  // chevron, Add project and the project gears stay on Tab after the list's stop.
+  const local = useRef<HTMLElement | null>(null);
+  const setRef = useCallback(
+    (el: HTMLElement | null) => {
+      local.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+  useRovingList(local, { owner: "sidebar" });
+  useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
   const openCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -84,13 +100,13 @@ export function Sidebar({
 
   return (
     // Collapsed: kept mounted (so it animates back) but inert: out of the tab order and a11y tree.
-    <aside className="sidebar" id="app-sidebar" ref={ref} inert={collapsed}>
+    <aside className="sidebar" id="app-sidebar" ref={setRef} inert={collapsed} {...keysArea("list sidebar", "sidebar")}>
       <div className="sidebar-inner">
         <div className="sidebar-top" />
         <div className="sidebar-scroll">
           {/* A split button: the main part is New session (⌘N), the chevron offers a terminal too. */}
           <div className="new-session-split" role="group" aria-label="New">
-            <button className="btn new-session-btn" data-testid="new-session" onClick={() => onNewSession()}>
+            <button className="btn new-session-btn" data-testid="new-session" data-roving-item onClick={() => onNewSession()}>
               <Icon name="plus" strokeWidth={2.25} />
               <span className="grow" style={{ textAlign: "left" }}>
                 New session
@@ -108,10 +124,10 @@ export function Sidebar({
             >
               {(close) => (
                 <>
-                  <button onClick={() => (close(), onNewSession())}>
+                  <button role="menuitem" onClick={() => (close(), onNewSession())}>
                     <Icon name="plus" /> <span className="grow">New session</span> <span className="kbd">{MOD}N</span>
                   </button>
-                  <button data-testid="new-terminal" onClick={() => (close(), onNewTerminal())}>
+                  <button role="menuitem" data-testid="new-terminal" onClick={() => (close(), onNewTerminal())}>
                     <Icon name="terminal" /> <span className="grow">New terminal</span> <span className="kbd">{MOD}T</span>
                   </button>
                 </>
@@ -164,7 +180,7 @@ export function Sidebar({
               </div>
             ))}
             {projects.length === 0 && (
-              <button className="nav-item nav-add" onClick={addProject}>
+              <button className="nav-item nav-add" data-roving-item onClick={addProject}>
                 <Icon name="folder" />
                 Add a project folder…
               </button>
@@ -196,7 +212,7 @@ function NavItem(props: {
   badge?: React.ReactNode;
 }) {
   return (
-    <button className={`nav-item ${props.active ? "active" : ""}`} onClick={props.onClick} title={props.title}>
+    <button className={`nav-item ${props.active ? "active" : ""}`} data-roving-item aria-current={props.active ? "page" : undefined} onClick={props.onClick} title={props.title}>
       {props.icon && <Icon name={props.icon} />}
       {props.prefix}
       <span className="grow truncate">{props.label}</span>

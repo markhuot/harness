@@ -29,6 +29,7 @@ import {
   orphanSessions,
   openTerminal,
   openTicket,
+  paneInDirection,
   paneLabel,
   PANE_MIN_WIDTH,
   PANES_KEY,
@@ -1188,5 +1189,58 @@ describe("watchPaneStore", () => {
     stop();
     updatePanes("a", (s) => openTerminal(s, term("t:2")));
     expect(seen).toEqual([[], ["t:1"]]);
+  });
+});
+
+describe("paneInDirection (⌥⌘arrows / ⌃hjkl)", () => {
+  //  B | A
+  //    |---
+  //    | C
+  const tree = () => st(row("r", [B, col("c", [T("A"), T("C")])], [0.5, 0.5]));
+  const go = (s: PaneState, from: string, dir: "left" | "right" | "up" | "down", sidebar = false) => paneInDirection(layoutPanes(s), from, dir, { sidebar });
+
+  test("moves across a row and down a column", () => {
+    expect(go(tree(), "B", "right")).toBe("A"); // both A and C border B: the topmost wins the tie
+    expect(go(tree(), "A", "down")).toBe("C");
+    expect(go(tree(), "C", "up")).toBe("A");
+    expect(go(tree(), "C", "left")).toBe("B");
+  });
+
+  test("prefers the pane sharing more of the edge", () => {
+    // B beside a column where A is a sliver on top and C fills most of the height.
+    const s = st(row("r", [B, col("c", [T("A"), T("C")], [0.2, 0.8])], [0.5, 0.5]));
+    expect(go(s, "B", "right")).toBe("C");
+  });
+
+  test("picks the nearest pane beyond the edge, not a farther one", () => {
+    const s = st(row("r", [B, T("A"), T("C")]));
+    expect(go(s, "B", "right")).toBe("A");
+    expect(go(s, "C", "left")).toBe("A");
+  });
+
+  test("a pane that doesn't overlap across the axis isn't a neighbour", () => {
+    // B above A on the left; C on the right, full height. From A, up is B, and nothing is below.
+    const s = st(row("r", [col("c", [B, T("A")]), T("C")]));
+    expect(go(s, "A", "up")).toBe("B");
+    expect(go(s, "A", "down")).toBeNull();
+    expect(go(s, "A", "right")).toBe("C");
+  });
+
+  test("left from the left edge is the sidebar only when it's open", () => {
+    expect(go(tree(), "B", "left", true)).toBe("sidebar");
+    expect(go(tree(), "B", "left", false)).toBeNull();
+    // A isn't on the left edge: left goes to B, never the sidebar.
+    expect(go(tree(), "A", "left", true)).toBe("B");
+  });
+
+  test("while zoomed the other panes are hidden, so there is nowhere to go but the sidebar", () => {
+    const s = st(tree().root, "A", "A");
+    expect(go(s, "A", "down")).toBeNull();
+    expect(go(s, "A", "left", true)).toBe("sidebar");
+  });
+
+  test("an unknown or hidden starting pane goes nowhere", () => {
+    expect(go(tree(), "nope", "right")).toBeNull();
+    expect(go(st(tree().root, "A", "A"), "B", "right")).toBeNull();
   });
 });

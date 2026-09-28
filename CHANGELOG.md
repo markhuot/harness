@@ -11,6 +11,21 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- You can drive the Mac app from the keyboard. On the board, h j k l (or the arrows) move between
+  cards and Enter opens one beside the board. In a ticket, ⇧⌘[ and ⇧⌘] (or 1 to 9) switch
+  tabs, j and k scroll, and i jumps to the reply box. ⌥⌘ and an arrow (or ⌃h ⌃j ⌃k ⌃l) moves to
+  the pane in that direction, and left from the board goes into the sidebar. The sidebar, the
+  Inbox, a conductor's Tickets tab and every menu work with the arrow keys or j and k, and dialogs
+  keep Tab inside them and put the focus back when they close.
+- ⌘K opens a command palette. Type part of a ticket's key or title to jump to it (older Done
+  tickets included), or the name of a command. The actions for the ticket you're on (Start work,
+  Approve, Request changes, Complete and the rest) are there too. ↑ and ↓ pick, Enter runs, and
+  your recent picks come first.
+- Press ? (or ⌘/) for a list of every keyboard shortcut. Help ▸ Keyboard Shortcuts has it too,
+  and the View menu lists the new pane and tab shortcuts.
+- While you're using the keyboard, the pane or sidebar it's acting on gets an accent outline, and
+  the card or item you're on gets a focus ring. Clicking hides them again.
+
 - When the harness service is running older code than the Mac app, a banner under the board says
   so, and it stays until the service restarts. Actions the older service doesn't know about fail
   with a plain "Not found" until it restarts (re-opening a done ticket was one), so the banner
@@ -24,6 +39,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- ⌘W closes the focused ticket or terminal pane (File ▸ Close Pane). With the board focused it
+  still closes the window.
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.

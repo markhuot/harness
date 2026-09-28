@@ -3,6 +3,7 @@ import { Root } from "./App";
 import { initTheme } from "./state/theme";
 import "./styles.css";
 import "./app.css";
+import "./components/keyboard.css";
 
 // Surface crashes with a stack in the main-process log (HARNESS_DEBUG / capture mode).
 window.addEventListener("error", (e: ErrorEvent) => console.error(e.error?.stack ?? e.message));

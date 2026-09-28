@@ -21,7 +21,8 @@ export interface ConnectionError {
 
 export type ConnectionResult = Connection | ConnectionError;
 
-export type MenuCommand = "new-session" | "new-terminal" | "settings" | "inbox" | "board" | "toggle-sidebar";
+/** A keyboard command id (renderer/state/keys.ts) the native menu sends back to the renderer. */
+export type MenuCommand = string;
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =
@@ -98,7 +99,8 @@ export interface HarnessBridge {
   revealInFinder(path: string): Promise<void>;
   /** Pop up a native menu at the cursor; resolves with the chosen item id, or null when dismissed */
   showContextMenu(items: ContextMenuItem[]): Promise<string | null>;
-  onMenu(cb: (cmd: MenuCommand) => void): () => void;
+  /** `viaKey`: the item's shortcut was pressed rather than the item clicked. */
+  onMenu(cb: (cmd: MenuCommand, viaKey: boolean) => void): () => void;
   /** App appearance. getTheme is synchronous so the renderer can apply it before first paint. */
   getTheme(): ThemeState;
   /** Change the appearance and/or the light / dark theme picks (a bare preference still works) */

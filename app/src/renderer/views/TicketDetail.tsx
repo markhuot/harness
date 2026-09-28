@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
@@ -16,6 +16,7 @@ import {
   isChatMode,
   isReady,
   moveSwitchLabel,
+  nextTab,
   openChatMode,
   parsePluginTab,
   parseSubagentTab,
@@ -28,6 +29,7 @@ import {
   tabStripTab,
   ticketByKey,
   TICKET_TABS,
+  visibleTabs,
   type TicketTab,
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
@@ -48,6 +50,33 @@ import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket, usePaneScope } from "../components/paneContext";
 import { MovePaneItems, PaneGrip } from "../components/paneHeader";
 import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
+import { keysArea, useCommands } from "../components/commands";
+import { commandKeys } from "../state/keys";
+
+/** What a command's tooltip adds: " (⇧⌘])", or nothing for a command without keys. */
+const keyHint = (id: string) => {
+  const keys = commandKeys(id);
+  return keys.length ? ` (${keys.join(" / ")})` : "";
+};
+
+/**
+ * The tab body's scroller: the first element inside `root` that scrolls vertically (each tab has
+ * its own, e.g. the transcript's or the summaries' list). Null for tabs that don't scroll here,
+ * like the browser canvas or a plugin iframe.
+ */
+function scrollerIn(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null;
+  const queue: HTMLElement[] = [root];
+  while (queue.length) {
+    const el = queue.shift()!;
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+    queue.push(...(Array.from(el.children) as HTMLElement[]));
+  }
+  return null;
+}
+
+const LINE = 48;
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
 export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
@@ -80,14 +109,61 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
 
+  // Keyboard: this pane is a "ticket" command area (state/keys.ts). The tabs are the strip's, in
+  // order; the scroll keys move whichever scroller the current tab has.
+  const owner = `ticket:${paneId}`;
+  const asideRef = useRef<HTMLElement>(null);
+  const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
+  const tabs = ticket ? visibleTabs({ conductor: ticket.kind === "conductor", subagents, pluginTabs }) : [];
+  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
+  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
+  const tab = ticket ? effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents }) : paneTab;
+  // A tab change from the keyboard keeps the focus on the strip when it was there.
+  const refocusTab = useRef(false);
+  const goTab = (t: TicketTab | null) => {
+    if (!t) return;
+    const a = document.activeElement;
+    refocusTab.current = !!a?.closest("[role=tablist]") && !!asideRef.current?.contains(a);
+    updatePanes(scope, (s) => setPaneTab(s, paneId, t));
+  };
+  useLayoutEffect(() => {
+    if (!refocusTab.current) return;
+    refocusTab.current = false;
+    asideRef.current?.querySelector<HTMLElement>(".tabs [aria-selected=true]")?.focus();
+  }, [tab]);
+  const scroll = (fn: (el: HTMLElement) => void) => () => {
+    const el = scrollerIn(asideRef.current?.querySelector(".detail-body") ?? null);
+    if (el) fn(el);
+  };
+  useCommands(owner, {
+    "tab.next": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, 1))),
+    "tab.prev": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, -1))),
+    ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab.${i + 1}`, !!tabs[i] && (() => goTab(tabs[i]!))])),
+    "ticket.compose": !!ticket && ticket.status !== "done" && (() => asideRef.current?.querySelector<HTMLElement>(".composer-input")?.focus()),
+    "ticket.scrollDown": scroll((el) => el.scrollBy({ top: LINE })),
+    "ticket.scrollUp": scroll((el) => el.scrollBy({ top: -LINE })),
+    "ticket.pageDown": scroll((el) => el.scrollBy({ top: el.clientHeight * 0.9 })),
+    "ticket.pageUp": scroll((el) => el.scrollBy({ top: -el.clientHeight * 0.9 })),
+    "ticket.top": scroll((el) => el.scrollTo({ top: 0 })),
+    "ticket.bottom": scroll((el) => el.scrollTo({ top: el.scrollHeight })),
+  });
+  /** ←/→ (and Home/End) on a focused tab move along the strip, as in any tablist. */
+  const tabKeys = (e: KeyboardEvent) => {
+    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    const to = delta ? nextTab(tabs, tab, delta) : e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : null;
+    if (!to || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    goTab(to);
+  };
+
   if (!ticket) {
     return (
-      <aside className="detail">
+      <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
         <div className="view-header detail-titlebar">
           <PaneGrip paneId={paneId} chip={ticketKey} title="" />
           <span className="detail-key">{ticketKey}</span>
           <div className="grow" />
-          <button className="btn btn-ghost btn-icon" onClick={close} title="Close (Esc)" aria-label="Close pane">
+          <button className="btn btn-ghost btn-icon" onClick={close} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane" data-pane-autofocus>
             <Icon name="x" />
           </button>
         </div>
@@ -108,10 +184,6 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
 
   const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
-  const subagents = subagentsOf(state, ticket.sessionId);
-  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
-  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
-  const tab = effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents });
   const openAgent = parseSubagentTab(tab);
   const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
@@ -119,12 +191,21 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
 
+  // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→.
+  const tabProps = (on: boolean, t: TicketTab) => ({
+    role: "tab",
+    "aria-selected": on,
+    tabIndex: on ? 0 : -1,
+    "data-pane-autofocus": on || undefined,
+    title: tabs.indexOf(t) >= 0 && tabs.indexOf(t) < 9 ? `Press ${tabs.indexOf(t) + 1}, or ⇧⌘[ / ⇧⌘] to go through the tabs` : undefined,
+  });
+
   return (
-    <aside className="detail">
-      <DetailHeader paneId={paneId} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
-      <nav className="tabs">
+    <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
+      <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
+      <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
         {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
-          <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
+          <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
@@ -136,7 +217,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
         {pluginTabs?.map((p) => {
           const t = pluginTabRoute(p.pluginId, p.id);
           return (
-            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} title={`${p.title} (plugin: ${p.pluginId})`} data-plugin-tab={t}>
+            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-plugin-tab={t} {...tabProps(tab === t, t)} title={`${p.title} (plugin: ${p.pluginId})`}>
               {p.icon && isIconName(p.icon) && <Icon name={p.icon} size={12} />}
               {p.title}
             </button>
@@ -163,7 +244,22 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   );
 }
 
-function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneId: string; ticket: Ticket; onClose: () => void; zoomed: boolean; onToggleZoom: () => void }) {
+function DetailHeader({
+  paneId,
+  owner,
+  ticket,
+  onClose,
+  zoomed,
+  onToggleZoom,
+}: {
+  paneId: string;
+  /** The pane's command area: the actions below are also palette commands (never bare keys). */
+  owner: string;
+  ticket: Ticket;
+  onClose: () => void;
+  zoomed: boolean;
+  onToggleZoom: () => void;
+}) {
   const { state, client } = useStore();
   const openTicket = useOpenTicket();
   const act = useAction();
@@ -181,6 +277,30 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
     const ok = await act(() => client.deleteTicket(k), `${k} deleted`);
     if (ok) onClose();
   };
+  // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
+  // ⌘K palette (these are its "Actions" commands) run the same functions.
+  const start = () => act(() => client.startTicket(k));
+  const approve = () => act(() => client.humanReview(k, { decision: "approve" }), "Approved");
+  const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
+  const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
+  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`);
+  const copyKey = () => void navigator.clipboard.writeText(k);
+  const external = ticket.externalRef?.url;
+  const reviewing = ticket.status === "review";
+  const canApprove = reviewing && ticket.humanReview !== "approved";
+  useCommands(owner, {
+    "ticket.start": ticket.status === "planning" && start,
+    "ticket.approve": canApprove && approve,
+    "ticket.requestChanges": canApprove && (() => setChanges(true)),
+    "ticket.complete": reviewing && ready && !ticket.busy && (() => setCompleting(true)),
+    "ticket.rerunReview": reviewing && !ticket.busy && rerunReview,
+    "ticket.cancelRun": ticket.busy && cancelRun,
+    "ticket.markDone": ticket.status !== "done" && markDone,
+    "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),
+    "ticket.copyKey": copyKey,
+    "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
+    "ticket.delete": () => void remove(),
+  });
 
   return (
     <div className="detail-head">
@@ -199,7 +319,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
         >
           {(close) => (
             <>
-              <button onClick={() => (close(), void navigator.clipboard.writeText(k))}>
+              <button onClick={() => (close(), copyKey())}>
                 <Icon name="hash" /> Copy key
               </button>
               {ticket.externalRef?.url && (
@@ -208,7 +328,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
                 </button>
               )}
               {ticket.status !== "done" && (
-                <button onClick={() => (close(), void act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`))}>
+                <button onClick={() => (close(), void markDone())}>
                   <Icon name="check" /> Mark done
                 </button>
               )}
@@ -225,12 +345,12 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
           data-testid="pane-zoom"
           aria-pressed={zoomed}
           onClick={onToggleZoom}
-          title={zoomed ? "Restore pane (Esc)" : "Maximize pane"}
+          title={zoomed ? `Restore pane (Esc / ${commandKeys("pane.zoom")[0]})` : `Maximize pane${keyHint("pane.zoom")}`}
           aria-label={zoomed ? "Restore pane" : "Maximize pane"}
         >
           <Icon name={zoomed ? "shrink" : "expand"} />
         </button>
-        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={onClose} title="Close (Esc)" aria-label="Close pane">
+        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={onClose} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane">
           <Icon name="x" />
         </button>
       </div>
@@ -260,13 +380,13 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
 
         <div className="actions">
           {ticket.status === "planning" && (
-            <button className="btn btn-primary" onClick={() => act(() => client.startTicket(k))}>
+            <button className="btn btn-primary" onClick={start}>
               <Icon name="play" /> Start work
             </button>
           )}
           {ticket.status === "review" && ticket.humanReview !== "approved" && (
             <>
-              <button className="btn btn-primary" onClick={() => act(() => client.humanReview(k, { decision: "approve" }), "Approved")}>
+              <button className="btn btn-primary" onClick={approve}>
                 <Icon name="check" strokeWidth={2.25} /> Approve
               </button>
               <button className="btn" onClick={() => setChanges(true)}>
@@ -284,7 +404,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
               >
                 <Icon name="checkCircle" /> Complete
               </button>
-              <button className="btn btn-ghost" disabled={ticket.busy} onClick={() => act(() => client.rerunAgentReview(k), "Agent review queued")}>
+              <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
                 <Icon name="refresh" /> Re-run agent review
               </button>
             </>
@@ -295,7 +415,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
             </button>
           )}
           {ticket.busy && (
-            <button className="btn btn-ghost btn-danger" onClick={() => act(() => client.cancelTicket(k), "Run cancelled")}>
+            <button className="btn btn-ghost btn-danger" onClick={cancelRun}>
               <Icon name="stop" /> Cancel run
             </button>
           )}
@@ -519,6 +639,10 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             void send();
+          } else if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            // Back to the pane (its current tab); a second Escape then closes the pane as usual.
+            e.preventDefault();
+            ref.current?.closest(".detail")?.querySelector<HTMLElement>("[data-pane-autofocus]")?.focus();
           }
         }}
       />

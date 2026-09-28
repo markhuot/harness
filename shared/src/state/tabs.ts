@@ -81,3 +81,25 @@ export function effectiveTab(
   if (p && opts.pluginTabs && !opts.pluginTabs.some((t) => t.pluginId === p.pluginId && t.id === p.tabId)) return "summaries";
   return requested;
 }
+
+/**
+ * The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents
+ * only once there are sub-agents), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
+ */
+export function visibleTabs(opts: { conductor: boolean; subagents?: { id: string }[] | null; pluginTabs?: { pluginId: string; id: string }[] | null }): TicketTab[] {
+  const builtin = TICKET_TABS.filter((t) => (t !== "children" || opts.conductor) && (t !== "agents" || showsAgentsTab(opts.subagents)));
+  return [...builtin, ...(opts.pluginTabs ?? []).map((p) => pluginTabRoute(p.pluginId, p.id))];
+}
+
+/**
+ * The tab `delta` steps from `current` in `tabs`, wrapping at both ends (like Chrome's ⌘⇧]). A
+ * sub-agent's view counts as the Agents tab; from a tab that isn't in the strip, forward goes to
+ * the first tab and back to the last. Null when there are no tabs.
+ */
+export function nextTab(tabs: readonly TicketTab[], current: TicketTab, delta: number): TicketTab | null {
+  if (!tabs.length) return null;
+  const i = tabs.indexOf(tabStripTab(current));
+  const from = i < 0 ? (delta > 0 ? -1 : 0) : i;
+  const n = tabs.length;
+  return tabs[(((from + delta) % n) + n) % n]!;
+}

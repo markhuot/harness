@@ -159,6 +159,24 @@
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+/* Keyboard mode (html[data-input="keyboard"], state/inputModality.ts): the pane the keyboard acts
+   on gets an inset accent ring, drawn over its content (plugin iframes and the browser canvas
+   included) without taking pointer events. A click switches back to pointer mode and hides it, and
+   it steps aside while the sidebar holds the focus. */
+.pane.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.active::after {
+  opacity: 1;
+}
+
 /* A divider's hit area straddles the boundary; its visible line is the 1px border between panes. */
 .pane-divider {
   position: absolute;

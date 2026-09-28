@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Session, Watcher } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions, watcherStatus } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { relativeTime, useNow } from "../components/bits";
+import { keysArea } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
 import { Transcript } from "./Transcript";
 
 const TONE_CLASS = { amber: "badge-amber", green: "badge-green", neutral: "", red: "badge-red" } as const;
@@ -26,6 +28,9 @@ export function InboxView() {
   const sessions = triageSessions(state);
   const selectedId = route.view === "inbox" ? (route.sessionId ?? sessions[0]?.id ?? null) : null;
   const selected = selectedId ? state.sessions[selectedId] : undefined;
+  // The sessions are one Tab stop; j/k (↑/↓) move between them, Enter opens one.
+  const listRef = useRef<HTMLDivElement>(null);
+  useRovingList(listRef, { owner: "inbox" });
 
   return (
     <div className="inbox">
@@ -36,7 +41,7 @@ export function InboxView() {
           </div>
           <span className="muted">{sessions.length}</span>
         </header>
-        <div className="view-body">
+        <div className="view-body" ref={listRef} {...keysArea("list", "inbox")}>
           <WatcherStrip />
           {sessions.length === 0 && (
             <div className="empty">
@@ -46,7 +51,12 @@ export function InboxView() {
             </div>
           )}
           {sessions.map((s) => (
-            <button key={s.id} className={`inbox-item ${s.id === selectedId ? "active" : ""}`} onClick={() => navigate({ view: "inbox", sessionId: s.id })}>
+            <button
+              key={s.id}
+              className={`inbox-item ${s.id === selectedId ? "active" : ""}`}
+              data-roving-item
+              aria-current={s.id === selectedId || undefined}
+              onClick={() => navigate({ view: "inbox", sessionId: s.id })}>
               <div className="row">
                 <span className="mono muted" style={{ fontSize: 11 }}>
                   {s.key}

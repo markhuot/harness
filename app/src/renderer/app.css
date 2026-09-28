@@ -322,17 +322,26 @@
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s, outline-color 0.12s;
   animation: fade-in 0.15s ease-out;
+  outline: none;
+  /* Scrolling a card into view (the keyboard cursor) keeps its ring in view too. */
+  scroll-margin: 6px;
 }
 .card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
+/* The keyboard cursor, while it has the focus: a halo outside the card, apart from the border and
+   shadow that .selected / .open / .related use, so it reads alongside any of them. */
 .card:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus);
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The cursor parked (the focus is elsewhere) in keyboard mode: where the board's keys will land. */
+html[data-input="keyboard"] .card.cursor:not(:focus) {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
 }
 /* Open in the focused pane (selected), or in another pane (open). */
 .card.selected {
@@ -1275,14 +1284,18 @@
 .nav-row {
   position: relative;
 }
-/* The gear replaces the open-ticket count on hover (and stays while its settings are open). */
+/* The gear replaces the open-ticket count on hover (and stays while its settings are open). It's
+   on Tab after the sidebar's list stop, so while hidden it's invisible and click-through rather
+   than display: none (which would take it out of the tab order), and it shows while focused. */
 .nav-gear {
   position: absolute;
   right: 3px;
   top: 3px;
   width: 22px;
   height: 22px;
-  display: none;
+  display: grid;
+  opacity: 0;
+  pointer-events: none;
   place-items: center;
   border: 0;
   border-radius: 4px;
@@ -1293,10 +1306,12 @@
 .nav-row:hover .nav-gear,
 .nav-row.settings-open .nav-gear,
 .nav-gear:focus-visible {
-  display: grid;
+  opacity: 1;
+  pointer-events: auto;
 }
 .nav-row:hover .nav-count,
-.nav-row.settings-open .nav-count {
+.nav-row.settings-open .nav-count,
+.nav-row:has(.nav-gear:focus-visible) .nav-count {
   visibility: hidden;
 }
 .nav-gear:hover {

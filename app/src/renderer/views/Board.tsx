@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import {
@@ -29,7 +29,11 @@ import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { focusedTicket, leaves, openTicket, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
-import { usePaneScope } from "../components/paneContext";
+import { usePane, usePaneScope } from "../components/paneContext";
+import { keysArea, runCommand, useCommands } from "../components/commands";
+import { focusPaneBy } from "../components/paneFocus";
+import { modality } from "../state/inputModality";
+import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
 import "./board.css";
 
 /** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
@@ -46,6 +50,7 @@ export function BoardPane() {
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
   const scope = usePaneScope();
+  const paneId = usePane()?.paneId;
   const panes = usePanes(scope);
   // The click-a-card rule (panes.ts openTicket): reuse the ticket pane beside the board, or split.
   const openCard = useCallback((key: string) => updatePanes(scope, (s) => openTicket(s, key)), [scope]);
@@ -63,9 +68,77 @@ export function BoardPane() {
   const visible = (t: Ticket) => searching || !hideOnBoard(t, hideChildren);
   const doneTotal = searching ? columns.done.length : doneCount(state, projectId, columns.done.length);
   const paging = searching ? undefined : state.donePaging[scopeOf(projectId)];
+  const shown = TICKET_STATUSES.map((status) => columns[status].filter(visible));
+
+  // The keyboard cursor (state/boardNav.ts): a card key, and the spot it was last seen at so a card
+  // that leaves (moves column, filtered out) hands the cursor to whatever's now nearest there. With
+  // no cursor yet it's the first card, which is also where pane focus lands.
+  const grid = shown.map((ts) => ts.map((t) => t.key));
+  const [cursorKey, setCursorKey] = useState<string | null>(null);
+  const cursorAt = useRef<CursorPos | null>(null);
+  const resolved = resolveCursor(grid, cursorKey, cursorAt.current);
+  const cursor = resolved ?? firstCard(grid);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const cardEl = (key: string) => rootRef.current?.querySelector<HTMLElement>(`.card[data-key="${CSS.escape(key)}"]`) ?? null;
+  const focusCard = (key: string | null) => {
+    const el = key && cardEl(key);
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: "nearest" });
+  };
+  const setCursor = (key: string) => {
+    cursorAt.current = cursorPos(grid, key);
+    setCursorKey(key);
+  };
+  useEffect(() => {
+    cursorAt.current = cursorPos(grid, resolved);
+    if (resolved !== cursorKey) setCursorKey(resolved);
+    // The focused card left the DOM (its ticket moved or went, taking the focus with it): keep the
+    // keyboard on the board, on the cursor.
+    if (document.activeElement === document.body && modality() === "keyboard" && rootRef.current?.closest(".pane.active")) focusCard(cursor);
+  });
+  const move = (dir: CursorDir) => () => {
+    const next = moveCursor(grid, cursor, dir);
+    if (!next) return;
+    setCursor(next);
+    focusCard(next);
+  };
+  const owner = `board:${paneId ?? ""}`;
+  useCommands(owner, {
+    "board.left": move("left"),
+    "board.right": move("right"),
+    "board.up": move("up"),
+    "board.down": move("down"),
+    "board.first": move("first"),
+    "board.last": move("last"),
+    // Read when Enter arrives: on a button in the board (the header's, "Load more") Enter is the button's.
+    get "board.open"() {
+      const key = cursor;
+      if (!key || document.activeElement?.closest("button, a[href], summary")) return null;
+      return () => focusPaneBy(scope, (s) => openTicket(s, key));
+    },
+    "board.search": () => searchRef.current?.focus(),
+  });
+  /** Escape in the search box clears it, then (empty) goes back to the cards; never on to close the pane. */
+  const searchKeys = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();
+    if (filter) setFilter("");
+    else focusCard(cursor);
+  };
 
   return (
-    <div className="board-pane">
+    <div
+      className="board-pane"
+      ref={rootRef}
+      {...keysArea("board", owner)}
+      // Focus on a card (a click, Tab, pane focus landing) puts the cursor there.
+      onFocus={(e) => {
+        const key = (e.target as HTMLElement).closest<HTMLElement>(".card")?.dataset.key;
+        if (key && key !== cursorKey) setCursor(key);
+      }}
+    >
       <header className="view-header">
         <div className="view-title">
           {project ? (
@@ -97,9 +170,10 @@ export function BoardPane() {
             placeholder="Search"
             aria-label="Search tickets"
             data-testid="board-search"
+            ref={searchRef}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            onKeyDown={(e) => e.key === "Escape" && filter && (e.stopPropagation(), setFilter(""))}
+            onKeyDown={searchKeys}
           />
           {filter && (
             <button className="search-clear" aria-label="Clear search" title="Clear search" onClick={() => setFilter("")}>
@@ -152,8 +226,8 @@ export function BoardPane() {
         </div>
       )}
       <div className="board">
-        {TICKET_STATUSES.map((status) => {
-          const tickets = columns[status].filter(visible);
+        {TICKET_STATUSES.map((status, i) => {
+          const tickets = shown[i]!;
           return (
             <section key={status} className="column">
               <div className="column-head">
@@ -168,6 +242,7 @@ export function BoardPane() {
                     ticket={t}
                     state={state}
                     selected={selection(t.key)}
+                    isCursor={t.key === cursor}
                     showProject={!projectId}
                     related={!!hoverConductor && t.parentId === hoverConductor}
                     onHoverConductor={setHoverConductor}
@@ -237,6 +312,7 @@ const TicketCard = memo(function TicketCard({
   ticket: t,
   state,
   selected,
+  isCursor,
   showProject,
   onOpen,
   related,
@@ -245,6 +321,8 @@ const TicketCard = memo(function TicketCard({
   ticket: Ticket;
   state: State;
   selected: CardSelection;
+  /** The keyboard cursor: the board's one tab stop, and where pane focus lands. */
+  isCursor: boolean;
   showProject: boolean;
   onOpen: (key: string) => void;
   related: boolean;
@@ -262,7 +340,7 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
+      className={`card ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
@@ -271,8 +349,12 @@ const TicketCard = memo(function TicketCard({
       // Drag onto a half of the board or an open ticket to open it in a split there.
       {...dragProps(t.key, t.title)}
       onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key))}
-      tabIndex={0}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onOpen(t.key))}
+      role="button"
+      aria-label={`${t.key} ${t.title || "Untitled"}`}
+      tabIndex={isCursor ? 0 : -1}
+      data-pane-autofocus={isCursor || undefined}
+      // Enter is board.open (the dispatcher); Space, as on any button, does the same.
+      onKeyDown={(e) => e.key === " " && e.target === e.currentTarget && (e.preventDefault(), runCommand("board.open", e.currentTarget))}
     >
       <div className="card-top">
         <span className="card-key">{t.key}</span>
@@ -343,9 +425,9 @@ const TicketCard = memo(function TicketCard({
   );
 }, cardPropsEqual);
 
-type CardProps = { ticket: Ticket; state: State; selected: CardSelection; showProject: boolean; related: boolean };
+type CardProps = { ticket: Ticket; state: State; selected: CardSelection; isCursor: boolean; showProject: boolean; related: boolean };
 function cardPropsEqual(a: CardProps, b: CardProps) {
-  if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.related !== b.related) return false;
+  if (a.ticket !== b.ticket || a.selected !== b.selected || a.isCursor !== b.isCursor || a.showProject !== b.showProject || a.related !== b.related) return false;
   const s1 = a.state;
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;

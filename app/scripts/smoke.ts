@@ -1135,6 +1135,228 @@ try {
     await js(`location.hash = "#/board/all"`);
   }
 
+  // 6f. Keyboard (DESIGN.md "Keyboard"): hjkl on the board, Enter opens, ⇧⌘[ ] tabs, ⌥⌘arrows
+  // between panes and the sidebar, i and Escape for the composer, ⌘K palette, ? overlay, menus,
+  // ⌘W, and the pane ring that shows only while the keyboard drives. Real key events throughout.
+  {
+    const key = app!.key;
+    // Modifiers: Alt=1, Ctrl=2, Meta=4, Shift=8.
+    const press = {
+      j: () => key("j", "KeyJ", 74),
+      k: () => key("k", "KeyK", 75),
+      l: () => key("l", "KeyL", 76),
+      h: () => key("h", "KeyH", 72),
+      i: () => key("i", "KeyI", 73),
+      two: () => key("2", "Digit2", 50),
+      // With its "\r" text, as a real Enter has: that's what presses a focused button.
+      enter: async () => {
+        await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+        await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+      },
+      escape: () => key("Escape", "Escape", 27),
+      down: () => key("ArrowDown", "ArrowDown", 40),
+      up: () => key("ArrowUp", "ArrowUp", 38),
+      question: () => key("?", "Slash", 191, 8),
+      nextTab: () => key("}", "BracketRight", 221, 4 | 8),
+      prevTab: () => key("{", "BracketLeft", 219, 4 | 8),
+      paneLeft: () => key("ArrowLeft", "ArrowLeft", 37, 1 | 4),
+      paneRight: () => key("ArrowRight", "ArrowRight", 39, 1 | 4),
+      palette: () => key("k", "KeyK", 75, 4),
+      closePane: () => key("w", "KeyW", 87, 4),
+    };
+    const setPanes = (st: object) =>
+      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": st } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
+    const boardOnly = { root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null };
+    const active = () =>
+      js<{ card: string | null; col: number; pane: string | null; tab: string | null; sidebar: boolean; composer: boolean; menu: boolean }>(`(() => {
+        const a = document.activeElement;
+        const card = a?.closest(".card");
+        const cols = [...document.querySelectorAll(".board .column")];
+        return { card: card?.dataset.key ?? null, col: card ? cols.indexOf(card.closest(".column")) : -1,
+          pane: a?.closest("[data-pane-id]")?.dataset.testid ?? null,
+          tab: document.querySelector(".pane.active .tabs [aria-selected=true]")?.dataset.tab ?? document.querySelector(".pane.active .tabs [aria-selected=true]")?.dataset.pluginTab ?? null,
+          sidebar: !!a?.closest("#app-sidebar"), composer: !!a?.matches(".composer-input"), menu: !!a?.closest(".menu") };
+      })()`);
+    const ringShown = () => js<string>(`(() => { const p = document.querySelector(".pane.active"); return p ? getComputedStyle(p, "::after").opacity : "none"; })()`);
+    const openTickets = () => js<string[]>(`[...document.querySelectorAll(".pane-ticket .detail-key")].map(e => e.textContent)`);
+
+    await setPanes(boardOnly);
+    await js(`location.hash = "#/board/all"`);
+    await until("board", () => exists(".board-pane .card"));
+    await js(`document.activeElement?.blur()`);
+
+    // hjkl on the board: nothing focused yet, so the keys go to the board pane.
+    await press.j();
+    const first = await until("j focuses a card", async () => {
+      const a = await active();
+      return a.card ? a : null;
+    });
+    await press.j();
+    const second = await active();
+    check("j moves the card cursor down the column (real DOM focus)", !!first.card && !!second.card && second.card !== first.card && second.col === first.col, `${first.card} → ${second.card}`);
+    await press.k();
+    check("k moves it back up", (await active()).card === first.card);
+    await press.l();
+    const right = await active();
+    check("l moves to the next column", right.col > first.col && !!right.card, `column ${first.col} → ${right.col}`);
+    await press.h();
+    check("h comes back to the first column", (await active()).col === first.col);
+    await Bun.sleep(200); // the ring fades in
+    check("keyboard use shows the focused-pane ring", (await js<string>(`document.documentElement.dataset.input`)) === "keyboard" && (await ringShown()) === "1", await ringShown());
+    const head = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector(".board-pane .view-title").getBoundingClientRect(); return { x: r.x + 4, y: r.y + r.height / 2 }; })()`);
+    await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: head.x, y: head.y, button: "left", buttons: 1, clickCount: 1 });
+    await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: head.x, y: head.y, button: "left", buttons: 0, clickCount: 1 });
+    await until("pointer mode", async () => (await js<string>(`document.documentElement.dataset.input`)) === "pointer");
+    await Bun.sleep(200); // the ring fades out
+    check("a click hides the ring again", (await ringShown()) === "0", await ringShown());
+
+    // Enter opens the cursor's card beside the board and moves the keyboard into it.
+    await js(`document.querySelector(".card.cursor")?.focus()`);
+    await press.k(); // back into keyboard mode on the same column
+    const target = (await active()).card!;
+    await press.enter();
+    const opened = await until("Enter opens the card", async () => {
+      const a = await active();
+      return a.pane === "pane-ticket" && (await openTickets()).includes(target) && a;
+    }).catch(() => null);
+    check("Enter opens the card and focus moves into its pane", !!opened, JSON.stringify(opened));
+
+    // ⇧⌘] / ⇧⌘[ walk the tabs and wrap; a digit jumps to that tab.
+    const tabs = await js<string[]>(`[...document.querySelectorAll(".pane.active .tabs [role=tab]")].map(t => t.dataset.tab ?? t.dataset.pluginTab)`);
+    const t0 = (await active()).tab;
+    await press.nextTab();
+    const t1 = await until("next tab", async () => ((await active()).tab !== t0 ? (await active()).tab : null)).catch(() => null);
+    check("⇧⌘] goes to the next tab", t1 === tabs[tabs.indexOf(t0!) + 1], `${t0} → ${t1}`);
+    await press.prevTab();
+    await press.prevTab();
+    const wrapped = await until("wrapped", async () => ((await active()).tab === tabs.at(-1) ? true : null)).catch(() => false);
+    check("⇧⌘[ wraps from the first tab to the last", wrapped === true, `${(await active()).tab} (tabs: ${tabs.join(",")})`);
+    await press.two();
+    check("2 jumps to the second tab", !!(await until("tab 2", async () => ((await active()).tab === tabs[1] ? true : null)).catch(() => false)), `${(await active()).tab}`);
+    await js(`document.querySelector(".pane.active .tabs [aria-selected=true]").focus()`);
+    await key("ArrowRight", "ArrowRight", 39);
+    check("→ on a focused tab moves along the strip and keeps focus there", !!(await until("tab 3", async () => ((await active()).tab === tabs[2] && (await js<boolean>(`document.activeElement.getAttribute("role") === "tab"`)) ? true : null)).catch(() => false)));
+
+    // ⌥⌘← back to the board lands on the same card; ⌥⌘→ returns to the ticket.
+    await press.paneLeft();
+    const back = await until("board again", async () => ((await active()).card ? active() : null)).catch(() => null);
+    check("⌥⌘← returns to the board with the cursor where it was", back?.card === target, `${back?.card} vs ${target}`);
+    await press.paneRight();
+    check("⌥⌘→ goes back into the ticket pane", !!(await until("ticket pane", async () => ((await active()).pane === "pane-ticket" ? true : null)).catch(() => false)));
+
+    // i focuses the composer; typing there moves nothing; Escape returns to the pane.
+    const before = await active();
+    await press.i();
+    check("i focuses the composer", !!(await until("composer", async () => ((await active()).composer ? true : null)).catch(() => false)));
+    for (const [ch, code] of [["h", "KeyH"], ["j", "KeyJ"], ["d", "KeyD"]] as const) {
+      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: ch, code, text: ch });
+      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: ch, code });
+    }
+    const typed = await js<string>(`document.querySelector(".pane.active .composer-input").value`);
+    check("typing hjd in the composer types it and moves nothing", typed.endsWith("hjd") && (await active()).tab === before.tab && (await openTickets()).includes(target), typed);
+    await press.escape();
+    const esc = await active();
+    check("Escape in the composer returns focus to the pane (and keeps it open)", !esc.composer && esc.pane === "pane-ticket" && (await openTickets()).includes(target), JSON.stringify(esc));
+    await type(".pane.active .composer-input", "");
+
+    // The ticket's More menu: Enter opens it with the first item focused, ↓ moves, Escape returns.
+    await js(`document.querySelector(".pane.active .detail-titlebar button[title=More]").focus()`);
+    await press.enter();
+    const inMenu = await until("menu focus", async () => ((await active()).menu ? true : null)).catch(() => false);
+    const item1 = await js<string>(`document.activeElement?.textContent ?? ""`);
+    await press.down();
+    const item2 = await js<string>(`document.activeElement?.textContent ?? ""`);
+    check("Enter on a menu button opens it with the first item focused, and ↓ moves", inMenu === true && item1 !== item2 && !!item2, `${item1} → ${item2}`);
+    await press.escape();
+    check(
+      "Escape closes the menu and puts focus back on its button",
+      !(await exists(".menu")) && (await js<boolean>(`document.activeElement?.getAttribute("title") === "More"`)) && (await openTickets()).includes(target),
+    );
+
+    // ? opens the shortcuts overlay; Escape closes it.
+    await js(`document.querySelector(".pane.active [data-pane-autofocus]")?.focus()`);
+    await press.question();
+    const overlay = await until("shortcuts overlay", () => exists("[data-testid=shortcuts]")).catch(() => false);
+    const rows = await js<number>(`document.querySelectorAll("[data-testid=shortcuts-row]").length`);
+    check("? opens the keyboard shortcuts overlay, listing the registry", overlay === true && rows > 20, `${rows} rows`);
+    await press.escape();
+    await until("overlay closed", async () => !(await exists("[data-testid=shortcuts]")));
+
+    // ⌘K palette: a partial key completes to the ticket; Enter opens it and focuses its pane.
+    const origin = await js<string>(`document.activeElement?.outerHTML.slice(0, 80) ?? ""`);
+    await press.palette();
+    await until("palette", () => exists("[data-testid=palette-input]"));
+    const focusInput = await js<boolean>(`document.activeElement?.matches("[data-testid=palette-input]")`);
+    await press.escape();
+    await until("palette closed", async () => !(await exists("[data-testid=palette]")));
+    check("⌘K opens the palette with the input focused; Escape closes it and focus goes back", focusInput && (await js<string>(`document.activeElement?.outerHTML.slice(0, 80) ?? ""`)) === origin);
+
+    const pick = "HARNESS-1";
+    await press.palette();
+    await until("palette", () => exists("[data-testid=palette-input]"));
+    await type("[data-testid=palette-input]", "harness-1");
+    const top = await until("ticket row", () => js<string | null>(`document.querySelector("[data-testid=palette-row][aria-selected=true]")?.dataset.id ?? null`).then((id) => id?.startsWith("ticket:") && id)).catch(() => null);
+    check("typing part of a key autocompletes the ticket", top === `ticket:${pick}`, String(top));
+    await press.enter();
+    const pickedOpen = await until("picked ticket open", async () => ((await openTickets()).includes(pick) && (await active()).pane === "pane-ticket" ? true : null)).catch(() => false);
+    check("Enter opens the ticket and focuses its pane", pickedOpen === true && !(await exists("[data-testid=palette]")), (await openTickets()).join(","));
+
+    // A ticket only the server has (an old Done one) shows up after the debounce.
+    await press.palette();
+    await until("palette", () => exists("[data-testid=palette-input]"));
+    await type("[data-testid=palette-input]", "SITE-42");
+    const remote = await until("server hit", () => exists('[data-testid=palette-row][data-id="ticket:SITE-42"]'), 5000).catch(() => false);
+    check("the palette finds a ticket the board hasn't loaded (server search)", remote === true);
+    await press.escape();
+
+    // Actions come from the focused ticket: "appr" on a ticket in review highlights Approve.
+    const reviewKeys = await js<string[]>(`[...[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Review").querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
+    let reviewKey: string | null = null;
+    for (const k of reviewKeys) if ((await api<{ ticket: { humanReview: string } }>("GET", `/tickets/${k}`)).ticket.humanReview !== "approved") reviewKey ??= k;
+    if (!reviewKey) fail(), console.log("✗ no unapproved review ticket to test palette actions on");
+    else {
+      await js(`location.hash = "#/board/all/ticket/${reviewKey}"`);
+      await until("review ticket open", async () => (await openTickets()).includes(reviewKey!));
+      await js(`document.querySelector(".pane.active [data-pane-autofocus]")?.focus()`);
+      await press.palette();
+      await until("palette", () => exists("[data-testid=palette-input]"));
+      await type("[data-testid=palette-input]", "appr");
+      const hl = () => js<string | null>(`document.querySelector("[data-testid=palette-row][aria-selected=true]")?.dataset.id ?? null`);
+      const approve = await until("approve row", () => hl().then((id) => id === "cmd:ticket.approve" && id)).catch(() => null);
+      await press.down();
+      const moved = await hl();
+      await press.up();
+      check("typing appr on a review ticket highlights Approve; ↓/↑ move the highlight", approve === "cmd:ticket.approve" && moved !== approve && (await hl()) === approve, `${approve} ↓ ${moved}`);
+      await press.escape();
+      await until("palette closed", async () => !(await exists("[data-testid=palette]")));
+      check("closing the palette ran nothing", (await api<{ ticket: { humanReview: string } }>("GET", `/tickets/${reviewKey}`)).ticket.humanReview !== "approved");
+    }
+
+    // ⌘W closes the focused ticket pane (and never the board).
+    const openBefore = await openTickets();
+    await js(`document.querySelector(".pane.active [data-pane-autofocus]")?.focus()`);
+    await press.closePane();
+    const closed = await until("pane closed", async () => ((await openTickets()).length === openBefore.length - 1 ? openTickets() : null)).catch(() => null);
+    check("⌘W closes the focused ticket pane", !!closed, `${openBefore.join(",")} → ${closed?.join(",")}`);
+
+    // The sidebar: ⌥⌘← from the board goes into it, j moves, l comes back to the board.
+    await setPanes(boardOnly);
+    await until("board only", async () => (await openTickets()).length === 0);
+    await js(`document.querySelector(".card.cursor")?.focus()`);
+    await press.paneLeft();
+    const side = await until("sidebar", async () => ((await active()).sidebar ? js<string>(`document.activeElement.textContent`) : null)).catch(() => null);
+    await press.j();
+    const side2 = await js<string>(`document.activeElement?.closest("#app-sidebar") ? document.activeElement.textContent : ""`);
+    check("⌥⌘← from the board focuses the sidebar, and j moves down its items", !!side && !!side2 && side !== side2, `${side} → ${side2}`);
+    await Bun.sleep(200); // the rings cross-fade
+    const sidebarRing = await js<string>(`getComputedStyle(document.getElementById("app-sidebar"), "::after").opacity`);
+    check("the sidebar shows the keyboard ring (and the pane's steps aside)", sidebarRing === "1" && (await ringShown()) === "0", `${sidebarRing} / ${await ringShown()}`);
+    await press.l();
+    check("l returns from the sidebar to the board", !!(await until("board again", async () => ((await active()).card ? true : null)).catch(() => false)));
+
+    await setPanes(boardOnly);
+  }
+
   // 6d. Transcript and summaries stay scrolled to the bottom until the user scrolls up, and pick
   // it back up when they return. A short window makes a few messages overflow.
   {
