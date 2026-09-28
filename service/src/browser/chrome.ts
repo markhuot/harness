@@ -41,8 +41,9 @@ let cloneRootCache: string | null | undefined;
 /**
  * Where macOS Chrome puts the ~2 GB copy of its app bundle it makes at every launch
  * (`<DARWIN_USER_TEMP_DIR>/../X/com.google.Chrome.code_sign_clone/code_sign_clone.XXXXXX`).
- * Chrome deletes its clone only on a clean exit, so anything that ends Chrome with a
- * signal leaks one. Null when it can't be located (non-macOS, or not created yet).
+ * Chrome before 154 deletes its clone only on a clean exit, so anything that ends it with a
+ * signal leaks one; 154+ deletes it itself within a moment of startup. Null when it can't be
+ * located (non-macOS, or not created yet).
  */
 export function codeSignCloneRoot(): string | null {
   if (cloneRootCache !== undefined) return cloneRootCache;
