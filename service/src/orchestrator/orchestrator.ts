@@ -13,6 +13,7 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
+  FileMatch,
   HumanReviewBody,
   ReopenBody,
   Project,
@@ -62,6 +63,7 @@ import * as prompts from "./prompts";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { ensureWorktree, isGitRepo } from "./worktree";
+import { attachMentions, searchPaths } from "./files";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
 import { resolveRunModel } from "./models";
@@ -160,6 +162,8 @@ const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
+/** Runs that carry a human's words (the brief, a message, notes) and get their @-mentioned files attached. */
+const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "complete"]);
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -592,6 +596,24 @@ export class Orchestrator {
       parent: ticket.parentId ? this.store.tickets.get(ticket.parentId) : null,
       subagents: this.store.subagents.listBySession(ticket.sessionId),
     };
+  }
+
+  /** The @-mention autocomplete for a new session in `projectId`: paths under the project folder. */
+  projectFiles(projectId: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+    const project = this.store.projects.get(projectId);
+    if (!project) throw notFound(`Unknown project: ${projectId}`);
+    return searchPaths(project.path, q, clampLimit(limit, 50));
+  }
+
+  /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
+  ticketFiles(key: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+    const found = this.store.tickets.lookup(key);
+    if (!found) throw notFound(`Unknown ticket: ${key}`);
+    const { ticket } = found;
+    const session = this.store.sessions.get(ticket.sessionId);
+    const project = this.store.projects.get(ticket.projectId);
+    const root = [ticket.workdir, session?.cwd, project?.path].find((d): d is string => !!d && existsSync(d));
+    return root ? searchPaths(root, q, clampLimit(limit, 50)) : Promise.resolve([]);
   }
 
   summaries(key: string): Summary[] {
@@ -2167,10 +2189,11 @@ export class Orchestrator {
       try {
         const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
         const children = ticket?.kind === "conductor" ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
+        const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
         const req: RunRequest = {
           runId: run.id,
           kind: run.kind,
-          prompt: run.prompt,
+          prompt,
           systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
           cwd,
           model,
@@ -2215,6 +2238,22 @@ export class Orchestrator {
       this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
     }
     this.kickScheduler();
+  }
+
+  /**
+   * The run's prompt with the files it @-mentions attached (DESIGN.md "File mentions"). The
+   * transcript keeps the prompt as written, plus a status line naming what was attached.
+   */
+  private async withMentions(sessionId: string, runId: string, prompt: string, cwd: string): Promise<string> {
+    try {
+      const a = await attachMentions(prompt, cwd);
+      if (a.attached.length) this.appendStatus(sessionId, runId, `Attached ${a.attached.map((p) => `@${p}`).join(", ")}`);
+      for (const s of a.skipped) this.appendStatus(sessionId, runId, `Didn't attach @${s.path}: ${s.reason}`);
+      return a.prompt;
+    } catch (err) {
+      this.appendStatus(sessionId, runId, `Couldn't attach mentioned files: ${errMsg(err)}`);
+      return prompt;
+    }
   }
 
   /** Iterate driver events until done or aborted; returns the run error, if any. */

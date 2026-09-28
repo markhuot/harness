@@ -137,6 +137,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/projects", async ({ body }) => o.createProject(await body()));
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
+  add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Tickets
   add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));
@@ -174,6 +175,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/agent-review", ({ params }) => o.rerunAgentReview(params.key!));
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
   add("GET", "/tickets/:key/summaries", ({ params }) => o.summaries(params.key!));
+  add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {
