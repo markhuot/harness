@@ -384,3 +384,34 @@ describe("list_watchers", () => {
     expect("prompt" in without).toBe(false);
   });
 });
+
+describe("watcher approval headline", () => {
+  /** The card summary a gated watcher call puts in front of the human. */
+  async function headline(name: string, input: Record<string, unknown>): Promise<string> {
+    let summary = "";
+    const ops = fakeOps({
+      requestApproval: async (_ctx, _tool, i, meta) => ((summary = meta?.summary ?? ""), { behavior: "allow", updatedInput: i }),
+      updateWatcher: async () => ({ id: "w_1", name: "events", command: "x", args: [], env: {}, prompt: "", cwd: null, mode: "loop", intervalSec: 60, enabled: true, driver: null, lastRunAt: null, lastError: null, createdAt: 0, updatedAt: 0 }),
+    });
+    await tool(name).execute(input, fakeContext({ ops }));
+    return summary;
+  }
+
+  test("create_watcher names env keys (sorted) and a set cwd, never values", async () => {
+    const s = await headline("create_watcher", { name: "events", command: "poll-events", env: { ZDOTDIR: "/tmp/zd", EVENTS_TOKEN: "s3cret" }, cwd: "~/work" });
+    expect(s).toBe('Create watcher "events" (loop): poll-events; env: EVENTS_TOKEN, ZDOTDIR; cwd: ~/work');
+    expect(s).not.toContain("s3cret");
+    expect(s).not.toContain("/tmp/zd");
+  });
+
+  test("create_watcher without env or cwd adds neither segment", async () => {
+    expect(await headline("create_watcher", { name: "events", command: "poll-events", env: {}, cwd: "" })).toBe('Create watcher "events" (loop): poll-events');
+  });
+
+  test("update_watcher separates keys set from keys removed, hides values, and says when cwd is cleared", async () => {
+    const s = await headline("update_watcher", { watcher: "events", env: { ZDOTDIR: "/tmp/zd", OLD_TOKEN: "" }, cwd: "" });
+    expect(s).toBe('Update watcher "events": env: set ZDOTDIR; removes OLD_TOKEN; cwd: service default');
+    expect(s).not.toContain("/tmp/zd");
+    expect(await headline("update_watcher", { watcher: "events", enabled: false, cwd: "/srv" })).toBe('Update watcher "events": enabled=false; cwd: /srv');
+  });
+});

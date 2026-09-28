@@ -102,6 +102,29 @@ function promptSuffix(prompt: string | undefined): string {
   return prompt?.trim() ? `; prompt: "${prompt.trim()}"` : "";
 }
 
+/**
+ * env keys and a non-default cwd for a watcher's card headline: both change what the command
+ * does (ZDOTDIR alone changes what the login shell runs). Key names only, never values, which
+ * can be credentials. `update` separates keys set from keys removed (an empty-string value) and
+ * says when cwd is cleared back to the service's.
+ */
+function watcherEnvSuffix(i: Pick<WatcherToolInput, "env" | "cwd">, update: boolean): string {
+  const parts: string[] = [];
+  const env = i.env && typeof i.env === "object" ? i.env : {};
+  const keys = Object.keys(env).sort();
+  if (update) {
+    const set = keys.filter((k) => env[k] !== "");
+    const removed = keys.filter((k) => env[k] === "");
+    const envParts = [set.length ? `set ${set.join(", ")}` : null, removed.length ? `removes ${removed.join(", ")}` : null].filter(Boolean);
+    if (envParts.length) parts.push(`env: ${envParts.join("; ")}`);
+  } else if (keys.length) {
+    parts.push(`env: ${keys.join(", ")}`);
+  }
+  if (i.cwd) parts.push(`cwd: ${i.cwd}`);
+  else if (update && i.cwd === "") parts.push("cwd: service default");
+  return parts.map((p) => `; ${p}`).join("");
+}
+
 function schedule(mode: string | undefined, intervalSec: number | undefined): string {
   return mode === "interval" ? `every ${intervalSec ?? 60}s` : "loop";
 }
@@ -186,7 +209,7 @@ export const createWatcher = defineGatedTool<CreateWatcherInput>({
   description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_GUIDE}`,
   inputSchema: schema(watcherProps, ["name", "command"]),
   describe: (i) => ({
-    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}${promptSuffix(i.prompt)}`,
+    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}${promptSuffix(i.prompt)}${watcherEnvSuffix(i, false)}`,
     reason: WATCHER_REASON,
   }),
   check: (i, ctx) => ctx.ops.createWatcher(ctx, watcherFields(i) as NewWatcher, true),
@@ -205,11 +228,13 @@ export const updateWatcher = defineGatedTool<UpdateWatcherInput>({
   inputSchema: schema({ watcher: watcherRefProp, ...watcherProps, name: { ...watcherProps.name, description: "New display name." } }, ["watcher"]),
   describe: (i) => {
     const { watcher, ...rest } = i;
-    const fields = fieldList(rest, ["command", "args", "prompt"]);
+    // env and cwd get their own segments (key names only), never fieldList's values.
+    const fields = fieldList(rest, ["command", "args", "prompt", "env", "cwd"]);
     const parts = [
       fields === "no changes" ? null : fields,
       i.command !== undefined || i.args !== undefined ? `command: ${commandLine(i.command ?? "(unchanged)", i.args ?? [])}` : null,
       i.prompt !== undefined ? `prompt: "${i.prompt.trim()}"` : null,
+      watcherEnvSuffix(i, true).slice(2) || null,
     ].filter(Boolean);
     return { summary: `Update watcher "${watcher}": ${parts.join("; ") || "no changes"}`, reason: WATCHER_REASON };
   },
