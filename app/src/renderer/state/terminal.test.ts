@@ -44,6 +44,7 @@ describe("createAttach", () => {
     rows: 24,
     created: true,
     scrollback: "",
+    end: 0,
     exit: null,
     ...over,
   });
@@ -57,14 +58,39 @@ describe("createAttach", () => {
     return { log, attach };
   }
   const exit0: TerminalExit = { exitCode: 0, signal: null };
+  const size = { cols: 80, rows: 24 };
 
-  test("output before ensure resolves is dropped (it's in the scrollback), then the scrollback, then live data in order", () => {
+  test("a chunk the scrollback already holds is skipped, whichever side of ensure's reply it arrives", () => {
+    // Output so far: "ab" (ends at 2) then "cd" (ends at 4). ensure() snapshotted after both.
+    const before = harness();
+    before.attach.data("ab", 2); // sent and received before the reply
+    before.attach.attached(session({ scrollback: "abcd", end: 4 }), size);
+    before.attach.data("cd", 4); // sent before the reply, received after it
+    before.attach.data("ef", 6);
+    expect(before.log).toEqual(["write abcd", "write ef"]);
+  });
+
+  test("a chunk sent after the reply but received before it is held, not lost", () => {
     const { log, attach } = harness();
-    attach.data("early"); // already folded into the scrollback by the manager
-    attach.attached(session({ created: false, scrollback: "history\r\n" }), { cols: 80, rows: 24 });
-    attach.data("a");
-    attach.data("b");
-    expect(log).toEqual(["write history\r\n", "resize 80x24", "write a", "write b"]);
+    attach.data("ef", 6);
+    attach.attached(session({ scrollback: "abcd", end: 4 }), size);
+    attach.data("gh", 8);
+    expect(log).toEqual(["write abcd", "write ef", "write gh"]);
+  });
+
+  test("a chunk straddling the scrollback's end writes only its new part", () => {
+    const { log, attach } = harness();
+    attach.attached(session({ scrollback: "abc", end: 3 }), size);
+    attach.data("bcdef", 6);
+    attach.data("def", 6); // a repeat of what's written
+    expect(log).toEqual(["write abc", "write def"]);
+  });
+
+  test("a trimmed scrollback still lines up: offsets count all output, not what's kept", () => {
+    const { log, attach } = harness();
+    attach.attached(session({ scrollback: "6789", end: 10 }), size);
+    attach.data("89xy", 12);
+    expect(log).toEqual(["write 6789", "write xy"]);
   });
 
   test("a re-attached pane resizes the PTY to itself (ensure ignores cols/rows for an existing shell)", () => {
@@ -75,36 +101,36 @@ describe("createAttach", () => {
 
   test("a fresh shell spawned at the pane's size isn't resized again; one the pane outgrew meanwhile is", () => {
     const fresh = harness();
-    fresh.attach.attached(session(), { cols: 80, rows: 24 });
+    fresh.attach.attached(session(), size);
     expect(fresh.log).toEqual([]);
     const grew = harness();
     grew.attach.attached(session(), { cols: 100, rows: 24 });
     expect(grew.log).toEqual(["resize 100x24"]);
   });
 
-  test("an empty scrollback or chunk writes nothing (ghostty-web throws on write(''))", () => {
+  test("an empty scrollback writes nothing (ghostty-web throws on write(''))", () => {
     const { log, attach } = harness();
-    attach.attached(session(), { cols: 80, rows: 24 });
-    attach.data("");
+    attach.attached(session(), size);
+    attach.data("", 0);
     expect(log).toEqual([]);
   });
 
   test("a shell that exited while no pane showed it reports the exit on attach", () => {
     const { log, attach } = harness();
-    attach.exit(exit0); // before attach: dropped, the session carries it
-    attach.attached(session({ created: false, scrollback: "bye\r\n", exit: { exitCode: 3, signal: null } }), { cols: 80, rows: 24 });
+    attach.attached(session({ created: false, scrollback: "bye\r\n", end: 5, exit: { exitCode: 3, signal: null } }), size);
     expect(log).toEqual(["write bye\r\n", "resize 80x24", "exit 3"]);
   });
 
-  test("an exit after attach is reported; after detach (a restart) events drop again", () => {
-    const { log, attach } = harness();
-    attach.attached(session(), { cols: 80, rows: 24 });
-    attach.exit(exit0);
-    attach.detach();
-    expect(attach.isAttached).toBe(false);
-    attach.data("old shell");
-    attach.exit(exit0);
-    expect(log).toEqual(["exit 0"]);
+  test("an exit that arrives before the reply is held until attach; one after is reported as it comes", () => {
+    const early = harness();
+    early.attach.exit(exit0);
+    expect(early.log).toEqual([]);
+    early.attach.attached(session(), size);
+    expect(early.log).toEqual(["exit 0"]);
+    const late = harness();
+    late.attach.attached(session(), size);
+    late.attach.exit({ exitCode: 7, signal: null });
+    expect(late.log).toEqual(["exit 7"]);
   });
 });
 

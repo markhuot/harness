@@ -38,43 +38,57 @@ export interface AttachSink {
 }
 
 export interface Attach {
-  /** An onData event for this pane's session. */
-  data(data: string): void;
+  /** An onData event for this pane's session; `end` is the output offset just past `data`. */
+  data(data: string, end: number): void;
   /** An onExit event for this pane's session. */
   exit(exit: TerminalExit): void;
   /** ensure() resolved with `session`, while the pane is `size`. */
   attached(session: TerminalSession, size: { cols: number; rows: number }): void;
-  /** Detach again (a restart is about to ensure a new shell): events are dropped until the next `attached`. */
-  detach(): void;
   readonly isAttached: boolean;
 }
 
 /**
- * The bridge's attach contract. On re-attach the manager folds output it hadn't sent yet into the
- * scrollback ensure() returns, so every event for the session that arrives before ensure resolves
- * is dropped (buffering it would print it twice). Then the scrollback is written once, and live
- * data applies from there on. ensure() ignores cols/rows for a shell that already exists, so a
- * re-attached pane (which may have remounted at another size) resizes the PTY to itself; a fresh
- * shell was spawned at the size asked for, so it's only resized if the pane changed meanwhile. A shell that exited while nothing showed it reports the
- * exit in the session.
+ * The bridge's attach contract. ensure() returns the scrollback and the output offset it ends at,
+ * and every data event carries the offset it ends at. Data events and ensure()'s reply travel
+ * separately, so they can arrive in either order: events before the reply are held, and once the
+ * scrollback is written only output past its end is (a chunk the scrollback already holds is
+ * skipped, one that straddles its end is trimmed). ensure() ignores cols/rows for a shell that
+ * already exists, so a re-attached pane (which may have remounted at another size) resizes the PTY
+ * to itself; a fresh shell was spawned at the size asked for, so it's only resized if the pane
+ * changed meanwhile. A shell that exited while nothing showed it reports the exit in the session.
  */
 export function createAttach(sink: AttachSink): Attach {
   let attached = false;
+  /** The output offset written up to. */
+  let seen = 0;
+  let held: [string, number][] = [];
+  let heldExit: TerminalExit | null = null;
+  const apply = (data: string, end: number) => {
+    if (end <= seen) return;
+    const start = end - data.length;
+    const fresh = start < seen ? data.slice(seen - start) : data;
+    seen = end;
+    if (fresh) sink.write(fresh);
+  };
   return {
-    data(data) {
-      if (attached && data) sink.write(data);
+    data(data, end) {
+      if (attached) apply(data, end);
+      else held.push([data, end]);
     },
     exit(exit) {
       if (attached) sink.exited(exit);
+      else heldExit = exit;
     },
     attached(session, size) {
       if (session.scrollback) sink.write(session.scrollback);
+      seen = session.end;
       attached = true;
+      for (const [data, end] of held) apply(data, end);
+      held = [];
       if (!session.created || session.cols !== size.cols || session.rows !== size.rows) sink.resizePty(size.cols, size.rows);
-      if (session.exit) sink.exited(session.exit);
-    },
-    detach() {
-      attached = false;
+      const exit = session.exit ?? heldExit;
+      heldExit = null;
+      if (exit) sink.exited(exit);
     },
     get isAttached() {
       return attached;

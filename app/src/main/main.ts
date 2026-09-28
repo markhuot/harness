@@ -372,7 +372,7 @@ let terminalManager: TerminalManager | null = null;
 const terminals = () =>
   (terminalManager ??= new TerminalManager({
     spawn: nodePtySpawn(),
-    events: { data: (id, data) => broadcast("terminal:data", id, data), exit: (id, exit) => broadcast("terminal:exit", id, exit) },
+    events: { data: (id, data, end) => broadcast("terminal:data", id, data, end), exit: (id, exit) => broadcast("terminal:exit", id, exit) },
   }));
 ipcMain.handle("harness:terminal:ensure", (_e, id: unknown, opts: unknown) => terminals().ensure(id, opts));
 ipcMain.handle("harness:terminal:write", (_e, id: unknown, data: unknown) => terminals().write(id, data));

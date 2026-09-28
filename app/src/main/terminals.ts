@@ -27,7 +27,8 @@ export interface SpawnOptions {
 export type SpawnPty = (file: string, args: string[], opts: SpawnOptions) => Pty;
 
 export interface TerminalEvents {
-  data(id: string, data: string): void;
+  /** Output, coalesced; `end` is the session's output offset just past it (see TerminalSession.end). */
+  data(id: string, data: string, end: number): void;
   exit(id: string, exit: TerminalExit): void;
 }
 
@@ -99,6 +100,8 @@ interface Session {
   rows: number;
   scrollback: Scrollback;
   pending: string;
+  /** How much output there's been, in UTF-16 code units (never trimmed, unlike the scrollback). */
+  written: number;
   exit: TerminalExit | null;
 }
 
@@ -191,24 +194,20 @@ export class TerminalManager {
   ensure(rawId: unknown, rawOpts?: unknown): TerminalSession {
     const id = checkId(rawId);
     const existing = this.sessions.get(id);
-    if (existing) {
-      // The snapshot's scrollback already holds the unsent output, so drop it rather than send
-      // it twice. Data events sent before the reply are in the scrollback too; the renderer
-      // ignores an id's data until ensure() resolves and appends only what comes after.
-      existing.pending = "";
-      this.dirty.delete(existing);
-      return this.snapshot(existing, false);
-    }
+    // An existing session re-attaches. Its unsent output still goes out (other windows may show
+    // it); the snapshot says where its scrollback ends, so this pane skips what it just replayed.
+    if (existing) return this.snapshot(existing, false);
     const { cwd: wanted, cols, rows } = parseEnsureOptions(rawOpts);
     const cwd = resolveCwd(wanted, this.home, this.isDirectory);
     const shell = loginShell(this.env);
     const pty = this.opts.spawn(shell, ["-l"], { cwd, cols, rows, env: shellEnv(this.env) });
-    const session: Session = { id, pty, shell, cwd, cols, rows, scrollback: new Scrollback(this.scrollbackLimit), pending: "", exit: null };
+    const session: Session = { id, pty, shell, cwd, cols, rows, scrollback: new Scrollback(this.scrollbackLimit), pending: "", written: 0, exit: null };
     this.sessions.set(id, session);
     pty.onData((data) => {
       if (this.sessions.get(id) !== session) return;
       session.scrollback.push(data);
       session.pending += data;
+      session.written += data.length;
       this.dirty.add(session);
       if (!this.flushScheduled) {
         this.flushScheduled = true;
@@ -298,10 +297,11 @@ export class TerminalManager {
     if (!session.pending) return;
     const data = session.pending;
     session.pending = "";
-    this.opts.events.data(session.id, data);
+    // pending is everything since the last flush, so it ends where the output does.
+    this.opts.events.data(session.id, data, session.written);
   }
 
   private snapshot(s: Session, created: boolean): TerminalSession {
-    return { id: s.id, pid: s.pty.pid, shell: s.shell, cwd: s.cwd, cols: s.cols, rows: s.rows, created, scrollback: s.scrollback.toString(), exit: s.exit };
+    return { id: s.id, pid: s.pty.pid, shell: s.shell, cwd: s.cwd, cols: s.cols, rows: s.rows, created, scrollback: s.scrollback.toString(), end: s.written, exit: s.exit };
   }
 }

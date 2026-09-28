@@ -10,7 +10,7 @@
 // a new one; re-attaching makes that look like nothing happened.
 
 import { useEffect, useRef, useState } from "react";
-import { FitAddon, init, Terminal } from "ghostty-web";
+import type { Terminal } from "ghostty-web";
 import type { TerminalExit } from "../../main/types";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
@@ -21,9 +21,12 @@ import { appOwnsKey, createAttach, exitLabel, terminalColors } from "../state/te
 import { currentColorTheme, currentTheme, useTheme } from "../state/theme";
 import "./terminal.css";
 
-/** Loads the WASM core once per page (it's inlined in the bundle, so there's nothing to fetch but a data: URL). */
-let ghostty: Promise<void> | null = null;
-const loadGhostty = () => (ghostty ??= init());
+/**
+ * ghostty-web and its WASM core (~420 KB, inlined as a data: URL) load on the first terminal, in
+ * their own chunk, so the app's startup bundle doesn't carry them. init() runs once per page.
+ */
+let ghostty: Promise<typeof import("ghostty-web")> | null = null;
+const loadGhostty = () => (ghostty ??= import("ghostty-web").then(async (m) => (await m.init(), m)));
 
 const FONT_SIZE = 12;
 
@@ -64,12 +67,12 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
       exited: (e) => setExit(e),
     });
     // Subscribed before ensure(), so nothing between its reply and the first live chunk is missed;
-    // the attach drops whatever arrives before the reply (it's in the scrollback).
-    offs.push(bridge.onData((id, data) => id === sessionId && attach.data(data)));
+    // the attach holds what arrives before the reply and keeps only what the scrollback lacks.
+    offs.push(bridge.onData((id, data, end) => id === sessionId && attach.data(data, end)));
     offs.push(bridge.onExit((id, e) => id === sessionId && attach.exit(e)));
 
     void (async () => {
-      await loadGhostty();
+      const { Terminal, FitAddon } = await loadGhostty();
       if (disposed) return;
       term = new Terminal({
         fontFamily: monoFont(),
@@ -78,6 +81,8 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
         theme: terminalColors(currentColorTheme().tokens, currentTheme()),
       });
       termRef.current = term;
+      // For scripts/terminal-pane-check.ts, which reads the screen (a canvas) through the buffer API.
+      (host as HTMLElement & { harnessTerminal?: Terminal }).harnessTerminal = term;
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(host);

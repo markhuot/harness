@@ -45,6 +45,7 @@ class FakePty implements Pty {
 function setup(over: { env?: Record<string, string>; dirs?: string[]; scrollbackLimit?: number; killGraceMs?: number } = {}) {
   const ptys: FakePty[] = [];
   const data: [string, string][] = [];
+  const ends: number[] = [];
   const exits: [string, TerminalExit][] = [];
   const flushes: (() => void)[] = [];
   const dirs = new Set(over.dirs ?? ["/home/me", "/work"]);
@@ -54,7 +55,7 @@ function setup(over: { env?: Record<string, string>; dirs?: string[]; scrollback
       ptys.push(p);
       return p;
     },
-    events: { data: (id, d) => data.push([id, d]), exit: (id, e) => exits.push([id, e]) },
+    events: { data: (id, d, end) => (data.push([id, d]), ends.push(end)), exit: (id, e) => exits.push([id, e]) },
     env: over.env ?? { SHELL: "/bin/bash", PATH: "/usr/bin" },
     home: "/home/me",
     isDirectory: (p) => dirs.has(p),
@@ -63,7 +64,7 @@ function setup(over: { env?: Record<string, string>; dirs?: string[]; scrollback
     schedule: (f) => void flushes.push(f),
   });
   const tick = () => flushes.splice(0).forEach((f) => f());
-  return { manager, ptys, data, exits, tick, flushes };
+  return { manager, ptys, data, ends, exits, tick, flushes };
 }
 
 describe("Scrollback", () => {
@@ -174,16 +175,33 @@ describe("TerminalManager", () => {
     expect(again).toMatchObject({ created: false, cwd: "/work", cols: 80, rows: 24, scrollback: "$ ls\r\na.txt\r\n" });
   });
 
-  test("re-attaching drops unsent output instead of sending what the scrollback already holds", () => {
-    const { manager, ptys, data, tick } = setup();
-    manager.ensure("p1", { cols: 80, rows: 24 });
+  test("each chunk carries the offset it ends at, and ensure the offset its scrollback ends at", () => {
+    const { manager, ptys, data, ends, tick } = setup();
+    expect(manager.ensure("p1", { cols: 80, rows: 24 }).end).toBe(0);
     ptys[0]!.emit("one");
-    manager.ensure("p1", { cols: 80, rows: 24 });
     tick();
-    expect(data).toEqual([]);
     ptys[0]!.emit("two");
+    // Re-attaching mid-flush: the scrollback holds "onetwo", so a pane skips every chunk ending by 6.
+    const again = manager.ensure("p1", { cols: 80, rows: 24 });
+    expect(again).toMatchObject({ scrollback: "onetwo", end: 6 });
     tick();
-    expect(data).toEqual([["p1", "two"]]);
+    ptys[0]!.emit("three");
+    tick();
+    expect(data).toEqual([
+      ["p1", "one"],
+      ["p1", "two"], // still sent: another window may be showing this session
+      ["p1", "three"],
+    ]);
+    expect(ends).toEqual([3, 6, 11]);
+  });
+
+  test("offsets keep counting past the scrollback's bound", () => {
+    const { manager, ptys, ends, tick } = setup({ scrollbackLimit: 4 });
+    manager.ensure("p1", { cols: 80, rows: 24 });
+    ptys[0]!.emit("0123456789");
+    tick();
+    expect(manager.ensure("p1", { cols: 80, rows: 24 })).toMatchObject({ scrollback: "6789", end: 10 });
+    expect(ends).toEqual([10]);
   });
 
   test("output is coalesced per session until the flush", () => {
