@@ -14,7 +14,7 @@ import { nativeTools, readOnlyNativeTools } from "../tools";
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
-const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
+const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR_ONLY = ["review_ticket", "complete_ticket"];
 const CONFIG_READ = ["list_watchers", "list_mappings", "get_settings", "list_drivers"];

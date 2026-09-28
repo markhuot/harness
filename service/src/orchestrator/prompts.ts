@@ -91,7 +91,7 @@ const BROWSER = section(
 /** Read-only board tools, given to every run kind (tools/board.ts). */
 const BOARD = section(
   "Board",
-  `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), and \`list_projects\` gives the project keys. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
+  `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), \`list_projects\` gives the project keys, and \`list_inbox\` { status?, source?, limit?, include_output? } shows the Inbox: each piece of watcher output and what triage did with it. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
 );
 
 /** Board tools that change other tickets: work and conductor runs (tools/board-write.ts). */
