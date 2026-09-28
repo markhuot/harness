@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.0230](https://github.com/markhuot/harness/releases/tag/app-20260928.0230) - 2026-09-28
+
 ### Fixed
 
 - Approving a tool call once no longer puts the rest of a ticket in ask mode. Before, an approval
