@@ -89,7 +89,17 @@ export function Switch({ checked, onChange, label, ariaLabel }: { checked: boole
 }
 
 /** Dropdown menu anchored to its trigger. */
-export function MenuButton({ trigger, children, align = "right" }: { trigger: (open: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: "left" | "right" }) {
+export function MenuButton({
+  trigger,
+  children,
+  align = "right",
+  className,
+}: {
+  trigger: (toggle: () => void, open: boolean) => ReactNode;
+  children: (close: () => void) => ReactNode;
+  align?: "left" | "right";
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -97,19 +107,24 @@ export function MenuButton({ trigger, children, align = "right" }: { trigger: (o
     const on = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    // Capture phase, swallowed: Escape closes the menu, not the panel behind it.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+    };
     addEventListener("mousedown", on);
-    addEventListener("keydown", key);
+    addEventListener("keydown", key, true);
     return () => {
       removeEventListener("mousedown", on);
-      removeEventListener("keydown", key);
+      removeEventListener("keydown", key, true);
     };
   }, [open]);
   return (
-    <div ref={ref} style={{ position: "relative" }} className="no-drag">
-      {trigger(() => setOpen((o) => !o))}
+    <div ref={ref} style={{ position: "relative" }} className={`no-drag ${className ?? ""}`}>
+      {trigger(() => setOpen((o) => !o), open)}
       {open && (
-        <div className="menu" style={{ top: "calc(100% + 4px)", [align]: 0 }}>
+        <div className="menu" role="menu" style={{ top: "calc(100% + 4px)", [align]: 0 }}>
           {children(() => setOpen(false))}
         </div>
       )}

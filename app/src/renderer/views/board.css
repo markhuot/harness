@@ -1,32 +1,47 @@
 /* Board: child-ticket toggle, server search strip, Done paging. Colors are theme tokens only. */
 
-/* "Show child tickets" — a plain on/off switch in the toolbar */
-.children-toggle {
-  gap: 7px;
+/* Search box: the options button at its end and its dropdown ("Show child tickets", …) */
+.search-options {
+  display: flex;
+  flex: none;
 }
-.children-toggle .switch-track {
-  width: 24px;
-  height: 14px;
+.search-options-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
 }
-.children-toggle .switch-track::after {
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
-}
-.children-toggle[aria-checked="true"] .switch-track {
-  background: var(--accent);
-}
-.children-toggle[aria-checked="true"] .switch-track::after {
-  transform: translateX(10px);
-}
-.children-toggle[aria-checked="true"] {
+.search-options-btn:hover,
+.search-options-btn[aria-expanded="true"] {
+  background: var(--bg-hover);
   color: var(--text);
 }
-@container board-pane (max-width: 760px) {
-  .board-pane .children-toggle-label {
-    display: none;
-  }
+/* An option is on that isn't by default */
+.search-options-btn.active {
+  color: var(--accent);
+}
+/* MenuButton anchors the menu to the button inline; line it up with the search box's edge instead. */
+.search-options .menu {
+  right: -5px !important;
+  top: calc(100% + 8px) !important;
+  min-width: 200px;
+}
+.search-options .menu-check {
+  display: inline-flex;
+  width: 12px;
+  flex: none;
+  color: var(--accent);
+}
+.search-options .menu-item {
+  color: var(--text);
 }
 
 /* Search box: clear button */
@@ -99,14 +114,8 @@
   color: var(--text);
 }
 
-/* A narrow board header: the title gives way (clipped) rather than running under the toolbar,
-   and the switch drops its icon last. */
+/* A narrow board header: the title gives way (clipped) rather than running under the search box. */
 .board-pane > .view-header .view-title {
   overflow: hidden;
   flex-shrink: 1;
-}
-@container board-pane (max-width: 460px) {
-  .board-pane .children-toggle > svg {
-    display: none;
-  }
 }

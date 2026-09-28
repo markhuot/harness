@@ -231,7 +231,7 @@ function Shell() {
         ) : route.view === "project" ? (
           <ProjectSettingsView />
         ) : (
-          <BoardView onNewSession={() => setComposer(true)} />
+          <BoardView />
         )}
       </main>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}

@@ -126,25 +126,16 @@
   flex: none;
 }
 @container board-pane (max-width: 640px) {
-  .board-pane .header-path,
-  .board-pane .board-new .kbd {
+  .board-pane .header-path {
     display: none;
   }
   .board-pane .search {
-    width: 110px;
+    width: 130px;
   }
 }
 @container board-pane (max-width: 460px) {
-  .board-pane .board-new-label {
-    display: none;
-  }
-  .board-pane .board-new {
-    width: 30px;
-    padding: 0;
-    justify-content: center;
-  }
   .board-pane .search {
-    width: 84px;
+    width: 104px;
   }
 }
 

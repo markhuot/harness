@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
@@ -12,7 +12,6 @@ import {
   doneCount,
   hasCustomDriver,
   hideOnBoard,
-  isChild,
   isReady,
   latestSummary,
   plainText,
@@ -25,7 +24,7 @@ import {
   type State,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { DriverBadge, KindBadge, MOD, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
+import { DriverBadge, KindBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
 import { TicketDetail } from "./TicketDetail";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
@@ -43,7 +42,7 @@ function dropIndex(body: Element, clientY: number, draggingKey: string | null): 
   return i === -1 ? cards.length : i;
 }
 
-export function BoardView({ onNewSession }: { onNewSession: () => void }) {
+export function BoardView() {
   const { state, route, navigate, client, dispatch, refresh, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
   const act = useAction();
   const [filter, setFilter] = useState("");
@@ -65,7 +64,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   const searching = !!filter.trim();
   const columns = searching ? searchColumns(state, projectId).columns : boardColumns(state, projectId);
   const visible = (t: Ticket) => searching || !hideOnBoard(t, hideChildren);
-  const hasChildren = Object.values(state.tickets).some((t) => isChild(t) && (!projectId || t.projectId === projectId));
   const doneTotal = searching ? columns.done.length : doneCount(state, projectId, columns.done.length);
   const paging = searching ? undefined : state.donePaging[scopeOf(projectId)];
 
@@ -89,10 +87,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
     if (!res) void refresh();
   };
 
-  const total = searching
-    ? (search?.ids ? search.total : Object.values(columns).reduce((n, c) => n + c.length, 0))
-    : Object.entries(columns).reduce((n, [status, c]) => n + (status === "done" ? doneTotal : c.length), 0);
-
   return (
     <div className="board-layout">
       <div className="board-pane">
@@ -109,9 +103,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
                 All projects
               </>
             )}
-            <span className="muted" style={{ fontWeight: 400 }}>
-              {total}
-            </span>
           </div>
           {project && (
             <span className="muted mono truncate header-path" title={project.path}>
@@ -124,22 +115,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
             </button>
           )}
           <div className="grow" />
-          {hasChildren && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={!hideChildren}
-              aria-label="Show child tickets"
-              className="btn btn-ghost btn-sm children-toggle no-drag"
-              data-testid="show-children"
-              title={hideChildren ? "Show child tickets (ones that need you always show)" : "Hide child tickets (ones that need you stay visible)"}
-              onClick={toggleHideChildren}
-            >
-              <Icon name="conductor" size={13} />
-              <span className="children-toggle-label">Show child tickets</span>
-              <span className="switch-track" aria-hidden="true" />
-            </button>
-          )}
           <div className="search no-drag">
             <Icon name="hash" size={12} />
             <input
@@ -155,12 +130,31 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
                 <Icon name="x" size={11} />
               </button>
             )}
+            <MenuButton
+              className="search-options"
+              trigger={(toggle, open) => (
+                <button
+                  type="button"
+                  className={`search-options-btn ${hideChildren ? "" : "active"}`}
+                  aria-label="Search options"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  title="Search options"
+                  data-testid="search-options"
+                  onClick={toggle}
+                >
+                  <Icon name="filter" size={12} />
+                </button>
+              )}
+            >
+              {() => (
+                // Stays open on toggle so the board visibly updates underneath.
+                <MenuCheckbox checked={!hideChildren} onToggle={toggleHideChildren} testId="show-children" title="Child tickets that need you always show">
+                  Show child tickets
+                </MenuCheckbox>
+              )}
+            </MenuButton>
           </div>
-          <button className="btn btn-primary board-new" onClick={onNewSession} title={`New session (${MOD}N)`} aria-label="New session">
-            <Icon name="plus" strokeWidth={2.25} />
-            <span className="board-new-label">New session</span>
-            <span className="kbd">{MOD}N</span>
-          </button>
         </header>
         {searching && (
           <div className="search-status" data-testid="search-status" role="status">
@@ -248,6 +242,17 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   );
 }
 
+
+
+/** A checkable menu row (the check sits in a fixed gutter so labels line up). */
+function MenuCheckbox({ checked, onToggle, testId, title, children }: { checked: boolean; onToggle: () => void; testId?: string; title?: string; children: ReactNode }) {
+  return (
+    <button type="button" role="menuitemcheckbox" aria-checked={checked} className="menu-item" data-testid={testId} title={title} onClick={onToggle}>
+      <span className="menu-check">{checked && <Icon name="check" size={12} strokeWidth={2.25} />}</span>
+      <span className="menu-label">{children}</span>
+    </button>
+  );
+}
 
 /**
  * "Load more" at the end of the Done column; also loads on its own when scrolled near (an
