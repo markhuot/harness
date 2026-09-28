@@ -313,6 +313,46 @@ describe("ticket lifecycle", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
   });
 
+  test("re-open sends a done ticket back to work with the notes; only done tickets, notes required", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await expect(h.orch.reopenTicket(t.key, { notes: "again" })).rejects.toThrow(/not done/);
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    await expect(h.orch.reopenTicket(t.key, { notes: "  " })).rejects.toThrow(/notes are required/);
+
+    const cur = await h.orch.reopenTicket(t.key, { notes: "the button is the wrong color" });
+    expect(cur.status).toBe("in_progress");
+    expect(cur.completedAt).toBeNull();
+    expect([cur.agentReview, cur.humanReview]).toEqual(["pending", "pending"]);
+    await h.orch.idle();
+    const prompt = h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt;
+    expect(prompt).toContain("re-opened");
+    expect(prompt).toContain("the button is the wrong color");
+    const after = h.orch.ticketDetail(t.key).ticket;
+    expect(after.status).toBe("review");
+    expect(after.humanReview).toBe("pending");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded", "work:succeeded", "review:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("Re-opened by human");
+    expect(h.orch.summaries(t.key).map((s) => `${s.author}:${s.body}`)).toContain("human:Re-opened: the button is the wrong color");
+  });
+
+  test("dragging a done ticket to in progress re-opens it with the plan", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "the plan" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    const cur = await h.orch.updateTicket(t.key, { status: "in_progress" });
+    expect(cur.status).toBe("in_progress");
+    expect(cur.humanReview).toBe("pending");
+    await h.orch.idle();
+    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt).toContain("the plan");
+    expect(statuses(h, t.sessionId)).toContain("Re-opened: moved to in progress");
+  });
+
   test("external keys, duplicates and validation", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "mirror", key: "foo-123", start: false });
@@ -678,5 +718,58 @@ describe("worktrees", () => {
     await h.orch.idle();
     expect(h.orch.ticketDetail(plain.key).ticket.workdir).toBe(h.project.path);
     expect(h.orch.ticketDetail(plain.key).ticket.branch).toBeNull();
+  });
+
+  test("re-opening a done ticket whose worktree and branch were removed recreates them", async () => {
+    const h = setup();
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    const p = h.orch.createProject({ path: repo, key: "repo" });
+    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    const done = h.orch.ticketDetail(t.key).ticket;
+    expect(done.status).toBe("done");
+    // What the complete run does: remove the worktree and delete the merged branch.
+    git("worktree", "remove", "--force", done.workdir!);
+    git("branch", "-D", done.branch!);
+    expect(existsSync(done.workdir!)).toBe(false);
+
+    await h.orch.reopenTicket(t.key, { notes: "one more fix" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect(cur.status).toBe("review");
+    expect(cur.workdir).toBe(done.workdir);
+    expect(cur.branch).toBe("harness/repo-1");
+    expect(existsSync(join(cur.workdir!, ".git"))).toBe(true);
+    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.cwd).toBe(cur.workdir!);
+    expect(new TextDecoder().decode(git("branch", "--list", "harness/*").stdout)).toContain("harness/repo-1");
+  });
+
+  test("a message to a done ticket with a removed worktree recreates it too", async () => {
+    const h = setup();
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    const p = h.orch.createProject({ path: repo, key: "repo" });
+    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    const done = h.orch.ticketDetail(t.key).ticket;
+    git("worktree", "remove", "--force", done.workdir!);
+
+    const cur = await h.orch.sendMessage(t.key, "tweak it");
+    expect(cur.status).toBe("in_progress");
+    expect(existsSync(join(done.workdir!, ".git"))).toBe(true);
+    await h.orch.idle();
+    const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
+    expect([last.prompt, last.cwd]).toEqual(["tweak it", done.workdir!]);
   });
 });

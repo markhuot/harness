@@ -107,6 +107,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
 | `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
 | Drag to done | `done` without an agent run |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a drag back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -385,7 +386,7 @@ GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages | /review | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
