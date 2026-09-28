@@ -727,7 +727,7 @@ function seed() {
   t1.triageStatus = "dispatched";
   t1.outcome = "Dispatched to NYTIMES as FOO-123 (started).";
   transcripts.get(t1.id)!.push(
-    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-123 Paywall meter counts AMP pageviews twice\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-123 → NYTIMES" }, createdAt: t1.createdAt },
+    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-123 Paywall meter counts AMP pageviews twice\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project." }, createdAt: t1.createdAt },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 2, role: "assistant", content: { type: "tool_call", callId: "c1", name: "dispatch_ticket", input: { project_key: "NYTIMES", key: "FOO-123", title: "Paywall meter counts AMP pageviews twice", start: true } }, createdAt: t1.createdAt + 5000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 3, role: "tool", content: { type: "tool_result", callId: "c1", name: "dispatch_ticket", output: [{ type: "text", text: "Created FOO-123" }], isError: false }, createdAt: t1.createdAt + 6000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 4, role: "system", content: { type: "status", text: "Dispatched to NYTIMES" }, createdAt: t1.createdAt + 7000 },
@@ -735,14 +735,14 @@ function seed() {
   const t2 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Recipe card print styles broken in Safari", now() - 2 * 60_000);
   t2.triageStatus = "triaging";
   t2.busy = true;
-  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-131 → NYTIMES" }, createdAt: t2.createdAt });
+  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project." }, createdAt: t2.createdAt });
 
   const w: Watcher = {
     id: newId("w"),
     name: "jira",
     command: "~/Sites/Jira/watch-jira.js",
     args: [],
-    prompt: "If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.",
+    prompt: "If this ticket is assigned to me and has actionable next steps, dispatch it. FOO tickets go to the NYTIMES project.",
     cwd: null,
     env: {},
     mode: "loop",
