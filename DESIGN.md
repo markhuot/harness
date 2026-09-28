@@ -1052,8 +1052,8 @@ Settings, project settings, or on the board route the pane workspace.
   cancels a native drag with a dragend), or on the first buttonless mouse move if the source
   left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
   Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
-  (`splitTarget`), and it skips a pane already showing that ticket. Cards are focusable, and
-  Enter opens them. A ticket pane's More menu has a Move pane section with a row for each other
+  (`splitTarget`), and it skips a pane already showing that ticket. The board's cards take a
+  keyboard cursor (see Keyboard below), and Enter opens the one it's on. A ticket pane's More menu has a Move pane section with a row for each other
   pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call `movePane`,
   so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
@@ -1066,11 +1066,72 @@ Settings, project settings, or on the board route the pane workspace.
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
   never shows a pane below its minimum while there's room. The stored sizes stay as they were
   until a divider moves, and a drag starts from the sizes on screen.
-- **Focus, close, zoom.** Clicking or tabbing into a pane focuses it (a faint header tint). ✕
-  closes a ticket pane and its neighbours take its room; the board can't be closed. Maximize
-  zooms a pane. Escape ends a zoom, or else closes the focused ticket pane (never while a text
-  field, modal, menu or terminal has it, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its pane, and a renamed key follows the
-  rename.
+- **Focus, close, zoom.** Clicking into a pane, or tabbing into it, focuses it (a faint header
+  tint). Focus that code moves with no key or pointer input in the last 300 ms (an autofocus, a
+  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket or
+  terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
+  focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
+  focused ticket pane (never while a text field, modal, menu, the palette or a terminal has the
+  focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
+  pane, and a renamed key follows the rename.
+- **Keyboard.** Every shortcut is a command in one registry (`state/keys.ts`): an id, a label, a
+  group, a scope and its chords. The rest follows from that list.
+  - *Two tiers.* ⌘ chords work everywhere, text fields and the browser canvas included. Every
+    other key (hjkl, Enter, g/G, `/`, `?`, `i`, 1–9, ⌃hjkl, Escape) only moves you around. Those
+    keys fire only outside text fields, the canvas, terminals and overlays (a modal, a menu, the
+    palette), and they never change a ticket. Actions (Start work, Approve, Request changes,
+    Complete, Re-run review, Cancel run, Mark done, Re-open, Copy key, Delete) have no keys at
+    all. `keys.test.ts` fails if one gets a bare key. They're reached from their buttons and from
+    the ⌘K palette.
+  - *Areas.* An element that owns commands carries `data-keys-scope` (`board`, `ticket`, `list`,
+    `sidebar`, or several) and `data-keys-owner` (a unique id). Components register handlers for
+    their owner with `useCommands` (`components/commands.tsx`). A falsy handler means the command
+    doesn't apply right now (an action that doesn't fit the ticket's status), which also keeps it
+    out of the palette. One window `keydown` listener in the shell walks from the focused element
+    outward through its areas and runs the first matching command with a handler, ending at the
+    global owner. With nothing focused, it starts from the focused pane's area. A list inside a
+    ticket pane (a conductor's Tickets tab) therefore takes j/k before the pane's own scroll keys.
+    Components' own key handling runs first and wins with preventDefault or stopPropagation (a
+    text field's Escape, a menu's arrows, the palette's list).
+  - *The menu bar.* `main.ts` builds its items from the registry (`commandItem`). The label and
+    accelerator come from the command, and choosing the item sends the id back to the renderer,
+    which runs it where the focus is (`runCommand`). The renderer handles the same chords itself,
+    and a ⌘ key the page prevents never reaches the menu. A short de-dupe covers the rest. The
+    menu is what makes ⌘ chords work from a plugin iframe (out of process, so its keys never reach
+    the renderer) and from a terminal (which keeps ⌘ keys from the page). No key forwarding goes
+    through the plugin SDK. Shifted punctuation is written as its character (`Cmd+}` for ⇧⌘]),
+    because macOS matches key equivalents by the character typed. The browser canvas keeps the
+    app's ⌘ chords from its page (`isAppChord`).
+  - *Focus follows the keyboard.* Real DOM focus, with a roving tabindex, marks where the keyboard
+    is. A keyboard command that changes the focused pane (⌥⌘arrows or ⌃hjkl through
+    `paneInDirection`, Enter on a card, ⌘W, Escape) goes through `focusPaneBy`
+    (`components/paneFocus.ts`), and the workspace then moves DOM focus into that pane. It goes to
+    what last had focus there, else the pane's `[data-pane-autofocus]` element (the board's cursor
+    card, a ticket's current tab), else the pane itself. A terminal focuses its own screen. Left
+    from a pane on the workspace's left edge goes to the sidebar, and l or → from the sidebar comes
+    back.
+  - *Board.* The cursor is a ticket key in `BoardPane`'s state, moved with `moveCursor` over the
+    columns as rendered (`state/boardNav.ts`). Empty columns are skipped, and the row index is
+    kept and clamped. A card that moves column or gets filtered out hands the cursor to the card
+    nearest its old spot (`resolveCursor`). The cursor reaches cards as a boolean prop, so a move
+    re-renders two cards.
+  - *Ticket pane.* The tabs are a `role=tablist` over `visibleTabs` (built-in tabs, then plugin
+    tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
+    scroll the current tab's own scroller. `i` focuses the composer, and Escape there hands focus
+    back to the current tab.
+  - *Lists and overlays.* The sidebar, the Inbox and a conductor's Tickets tab are roving lists
+    (`useRovingList`: j/k/↑/↓, g/G/Home/End, one tab stop). Menus focus their first item, move with
+    ↑/↓ and give focus back to their button. Modals trap Tab and restore focus when they close.
+  - *Palette and overlay.* ⌘K (`views/CommandPalette.tsx`) lists the commands that apply where the
+    focus was (`availableCommands`), places to go, and tickets. Loaded tickets match at once, and
+    `searchTickets` adds the rest after 150 ms. `rankCommands` (`state/palette.ts`) ranks
+    subsequence matches, with a label prefix first, then word starts, then runs, then scattered
+    letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`
+    and ⌘/ open the shortcuts overlay, which is rendered from the registry.
+  - *Rings.* `html[data-input]` is `keyboard` after a keyboard command or Tab, and `pointer` after
+    any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
+    (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
+    Elements get `:focus-visible` rings from `--focus`. A click never shows any of them.
 - **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
   opens the ticket the way a card click does. The route the app launches with opens its ticket
