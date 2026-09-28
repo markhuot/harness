@@ -8,12 +8,14 @@ import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, 
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
+import { useOpenTicket } from "../components/paneContext";
 
 /** Ticket.model arrives with per-ticket model selection; read it defensively. */
 const modelOf = (t: Ticket) => (t as Ticket & { model?: string | null }).model ?? null;
 
 export function ChildrenTab({ ticket }: { ticket: Ticket }) {
-  const { state, client, dispatch, navigate, route, epoch } = useStore();
+  const { state, client, dispatch, epoch } = useStore();
+  const openTicket = useOpenTicket();
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
@@ -32,7 +34,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   }, [children, client, dispatch, state.summaries]);
   useEffect(() => fetched.current.clear(), [epoch]);
 
-  const open = (key: string) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "summaries" });
+  const open = (key: string) => openTicket(key);
 
   if (children.length === 0) {
     return (

@@ -45,6 +45,11 @@ const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
   `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
+// The pane store follows storage events too. Board | tickets, each ticket in its own pane.
+const board = { type: "leaf", id: "b", content: { kind: "board" } };
+const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
+const panes = (children: object[], sizes: number[], focusedId: string) =>
+  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
 // Opens the first watcher's edit form and keeps the Watchers section in view.
 const editWatcher = `document.querySelector("#settings-watchers .settings-row button[title=Edit]")?.click(); setTimeout(() => document.getElementById("settings-watchers")?.scrollIntoView({ block: "start" }), 50)`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
@@ -76,7 +81,17 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "board-search", route: "#/board/all", setup: search("the") },
   { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
   { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
-  { name: "panel-resized", route: "#/board/all/ticket/HARNESS-1/children", setup: layout({ sidebarCollapsed: false, sidebarWidth: 280, detailWidth: 860 }) },
+  {
+    name: "panel-resized",
+    route: "#/board/all/ticket/HARNESS-1/children",
+    setup: `${layout({ sidebarCollapsed: false, sidebarWidth: 280 })}; ${panes([board, ticketPane("t", "HARNESS-1", "children")], [0.3, 0.7], "t")}`,
+  },
+  {
+    name: "split",
+    route: "#/board/all/ticket/NYTIMES-3",
+    delay: 3000,
+    setup: panes([board, ticketPane("t1", "NYTIMES-4"), ticketPane("t2", "NYTIMES-3", "details")], [0.4, 0.3, 0.3], "t2"),
+  },
 ];
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");
