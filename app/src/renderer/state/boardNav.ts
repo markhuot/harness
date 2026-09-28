@@ -21,7 +21,7 @@ export function cursorPos(grid: string[][], key: string | null): CursorPos | nul
 }
 
 /** The first card of the first non-empty column, or null on an empty board. */
-const firstCard = (grid: string[][]) => grid.find((c) => c.length)?.[0] ?? null;
+export const firstCard = (grid: string[][]) => grid.find((c) => c.length)?.[0] ?? null;
 
 /** The card at (col, row), with the row clamped to the column's last card. */
 const cardAt = (grid: string[][], col: number, row: number) => {

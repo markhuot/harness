@@ -117,3 +117,16 @@
   overflow: hidden;
   flex-shrink: 1;
 }
+
+/* Room above the first card for the keyboard cursor's ring (app.css .card:focus-visible), which
+   the column's scroller would otherwise clip. */
+.board .column-body {
+  padding-top: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board .card {
+    transition: none;
+    animation: none;
+  }
+}

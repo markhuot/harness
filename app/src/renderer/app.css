@@ -322,17 +322,26 @@
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s, outline-color 0.12s;
   animation: fade-in 0.15s ease-out;
+  outline: none;
+  /* Scrolling a card into view (the keyboard cursor) keeps its ring in view too. */
+  scroll-margin: 6px;
 }
 .card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
+/* The keyboard cursor, while it has the focus: a halo outside the card, apart from the border and
+   shadow that .selected / .open / .related use, so it reads alongside any of them. */
 .card:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus);
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The cursor parked (the focus is elsewhere) in keyboard mode: where the board's keys will land. */
+html[data-input="keyboard"] .card.cursor:not(:focus) {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
 }
 /* Open in the focused pane (selected), or in another pane (open). */
 .card.selected {
