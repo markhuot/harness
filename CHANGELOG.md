@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.0155](https://github.com/markhuot/harness/releases/tag/app-20260928.0155) - 2026-09-28
+
 ### Fixed
 
 - On iPhone, the keyboard no longer hides the bottom of the screen. The ticket composer now sits
