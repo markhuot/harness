@@ -156,8 +156,10 @@ command, args, cwd, env, mode or interval does.
 * `mode: "interval"` runs the command every `intervalSec`. Each run's stdout is one item.
 * `mode: "loop"` re-runs the command as soon as it exits (for blocking or long-running
   commands). Each **burst** of output is one item: lines that arrive close together, ended by
-  `batchIdleMs` (200ms) of quiet or `batchMaxMs` (1s) of age. A timed flush stops at the last
-  complete line.
+  `batchIdleMs` (200ms) of quiet or `batchMaxMs` (1s) of age. Going quiet delivers everything,
+  so a response without a trailing newline (pretty JSON from `curl`) stays whole. Hitting the
+  max age while output is still streaming stops at the last complete line and carries the
+  partial line into the next item.
 * Output is trimmed, and whitespace-only output is dropped. A chunk is cut at 16,000
   characters and marked truncated, and the triage prompt says so.
 * Identical output from the same watcher is triaged once: `seen_items` records

@@ -490,9 +490,10 @@ async function readText(stream: ReadableStream<Uint8Array>, onChunk: (text: stri
 
 /**
  * Collects stdout text into chunks. Untimed (interval mode): one chunk, flushed at exit. Timed
- * (loop mode): a chunk ends when output goes quiet for idleMs or is maxMs old; a timed flush
- * stops at the last complete line and keeps a partial line for the next chunk. Text past `limit`
- * is dropped and the chunk marked truncated.
+ * (loop mode): a chunk ends when output goes quiet for idleMs, which delivers everything (a
+ * response without a trailing newline is still finished), or when it is maxMs old while output
+ * is still streaming, which stops at the last complete line and keeps the partial line for the
+ * next chunk. Text past `limit` is dropped and the chunk marked truncated.
  */
 class Chunker {
   private text = "";
@@ -519,11 +520,13 @@ class Chunker {
     if (!this.timed) return;
     if (this.timer) clearTimeout(this.timer);
     const age = Date.now() - this.firstAt;
-    const wait = Math.max(0, Math.min(this.timed.idleMs, this.timed.maxMs - age));
-    this.timer = setTimeout(() => this.flush(false), wait);
+    const untilMax = this.timed.maxMs - age;
+    // Whichever comes first: quiet for idleMs (the burst is over) or the max age (still streaming).
+    const idle = this.timed.idleMs <= untilMax;
+    this.timer = setTimeout(() => this.flush(idle), Math.max(0, idle ? this.timed.idleMs : untilMax));
   }
 
-  /** Deliver what's collected. `all` false keeps a trailing partial line (unless truncated). */
+  /** Deliver what's collected. `all` false (a max-age flush) keeps a trailing partial line, unless truncated. */
   flush(all: boolean): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -541,7 +544,8 @@ class Chunker {
     this.truncated = false;
     if (rest) {
       this.firstAt = Date.now();
-      if (this.timed) this.timer = setTimeout(() => this.flush(false), this.timed.idleMs);
+      // Nothing more within idleMs means the partial line was the end of the output.
+      if (this.timed) this.timer = setTimeout(() => this.flush(true), this.timed.idleMs);
     }
     if (output) this.deliver(output);
   }

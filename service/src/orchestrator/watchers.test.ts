@@ -367,7 +367,7 @@ describe("WatcherRunner loop mode", () => {
     expect(h.outputs.length).toBeLessThan(12);
   });
 
-  test("a timed flush keeps a partial line for the next burst", async () => {
+  test("an idle flush delivers everything, including a last line without a newline", async () => {
     let proc!: FakeProc;
     const { spawn } = fakeSpawn((p) => (proc = p));
     const h = track(harness(spawn, { ...FAST, batchIdleMs: 30, restartDelayMs: 10_000 }));
@@ -375,11 +375,40 @@ describe("WatcherRunner loop mode", () => {
     await waitFor(() => !!proc, 1000, "spawn");
     proc.write("line one\nline tw");
     await waitFor(() => h.outputs.length === 1, 1000, "first burst");
+    await sleep(60);
+    expect(h.texts()).toEqual(["line one\nline tw"]);
+  });
+
+  test("pretty JSON without a trailing newline stays one item per response", async () => {
+    let proc!: FakeProc;
+    const { spawn } = fakeSpawn((p) => (proc = p));
+    const h = track(harness(spawn, { ...FAST, batchIdleMs: 20, batchMaxMs: 500, restartDelayMs: 10_000 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => !!proc, 1000, "spawn");
+    const body = '{\n  "event": "assigned",\n  "to": "mark"\n}';
+    proc.write(body); // like curl against an API that doesn't end its body with a newline
+    await waitFor(() => h.outputs.length === 1, 1000, "first response");
+    await sleep(60);
+    proc.write(body.replace("mark", "sam"));
+    await waitFor(() => h.outputs.length === 2, 1000, "second response");
+    await sleep(60);
+    expect(h.texts()).toEqual([body, body.replace("mark", "sam")]);
+  });
+
+  test("a max-age flush while output is still streaming keeps the partial line", async () => {
+    let proc!: FakeProc;
+    const { spawn } = fakeSpawn((p) => (proc = p));
+    const h = track(harness(spawn, { ...FAST, batchIdleMs: 80, batchMaxMs: 60, restartDelayMs: 10_000 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => !!proc, 1000, "spawn");
+    proc.write("line one\nline tw");
+    await sleep(20);
+    proc.write("o"); // still streaming when the 60ms max age hits
+    await waitFor(() => h.outputs.length === 1, 1000, "max-age flush");
     expect(h.texts()[0]).toBe("line one");
-    proc.write("o\n");
-    proc.exit(0);
+    proc.write(" done\n");
     await waitFor(() => h.outputs.length === 2, 1000, "rest");
-    expect(h.texts()[1]).toBe("line two");
+    expect(h.texts()[1]).toBe("line two done");
   });
 
   test("a huge burst is cut at maxOutputChars and marked truncated", async () => {
@@ -689,6 +718,20 @@ process.exit(4);
     await waitFor(() => errors.length > 0, 10_000, "exit");
     expect(errors).toEqual([null]);
     expect(outputs.map((o) => o.text)).toEqual(['{"EVENT":"ASSIGNED","TO":"MARK","N":1}\n{"EVENT":"ASSIGNED","TO":"MARK","N":2}']);
+  });
+
+  test("a looping shell command printing pretty JSON without a newline gives one item per response", async () => {
+    const outputs: WatcherOutput[] = [];
+    const runner = new WatcherRunner({
+      onOutput: (_w, o) => void outputs.push(o),
+      onStatus: () => {},
+      timing: { ...FAST, batchIdleMs: 50, batchMaxMs: 1000 },
+      shell: "/bin/sh",
+    });
+    active.push(runner);
+    runner.sync([watcher({ command: `while true; do printf '{\\n  "event": "assigned",\\n  "to": "mark"\\n}'; sleep 0.3; done` })]);
+    await waitFor(() => outputs.length >= 2, 10_000, "two responses");
+    for (const o of outputs.slice(0, 2)) expect(o.text).toBe('{\n  "event": "assigned",\n  "to": "mark"\n}');
   });
 
   test("a failing process reports its stderr", async () => {

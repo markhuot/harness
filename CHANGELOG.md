@@ -28,7 +28,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The watcher form on Mac and iPhone has a single Command field and a new Prompt field in
   place of the separate command and arguments fields. Watchers you already have keep running
-  as they are. Saving one from the form turns its command and arguments into one command line.
+  as they are. Saving one from the form turns its command and arguments into one command line,
+  which then runs in your login shell too, so your shell's startup files apply to it.
 - Mappings are now hints for triage. When a key in a watcher's output (like FOO-123) matches a
   mapping, triage is pointed at that project, and it can still choose another one.
 
