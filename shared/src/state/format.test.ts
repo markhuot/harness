@@ -74,17 +74,17 @@ test("approval input: Write/Edit show file_path, WebFetch shows the url as plain
 });
 
 test("approval input: config tools show the watcher command line and what they act on", () => {
-  expect(describeApprovalInput("create_watcher", { name: "gh", command: "/bin/zsh", args: ["-lc", "gh issue list --repo a/b"], mode: "loop" })).toEqual({
-    primary: { label: "Command", value: "/bin/zsh -lc 'gh issue list --repo a/b'", code: true },
+  expect(describeApprovalInput("create_watcher", { name: "jira", command: "/bin/zsh", args: ["-lc", "exec watch-jira --project=FOO --follow"], mode: "loop" })).toEqual({
+    primary: { label: "Command", value: "/bin/zsh -lc 'exec watch-jira --project=FOO --follow'", code: true },
     description: null,
-    rest: { name: "gh", mode: "loop" },
+    rest: { name: "jira", mode: "loop" },
   });
   // an args-only update still shows what will run
-  expect(describeApprovalInput("mcp__harness__update_watcher", { watcher: "gh", args: ["it's"] })).toMatchObject({
+  expect(describeApprovalInput("mcp__harness__update_watcher", { watcher: "jira", args: ["it's"] })).toMatchObject({
     primary: { value: "'(unchanged command)' 'it'\\''s'" },
-    rest: { watcher: "gh" },
+    rest: { watcher: "jira" },
   });
-  expect(describeApprovalInput("update_watcher", { watcher: "gh", enabled: false }).primary).toEqual({ label: "Watcher", value: "gh", code: false });
+  expect(describeApprovalInput("update_watcher", { watcher: "jira", enabled: false }).primary).toEqual({ label: "Watcher", value: "jira", code: false });
   expect(describeApprovalInput("delete_ticket", { key: "ACME-3" }).primary).toEqual({ label: "Ticket", value: "ACME-3", code: false });
   expect(describeApprovalInput("update_project", { project_key: "ACME", auto_complete: true })).toMatchObject({
     primary: { label: "Project", value: "ACME" },
