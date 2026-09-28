@@ -10,21 +10,20 @@ import { defineGatedTool, defineTool, json, schema } from "./util";
 // Shared schema pieces and descriptions
 // ---------------------------------------------------------------------------
 
-// TODO(github-watcher): a built-in `harness watch github` command is being built on a sibling
-// ticket. Once it merges, replace this with its exact command and args (and add it to the
-// DESIGN.md "Config tools" section); until then agents get a gh-CLI one-liner that works today.
-const GITHUB_WATCHER_HINT =
-  'GitHub issues: until a built-in GitHub watcher exists, use the gh CLI in interval mode (gh must be installed and logged in): command "/bin/zsh", args ["-lc", "gh issue list --repo OWNER/NAME --state open --json number,title,url,updatedAt --jq \'.[] | {key: \\"PREFIX-\\\\(.number)\\", title, url, updated: .updatedAt} | tojson\'"], mode "interval", interval_sec 300, then create_mapping with pattern "PREFIX" for the target project. PREFIX is an upper-case key you choose, e.g. the repository name.';
-
+// The watcher contract, for an agent configuring a tool the user already has installed
+// (watch-jira, or any CLI that prints NDJSON work items). The examples are the shapes in
+// service/examples/watchers/jira-*.json.
 const WATCHER_CONTRACT = [
-  "A watcher is a command the harness service runs on this machine (outside any ticket sandbox) to discover work.",
-  "It is spawned without a shell: command is an executable path and args its arguments. For pipes, quoting or your PATH, use command \"/bin/zsh\" with args [\"-lc\", \"<shell command>\"].",
-  "Output: one JSON object per line on stdout (NDJSON); other lines are ignored. Fields: key (required; also read from id or identifier) is the external ticket key, e.g. \"FOO-123\"; title (or summary / name); url (or link / html_url); version (or updated / updatedAt / updated_at). Every other field is passed to the triage agent as-is.",
-  "Each new (watcher, key, version) starts a triage session that files the item as a local ticket with that same key in a project; re-emitting a key with a new version sends the update to the existing ticket, the same version is ignored.",
-  "Routing: triage suggests the project from the mappings. Create a mapping whose pattern is the key prefix the watcher emits (pattern \"FOO\" matches FOO-123) with create_mapping, or items may be declined.",
-  "mode \"loop\" re-runs the command about a second after it exits: for commands that block until there is work (long-polling). mode \"interval\" runs it every interval_sec seconds (at least 10): for commands that print the current items and exit.",
-  "Exit codes: 0 = ran (work may have been emitted), 4 = nothing to report, anything else = failure: the tail of stderr becomes the watcher's last_error and a loop watcher backs off (2s doubling to 5 minutes).",
-  "env holds extra environment variables merged over the service's own; cwd is the working directory (~ allowed; default: the service's).",
+  `A watcher runs a tool the user already has installed (for example watch-jira, or any CLI that prints work items) so incoming work is filed as tickets. The harness service runs it on this machine as the user, outside any ticket sandbox.`,
+  `How to run it: the command is spawned directly, without a shell, and the service's PATH is not the user's. Run the tool through a login shell so the user's PATH resolves and their quoting works: command "/bin/zsh", args ["-lc", "exec <tool> <options>"] (exec lets the watcher stop the tool itself). Put the user's options inside that one string exactly as they'd type them in a terminal.`,
+  `What it must print: one JSON object per line on stdout (NDJSON); other lines are ignored. key (required) is the external ticket key, e.g. "FOO-123"; summary is the title; url links to the item; updated is its version (a timestamp or revision). Alternatives are accepted: id / identifier for key, title / name for summary, link / html_url for url, version / updatedAt / updated_at for updated. Every other field is passed to the triage agent as-is.`,
+  `What happens to items: each new (watcher, key, updated) starts a triage session that files the item as a local ticket with that same key. Printing a key again with a new updated value sends the update to the existing ticket; the same value is ignored, so a tool may print its full list on every run.`,
+  `Routing: a mapping sends items to a project by key prefix. After creating the watcher, call create_mapping with pattern set to the prefix of the keys the tool prints (pattern "FOO" matches FOO-123) and the target project_key; without a matching mapping items may be declined.`,
+  `mode: "loop" re-runs the command about a second after it exits, for tools that block or follow until there's work (e.g. watch-jira --follow). "interval" runs it every interval_sec seconds (at least 10), for tools that print the current items and exit (e.g. watch-jira --once).`,
+  `Exit codes: 0 = ran (items may have been printed), 4 = nothing to report; both are normal. Anything else is a failure: the end of stderr becomes the watcher's last_error and a loop watcher backs off (2s, doubling up to 5 minutes).`,
+  `env: extra environment variables for the tool, merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if the tool needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
+  `Examples. A following watcher: {"name": "jira-sprint", "command": "/bin/zsh", "args": ["-lc", "exec watch-jira --project=PLAYR,MEDL --assigned=@me --open-sprints --follow --interval=300"], "mode": "loop"} with create_mapping {"pattern": "PLAYR", "project_key": "<project>"} (and one for MEDL). A polling watcher: {"name": "jira-once", "command": "/bin/zsh", "args": ["-lc", "exec watch-jira --project=CEPFR --assigned=unassigned --open-sprints --once"], "mode": "interval", "interval_sec": 600}.`,
+  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run.`,
 ].join(" ");
 
 const watcherRefProp = { type: "string", minLength: 1, description: "The watcher's id (from list_watchers) or its exact name." };
@@ -40,12 +39,12 @@ const modelMapProp = {
 };
 
 const watcherProps = {
-  name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"github\"." },
-  command: { type: "string", minLength: 1, description: "Executable to run, e.g. \"/bin/zsh\" or an absolute path to a script." },
-  args: { type: "array", items: { type: "string" }, description: "Arguments, one per array entry (no shell splitting)." },
+  name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"jira-sprint\"." },
+  command: { type: "string", minLength: 1, description: "Executable to run: \"/bin/zsh\" (with args [\"-lc\", \"exec <tool> <options>\"]) for a tool on the user's PATH, or an absolute path." },
+  args: { type: "array", items: { type: "string" }, description: "Arguments, one array entry each (no shell splitting), e.g. [\"-lc\", \"exec watch-jira --project=FOO --once\"]." },
   cwd: { type: "string", description: "Working directory; empty for the service's." },
   env: { type: "object", description: "Environment variables (string values)." },
-  mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for blocking commands, \"interval\" for commands that print and exit. Default \"loop\"." },
+  mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for tools that block or follow, \"interval\" for tools that print and exit. Default \"loop\"." },
   interval_sec: { type: "integer", minimum: 10, description: "Seconds between runs in interval mode. Default 60." },
   enabled: { type: "boolean", description: "Whether the service runs it. Default true." },
   driver: { type: "string", description: "Driver id for this watcher's triage sessions (see list_drivers); empty for the settings default." },
@@ -177,7 +176,7 @@ type NewWatcher = WatcherFields & { name: string; command: string };
 
 export const createWatcher = defineGatedTool<CreateWatcherInput>({
   name: "create_watcher",
-  description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_CONTRACT} ${GITHUB_WATCHER_HINT}`,
+  description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_CONTRACT}`,
   inputSchema: schema(watcherProps, ["name", "command"]),
   describe: (i) => ({
     summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}`,

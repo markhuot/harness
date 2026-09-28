@@ -204,8 +204,8 @@ async function seed() {
   const conductor = await create(project.id, "Ship the greeter v2\n- Add a greet helper\n- Wire it into main\n- Update the README", { kind: "conductor" });
   const browse = await create(other.id, "/browse https://example.com");
   const approval = await create(other.id, 'Install the dependencies\n/approve Bash {"command":"npm install","description":"Install dependencies"}');
-  const watcherCall = { name: "create_watcher", input: { name: "github", command: "/bin/zsh", args: ["-lc", "gh issue list --repo acme/site --json number,title,url,updatedAt"], mode: "interval", interval_sec: 300 } };
-  const configApproval = await create(other.id, `Watch acme/site issues\n/tools ${JSON.stringify([watcherCall])}`);
+  const watcherCall = { name: "create_watcher", input: { name: "jira-sprint", command: "/bin/zsh", args: ["-lc", "exec watch-jira --project=PLAYR --assigned=@me --open-sprints --follow --interval=300"], mode: "loop" } };
+  const configApproval = await create(other.id, `Watch the PLAYR sprint\n/tools ${JSON.stringify([watcherCall])}`);
   const blocked = await create(other.id, "Sign the build\n/block Which Apple Developer team should sign the build: Happy Cog or your personal account?");
   const plan = await create(other.id, "Write a landing page for the install link", { start: false });
 

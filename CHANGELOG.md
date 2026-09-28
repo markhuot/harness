@@ -11,14 +11,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- Agents can now set up watchers, mappings, projects, and settings for you, so a ticket like
-  "add a watcher for the GitHub repository owner/name that files issues into this project" can
-  be done end to end. Agents can also delete tickets and projects, though never their own ticket,
-  its parent tickets, or the project they're working in. Each of these changes waits for you: the
-  ticket shows an approval card with a plain description of the change (for a watcher, the exact
-  command it will run) and moves on only after you tap Allow once. These cards have no "Always
-  allow" button, and a read-only ticket can't make these changes at all. Agents can't see or set
-  your Anthropic API key, pair devices, or rotate the access token.
+- Agents can now set up watchers, mappings, projects, and settings for you. If you already have
+  a watch tool installed (like `watch-jira`, or any command that prints work items), a ticket
+  like "add a watcher that runs watch-jira for PLAYR and files its tickets into this project"
+  gets the watcher and its mapping configured end to end. Agents can also delete tickets and
+  projects, though never their own ticket, its parent tickets, or the project they're working
+  in. Each of these changes waits for you: the ticket shows an approval card with a plain
+  description of the change (for a watcher, the exact command it will run) and moves on only
+  after you tap Allow once. These cards have no "Always allow" button, and a read-only ticket
+  can't make these changes at all. Agents can't see or set your Anthropic API key, pair
+  devices, or rotate the access token.
 
 ### Fixed
 

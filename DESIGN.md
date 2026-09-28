@@ -196,7 +196,13 @@ Harness tools (always exposed, via MCP for claude-code):
 ### Config tools
 
 The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
-screens, so a ticket like "watch owner/name and file its issues here" can be done end to end.
+screens, so a ticket like "add a watcher that runs watch-jira --project=FOO --follow for project
+X" can be done end to end. There's no built-in watcher: the agent wires up a tool the user already
+has. `create_watcher`'s description teaches the contract above (NDJSON `key`/`summary`/`url`/
+`updated`, loop vs interval, exit codes 0/4, the key prefix a mapping needs) and to run the tool
+through a login shell (`/bin/zsh -lc "exec <tool> …"`) so the user's PATH resolves, with the
+`service/examples/watchers/jira-*.json` shapes as its examples.
+
 Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
 `tools/util.ts`), because a watcher's command runs as the user outside any ticket sandbox and
 settings like `permissionMode` or `listen` loosen the permission model or network exposure. A
@@ -206,8 +212,8 @@ gated call:
    the HTTP API), so a bad call is a tool error and never reaches a human;
 2. calls `requestApproval` with `{ summary, reason, source: "policy", onceOnly: true }` whatever
    the ticket's permission mode. Read-only tickets are denied outright; otherwise the ticket
-   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "github" (every 300s):
-   /bin/zsh -lc '…'`) is the card's subtitle and blocked reason;
+   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "jira-sprint" (loop): /bin/zsh
+   -lc 'exec watch-jira …'`) is the card's subtitle and blocked reason;
 3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
    grant and runs the op.
 

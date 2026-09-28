@@ -2,7 +2,7 @@
 // tools, and every mutation waits for a human (approval card → allow once → the same call runs).
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, TranscriptEntry } from "@harness/shared";
 import { DummyDriver } from "../drivers/dummy";
@@ -11,6 +11,7 @@ import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 import { toolsForRun } from "../tools/index";
 import type { ToolResult } from "../tools/types";
 import { APPROVAL_PENDING_MESSAGE } from "./orchestrator";
+import { WatcherRunner } from "./watchers";
 
 function setup(opts: { mode?: "auto" | "ask" | "read_only" } = {}) {
   const driver = new DummyDriver({ delayMs: 0 });
@@ -48,14 +49,14 @@ const toolResults = (entries: TranscriptEntry[], name: string) =>
 const watcherCall = {
   name: "create_watcher",
   input: {
-    name: "github",
+    name: "jira-once",
     command: "/bin/zsh",
-    args: ["-lc", "gh issue list --repo acme/site --json number,title"],
+    args: ["-lc", "exec watch-jira --project=SITE --assigned=unassigned --once"],
     mode: "interval",
-    interval_sec: 300,
+    interval_sec: 600,
   },
 };
-const mappingCall = { name: "create_mapping", input: { pattern: "SITE", project_key: "proj", notes: "acme/site issues" } };
+const mappingCall = { name: "create_mapping", input: { pattern: "SITE", project_key: "proj", notes: "Jira SITE board" } };
 
 describe("config tools behind human approval", () => {
   test("a work run creates a watcher and a mapping, each after its own allow-once", async () => {
@@ -66,7 +67,7 @@ describe("config tools behind human approval", () => {
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
     expect(cur.pendingApproval).toMatchObject({ toolName: "create_watcher", input: watcherCall.input, onceOnly: true, source: "policy" });
-    expect(cur.pendingApproval!.summary).toBe(`Create watcher "github" (every 300s): /bin/zsh -lc 'gh issue list --repo acme/site --json number,title'`);
+    expect(cur.pendingApproval!.summary).toBe(`Create watcher "jira-once" (every 600s): /bin/zsh -lc 'exec watch-jira --project=SITE --assigned=unassigned --once'`);
     expect(cur.blockedReason).toBe(`Permission needed: create_watcher — ${cur.pendingApproval!.summary}`);
     expect(h.orch.listWatchers()).toEqual([]);
     const denied = toolResults(h.store.transcript.list(t.sessionId), "create_watcher");
@@ -80,7 +81,7 @@ describe("config tools behind human approval", () => {
     await h.orch.idle();
     const watchers = h.orch.listWatchers();
     expect(watchers.map((w) => [w.name, w.command, w.args, w.mode, w.intervalSec])).toEqual([
-      ["github", "/bin/zsh", watcherCall.input.args, "interval", 300],
+      ["jira-once", "/bin/zsh", watcherCall.input.args, "interval", 600],
     ]);
     // The mapping is its own approval; the watcher's grant was used up
     cur = h.orch.ticketDetail(t.key).ticket;
@@ -91,11 +92,11 @@ describe("config tools behind human approval", () => {
 
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
-    expect(h.orch.listMappings().map((m) => [m.pattern, m.projectId, m.notes])).toEqual([["SITE", h.project.id, "acme/site issues"]]);
+    expect(h.orch.listMappings().map((m) => [m.pattern, m.projectId, m.notes])).toEqual([["SITE", h.project.id, "Jira SITE board"]]);
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(h.orch.listWatchers()).toHaveLength(1); // the approved call ran exactly once
     expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
-      `Allowed once: create_watcher (Create watcher "github" (every 300s): /bin/zsh -lc 'gh issue list --repo acme/site --json number,title')`,
+      `Allowed once: create_watcher (Create watcher "jira-once" (every 600s): /bin/zsh -lc 'exec watch-jira --project=SITE --assigned=unassigned --once')`,
       "Allowed once: create_mapping (Route SITE items to project proj)",
     ]);
   });
@@ -272,5 +273,50 @@ describe("config tools behind human approval", () => {
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
     expect(h.store.watchers.get(w.id)!.env).toEqual({ SITE: "acme", EXTRA: "1" });
+  });
+
+  test("a watcher configured the way create_watcher teaches (login shell + exec + mapping) files its items in the mapped project", async () => {
+    const driver = new FakeDriver("fake");
+    const h = makeOrchestrator({
+      driver,
+      tools: (kind, d) => toolsForRun(kind, d),
+      watchers: (handlers) => new WatcherRunner({ ...handlers, timing: { batchIdleMs: 5, batchMaxMs: 20, minIntervalMs: 10 } }),
+    });
+    const dir = join(h.home, "site");
+    mkdirSync(dir);
+    const project = h.orch.createProject({ path: dir, key: "SITE", useWorktrees: false });
+    // Stands in for a tool the user has installed: prints NDJSON for its --project and exits 0.
+    const tool = join(h.home, "watch-fake");
+    writeFileSync(
+      tool,
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in --project=*) p="\${a#--project=}";; esac; done\necho '{"key":"'"$p"'-7","summary":"Fix the footer","url":"https://x.test/7","updated":"1"}'\n`,
+    );
+    chmodSync(tool, 0o755);
+    const calls = [
+      { name: "create_watcher", input: { name: "fake", command: "/bin/zsh", args: ["-lc", `exec ${tool} --project=ACME --once`], mode: "interval", interval_sec: 600 } },
+      { name: "create_mapping", input: { pattern: "ACME", project_key: "SITE" } },
+    ];
+    const worker = driver.run.bind(driver);
+    let pending = [...calls];
+    driver.run = async function* (req) {
+      if (req.kind !== "work") return yield* worker(req);
+      while (pending.length) {
+        const r = await executeTool(req.tools, pending[0]!.name, pending[0]!.input, req.toolContext);
+        if (r.isError) return;
+        pending = pending.slice(1);
+      }
+    };
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "add the fake watcher" });
+    await h.orch.idle();
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    const deadline = Date.now() + 10_000;
+    while (!h.orch.listTickets().some((x) => x.key === "ACME-7") && Date.now() < deadline) await Bun.sleep(20);
+    await h.orch.idle();
+    const filed = h.orch.listTickets().find((x) => x.key === "ACME-7");
+    expect(filed?.projectId).toBe(project.id);
+    expect(h.orch.listWatchers()[0]!.lastError).toBeNull();
+    await h.orch.stop();
   });
 });
