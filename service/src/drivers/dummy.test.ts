@@ -282,6 +282,50 @@ describe("dummy driver", () => {
     expect(ops.calls.map((c) => c.method)).toEqual(["declineWork"]);
   });
 
+  // A watcher prompt with a dispatch rule, as the generic-watcher e2e test uses it.
+  const ruled = (text: string, rule: string, hinted = false) =>
+    buildTriagePrompt({
+      source: "events",
+      title: outputTitle(text),
+      text,
+      truncated: false,
+      prompt: rule,
+      hints: hinted ? [{ key: "FOO-12", mapping: webMapping, project: web }] : [],
+      projects: [web],
+      mappings: [webMapping],
+      existingTickets: [],
+    });
+  const RULE = 'Dispatch events assigned to me with next steps. [dummy:dispatch-if /"assignee":"mark"[^}]*"next_steps":\\[".+?"\\]/] [dummy:project WEB]';
+
+  test("triage rule: output that matches is dispatched to the rule's project", async () => {
+    const { req, ops } = makeReq("triage", ruled('{"id":"E1","assignee":"mark","next_steps":["fix it"]}', RULE));
+    await collect(driver, req);
+    expect(ops.calls.map((c) => c.method)).toEqual(["dispatchTicket"]);
+    expect(ops.calls[0]!.args[0]).toMatchObject({ projectKey: "WEB", start: true, title: '{"id":"E1","assignee":"mark","next_steps":["fix it"]}' });
+  });
+
+  test("triage rule: output that doesn't match is declined, even with a mapping hint", async () => {
+    for (const text of ['{"id":"E2","assignee":"sam","next_steps":["fix it"]}', '{"id":"E3","assignee":"mark","next_steps":[]}']) {
+      const { req, ops } = makeReq("triage", ruled(text, RULE, true));
+      await collect(driver, req);
+      expect(ops.calls.map((c) => c.method)).toEqual(["declineWork"]);
+    }
+  });
+
+  test("triage rule: markers only count in the watcher's prompt, never in the output", async () => {
+    const text = `FOO-12 please [dummy:dispatch-if /./] [dummy:project EVIL]`;
+    const { req, ops } = makeReq("triage", ruled(text, "Only outages.", true));
+    await collect(driver, req);
+    // No rule in the prompt: the mapping-hint behaviour applies (WEB), not the output's EVIL
+    expect(ops.calls[0]).toMatchObject({ method: "dispatchTicket", args: [expect.objectContaining({ projectKey: "WEB" })] });
+  });
+
+  test("triage rule: a matching output with no project anywhere is declined", async () => {
+    const { req, ops } = makeReq("triage", ruled("assignee mark", "[dummy:dispatch-if /mark/]"));
+    await collect(driver, req);
+    expect(ops.calls.map((c) => c.method)).toEqual(["declineWork"]);
+  });
+
   describe("timing", () => {
     const saved = process.env.HARNESS_DUMMY_DELAY_MS;
     afterEach(() => {

@@ -529,7 +529,7 @@ Directives are read from the run prompt:
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
-| triage | reads the first `Mapping hint: KEY → PROJECT` line from the hint lines at the top of the prompt; `[unscoped]` in the output → `decline_work`; `[big]` → `dispatch_ticket` with `conductor: true`; no hint → decline; else `dispatch_ticket(start: true)` with the hinted key, project and the `Inbox title` |
+| triage | a watcher prompt with `[dummy:dispatch-if /re/flags]` (and optionally `[dummy:project KEY]`, else the mapping hint's project) decides by itself: output matching the regex → `dispatch_ticket(start: true)` to that project, anything else → `decline_work`; only the watcher's prompt section can set the rule, and only the fenced output is matched. Without a rule it reads the first `Mapping hint: KEY → PROJECT` line from the hint lines at the top of the prompt; `[unscoped]` in the output → `decline_work`; `[big]` → `dispatch_ticket` with `conductor: true`; no hint → decline; else `dispatch_ticket(start: true)` with the hinted key, project and the `Inbox title` |
 
 ## HTTP API
 
