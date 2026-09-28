@@ -962,6 +962,54 @@ try {
       JSON.stringify({ moveLabel, underBoard }),
     );
 
+    // Narrow panes: 4 across a 1280px window. The rightmost pane's More menu (with its Move pane
+    // arrows) stays inside the window, and no titlebar runs into the pane next to it. Then a pane
+    // stacked at the bottom opens its menu upward, still inside the window.
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+    const tLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "summaries" } });
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, tLeaf("n1", "NYTIMES-4"), tLeaf("n2", "NYTIMES-3"), tLeaf("n3", "NYTIMES-1")], sizes: [0.25, 0.25, 0.25, 0.25] },
+      focusedId: "n3",
+      zoomedId: null,
+    });
+    await until("four panes", async () => (await boxes()).length === 4 && (await exists("[data-pane-id=n3] .detail-titlebar button[title=More]")));
+    await Bun.sleep(300);
+    /** The open menu's rect, how far its Move pane arrows reach, and the viewport. */
+    const menuFit = () =>
+      js<{ vw: number; vh: number; left: number; right: number; top: number; bottom: number; arrowsRight: number; above: boolean }>(`(() => {
+        const m = document.querySelector(".menu"); const r = m.getBoundingClientRect();
+        const arrows = [...m.querySelectorAll(".menu-move button")].map(b => b.getBoundingClientRect().right);
+        return { vw: innerWidth, vh: innerHeight, left: r.left, right: r.right, top: r.top, bottom: r.bottom, arrowsRight: Math.max(0, ...arrows), above: m.dataset.above === "true" };
+      })()`);
+    const inside = (f: Awaited<ReturnType<typeof menuFit>>) => f.left >= 0 && f.top >= 0 && f.right <= f.vw && f.bottom <= f.vh && f.arrowsRight > 0 && f.arrowsRight <= f.vw;
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await until("rightmost menu", () => exists(".menu .menu-move"));
+    await Bun.sleep(100);
+    const fit = await menuFit();
+    const titlebarSpill = await js<string[]>(`[...document.querySelectorAll(".pane-ticket")].flatMap(p => {
+      const pr = p.getBoundingClientRect();
+      return [...p.querySelectorAll(".detail-titlebar > *")].filter(c => getComputedStyle(c).display !== "none" && c.getBoundingClientRect().right > pr.right + 0.5).map(c => p.dataset.paneId + ":" + c.className);
+    })`);
+    const narrow = (await boxes()).map((b) => b.w);
+    check("at 1280px with 4 panes, the rightmost pane's More menu and its Move pane arrows stay inside the window", fit.vw === 1280 && inside(fit), JSON.stringify({ fit, narrow }));
+    check("narrow ticket panes' titlebars don't run into the next pane", titlebarSpill.length === 0, titlebarSpill.join(","));
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "split", id: "c", dir: "column", children: [tLeaf("n1", "NYTIMES-4"), tLeaf("n3", "NYTIMES-1")], sizes: [0.85, 0.15] }], sizes: [0.6, 0.4] },
+      focusedId: "n3",
+      zoomedId: null,
+    });
+    await until("stacked pane", () => exists("[data-pane-id=n3] .detail-titlebar button[title=More]"));
+    await Bun.sleep(300);
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await until("bottom menu", () => exists(".menu .menu-move"));
+    await Bun.sleep(100);
+    const low = await menuFit();
+    check("a More menu near the bottom of the window opens upward, inside it", low.above && inside(low), JSON.stringify(low));
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await cdp("Emulation.clearDeviceMetricsOverride");
+    await Bun.sleep(200);
+
     // Over a Browser tab's canvas the layer still takes the drag; other drags (text, files) are ignored.
     await setPanes(boardOnly);
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);

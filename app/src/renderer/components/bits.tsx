@@ -1,9 +1,11 @@
 // Small presentational pieces shared across views.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { ReviewState, Ticket, TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { Icon } from "./Icon";
+import { placeMenu, type MenuPlacement } from "./menuPlacement";
 
 export { driverLabel, relativeTime, STATUS_LABEL } from "@harness/shared/state";
 
@@ -88,24 +90,41 @@ export function Switch({ checked, onChange, label, ariaLabel }: { checked: boole
   );
 }
 
-/** Dropdown menu anchored to its trigger. */
+/**
+ * Dropdown menu anchored to its trigger. The menu renders in a portal with fixed positioning, so a
+ * pane's `overflow: hidden` can't clip it, and placeMenu keeps it inside the window: shifted left or
+ * right at the sides, flipped above the trigger near the bottom, scrolling when it's taller than the
+ * room. It's measured hidden, then placed, and follows the trigger on resize and scroll.
+ */
 export function MenuButton({
   trigger,
   children,
   align = "right",
   className,
+  menuClassName,
+  gap,
+  offsetX,
 }: {
   trigger: (toggle: () => void, open: boolean) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: "left" | "right";
   className?: string;
+  /** Styles for the menu itself (it's portaled out of the trigger's subtree). */
+  menuClassName?: string;
+  /** px between the trigger and the menu (default 4). */
+  gap?: number;
+  /** px to shift the menu from the aligned edge before it's clamped to the window. */
+  offsetX?: number;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<MenuPlacement | null>(null);
   useEffect(() => {
     if (!open) return;
     const on = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
     };
     // Capture phase, swallowed: Escape closes the menu, not the panel behind it.
     const key = (e: KeyboardEvent) => {
@@ -120,14 +139,50 @@ export function MenuButton({
       removeEventListener("keydown", key, true);
     };
   }, [open]);
+  useLayoutEffect(() => {
+    if (!open) return setPlace(null);
+    const measure = () => {
+      const anchor = ref.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!anchor || !menu) return;
+      // Its natural size, not the capped one from a previous placement.
+      const cap = menu.style.maxHeight;
+      menu.style.maxHeight = "";
+      const { width, height } = menu.getBoundingClientRect();
+      menu.style.maxHeight = cap;
+      setPlace(placeMenu({ anchor, width, height, vw: innerWidth, vh: innerHeight, align, gap, offsetX }));
+    };
+    measure();
+    addEventListener("resize", measure);
+    addEventListener("scroll", measure, true);
+    return () => {
+      removeEventListener("resize", measure);
+      removeEventListener("scroll", measure, true);
+    };
+  }, [open, align, gap, offsetX]);
   return (
     <div ref={ref} style={{ position: "relative" }} className={`no-drag ${className ?? ""}`}>
       {trigger(() => setOpen((o) => !o), open)}
-      {open && (
-        <div className="menu" role="menu" style={{ top: "calc(100% + 4px)", [align]: 0 }}>
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={`menu ${menuClassName ?? ""}`}
+            role="menu"
+            data-above={place?.above || undefined}
+            style={{
+              position: "fixed",
+              left: place?.left ?? 0,
+              top: place?.top ?? 0,
+              maxHeight: place?.maxHeight ?? undefined,
+              overflowY: place?.maxHeight != null ? "auto" : undefined,
+              visibility: place ? undefined : "hidden",
+            }}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

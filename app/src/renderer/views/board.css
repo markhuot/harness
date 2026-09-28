@@ -28,19 +28,17 @@
 .search-options-btn.active {
   color: var(--accent);
 }
-/* MenuButton anchors the menu to the button inline; line it up with the search box's edge instead. */
-.search-options .menu {
-  right: -5px !important;
-  top: calc(100% + 8px) !important;
+/* The options menu (portaled by MenuButton, lined up with the search box's edge via gap/offsetX). */
+.menu.search-options-menu {
   min-width: 200px;
 }
-.search-options .menu-check {
+.search-options-menu .menu-check {
   display: inline-flex;
   width: 12px;
   flex: none;
   color: var(--accent);
 }
-.search-options .menu-item {
+.search-options-menu .menu-item {
   color: var(--text);
 }
 

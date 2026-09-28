@@ -936,7 +936,16 @@ Settings, project settings, or on the board route the pane workspace.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a
-  container query when its pane is narrow.
+  container query when its pane is narrow. A ticket pane's titlebar does the same. It hides the
+  model badge below 460 px and the status pill below 380 px, then the key truncates and the row
+  clips, so its buttons never run into the next pane. The titlebar is the container, not the pane:
+  a container is the containing block for fixed descendants, which would trap modals inside the
+  pane.
+- **Menus.** `MenuButton` (`components/bits.tsx`) renders its menu in a portal with fixed
+  positioning, so a pane's `overflow: hidden` can't clip it. `placeMenu` (`menuPlacement.ts`)
+  keeps it inside the window. It shifts the menu left or right at the sides and flips it above
+  the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
+  and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
 
 ## iPhone app (`mobile/`)
 

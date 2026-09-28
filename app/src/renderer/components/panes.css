@@ -287,6 +287,34 @@
   cursor: grabbing;
 }
 
+/* A narrow ticket pane's titlebar sheds its lower-priority badges instead of running into the next
+   pane: the model first, then the status pill; then the key truncates, and as a last resort the
+   row clips. (The titlebar is the container, not the pane: a container is the containing block for
+   fixed descendants, which would trap the ticket's modals inside the pane.) */
+.detail-titlebar {
+  container: pane-titlebar / inline-size;
+  overflow: clip;
+}
+.detail .detail-titlebar > .detail-key {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-titlebar > :is(.no-drag, .btn, .pane-grip) {
+  flex: none;
+}
+@container pane-titlebar (max-width: 460px) {
+  .detail-titlebar > .model-badge {
+    display: none;
+  }
+}
+@container pane-titlebar (max-width: 380px) {
+  .detail-titlebar > .status-pill {
+    display: none;
+  }
+}
+
 /* The ticket header's More → Move pane rows: a target's name, then ← → ↑ ↓ buttons. */
 .menu .menu-caption {
   padding: 6px 8px 2px;

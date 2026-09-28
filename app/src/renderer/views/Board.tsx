@@ -104,6 +104,9 @@ export function BoardPane() {
           )}
           <MenuButton
             className="search-options"
+            menuClassName="search-options-menu"
+            gap={8}
+            offsetX={5}
             trigger={(toggle, open) => (
               <button
                 type="button"
