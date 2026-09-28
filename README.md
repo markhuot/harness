@@ -46,9 +46,12 @@ It shares its state logic with the desktop through `@harness/shared/state`.
   camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
 - **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,
   then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
-  throwaway daemon, taps through approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
+  throwaway daemon, taps through opening a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
   and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
-  board + settings shots per color theme). Use
+  board + settings shots per color theme). `ios/` is gitignored and outlives dependency changes, so
+  `release:publish` regenerates it on every build, and sim-check does whenever it doesn't link
+  every native package in `mobile/package.json` (`bun Tools/nativeDeps.ts check`). A stale `ios/` still builds, but the
+  app then crashes on its first use of the missing module. Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 

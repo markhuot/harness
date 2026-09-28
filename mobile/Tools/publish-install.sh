@@ -85,11 +85,13 @@ check_no_token() {
 
 # ------------------------------------------------------------------ iPhone
 if [[ $SKIP_IOS -eq 0 ]]; then
-  if [[ ! -d ios/Harness.xcworkspace ]]; then
-    echo "==> Generating the native iOS project"
-    bunx expo prebuild --platform ios --no-install
-    (cd ios && "$MOBILE/Tools/pod.sh" install)
-  fi
+  # ios/ is gitignored and outlives the commits that change native dependencies, so regenerate it
+  # from app.json and package.json on every build, never only when it's missing: an ios/ from before
+  # expo-video still archived, and the app aborted on "Cannot find native module 'ExpoVideo'".
+  echo "==> Syncing the native iOS project (expo prebuild, pod install)"
+  EXPO_NO_GIT_STATUS=1 bunx expo prebuild --platform ios --no-install > build/prebuild.log 2>&1 || { tail -40 build/prebuild.log >&2; exit 1; }
+  (cd ios && "$MOBILE/Tools/pod.sh" install) > build/pod-install.log 2>&1 || { tail -40 build/pod-install.log >&2; exit 1; }
+  bun Tools/nativeDeps.ts check
 
   # Prebuild writes a literal CFBundleVersion ("1"), which CURRENT_PROJECT_VERSION can't override;
   # point it at the build setting so the archive carries the tag's digits.

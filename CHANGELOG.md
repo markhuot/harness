@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.2051](https://github.com/markhuot/harness/releases/tag/app-20260928.2051) - 2026-09-28
+
+### Fixed
+
+- On iPhone, tapping a ticket no longer crashes the app. The app-20260928.1943 build was missing
+  the video player that summary attachments use, so it quit whenever a ticket opened.
+
 ## [app-20260928.1943](https://github.com/markhuot/harness/releases/tag/app-20260928.1943) - 2026-09-28
 
 ### Added
