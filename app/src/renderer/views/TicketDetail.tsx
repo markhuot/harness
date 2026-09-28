@@ -17,7 +17,7 @@ import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket } from "../components/paneContext";
 import { dragProps } from "../components/paneDrag";
-import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes } from "../state/panes";
+import { closePane, movePaneToEdge, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes, type DropZone } from "../state/panes";
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
 export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
@@ -122,10 +122,17 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   );
 }
 
+const MOVE_EDGES: [DropZone, string][] = [
+  ["left", "Move pane to the left"],
+  ["right", "Move pane to the right"],
+  ["top", "Move pane to the top"],
+  ["bottom", "Move pane to the bottom"],
+];
+
 /** Drag a ticket pane by this onto a half of another pane to move it there. */
 function PaneGrip({ paneId, ticketKey, title }: { paneId: string; ticketKey: string; title: string }) {
   return (
-    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one" aria-hidden {...dragProps(ticketKey, title, paneId)}>
+    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one (or use More → Move pane)" aria-hidden {...dragProps(ticketKey, title, paneId)}>
       <Icon name="grip" size={13} />
     </span>
   );
@@ -180,6 +187,13 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
                   <Icon name="check" /> Mark done
                 </button>
               )}
+              <hr />
+              {/* The keyboard way to re-dock a pane (the header grip drags it). */}
+              {MOVE_EDGES.map(([zone, label]) => (
+                <button key={zone} data-testid={`move-pane-${zone}`} onClick={() => (close(), updatePanes((s) => movePaneToEdge(s, paneId, zone)))}>
+                  <Icon name="sidebar" /> {label}
+                </button>
+              ))}
               <hr />
               <button className="danger" onClick={() => (close(), void remove())}>
                 <Icon name="trash" /> Delete ticket

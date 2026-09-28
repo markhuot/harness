@@ -908,7 +908,9 @@ Settings, project settings, or on the board route the pane workspace.
   left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
   Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
   (`splitTarget`), and it skips a pane already showing that ticket. Cards are focusable, and
-  Enter opens them.
+  Enter opens them. A ticket pane's More menu has Move pane to the left/right/top/bottom
+  (`movePaneToEdge`), which docks it along that whole edge of the workspace. That's the
+  keyboard way to re-dock, since the grip itself is pointer-only.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay

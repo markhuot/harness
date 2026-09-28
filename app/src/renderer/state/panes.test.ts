@@ -17,6 +17,7 @@ import {
   leaves,
   minSize,
   movePane,
+  movePaneToEdge,
   normalize,
   openTicket,
   parsePanes,
@@ -791,5 +792,33 @@ describe("layoutPanes with the workspace size", () => {
     expect(rr(layoutPanes(state).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
     expect(rr(layoutPanes(state, { width: 1400, height: 900 }).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
     expect(rr(layoutPanes(st(row("r", [B, T("A")], [0.95, 0.05]))).leaves[1]!.rect)).toEqual([0.95, 0, 0.05, 1]);
+  });
+});
+
+describe("movePaneToEdge", () => {
+  test("docks a pane along a whole edge of the workspace, taking half", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25]), "A-2");
+    const s = valid(movePaneToEdge(start, "A-1", "bottom"));
+    expect(shape(s.root)).toBe("col[row[board 0.625, A-2 0.375] 0.5, A-1 0.5]");
+    expect(focusedLabel(s)).toBe("A-1");
+    expect(shape(valid(movePaneToEdge(start, "A-2", "left")).root)).toBe("row[A-2 0.5, board 0.25, A-1 0.25]");
+  });
+
+  test("beside just the board it takes 40%, as a click would", () => {
+    const s = valid(movePaneToEdge(st(row("r", [B, T("A-1")], [0.6, 0.4])), "A-1", "top"));
+    expect(shape(s.root)).toBe("col[A-1 0.4, board 0.6]");
+  });
+
+  test("pulls a pane out of a stack and ends a zoom", () => {
+    const start = st(row("r", [B, col("c", [T("A-1"), T("A-2")])], [0.6, 0.4]), "A-2", "A-2");
+    const s = valid(movePaneToEdge(start, "A-2", "right"));
+    expect(shape(s.root)).toBe("row[board 0.3, A-1 0.2, A-2 0.5]");
+    expect(s.zoomedId).toBeNull();
+  });
+
+  test("the board and unknown panes don't move", () => {
+    const start = st(row("r", [B, T("A-1")]));
+    expect(movePaneToEdge(start, "B", "left")).toBe(start);
+    expect(movePaneToEdge(start, "nope", "left")).toBe(start);
   });
 });
