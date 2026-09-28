@@ -2,7 +2,7 @@
 //  - natively, to drivers that run their own agent loop (dummy, anthropic-api)
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
-import type { RunKind, Session, Ticket, ToolResultContent } from "@harness/shared";
+import type { RunKind, Session, Ticket, TicketStatus, ToolResultContent, TranscriptRole } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 
 /** JSON Schema object describing the tool input */
@@ -34,6 +34,29 @@ export interface ToolDefinition<I = any> {
   /** MCP tool annotations. Defaults (see api/mcp.ts): readOnlyHint = group === "harness". */
   annotations?: ToolAnnotations;
   execute(input: I, ctx: ToolContext): Promise<ToolResult>;
+}
+
+export type BoardScope = "children" | "project" | "all";
+
+export interface BoardListFilter {
+  scope?: BoardScope;
+  projectKey?: string;
+  statuses?: TicketStatus[];
+  limit?: number;
+}
+
+/** A ticket plus its project's key (mirrored keys like FOO-123 don't name their project). */
+export type BoardTicket = Ticket & { projectKey: string };
+
+export interface BoardTicketDetail {
+  ticket: BoardTicket;
+  /** The old key the lookup went through, when `key` was an alias */
+  resolvedFrom: string | null;
+  parent: string | null;
+  children: string[];
+  summaries: { author: string; body: string; createdAt: number }[];
+  /** Last N text/status/error entries, oldest first; present only when requested */
+  transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -74,13 +97,29 @@ export interface HarnessOps {
   /** Record the agent review decision. */
   reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void>;
 
+  // --- board (read) ---
+  // Every run kind (plan, work, review, complete, conductor, triage) may read the whole board.
+  // None of these change state. Keys resolve like the HTTP API (current key, then old aliases).
+  /**
+   * Tickets matching the filter, capped at `limit` (default 50, max 200). `total` counts every
+   * match. Scope defaults: conductor → "children"; a project_key or any other ticket run →
+   * "project"; no ticket (triage) → "all". Throws for an unknown project key.
+   */
+  listTickets(ctx: ToolContext, filter: BoardListFilter): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }>;
+  /** One ticket in any project, with summaries and optionally the last N text transcript entries. */
+  getTicket(ctx: ToolContext, key: string, opts?: { transcript?: number }): Promise<BoardTicketDetail>;
+  /** Full-text search across every status (Orchestrator.searchTickets ranking and cursors). */
+  searchTickets(
+    ctx: ToolContext,
+    input: { query: string; projectKey?: string; limit?: number; cursor?: string },
+  ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
+  listProjects(ctx: ToolContext): Promise<{ key: string; name: string; path: string }[]>;
+
   // --- conductor runs (act on child tickets) ---
   createTicket(
     ctx: ToolContext,
     input: { title: string; description: string; dependsOn?: string[]; autoStart?: boolean; projectKey?: string },
   ): Promise<Ticket>;
-  listTickets(ctx: ToolContext, scope: "children" | "project"): Promise<Ticket[]>;
-  getTicket(ctx: ToolContext, key: string): Promise<{ ticket: Ticket; summaries: { author: string; body: string; createdAt: number }[] }>;
   startTicket(ctx: ToolContext, key: string): Promise<Ticket>;
   messageTicket(ctx: ToolContext, key: string, text: string): Promise<void>;
   /** Conductor stands in for the human reviewer of its children. */
@@ -88,7 +127,6 @@ export interface HarnessOps {
   completeTicket(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket>;
 
   // --- triage runs ---
-  listProjects(ctx: ToolContext): Promise<{ key: string; name: string; path: string }[]>;
   /** Create (and optionally start) a local ticket mirroring the external item. */
   dispatchTicket(
     ctx: ToolContext,

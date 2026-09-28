@@ -46,4 +46,19 @@ export class TranscriptRepo {
         .all({ sessionId, afterSeq, limit }) as EntryRow[]
     ).map(toEntry);
   }
+
+  /** The last `limit` entries whose content type is in `types`, oldest first. */
+  tail(sessionId: string, limit: number, types: TranscriptContent["type"][]): TranscriptEntry[] {
+    if (limit <= 0 || !types.length) return [];
+    const params: Record<string, string | number> = { sessionId, limit };
+    types.forEach((t, i) => (params[`type${i}`] = t));
+    const inTypes = types.map((_, i) => `$type${i}`).join(", ");
+    return (
+      this.db
+        .query(`SELECT * FROM transcript WHERE session_id = $sessionId AND json_extract(content, '$.type') IN (${inTypes}) ORDER BY seq DESC LIMIT $limit`)
+        .all(params) as EntryRow[]
+    )
+      .reverse()
+      .map(toEntry);
+  }
 }

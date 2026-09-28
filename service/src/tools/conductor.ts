@@ -1,4 +1,4 @@
-// Conductor tools: create and steer child tickets.
+// Conductor tools: create and steer child tickets (reading the board is in board.ts).
 
 import { defineTool, json, schema, ticketView } from "./util";
 
@@ -25,28 +25,6 @@ export const createTicket = defineTool<{ title: string; description: string; dep
       autoStart: input.auto_start,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
-  },
-});
-
-export const listTickets = defineTool<{ scope?: "children" | "project" }>({
-  name: "list_tickets",
-  description:
-    "List tickets with their status and review state. scope \"children\" (default) lists this conductor's child tickets; \"project\" lists every ticket in the project.",
-  inputSchema: schema({ scope: { type: "string", enum: ["children", "project"], description: "Which tickets to list. Default \"children\"." } }),
-  async run({ scope }, ctx) {
-    const tickets = await ctx.ops.listTickets(ctx, scope ?? "children");
-    if (tickets.length === 0) return scope === "project" ? "The project has no tickets." : "This conductor has no child tickets yet.";
-    return json(tickets.map(ticketView));
-  },
-});
-
-export const getTicket = defineTool<{ key: string }>({
-  name: "get_ticket",
-  description: "Get one ticket's full detail: description, status, review state, and the summaries its agent and humans have posted.",
-  inputSchema: schema({ key: keyProp }, ["key"]),
-  async run({ key }, ctx) {
-    const { ticket, summaries } = await ctx.ops.getTicket(ctx, key);
-    return json({ ...ticketView(ticket), description: ticket.description, summaries });
   },
 });
 

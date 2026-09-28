@@ -1,17 +1,7 @@
-// Triage tools: route an incoming external work item to a project, or decline it.
+// Triage tools: route an incoming external work item to a project, or decline it
+// (list_projects is a board tool, see board.ts).
 
-import { defineTool, json, schema } from "./util";
-
-export const listProjects = defineTool<Record<string, never>>({
-  name: "list_projects",
-  description: "List the local projects work can be dispatched to, with their ticket key prefix, name and directory.",
-  inputSchema: schema({}),
-  async run(_input, ctx) {
-    const projects = await ctx.ops.listProjects(ctx);
-    if (projects.length === 0) return "No projects are configured.";
-    return json(projects);
-  },
-});
+import { defineTool, schema } from "./util";
 
 export const dispatchTicket = defineTool<{
   project_key: string;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fakeBrowser, fakeContext, fakeOps } from "./fakes";
+import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
 import { allTools } from "./index";
 import type { ToolResult } from "./types";
 
@@ -34,6 +34,9 @@ describe("tool catalogue", () => {
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
     expect(props("complete_ticket")).toEqual(["instructions", "key"]);
+    expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
+    expect(props("get_ticket")).toEqual(["include_transcript", "key"]);
+    expect(props("search_tickets")).toEqual(["cursor", "limit", "project_key", "query"]);
   });
 });
 
@@ -120,28 +123,6 @@ describe("conductor tools → HarnessOps", () => {
     expect(ops.calls).toEqual([]);
   });
 
-  test("list_tickets defaults to children scope and returns JSON the model (and dummy) can parse", async () => {
-    const ops = fakeOps();
-    const ctx = fakeContext({ ops });
-    expect(text(await tool("list_tickets").execute({}, ctx))).toContain("no child tickets");
-    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
-    const r = await tool("list_tickets").execute({ scope: "project" }, ctx);
-    expect(ops.calls.filter((c) => c.method === "listTickets").map((c) => c.args)).toEqual([["children"], ["project"]]);
-    const parsed = JSON.parse(text(r));
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0]).toMatchObject({ key: "TEST-2", title: "one", status: "planning", agentReview: "pending" });
-    expect(parsed[0].description).toBeUndefined();
-  });
-
-  test("get_ticket includes description and summaries", async () => {
-    const ops = fakeOps();
-    const ctx = fakeContext({ ops });
-    await tool("create_ticket").execute({ title: "one", description: "the brief" }, ctx);
-    const r = JSON.parse(text(await tool("get_ticket").execute({ key: "TEST-2" }, ctx)));
-    expect(r.description).toBe("the brief");
-    expect(r.summaries[0].body).toBe("did it");
-  });
-
   test("start/message/review/complete map key and arguments", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
@@ -159,6 +140,90 @@ describe("conductor tools → HarnessOps", () => {
       { method: "completeTicket", args: ["TEST-2", undefined] },
     ]);
     expect(text(rv)).toContain("human review: approved");
+  });
+});
+
+describe("board tools → HarnessOps", () => {
+  test("list_tickets maps snake_case filters, applies the default limit, and returns parseable JSON without descriptions", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    expect(text(await tool("list_tickets").execute({}, ctx))).toContain("no child tickets");
+    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    const r = await tool("list_tickets").execute({ scope: "all", project_key: "WEB", status: ["planning", "review"], limit: 5 }, ctx);
+    expect(ops.calls.filter((c) => c.method === "listTickets").map((c) => c.args)).toEqual([
+      [{ scope: undefined, projectKey: undefined, statuses: undefined, limit: 50 }],
+      [{ scope: "all", projectKey: "WEB", statuses: ["planning", "review"], limit: 5 }],
+    ]);
+    const parsed = JSON.parse(text(r));
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]).toMatchObject({ key: "TEST-2", title: "one", status: "planning", agentReview: "pending", project: "TEST" });
+    expect(parsed[0].description).toBeUndefined();
+  });
+
+  test("list_tickets rejects unknown statuses and scopes before calling ops", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    const badStatus = await tool("list_tickets").execute({ status: ["archived"] } as any, ctx);
+    const badScope = await tool("list_tickets").execute({ scope: "everything" } as any, ctx);
+    const badLimit = await tool("list_tickets").execute({ limit: 0 }, ctx);
+    for (const r of [badStatus, badScope, badLimit]) expect(r.isError).toBe(true);
+    expect(text(badStatus)).toContain('"status[0]" must be one of');
+    expect(ops.calls).toEqual([]);
+  });
+
+  test("list_tickets says so when the page was capped", async () => {
+    const many = Array.from({ length: 3 }, (_, i) => ({ ...fakeTicket({ key: `WEB-${i}` }), projectKey: "WEB" }));
+    const ops = fakeOps({ listTickets: async () => ({ tickets: many, total: 120, scope: "project" }) });
+    const out = text(await tool("list_tickets").execute({ limit: 3 }, fakeContext({ ops })));
+    expect(out.split("\n")[0]).toBe("Showing 3 of 120 tickets. Narrow with status or project_key, raise limit, or use search_tickets.");
+    expect(JSON.parse(out.split("\n").slice(1).join("\n"))).toHaveLength(3);
+    const empty = fakeOps({ listTickets: async () => ({ tickets: [], total: 0, scope: "all" }) });
+    expect(text(await tool("list_tickets").execute({ status: ["blocked"] }, fakeContext({ ops: empty })))).toBe('No tickets match (scope "all", status blocked).');
+  });
+
+  test("get_ticket includes description, parent, driver and summaries; transcript only when asked", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    await tool("create_ticket").execute({ title: "one", description: "the brief" }, ctx);
+    const r = JSON.parse(text(await tool("get_ticket").execute({ key: "TEST-2" }, ctx)));
+    expect(r).toMatchObject({ key: "TEST-2", project: "TEST", description: "the brief", parent: "TEST-1", driver: "dummy", model: null });
+    expect(r.summaries[0].body).toBe("did it");
+    expect(r.transcript).toBeUndefined();
+    await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 5 }, ctx);
+    expect(ops.calls.filter((c) => c.method === "getTicket").map((c) => c.args)).toEqual([
+      ["TEST-2", undefined],
+      ["TEST-2", { transcript: 5 }],
+    ]);
+    const tooMany = await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 51 }, ctx);
+    expect(tooMany.isError).toBe(true);
+  });
+
+  test("get_ticket reports an alias it resolved through", async () => {
+    const ops = fakeOps({
+      getTicket: async () => ({ ticket: { ...fakeTicket({ key: "NEW-1" }), projectKey: "NEW" }, resolvedFrom: "OLD-1", parent: null, children: [], summaries: [] }),
+    });
+    const r = JSON.parse(text(await tool("get_ticket").execute({ key: "OLD-1" }, fakeContext({ ops }))));
+    expect(r).toMatchObject({ key: "NEW-1", resolvedFrom: "OLD-1" });
+  });
+
+  test("search_tickets maps inputs and returns compact hits with nextCursor", async () => {
+    const hit = { ticket: { ...fakeTicket({ key: "WEB-3", title: "Nav", status: "done", description: "long brief" }), projectKey: "WEB" }, snippet: "…the nav…" };
+    const ops = fakeOps({ searchTickets: async () => ({ hits: [hit], nextCursor: "abc", total: 7 }) });
+    const ctx = fakeContext({ ops, runKind: "triage", ticket: null });
+    const r = JSON.parse(text(await tool("search_tickets").execute({ query: "nav", project_key: "WEB", limit: 1, cursor: "prev" }, ctx)));
+    expect(ops.calls).toEqual([{ method: "searchTickets", args: [{ query: "nav", projectKey: "WEB", limit: 1, cursor: "prev" }] }]);
+    expect(r).toEqual({ total: 7, hits: [{ key: "WEB-3", title: "Nav", status: "done", project: "WEB", snippet: "…the nav…" }], nextCursor: "abc" });
+    const none = fakeOps();
+    expect(text(await tool("search_tickets").execute({ query: "x", cursor: "c" }, fakeContext({ ops: none })))).toBe("No more matches.");
+    const blank = await tool("search_tickets").execute({ query: "  " }, fakeContext({ ops: none }));
+    expect(blank.isError).toBe(true);
+  });
+
+  test("list_projects", async () => {
+    const ops = fakeOps();
+    expect(JSON.parse(text(await tool("list_projects").execute({}, fakeContext({ ops }))))).toEqual([{ key: "WEB", name: "Website", path: "/code/web" }]);
+    const empty = fakeOps({ listProjects: async () => [] });
+    expect(text(await tool("list_projects").execute({}, fakeContext({ ops: empty })))).toBe("No projects are configured.");
   });
 });
 
@@ -183,14 +248,11 @@ describe("triage tools → HarnessOps", () => {
     expect(text(r)).toContain('"project_key" is required');
   });
 
-  test("list_projects and decline_work", async () => {
+  test("decline_work", async () => {
     const ops = fakeOps();
-    const ctx = fakeContext({ ops });
-    expect(JSON.parse(text(await tool("list_projects").execute({}, ctx)))).toEqual([{ key: "WEB", name: "Website", path: "/code/web" }]);
-    await tool("decline_work").execute({ reason: "no project" }, ctx);
-    expect(ops.calls.map((c) => c.method)).toEqual(["listProjects", "declineWork"]);
-    const empty = fakeOps({ listProjects: async () => [] });
-    expect(text(await tool("list_projects").execute({}, fakeContext({ ops: empty })))).toBe("No projects are configured.");
+    const r = await tool("decline_work").execute({ reason: "no project" }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([{ method: "declineWork", args: ["no project"] }]);
+    expect(text(r)).toContain("Stop here");
   });
 });
 

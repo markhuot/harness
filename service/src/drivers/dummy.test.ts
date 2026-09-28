@@ -199,7 +199,7 @@ describe("dummy driver", () => {
     const second = makeReq("conductor", "Child ticket updates", { state: state1, ctx: { ops } });
     const r2 = await collect(driver, second.req);
     expect(ops.calls.map((c) => [c.method, c.args[0]])).toEqual([
-      ["listTickets", "children"],
+      ["listTickets", { scope: "children", projectKey: undefined, statuses: undefined, limit: 200 }],
       ["reviewTicket", a!.key],
       ["completeTicket", a!.key],
     ]);
@@ -214,7 +214,7 @@ describe("dummy driver", () => {
     ops.calls.length = 0;
     await collect(driver, makeReq("conductor", "updates", { state: state2, ctx: { ops } }).req);
     expect(ops.calls.map((c) => [c.method, c.args[0]])).toEqual([
-      ["listTickets", "children"],
+      ["listTickets", { scope: "children", projectKey: undefined, statuses: undefined, limit: 200 }],
       ["completeTicket", b!.key],
     ]);
 
