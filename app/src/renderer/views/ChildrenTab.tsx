@@ -9,6 +9,8 @@ import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
 import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
+import { keysArea } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
 
 /** Ticket.model arrives with per-ticket model selection; read it defensively. */
@@ -37,9 +39,15 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 
   const open = (key: string) => openTicket(key);
 
+  // The rows are one Tab stop; j/k (↑/↓) move between them before the ticket pane scrolls. The
+  // container is the same element with or without children, so the hook keeps watching it.
+  const listRef = useRef<HTMLDivElement>(null);
+  const owner = `children:${usePane()?.paneId ?? ticket.id}`;
+  useRovingList(listRef, { owner });
+
   if (children.length === 0) {
     return (
-      <div className="children-tab">
+      <div className="children-tab" ref={listRef} {...keysArea("list", owner)}>
         <div className="empty" data-testid="children-empty">
           <Icon name="conductor" />
           <strong>No tickets yet</strong>
@@ -50,7 +58,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   }
 
   return (
-    <div className="children-tab">
+    <div className="children-tab" ref={listRef} {...keysArea("list", owner)}>
       <div className="children-progress card-surface">
         <div className="children-progress-text" data-testid="children-progress">
           {progressLabel(progress)}
@@ -96,7 +104,8 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
   return (
     <div
       role="button"
-      tabIndex={0}
+      // The roving list (ChildrenTab) sets tabIndex: the current row 0, the rest -1.
+      data-roving-item
       className={`child-row ${attention ? `attn attn-${attention}` : ""} ${quietDone ? "is-done" : ""}`}
       data-key={c.key}
       onClick={() => onOpen(c.key)}
