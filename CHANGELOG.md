@@ -13,7 +13,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Watchers now take any command that prints text, plus a prompt that tells triage what you
   want done with the output (for example, "If this event is assigned to me and has actionable
-  next steps, dispatch it to an agent"). The command runs in your login shell, so pipes, your
+  next steps, dispatch it to an agent in PLAYR"). The command runs in your login shell, so pipes, your
   PATH, and loops like `while true; do curl -s …; sleep 60; done` all work. Output doesn't
   need a particular format anymore.
 - Whatever a watcher prints shows up in the Inbox. In interval mode each run becomes one item,
@@ -38,7 +38,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   the agent's own, and an agent can't hand work to a ticket whose mode is looser than its own
   (for example, a read-only agent messaging or editing a ticket that runs in auto). It can still
   tighten that ticket's mode. Only a ticket still in Planning can be moved straight to Done.
-- Agents can now set up watchers, mappings, projects, and settings for you. A ticket like "add a
+- Agents can now set up watchers, projects, and settings for you. A ticket like "add a
   watcher that polls our events API every minute and dispatches anything assigned to me with next
   steps" gets the watcher's command, schedule, and triage instructions filled in for you. Agents
   can also delete tickets and projects, though never their own ticket, its parent tickets, or the
@@ -65,8 +65,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   place of the separate command and arguments fields. Watchers you already have keep running
   as they are. Saving one from the form turns its command and arguments into one command line,
   which then runs in your login shell too, so your shell's startup files apply to it.
-- Mappings are now hints for triage. When a key in a watcher's output (like FOO-123) matches a
-  mapping, triage is pointed at that project, and it can still choose another one.
 - A blocked ticket no longer repeats the agent's question in a red box at the top of the ticket.
   The Blocked pill shows the status and the question is on the Summary tab. Failed runs and
   worktrees that couldn't be created now put their error on the Summary tab too, so every
@@ -76,6 +74,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Agents now read and edit files with their file tools instead of shell commands like `sed -i`,
   `cat`, or heredocs. In Ask mode that means fewer approval requests for ordinary edits inside
   the ticket's worktree, and a ticket's activity shows which file each step read or changed.
+
+### Removed
+
+- Mappings are gone from Settings on Mac and iPhone, and agents can no longer add or delete
+  them. A watcher's prompt now says which project its work goes to, for example "When an
+  actionable ticket assigned to me comes in, dispatch it to the PLAYR project." Updating deletes
+  any mappings you had, so add the project to each watcher's prompt. Triage declines output when
+  the prompt and the output don't make the project clear.
 
 ## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
 

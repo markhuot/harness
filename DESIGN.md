@@ -170,10 +170,11 @@ command, args, cwd, env, mode or interval does.
 Each item starts an **ephemeral triage session** (`kind: "triage"`, key `TRIAGE-n`, visible in
 the app's Inbox, not on the board). Its title is the output's first line with letters or digits
 in it, cut at 80 characters. Triage replaces it with the dispatched ticket's title, or with
-`decline_work`'s `title`. The triage prompt carries, in order: `Mapping hint:` lines, the
-provisional title, the user's prompt, the local tickets whose keys appear in the output, the
-raw output in a fence it can't close, the project list and the mappings. Triage works out the
-title, key, link and project, then calls `dispatch_ticket` (once per separate item in the
+`decline_work`'s `title`. The triage prompt carries, in order: the watcher's name and the
+provisional title, an instruction to pick the project from the user's prompt and the output (and
+to decline when that leaves it ambiguous), the user's prompt, the local tickets whose keys
+appear in the output, the raw output in a fence it can't close, and the project list. Triage
+works out the title, key, link and project, then calls `dispatch_ticket` (once per separate item in the
 output that qualifies) or `decline_work`. `dispatch_ticket` with a `key` makes a ticket that
 mirrors the external key (`FOO-123`) and records `externalRef`. Without one, the ticket gets
 the project's next key. If a local ticket with that key already exists, dispatch posts the
@@ -181,10 +182,11 @@ description to it as a message instead of creating a duplicate. Triage runs get 
 read tools, and the triage instructions tell the agent to use `search_tickets` / `get_ticket` to
 find tickets the output doesn't name by key (they're named only while triage runs have them).
 
-**Mappings** are routing hints. `pattern` is a key prefix (`FOO` matches `FOO-123`, longest
-prefix first) or a `/regex/`. The orchestrator finds ticket-style keys (`[A-Z][A-Z0-9_]*-\d+`)
-in the output, and each key a mapping matches becomes a `Mapping hint: FOO-123 → PROJ` line.
-The first hint's project also becomes the triage session's cwd. Triage can override hints.
+**Routing lives in the watcher's prompt.** There is no separate key → project table: the prompt
+says where work goes ("When an actionable ticket assigned to me comes in, dispatch it to the
+PLAYR project"; "PLAYR-12 goes to PLAYR, MEDL-3 to MEDL"). The orchestrator finds ticket-style
+keys (`[A-Z][A-Z0-9_]*-\d+`) in the output only to list the local tickets they name. Triage
+sessions run in the harness home directory, since no project is chosen until dispatch.
 
 `POST /watchers/inject { source, text, prompt? }` feeds output as if a watcher named `source`
 printed it (`HarnessClient.injectOutput`). An object `text` (or the older `{ source, item }`
@@ -218,14 +220,11 @@ Harness tools (always exposed, via MCP for claude-code):
 | `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
-| `list_mappings` | all | `{}` (triage routing hints) |
 | `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
 | `list_drivers` | all | `{}` → drivers with their models |
 | `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_mapping` | ″ | `{ pattern, project_key, notes? }` (a routing hint for triage) |
-| `delete_mapping` | ″ | `{ id }` |
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
@@ -301,8 +300,8 @@ curl …; sleep 60; done`) or `interval`. A non-zero exit shows as the watcher's
 described as legacy only. The tools pass `prompt` straight through to
 `Orchestrator.createWatcher` / `updateWatcher`, which validate and store it like the HTTP API.
 `list_watchers` shows it when set, and the approval summary includes it, since the prompt decides
-what happens to the output. `create_mapping` / `delete_mapping` describe mappings as optional
-routing hints for triage. Approval cards show the command line as written (`commandLine` in
+what happens to the output, including which project it goes to: the tool descriptions tell the
+agent to put the project the user names into the prompt. Approval cards show the command line as written (`commandLine` in
 `shared/src/commandLine.ts`: `watcherCommandLine`, plus the line inside a legacy `zsh -lc`).
 
 Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
@@ -358,7 +357,6 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Mappings | add, delete | `create_mapping`, `delete_mapping` (gated); `list_mappings` | |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, human review, auto-complete, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode | `update_settings` (gated), `get_settings` | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
@@ -577,7 +575,7 @@ Directives are read from the run prompt:
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
-| triage | a watcher prompt with `[dummy:dispatch-if /re/flags]` (and optionally `[dummy:project KEY]`, else the mapping hint's project) decides by itself: output matching the regex → `dispatch_ticket(start: true)` to that project, anything else → `decline_work`; only the watcher's prompt section can set the rule, and only the fenced output is matched. Without a rule it reads the first `Mapping hint: KEY → PROJECT` line from the hint lines at the top of the prompt; `[unscoped]` in the output → `decline_work`; `[big]` → `dispatch_ticket` with `conductor: true`; no hint → decline; else `dispatch_ticket(start: true)` with the hinted key, project and the `Inbox title` |
+| triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key is the first `KEY-123` in the fenced output. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
 ## HTTP API
 
@@ -598,7 +596,6 @@ GET    /tickets/:key/summaries
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
-GET    /mappings                 POST /mappings            DELETE /mappings/:id
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)
 GET    /network                  → NetworkStatus           GET /pairing → PairingInfo (409 in localhost mode)
