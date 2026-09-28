@@ -763,6 +763,7 @@ function seed() {
     lastError: null,
     createdAt: now() - 86400_000,
     updatedAt: now() - 60_000,
+    live: { state: "running", since: now() - 42 * 60_000, nextRunAt: null, failures: 0 },
   };
   watchers.set(w.id, w);
   const status: Watcher = {
@@ -772,8 +773,32 @@ function seed() {
     command: "while true; do curl -s https://status.example.com/api/incidents.json; sleep 300; done",
     prompt: "Only surface new incidents that affect the NYTIMES site.",
     lastRunAt: now() - 4 * 60_000,
+    live: { state: "waiting", since: now() - 30_000, nextRunAt: now() + 90_000, failures: 3 },
+    lastError: "Command exited with code 6: curl: (6) Could not resolve host: status.example.com\ncurl: (6) Could not resolve host: status.example.com\nThe watcher's loop exits when curl fails, so every restart hits the same DNS error until the host resolves again.",
   };
   watchers.set(status.id, status);
+  const reviews: Watcher = {
+    ...w,
+    id: newId("w"),
+    name: "gh-reviews",
+    command: "gh search prs --review-requested=@me --state=open --json url,title",
+    prompt: "Dispatch review requests for harness to HARNESS.",
+    mode: "interval",
+    intervalSec: 300,
+    lastRunAt: now() - 60_000,
+    live: { state: "waiting", since: now() - 58_000, nextRunAt: now() + 240_000, failures: 0 },
+  };
+  watchers.set(reviews.id, reviews);
+  const sentry: Watcher = {
+    ...w,
+    id: newId("w"),
+    name: "sentry-alerts",
+    command: "sentry-cli events list --project web --max-rows 20",
+    enabled: false,
+    lastRunAt: now() - 3 * 86400_000,
+    live: { state: "stopped", since: now() - 3 * 86400_000, nextRunAt: null, failures: 0 },
+  };
+  watchers.set(sentry.id, sentry);
 }
 seed();
 
@@ -1292,13 +1317,24 @@ async function route(req: Request, url: URL): Promise<Response> {
     const w = b ? watchers.get(b) : undefined;
     if (!w) throw new HttpError(404, "Watcher not found");
     if (c === "run" && method === "POST") {
+      // A pretend run: the process comes up, and loop watchers stay up (clearing the last error).
       w.lastRunAt = now();
       w.updatedAt = now();
+      if (w.mode === "loop") w.lastError = null;
+      w.live = { state: "running", since: now(), nextRunAt: null, failures: w.live?.failures ?? 0 };
       broadcast({ kind: "watcher.upserted", watcher: w });
+      if (w.mode === "interval")
+        setTimeout(() => {
+          w.lastError = null;
+          w.live = { state: "waiting", since: now(), nextRunAt: now() + w.intervalSec * 1000, failures: 0 };
+          broadcast({ kind: "watcher.upserted", watcher: w });
+        }, 1500);
       return ok({ ok: true });
     }
     if (method === "PATCH") {
+      const wasEnabled = w.enabled;
       Object.assign(w, await readBody(req), { id: w.id, updatedAt: now() });
+      if (wasEnabled !== w.enabled) w.live = w.enabled ? { state: "running", since: now(), nextRunAt: null, failures: 0 } : { state: "stopped", since: now(), nextRunAt: null, failures: 0 };
       broadcast({ kind: "watcher.upserted", watcher: w });
       return ok(w);
     }

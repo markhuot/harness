@@ -14,3 +14,4 @@ export * from "./chatMode";
 export * from "./markdown";
 export * from "./icons";
 export * from "./stickToBottom";
+export * from "./watchers";
