@@ -71,9 +71,10 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   const { api, app, check, shot } = opts;
   const repo = await seedRepo();
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/bash ${AGENT_SCRIPT}`, driver: "dummy", start: true });
-  // The default permission mode asks a human before the dummy agent's /bash: approve it (for the
-  // tool) the way a person would, then wait for the run to finish.
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/tools ${JSON.stringify([{ name: "bash", input: { command: AGENT_SCRIPT } }])}`, driver: "dummy", start: true });
+  // The default permission mode asks a human before the dummy agent's bash call: approve it (for
+  // the tool) the way a person would, then wait for the run to finish. `/tools` (unlike `/bash`)
+  // repeats the call when the answered approval resumes the run.
   let settled: Ticket | null = null;
   for (let round = 0; round < 3; round++) {
     settled = await until(
@@ -91,7 +92,7 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   settled = settled!;
   if (settled.status === "blocked") throw new Error(`changes ticket blocked: ${settled.blockedReason ?? JSON.stringify(settled.pendingApproval)}`);
   const transcript = await api<TranscriptEntry[]>("GET", `/sessions/${settled.sessionId}/transcript?after=0`);
-  const bash = transcript.find((e) => e.content.type === "tool_result" && e.content.name === "bash")?.content;
+  const bash = transcript.findLast((e) => e.content.type === "tool_result" && e.content.name === "bash")?.content;
   const bashOut = bash?.type === "tool_result" ? bash.output.map((o) => (o.type === "text" ? o.text : "")).join("") : "no bash tool result";
   check("worktree ticket ran the /bash edits", !!settled.branch && !!settled.workdir && bash?.type === "tool_result" && !bash.isError, `${settled.branch} @ ${settled.workdir} ${bashOut.slice(0, 300)}`);
 
@@ -134,6 +135,12 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   await Bun.sleep(900); // syntax highlighting lands asynchronously
   await shot("8-changes");
   check("narrow panel hides the tree behind a toggle", await frame.js<boolean>(`document.getElementById("app").classList.contains("narrow")`));
+  const overlay = () => frame.js<{ open: boolean; expanded: string | null }>(`({ open: document.getElementById("app").classList.contains("files-open"), expanded: document.querySelector(".bar [data-action=files]")?.getAttribute("aria-expanded") ?? null })`);
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  const opened = await overlay();
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  const closed = await overlay();
+  check("narrow files button opens and closes the overlay", opened.open && opened.expanded === "true" && !closed.open && closed.expanded === "false", JSON.stringify({ opened, closed }));
 
   // Maximized ticket pane: the tree sits beside the diffs.
   await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
@@ -141,6 +148,30 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   check("expanded panel shows the file tree beside the diffs", !!wide);
   await Bun.sleep(800);
   await shot("8-changes-wide");
+
+  // Collapse the docked sidebar: the diffs take its width, and the choice survives a reload.
+  const sidebar = () =>
+    frame.js<{ files: number; diffs: number; expanded: string | null; collapsed: boolean }>(`(() => {
+      const app = document.getElementById("app"), btn = document.querySelector(".bar [data-action=files]");
+      return { files: document.querySelector(".files").getBoundingClientRect().width, diffs: document.querySelector(".diffs").getBoundingClientRect().width,
+        expanded: btn?.getAttribute("aria-expanded") ?? null, collapsed: app.classList.contains("files-collapsed") };
+    })()`);
+  const open = await sidebar();
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  await Bun.sleep(400);
+  const shut = await sidebar();
+  check("files button collapses the docked sidebar", open.expanded === "true" && shut.expanded === "false" && shut.files === 0 && shut.collapsed, JSON.stringify({ open, shut }));
+  check("diffs take the collapsed sidebar's width", shut.diffs >= open.diffs + open.files - 2, JSON.stringify({ open, shut }));
+  const diffBox = await frame.js<number>(`Math.round(document.querySelector(".diffs diffs-container")?.getBoundingClientRect().width ?? 0)`);
+  check("CodeView reflows into the wider column", diffBox > open.diffs, `${diffBox} vs ${open.diffs}`);
+  await shot("8-changes-wide-collapsed");
+  await frame.js(`window.__stale = true; location.reload()`);
+  const kept = await until("plugin reloaded with sidebar collapsed", () => frame.js<boolean>(`!window.__stale && !!document.querySelector(".bar .stat") && document.getElementById("app").classList.contains("files-collapsed")`), 20000).catch(() => false);
+  check("collapsed sidebar persists across a reload", !!kept);
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  await until("sidebar back", () => frame.js<boolean>(`document.querySelector(".files").getBoundingClientRect().width > 0`), 5000).catch(() => false);
+  check("files button expands the sidebar again", (await sidebar()).expanded === "true");
+  await Bun.sleep(600);
 
   if (opts.setTheme) {
     await opts.setTheme("dark");
