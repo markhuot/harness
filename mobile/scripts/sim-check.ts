@@ -126,26 +126,50 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
 
-// Whether iOS has asked "Open in “Harness”?" for a deep link this run. Some simulators never ask;
-// once a link opened without the prompt, later links check for it once instead of polling for 3 s
-// (each describe-ui is ~0.4 s, so a full poll cost ~8 s per link).
-let openPrompt: "unknown" | "shown" | "never" = "unknown";
+type Settle = { tree: string; since: number };
+const settleState = (): Settle => ({ tree: "", since: Date.now() });
+/** Whether the app is on screen and its accessibility tree (labels `l`) hasn't changed for 800 ms. */
+function settled(l: string[], prev: Settle): boolean {
+  const tree = l.join("\n");
+  if (tree !== prev.tree) Object.assign(prev, { tree, since: Date.now() });
+  // The splash has only the app's own label; SpringBoard (app not up yet) has no "Harness" root.
+  return l[0] === "Harness" && l.length >= 3 && Date.now() - prev.since >= 800;
+}
 
-/** simctl openurl, then accept iOS's "Open in “Harness”?" confirmation. */
+/**
+ * simctl openurl, accept iOS's "Open in “Harness”?" confirmation if it asks (not every simulator
+ * does), and wait until the linked screen has rendered and settled. A cold launch takes ~4 s.
+ */
 async function openUrl(udid: string, url: string) {
   await simctl("openurl", udid, url);
   if (!hasAxe) return;
-  const polls = openPrompt === "never" ? 1 : 12;
-  for (let i = 0; i < polls; i++) {
-    await Bun.sleep(250);
+  const prev = settleState();
+  const end = Date.now() + 15000;
+  while (Date.now() < end) {
+    await Bun.sleep(150);
     const l = await labels(udid);
     if (l.some((x) => x.startsWith("Open in"))) {
       await tapLabel(udid, "Open");
-      openPrompt = "shown";
-      return;
+      continue;
     }
+    if (settled(l, prev)) return;
   }
-  if (openPrompt === "unknown") openPrompt = "never";
+}
+/** Waits until the app is up and its screen has settled (after a plain `simctl launch`). */
+async function whenRendered(udid: string) {
+  const prev = settleState();
+  await until("app rendered", async () => settled(await labels(udid), prev), 15000).catch(() => {});
+}
+/**
+ * A fresh launch, so nothing from the previous screen (a modal, a scroll position) frames the next:
+ * a deep link cold-launches the app straight onto its screen, no URL launches it on the board.
+ * Returns once the screen has rendered and settled.
+ */
+async function coldOpen(udid: string, url = "") {
+  await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+  if (url) return openUrl(udid, url);
+  await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+  await whenRendered(udid);
 }
 async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000): Promise<T> {
   const end = Date.now() + ms;
@@ -314,11 +338,8 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     }
   };
   const fresh = async (url = "") => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-    if (url) await openUrl(udid, url);
-    else await until("board loaded", async () => (await labels(udid)).some((l) => /^ARCH-\d+ /.test(l)), 20000);
+    await coldOpen(udid, url);
+    if (!url) await until("board loaded", async () => (await labels(udid)).some((l) => /^ARCH-\d+ /.test(l)), 20000);
     await Bun.sleep(url ? 1500 : 800);
   };
   const has = async (prefix: string) => (await labels(udid)).some((l) => l.startsWith(prefix));
@@ -458,10 +479,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   };
   const key = p.ticket.key;
   const fresh = async (tab: string) => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-    await openUrl(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
+    await coldOpen(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
     await Bun.sleep(3000);
   };
   const H = (await tree())[0]!.frame.height;
@@ -566,10 +584,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedSti
     }
   };
   const fresh = async (url: string) => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-    await openUrl(udid, url);
+    await coldOpen(udid, url);
     await Bun.sleep(2500);
   };
   const nodes = async () => {
@@ -647,10 +662,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     }
   };
   const fresh = async (url: string) => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-    await openUrl(udid, url);
+    await coldOpen(udid, url);
     await Bun.sleep(2500);
   };
   const has = async (label: string) => (await labels(udid)).includes(label);
@@ -759,10 +771,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   };
   const summaries = `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=summaries`;
   const fresh = async () => {
-    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-    await Bun.sleep(2000);
-    await openUrl(udid, summaries);
+    await coldOpen(udid, summaries);
     await until("thumbnails", async () => (await labels(udid)).includes("Image phone.png"), 10000);
     await Bun.sleep(1500); // let the images and the video's first frame load
   };
@@ -896,8 +905,8 @@ try {
       ["approval-config", `harness://ticket/${k(seeded.configApproval)}`],
       ["blocked", `harness://ticket/${k(seeded.blocked)}`],
       ["planning", `harness://ticket/${k(seeded.plan)}`],
-      ["browser", `harness://ticket/${k(seeded.browse)}?tab=browser`, 6000],
-      ["changes", `harness://ticket/${k(seeded.changes)}?tab=plugin:git:changes`, 7000],
+      ["browser", `harness://ticket/${k(seeded.browse)}?tab=browser`, 3500],
+      ["changes", `harness://ticket/${k(seeded.changes)}?tab=plugin:git:changes`, 2500],
       ["new-session", "harness://new"],
       ["inbox", "harness://inbox"],
       ["settings", "harness://settings"],
@@ -906,11 +915,7 @@ try {
       ["project-settings", `harness://project/${seeded.project.id}`],
       ["connect", "harness://connect"],
     ];
-    const relaunch = async () => {
-      await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-      await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-      await Bun.sleep(2000);
-    };
+    const relaunch = () => coldOpen(udid);
     for (const id of themeShots) {
       const theme = findTheme(id)!;
       await simctl("ui", udid, "appearance", theme.appearance);
@@ -939,16 +944,9 @@ try {
       await simctl("ui", udid, "appearance", theme);
       for (const [name, url, wait] of screens) {
         if (only && !only.includes(name)) continue;
-        // A fresh launch per screen, so a modal from the previous one never frames the next. The deep
-        // link cold-launches the app straight onto its screen, skipping a launch and its 2 s settle.
-        await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-        if (url === "harness://board") {
-          await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-          await Bun.sleep(2000);
-        } else {
-          await openUrl(udid, url);
-        }
-        await Bun.sleep(wait ?? 2200);
+        await coldOpen(udid, url === "harness://board" ? "" : url);
+        // Images, a streamed browser frame or a diff can land after the labels settle.
+        await Bun.sleep(wait ?? 1000);
         const file = join(shots, `${name}-${theme}.png`);
         await simctl("io", udid, "screenshot", file);
         if (await running(udid)) console.log(`  ${file}`);
@@ -971,13 +969,7 @@ try {
           results.push([name, false, (e as Error).message.split("\n")[0]!]);
         }
       };
-      const fresh = async (url: string) => {
-        await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-        await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-        await Bun.sleep(2000);
-        if (url) await openUrl(udid, url);
-        await Bun.sleep(2000);
-      };
+      const fresh = (url: string) => coldOpen(udid, url);
       await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
         await fresh("");
         const card = (l: string) => l.startsWith(`${seeded.hello.key} `);
