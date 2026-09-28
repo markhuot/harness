@@ -217,11 +217,16 @@ hits them too:
 - **No escalation through other tickets.** A ticket an agent creates (work or conductor run)
   runs no looser than the caller: when the caller's effective mode is stricter than what the new
   ticket would inherit from its project, the ticket gets the caller's mode explicitly; otherwise
-  `permissionMode` stays null (inherit). And an agent can't put work into a ticket whose
+  `permissionMode` stays null (inherit). (`create_ticket` with `depends_on` also checks that the
+  new ticket isn't looser, since the scheduler may start it on its own. The rule above already
+  guarantees that, so the check is a backstop.) An agent can't put work into a ticket whose
   effective mode is looser than its own: `message_ticket`, `start_ticket`, `reopen_ticket` and
   `move_ticket` to in_progress or planning are refused ("<KEY> runs in auto, looser than your
-  read_only; ask a human"). Equal modes are fine, so a conductor steers children created under
-  its own mode.
+  read_only; ask a human"). Nor can it edit one with `update_ticket`, whatever the field: the
+  description is the brief its next run follows and `depends_on` lets the scheduler start it.
+  The one exception is a call that only changes `permission_mode` to a stricter one, which can
+  only make the ticket safer. Equal modes are fine, so a conductor steers and edits children
+  created under its own mode.
 
 Deleting tickets isn't a tool.
 

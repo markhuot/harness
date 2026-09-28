@@ -68,7 +68,7 @@ export const updateTicket = defineTool<{
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode or dependencies. Only the fields you pass change; depends_on replaces the whole list. A permission mode can be made stricter (auto → ask → read_only) but never looser. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode or dependencies. Only the fields you pass change; depends_on replaces the whole list. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,

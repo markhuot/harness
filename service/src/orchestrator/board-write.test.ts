@@ -236,6 +236,43 @@ describe("permission modes across tickets", () => {
     expect((await h.orch.ops.reopenTicket(c, done.key, "again")).status).toBe("in_progress");
   });
 
+  test("a stricter agent can't edit a looser ticket, except to tighten its mode", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    h.store.tickets.update(me.id, { permissionMode: "read_only" });
+    const c = h.ctx("work", h.get(me));
+    const dep = await h.make("dep");
+    h.store.tickets.update(dep.id, { permissionMode: "read_only" });
+    const loose = await h.make("loose"); // auto via settings
+    const msg = `${loose.key} runs in auto, looser than your read_only; ask a human.`;
+    const before = h.get(loose);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { title: "renamed" })).rejects.toThrow(msg);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { description: "delete X" })).rejects.toThrow(msg);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { dependsOn: [dep.key] })).rejects.toThrow(msg);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { driver: "fake" })).rejects.toThrow(msg);
+    // Bundling an edit with a tightening doesn't sneak it through.
+    await expect(h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only", description: "delete X" })).rejects.toThrow(msg);
+    const after = h.get(loose);
+    expect([after.title, after.description, after.dependsOn, after.driver, after.permissionMode]).toEqual([before.title, before.description, [], before.driver, null]);
+
+    const tightened = await h.orch.ops.updateTicket(c, loose.key, { permissionMode: "ask" });
+    expect(tightened.permissionMode).toBe("ask"); // still looser than read_only, but safer
+    await expect(h.orch.ops.updateTicket(c, loose.key, { title: "renamed" })).rejects.toThrow("runs in ask, looser than your read_only");
+    expect((await h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only" })).permissionMode).toBe("read_only");
+    // Now as strict as the caller: every field is editable again.
+    const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", description: "new brief", dependsOn: [dep.key] });
+    expect([u.title, u.description, u.dependsOn]).toEqual(["renamed", "new brief", [dep.key]]);
+  });
+
+  test("create_ticket with depends_on from a strict caller: the new ticket is never looser", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    h.store.tickets.update(me.id, { permissionMode: "read_only" });
+    const dep = await h.make("dep"); // auto: depending on a looser ticket only waits on it
+    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "after", description: "x", dependsOn: [dep.key], start: true });
+    expect([h.get(t).permissionMode, h.orch.permissionModeFor(h.get(t)), h.get(t).autoStart]).toEqual(["read_only", "read_only", true]);
+  });
+
   test("an ask conductor still steers its ask children", async () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });

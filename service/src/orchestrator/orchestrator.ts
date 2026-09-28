@@ -1282,7 +1282,14 @@ export class Orchestrator {
     // The new ticket runs no looser than its creator: it takes the caller's mode when the project's
     // would be looser, and otherwise keeps inheriting.
     const mine = this.permissionModeFor(own);
-    const permissionMode = PERMISSION_STRICTNESS[mine] > PERMISSION_STRICTNESS[this.permissionModeFor(null, project)] ? mine : undefined;
+    const inherited = this.permissionModeFor(null, project);
+    const permissionMode = PERMISSION_STRICTNESS[mine] > PERMISSION_STRICTNESS[inherited] ? mine : undefined;
+    // depends_on lets the scheduler start the new ticket on its own; that must never happen under a
+    // looser mode than the caller's. Unreachable while the rule above holds; kept as the backstop.
+    const effective = permissionMode ?? inherited;
+    if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
+      throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
+    }
     if (ctx.runKind === "conductor" && own.kind === "conductor") {
       // A conductor's tickets are its children, on its driver/model unless it picks another.
       return this.asTool(() =>
@@ -1318,7 +1325,11 @@ export class Orchestrator {
   }
 
   async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
-    const { target } = this.boardTarget(ctx, key, "update_ticket");
+    const { actor, target } = this.boardTarget(ctx, key, "update_ticket");
+    // Editing a looser ticket (its brief, dependencies, driver...) would get it to act for the caller
+    // under looser permissions. The one edit allowed on it is tightening its mode, alone.
+    const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
+    if (!(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
     const body: UpdateTicketBody = {};
     if (input.title !== undefined) {
       if (!String(input.title).trim()) throw new Error("title can't be empty");
