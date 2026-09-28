@@ -191,8 +191,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/watchers", () => o.listWatchers());
   add("POST", "/watchers", async ({ body }) => o.createWatcher(await body()));
   add("POST", "/watchers/inject", async ({ body }) => {
+    // { source, text, prompt? }; `item` (an object) is the older shape and is sent as JSON text.
     const b = (await body()) ?? {};
-    return o.injectWorkItem(b.source, b.item);
+    return o.injectOutput(b.source, b.text ?? b.item, b.prompt);
   });
   add("PATCH", "/watchers/:id", async ({ params, body }) => o.updateWatcher(params.id!, await body()));
   add("DELETE", "/watchers/:id", ({ params }) => (o.deleteWatcher(params.id!), ok));

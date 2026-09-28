@@ -7,6 +7,7 @@ interface WatcherRow {
   name: string;
   command: string;
   args: string;
+  prompt: string;
   cwd: string | null;
   env: string;
   mode: string;
@@ -24,6 +25,7 @@ const toWatcher = (r: WatcherRow): Watcher => ({
   name: r.name,
   command: r.command,
   args: fromJson<string[]>(r.args, []),
+  prompt: r.prompt ?? "",
   cwd: r.cwd,
   env: fromJson<Record<string, string>>(r.env, {}),
   mode: r.mode === "interval" ? "interval" : "loop",
@@ -55,14 +57,15 @@ export class WatcherRepo {
     const t = now();
     this.db
       .query(
-        `INSERT INTO watchers (id, name, command, args, cwd, env, mode, interval_sec, enabled, driver, last_run_at, last_error, created_at, updated_at)
-         VALUES ($id, $name, $command, $args, $cwd, $env, $mode, $intervalSec, $enabled, $driver, NULL, NULL, $t, $t)`,
+        `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, last_run_at, last_error, created_at, updated_at)
+         VALUES ($id, $name, $command, $args, $prompt, $cwd, $env, $mode, $intervalSec, $enabled, $driver, NULL, NULL, $t, $t)`,
       )
       .run({
         id,
         name: input.name,
         command: input.command,
         args: JSON.stringify(input.args ?? []),
+        prompt: input.prompt ?? "",
         cwd: input.cwd ?? null,
         env: JSON.stringify(input.env ?? {}),
         mode: input.mode ?? "loop",
@@ -80,7 +83,7 @@ export class WatcherRepo {
     const next = { ...w, ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) } as Watcher;
     this.db
       .query(
-        `UPDATE watchers SET name = $name, command = $command, args = $args, cwd = $cwd, env = $env, mode = $mode,
+        `UPDATE watchers SET name = $name, command = $command, args = $args, prompt = $prompt, cwd = $cwd, env = $env, mode = $mode,
            interval_sec = $intervalSec, enabled = $enabled, driver = $driver, last_run_at = $lastRunAt, last_error = $lastError, updated_at = $t
          WHERE id = $id`,
       )
@@ -89,6 +92,7 @@ export class WatcherRepo {
         name: next.name,
         command: next.command,
         args: JSON.stringify(next.args),
+        prompt: next.prompt,
         cwd: next.cwd,
         env: JSON.stringify(next.env),
         mode: next.mode,

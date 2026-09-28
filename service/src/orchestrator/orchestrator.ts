@@ -3,7 +3,7 @@
 
 import { existsSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type {
   ApprovalBody,
   CompleteBody,
@@ -32,9 +32,8 @@ import type {
   TranscriptRole,
   UpdateTicketBody,
   Watcher,
-  WorkItem,
 } from "@harness/shared";
-import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isTicketKey, outputTitle, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -48,7 +47,7 @@ import type { HarnessPaths } from "../config";
 import { toolsForRun } from "../tools/index";
 import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
-import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
+import { findKeys, matchMapping, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { ensureWorktree, isGitRepo } from "./worktree";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
@@ -126,7 +125,22 @@ interface ActiveRun {
 
 interface TriageMeta {
   source: string;
-  item: WorkItem;
+  /** The watcher output being triaged */
+  text: string;
+  truncated?: boolean;
+  /** The watcher's prompt at the time ("" → none) */
+  prompt?: string;
+}
+
+/** One chunk of watcher (or injected) output on its way into triage. */
+export interface IngestInput {
+  /** Dedupe scope: the watcher id, or inject:<source> */
+  sourceId: string;
+  /** Watcher name shown to triage and on dispatched tickets */
+  source: string;
+  output: WatcherOutput;
+  prompt: string;
+  driver: string | null;
 }
 
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
@@ -250,8 +264,8 @@ export class Orchestrator {
       onError: (job, err) => this.log(`run ${job.runId} crashed: ${errMsg(err)}`),
     });
     const handlers = {
-      onItems: async (w: Watcher, items: WorkItem[]) => {
-        for (const item of items) await this.ingest(w.id, w.name, item, w.driver);
+      onOutput: async (w: Watcher, output: WatcherOutput) => {
+        await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver });
       },
       onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
         const w = this.store.watchers.update(id, patch);
@@ -943,6 +957,10 @@ export class Orchestrator {
       if (typeof body.command !== "string" || !body.command.trim()) throw badRequest("command is required");
       out.command = body.command.trim();
     }
+    if (body.prompt !== undefined) {
+      if (typeof body.prompt !== "string") throw badRequest("prompt must be a string");
+      out.prompt = body.prompt.trim();
+    }
     if (body.args !== undefined) {
       if (!Array.isArray(body.args) || body.args.some((a) => typeof a !== "string")) throw badRequest("args must be an array of strings");
       out.args = body.args;
@@ -1000,40 +1018,61 @@ export class Orchestrator {
     this.bus.emit({ kind: "mapping.deleted", id });
   }
 
-  /** Feed a raw item as if a watcher named `source` emitted it. Null when deduped. */
-  async injectWorkItem(source: string, raw: unknown): Promise<Session | null> {
+  /**
+   * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON).
+   * `prompt` plays the watcher's prompt. Null when deduped or when the text is only whitespace.
+   */
+  async injectOutput(source: string, text: unknown, prompt?: unknown): Promise<Session | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
-    const item = parseWorkItem(typeof raw === "string" ? raw : JSON.stringify(raw ?? null));
-    if (!item) throw badRequest("item must be an object with a key (or id)");
-    return this.ingest(`inject:${source.trim()}`, source.trim(), item, null);
+    if (prompt !== undefined && prompt !== null && typeof prompt !== "string") throw badRequest("prompt must be a string");
+    const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
+    const output = toOutput(raw);
+    if (!output) throw badRequest("text is required");
+    const name = source.trim();
+    return this.ingest({ sourceId: `inject:${name}`, source: name, output, prompt: (prompt ?? "").trim(), driver: null });
   }
 
-  /** Dedupe then triage one item. */
-  async ingest(sourceId: string, sourceName: string, item: WorkItem, driver: string | null): Promise<Session | null> {
-    if (!this.store.seen.markSeen(sourceId, item.key, item.version)) return null;
-    return this.triage(sourceName, item, driver);
+  /** Dedupe (identical text from the same source is triaged once), then triage. */
+  async ingest(input: IngestInput): Promise<Session | null> {
+    const hash = createHash("sha256").update(input.output.text).digest("hex");
+    if (!this.store.seen.markSeen(input.sourceId, `sha256:${hash}`, null)) return null;
+    return this.triage(input);
   }
 
-  triage(source: string, item: WorkItem, driverId: string | null): Session {
+  triage(input: Omit<IngestInput, "sourceId">): Session {
+    const { source, output, prompt, driver } = input;
     const projects = this.store.projects.list();
     const mappings = this.store.mappings.list();
-    const mapping = matchMapping(item.key, mappings);
-    const suggestion = mapping ? (projects.find((p) => p.id === mapping.projectId) ?? null) : null;
-    const existingTicket = isTicketKey(item.key) ? this.store.tickets.getByKey(item.key) : null;
+    const keys = findKeys(output.text);
+    // Routing hints: keys in the output that a mapping points at a project.
+    const hints = keys.flatMap((key) => {
+      const mapping = matchMapping(key, mappings);
+      const project = mapping ? projects.find((p) => p.id === mapping.projectId) : undefined;
+      return mapping && project ? [{ key, mapping, project }] : [];
+    });
+    const existingTickets = keys.flatMap((key) => {
+      const t = this.store.tickets.getByKey(key);
+      return t ? [t] : [];
+    });
+    const title = outputTitle(output.text);
     const n = this.store.counters.next("triage");
     const session = this.store.sessions.create({
       key: `TRIAGE-${n}`,
       kind: "triage",
       ticketId: null,
-      driver: driverId ?? this.settings().defaultDriver,
-      cwd: suggestion?.path ?? this.paths.home,
-      title: item.title,
+      driver: driver ?? this.settings().defaultDriver,
+      cwd: hints[0]?.project.path ?? this.paths.home,
+      title,
       triageStatus: "triaging",
-      meta: { source, item } satisfies TriageMeta,
+      meta: { source, text: output.text, truncated: output.truncated, prompt } satisfies TriageMeta,
     });
     this.touchSession(session.id);
-    this.appendStatus(session.id, null, `New item ${item.key} from ${source}`);
-    this.enqueueRun(session.id, "triage", prompts.triagePrompt({ item, source, suggestion, projects, mappings, existingTicket }));
+    this.appendStatus(session.id, null, `New output from ${source}`);
+    this.enqueueRun(
+      session.id,
+      "triage",
+      prompts.triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, hints, projects, mappings, existingTickets }),
+    );
     return this.store.sessions.get(session.id)!;
   }
 
@@ -1449,39 +1488,42 @@ export class Orchestrator {
     return this.completeTicket(child.key, { instructions });
   }
 
-  private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
+  /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
+  private triageMeta(ctx: ToolContext, more = false): { session: Session; meta: TriageMeta } {
     const session = this.store.sessions.get(ctx.session.id);
     if (!session || session.kind !== "triage") throw new Error("Not a triage session");
     const meta = this.store.sessions.getMeta<TriageMeta>(session.id);
-    if (!meta) throw new Error("Triage session has no work item");
-    if (session.triageStatus !== "triaging") throw new Error(`This item was already ${session.triageStatus}`);
+    if (!meta) throw new Error("Triage session has no output");
+    const open = session.triageStatus === "triaging" || (more && session.triageStatus === "dispatched");
+    if (!open) throw new Error(`This output was already ${session.triageStatus}`);
     return { session, meta };
   }
 
   async dispatchTicket(ctx: ToolContext, input: Parameters<HarnessOps["dispatchTicket"]>[1]): Promise<Ticket> {
-    const { session, meta } = this.triageMeta(ctx);
+    const { session, meta } = this.triageMeta(ctx, true);
     const project = this.store.projects.getByKey(input.projectKey ?? "");
     if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
-    const key = (input.key ?? meta.item.key).trim().toUpperCase();
-    const existing = this.store.tickets.getByKey(key);
+    const key = input.key?.trim().toUpperCase() || null;
+    const existing = key ? this.store.tickets.getByKey(key) : null;
     if (existing) {
-      const body = input.description?.trim() || `Update from ${meta.source}: ${meta.item.title}`;
+      const body = input.description?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
       const t = await this.sendMessage(existing.key, body);
-      this.finishTriage(session.id, "dispatched", `Sent update to existing ${existing.key}`);
+      this.finishTriage(session.id, "dispatched", `Sent update to existing ${existing.key}`, input.title);
       return t;
     }
-    if (!isTicketKey(key)) throw new Error(`Invalid ticket key: ${key}`);
+    if (key && !isTicketKey(key)) throw new Error(`Invalid ticket key: ${key}`);
     const t = await this.createTicket({
       projectId: project.id,
-      key,
+      key: key ?? undefined,
       title: input.title,
       prompt: input.description || input.title,
       kind: input.conductor ? "conductor" : "task",
       start: input.start ?? false,
       driver: project.defaultDriver ?? session.driver,
-      externalRef: { source: meta.source, key: meta.item.key, url: meta.item.url, raw: meta.item.raw },
+      // Only an external key makes the ticket a mirror; otherwise the description carries the context.
+      externalRef: key ? { source: meta.source, key, url: input.url?.trim() || null, raw: meta.text ?? null } : null,
     });
-    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key} in ${project.key}`);
+    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key} in ${project.key}`, input.title);
     return t;
   }
 
@@ -1657,13 +1699,22 @@ export class Orchestrator {
     return lines.slice(-max);
   }
 
-  async declineWork(ctx: ToolContext, reason: string): Promise<void> {
+  async declineWork(ctx: ToolContext, reason: string, title?: string): Promise<void> {
     const { session } = this.triageMeta(ctx);
-    this.finishTriage(session.id, "declined", `Declined: ${reason?.trim() || "no reason given"}`);
+    this.finishTriage(session.id, "declined", `Declined: ${reason?.trim() || "no reason given"}`, title);
   }
 
-  private finishTriage(sessionId: string, status: "dispatched" | "declined" | "failed", outcome: string) {
-    this.store.sessions.update(sessionId, { triageStatus: status, outcome });
+  /**
+   * `title` (from triage) replaces the Inbox title derived from the raw output. Later dispatches
+   * from the same output add to the outcome and keep the first title.
+   */
+  private finishTriage(sessionId: string, status: "dispatched" | "declined" | "failed", outcome: string, title?: string) {
+    const prev = this.store.sessions.get(sessionId);
+    if (prev?.triageStatus === "dispatched" && status === "dispatched") {
+      this.store.sessions.update(sessionId, { outcome: `${prev.outcome}; ${outcome}` });
+    } else {
+      this.store.sessions.update(sessionId, { triageStatus: status, outcome, title: title?.trim() || undefined });
+    }
     this.appendStatus(sessionId, null, outcome);
     this.touchSession(sessionId);
   }
@@ -2118,7 +2169,7 @@ export class Orchestrator {
       completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
       // --- triage ---
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
-      declineWork: (c, r) => this.declineWork(c, r),
+      declineWork: (c, r, title) => this.declineWork(c, r, title),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
     };

@@ -33,7 +33,7 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, LISTEN_MODES } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, LISTEN_MODES, outputTitle } from "@harness/shared";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -696,7 +696,7 @@ function seed() {
   t1.triageStatus = "dispatched";
   t1.outcome = "Dispatched to NYTIMES as FOO-123 (started).";
   transcripts.get(t1.id)!.push(
-    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New work item from jira: FOO-123 Paywall meter counts AMP pageviews twice\nSuggested project: NYTIMES" }, createdAt: t1.createdAt },
+    { id: newId("te"), sessionId: t1.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-123 Paywall meter counts AMP pageviews twice\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-123 → NYTIMES" }, createdAt: t1.createdAt },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 2, role: "assistant", content: { type: "tool_call", callId: "c1", name: "dispatch_ticket", input: { project_key: "NYTIMES", key: "FOO-123", title: "Paywall meter counts AMP pageviews twice", start: true } }, createdAt: t1.createdAt + 5000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 3, role: "tool", content: { type: "tool_result", callId: "c1", name: "dispatch_ticket", output: [{ type: "text", text: "Created FOO-123" }], isError: false }, createdAt: t1.createdAt + 6000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 4, role: "system", content: { type: "status", text: "Dispatched to NYTIMES" }, createdAt: t1.createdAt + 7000 },
@@ -704,13 +704,14 @@ function seed() {
   const t2 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Recipe card print styles broken in Safari", now() - 2 * 60_000);
   t2.triageStatus = "triaging";
   t2.busy = true;
-  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New work item from jira: FOO-131 Recipe card print styles broken in Safari" }, createdAt: t2.createdAt });
+  transcripts.get(t2.id)!.push({ id: newId("te"), sessionId: t2.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.\n\nMapped keys: FOO-131 → NYTIMES" }, createdAt: t2.createdAt });
 
   const w: Watcher = {
     id: newId("w"),
     name: "jira",
-    command: "node",
-    args: ["/Users/markhuot/Sites/Jira/watch-jira.js"],
+    command: "~/Sites/Jira/watch-jira.js",
+    args: [],
+    prompt: "If this ticket is assigned to me and has actionable next steps, dispatch it to an agent.",
     cwd: null,
     env: {},
     mode: "loop",
@@ -723,6 +724,15 @@ function seed() {
     updatedAt: now() - 60_000,
   };
   watchers.set(w.id, w);
+  const status: Watcher = {
+    ...w,
+    id: newId("w"),
+    name: "status-page",
+    command: "while true; do curl -s https://status.example.com/api/incidents.json; sleep 300; done",
+    prompt: "Only surface new incidents that affect the NYTIMES site.",
+    lastRunAt: now() - 4 * 60_000,
+  };
+  watchers.set(status.id, status);
   const m: Mapping = { id: newId("map"), pattern: "FOO", projectId: ny.id, notes: "Client Jira project → nytimes repo", createdAt: now() - 86400_000 };
   mappings.set(m.id, m);
 }
@@ -1179,6 +1189,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         name: body.name,
         command: body.command,
         args: body.args ?? [],
+        prompt: body.prompt ?? "",
         cwd: body.cwd ?? null,
         env: body.env ?? {},
         mode: body.mode ?? "loop",
@@ -1196,12 +1207,16 @@ async function route(req: Request, url: URL): Promise<Response> {
     }
     if (b === "inject" && method === "POST") {
       const body = await readBody(req);
-      const item = body.item ?? {};
-      const s = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, settings.defaultDriver, "", String(item.summary ?? item.title ?? item.key ?? "Work item"), now());
+      // { source, text, prompt? }; a legacy `item` (or an object `text`) is JSON-stringified
+      const raw = body.text ?? body.item ?? "";
+      const text = typeof raw === "string" ? raw : JSON.stringify(raw);
+      if (!body.source || !text.trim()) throw new HttpError(400, "source and text are required");
+      const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      const s = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, settings.defaultDriver, "", outputTitle(text), now());
       s.triageStatus = "triaging";
       s.busy = true;
       upsertSession(s);
-      appendEntry(s.id, null, "user", { type: "text", text: `New work item from ${body.source}: ${JSON.stringify(item)}` });
+      appendEntry(s.id, null, "user", { type: "text", text: `New output from watcher ${body.source}:\n\n${text}${prompt ? `\n\nPrompt: ${prompt}` : ""}` });
       setTimeout(() => {
         s.triageStatus = "declined";
         s.outcome = "Declined: mock service does not dispatch.";

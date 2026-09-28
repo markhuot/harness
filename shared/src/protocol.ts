@@ -239,14 +239,23 @@ export interface Summary {
 export interface Watcher {
   id: string;
   name: string;
-  /** Executable + args; spawned with a shell-less exec. Emits NDJSON work items on stdout. */
+  /**
+   * What to run. With no args (the normal case) this is one shell command line, run through the
+   * user's login shell (`$SHELL -lc <command>`), so PATH, pipes and `while true; do …; done`
+   * loops work. With args (watchers created before prompts existed) it is an executable that is
+   * spawned directly with those args and no shell. Whatever it prints on stdout becomes Inbox items.
+   */
   command: string;
+  /** Legacy direct-exec arguments; empty for shell command lines. See `command`. */
   args: string[];
+  /** What the triage agent should do with this watcher's output, in the user's words ("" → none). */
+  prompt: string;
   cwd: string | null;
   env: Record<string, string>;
   /**
-   * "loop": run, read lines until exit, re-run immediately (for blocking watchers like watch-jira).
-   * "interval": run every intervalSec seconds.
+   * "loop": run, read output until exit, re-run immediately (for blocking or long-running
+   * commands). Each burst of output becomes one Inbox item.
+   * "interval": run every intervalSec seconds. Each run's output becomes one Inbox item.
    */
   mode: "loop" | "interval";
   intervalSec: number;
@@ -259,17 +268,11 @@ export interface Watcher {
   updatedAt: number;
 }
 
-/** A normalized work item parsed from one watcher output line. */
-export interface WorkItem {
-  key: string;
-  title: string;
-  url: string | null;
-  /** Used to dedupe: same key + same version is ignored */
-  version: string | null;
-  raw: unknown;
-}
-
-/** Maps external ticket keys to local projects. pattern is a key prefix ("FOO") or /regex/. */
+/**
+ * Maps external ticket keys to local projects. pattern is a key prefix ("FOO") or /regex/.
+ * Mappings are routing hints for triage: keys found in a watcher's output that match one are
+ * pointed out to the triage agent, which makes the final call.
+ */
 export interface Mapping {
   id: string;
   pattern: string;

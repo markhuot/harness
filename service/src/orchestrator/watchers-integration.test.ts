@@ -5,7 +5,7 @@ import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 import { WatcherRunner } from "./watchers";
 
 describe("watchers → triage", () => {
-  test("a real watcher process feeds items that are deduped per watcher and triaged with its driver", async () => {
+  test("a real watcher's output is one triage item with its driver, deduped until it changes", async () => {
     const other = new FakeDriver("other");
     const main = new FakeDriver("fake");
     let runner!: WatcherRunner;
@@ -20,28 +20,38 @@ describe("watchers → triage", () => {
     h.orch.createMapping({ pattern: "FOO", projectId: p.id });
     const lines = [
       { key: "FOO-1", summary: "one", updated: "a" },
-      { key: "FOO-1", summary: "one again", updated: "a" }, // duplicate version
       { key: "FOO-2", summary: "two", updated: "a" },
     ]
       .map((l) => JSON.stringify(l))
       .join("\n");
-    const w = h.orch.createWatcher({ name: "jira", command: "/bin/echo", args: [lines], mode: "loop", driver: "other" });
-    const deadline = Date.now() + 5000;
-    while (h.orch.listSessions("triage").length < 2 && Date.now() < deadline) await Bun.sleep(10);
-    await h.orch.idle();
+    const w = h.orch.createWatcher({ name: "jira", command: "/bin/echo", args: [lines], mode: "loop", driver: "other", prompt: "Dispatch mine" });
+    const waitForSessions = async (n: number) => {
+      const deadline = Date.now() + 5000;
+      while (h.orch.listSessions("triage").length < n && Date.now() < deadline) await Bun.sleep(10);
+      await h.orch.idle();
+    };
+    await waitForSessions(1);
     const triage = h.orch.listSessions("triage");
-    expect(triage.map((s) => s.title).sort()).toEqual(["one", "two"]);
-    expect(triage.every((s) => s.driver === "other")).toBe(true);
-    expect(other.calls.filter((c) => c.kind === "triage").length).toBe(2);
-    expect(h.orch.listTickets().map((t) => t.key).sort()).toEqual(["FOO-1", "FOO-2"]);
+    expect(triage).toHaveLength(1); // one run, one burst, one item
+    expect(triage[0]!.driver).toBe("other");
+    const prompt = other.calls.find((c) => c.kind === "triage")!.prompt;
+    expect(prompt).toContain("Mapping hint: FOO-1 → FOO\nMapping hint: FOO-2 → FOO");
+    expect(prompt).toContain("Dispatch mine");
+    expect(prompt).toContain(lines);
+    expect(h.orch.listTickets().map((t) => t.key)).toEqual(["FOO-1"]); // the fake dispatches the first hint
     expect(h.store.watchers.get(w.id)!.lastRunAt).not.toBeNull();
 
-    // Re-running emits the same items: nothing new is triaged
+    // Re-running prints the same text: nothing new is triaged
     await h.orch.runWatcher(w.id);
     await Bun.sleep(200);
     await h.orch.idle();
+    expect(h.orch.listSessions("triage").length).toBe(1);
+
+    // Changed output is a new item
+    h.orch.updateWatcher(w.id, { args: [lines.replace('"two"', '"two, edited"')] });
+    await waitForSessions(2);
     expect(h.orch.listSessions("triage").length).toBe(2);
     await h.orch.stop();
     expect(runner).toBeDefined();
-  });
+  }, 15_000);
 });

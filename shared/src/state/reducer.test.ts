@@ -250,6 +250,7 @@ describe("entities", () => {
       name: "jira",
       command: "node",
       args: [],
+      prompt: "",
       cwd: null,
       env: {},
       mode: "loop" as const,

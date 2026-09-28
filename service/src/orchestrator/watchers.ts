@@ -1,51 +1,53 @@
-// Watchers: long-lived or periodic commands that print NDJSON work items on stdout
-// (reference implementation: ~/Sites/Jira/watch-jira.js). This module parses their
-// output, resolves item keys to project mappings, and supervises the processes.
+// Watchers: long-lived or periodic commands whose text output becomes Inbox items. Any
+// command works; nothing about the output's shape is required. This module turns stdout into
+// output chunks, resolves external keys to project mappings (hints for triage), and supervises
+// the processes.
 //
-// Exit codes follow watch-jira: 0 = work was emitted, 4 = nothing to report
-// (--once / --timeout), anything else = failure.
+// Chunking: interval mode delivers one chunk per run (everything it printed); loop mode
+// delivers one chunk per burst of output (lines that arrive close together, see batchIdleMs /
+// batchMaxMs). Chunks are trimmed, whitespace-only output is dropped, and a chunk is cut at
+// maxOutputChars and marked truncated.
+//
+// Exit codes follow watch-jira: 0 = ok, 4 = nothing to report (--once / --timeout), anything
+// else = failure.
 
-import type { Mapping, Watcher, WorkItem } from "@harness/shared";
+import type { Mapping, Watcher } from "@harness/shared";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
-// Parsing
+// Output
 // ---------------------------------------------------------------------------
 
-function pickString(obj: Record<string, unknown>, fields: string[], numbers: boolean): string | null {
-  for (const f of fields) {
-    const v = obj[f];
-    if (typeof v === "string" && v.trim() !== "") return v.trim();
-    if (numbers && typeof v === "number" && Number.isFinite(v)) return String(v);
-  }
-  return null;
+/** One Inbox-bound piece of watcher output. */
+export interface WatcherOutput {
+  /** Trimmed, never empty */
+  text: string;
+  /** True when the output was cut at the character limit */
+  truncated: boolean;
 }
 
-/**
- * Normalize one NDJSON line into a WorkItem. Returns null for blank lines,
- * non-JSON, non-objects, and objects without a usable key.
- */
-export function parseWorkItem(line: string): WorkItem | null {
-  const text = line.trim();
-  if (!text || text[0] !== "{") return null;
-  let obj: unknown;
-  try {
-    obj = JSON.parse(text);
-  } catch {
-    return null;
+/** Default cap on one chunk of watcher output, in characters */
+export const MAX_OUTPUT_CHARS = 16_000;
+
+/** Trim and cap raw output. Null when there is nothing but whitespace. */
+export function toOutput(raw: string, limit = MAX_OUTPUT_CHARS, truncated = false): WatcherOutput | null {
+  let text = raw.trim();
+  if (!text) return null;
+  if (text.length > limit) {
+    text = text.slice(0, limit).trimEnd();
+    truncated = true;
   }
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return null;
-  const rec = obj as Record<string, unknown>;
-  const key = pickString(rec, ["key", "id", "identifier"], true);
-  if (!key) return null;
-  return {
-    key,
-    title: pickString(rec, ["summary", "title", "name"], false) ?? key,
-    url: pickString(rec, ["url", "link", "html_url", "self"], false),
-    // Numeric versions (epoch stamps, revision counters) are accepted too.
-    version: pickString(rec, ["updated", "version", "updatedAt", "updated_at"], true),
-    raw: obj,
-  };
+  return { text, truncated };
+}
+
+/** Upper-case external keys (FOO-123) mentioned in text, in order of first appearance. */
+export function findKeys(text: string, max = 20): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\b[A-Z][A-Z0-9_]*-\d+\b/g)) {
+    if (!out.includes(m[0])) out.push(m[0]);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +118,23 @@ export type SpawnFn = (
   opts: { cwd?: string; env?: Record<string, string> },
 ) => SpawnedProcess;
 
+/** The user's login shell for command-line watchers: $SHELL when it is absolute, else zsh/sh. */
+export function loginShell(env: Record<string, string | undefined> = process.env): string {
+  const shell = env.SHELL;
+  if (shell && shell.startsWith("/")) return shell;
+  return process.platform === "darwin" ? "/bin/zsh" : "/bin/sh";
+}
+
+/**
+ * What to spawn for a watcher. No args: `command` is a shell command line, run as
+ * `<shell> -lc <command>` so PATH, pipes and loops behave as in the user's terminal. With args:
+ * a legacy watcher, spawned directly as `command args…` without a shell, exactly as before.
+ */
+export function watcherArgv(w: Pick<Watcher, "command" | "args">, shell: string): [string, string[]] {
+  if (w.args?.length) return [w.command, w.args];
+  return [shell, ["-lc", w.command]];
+}
+
 export const bunSpawn: SpawnFn = (cmd, args, opts) => {
   const proc = Bun.spawn([cmd, ...args], {
     cwd: opts.cwd,
@@ -133,9 +152,9 @@ export const bunSpawn: SpawnFn = (cmd, args, opts) => {
 };
 
 export interface WatcherTiming {
-  /** Flush a batch when no new line arrived for this long (default 200ms) */
+  /** Loop mode: end an output burst when nothing new arrived for this long (default 200ms) */
   batchIdleMs: number;
-  /** Flush a batch at the latest this long after its first item (default 1000ms) */
+  /** Loop mode: end an output burst at the latest this long after it started (default 1000ms) */
   batchMaxMs: number;
   /** Loop mode: delay before re-running after exit 0/4 (default 1000ms) */
   restartDelayMs: number;
@@ -180,6 +199,7 @@ function signatureOf(w: Watcher): string {
   const env = Object.keys(w.env ?? {})
     .sort()
     .map((k) => [k, w.env[k]]);
+  // The prompt is read at delivery time, so editing it doesn't restart the process.
   return JSON.stringify([w.command, w.args, w.cwd, env, w.mode, w.mode === "interval" ? w.intervalSec : null]);
 }
 
@@ -195,17 +215,24 @@ function errorMessage(err: unknown): string {
 }
 
 export interface WatcherRunnerOptions {
-  onItems: (watcher: Watcher, items: WorkItem[]) => void | Promise<void>;
+  /** Called once per chunk of output, in order, with the latest watcher object */
+  onOutput: (watcher: Watcher, output: WatcherOutput) => void | Promise<void>;
   onStatus: (watcherId: string, patch: { lastRunAt?: number; lastError?: string | null }) => void;
   spawn?: SpawnFn;
   timing?: Partial<WatcherTiming>;
+  /** Shell for command-line watchers (default loginShell()) */
+  shell?: string;
+  /** Cap on one chunk of output (default MAX_OUTPUT_CHARS) */
+  maxOutputChars?: number;
 }
 
 export class WatcherRunner {
-  private readonly onItems: WatcherRunnerOptions["onItems"];
+  private readonly onOutput: WatcherRunnerOptions["onOutput"];
   private readonly onStatus: WatcherRunnerOptions["onStatus"];
   private readonly spawn: SpawnFn;
   private readonly timing: WatcherTiming;
+  private readonly shell: string;
+  private readonly maxOutputChars: number;
   /** Supervised (enabled) watchers */
   private readonly entries = new Map<string, Entry>();
   /** Every watcher seen by the last sync, so runNow works for disabled ones too */
@@ -215,10 +242,12 @@ export class WatcherRunner {
   private readonly stopping = new Set<Promise<void>>();
 
   constructor(opts: WatcherRunnerOptions) {
-    this.onItems = opts.onItems;
+    this.onOutput = opts.onOutput;
     this.onStatus = opts.onStatus;
     this.spawn = opts.spawn ?? bunSpawn;
     this.timing = { ...DEFAULT_TIMING, ...(opts.timing ?? {}) };
+    this.shell = opts.shell ?? loginShell();
+    this.maxOutputChars = opts.maxOutputChars ?? MAX_OUTPUT_CHARS;
   }
 
   /** Reconcile running processes with the given watcher list. */
@@ -381,8 +410,9 @@ export class WatcherRunner {
     this.onStatus(w.id, { lastRunAt: Date.now() });
 
     let proc: SpawnedProcess;
+    const [cmd, args] = watcherArgv(w, this.shell);
     try {
-      proc = this.spawn(w.command, w.args ?? [], { cwd: expandHome(w.cwd), env: w.env ?? {} });
+      proc = this.spawn(cmd, args, { cwd: expandHome(w.cwd), env: w.env ?? {} });
     } catch (err) {
       this.onStatus(w.id, { lastError: `Failed to start ${w.command}: ${errorMessage(err)}` });
       return false;
@@ -393,43 +423,35 @@ export class WatcherRunner {
 
     let deliveryError: string | null = null;
     let delivery: Promise<void> = Promise.resolve();
-    const deliver = (items: WorkItem[]) => {
+    const deliver = (output: WatcherOutput) => {
       delivery = delivery.then(async () => {
         try {
-          await this.onItems(entry.watcher, items);
+          await this.onOutput(entry.watcher, output);
         } catch (err) {
-          deliveryError = `Failed to handle items: ${errorMessage(err)}`;
+          deliveryError = `Failed to handle output: ${errorMessage(err)}`;
           this.onStatus(w.id, { lastError: deliveryError });
         }
       });
     };
 
-    const batcher = new Batcher(deliver, this.timing.batchIdleMs, this.timing.batchMaxMs);
+    // Interval runs are one chunk each; loop runs split into bursts.
+    const chunker =
+      w.mode === "interval"
+        ? new Chunker(deliver, this.maxOutputChars, null)
+        : new Chunker(deliver, this.maxOutputChars, { idleMs: this.timing.batchIdleMs, maxMs: this.timing.batchMaxMs });
     let stderrTail = "";
     const readStderr = proc.stderr
       ? readText(proc.stderr, (chunk) => {
           stderrTail = (stderrTail + chunk).slice(-STDERR_TAIL);
         })
       : Promise.resolve();
-
-    let buffer = "";
-    const readStdout = readText(proc.stdout, (chunk) => {
-      buffer += chunk;
-      let nl: number;
-      while ((nl = buffer.indexOf("\n")) >= 0) {
-        const item = parseWorkItem(buffer.slice(0, nl));
-        buffer = buffer.slice(nl + 1);
-        if (item) batcher.push(item);
-      }
-    });
+    const readStdout = readText(proc.stdout, (chunk) => chunker.push(chunk));
 
     let code: number;
     try {
       [code] = await Promise.all([proc.exited, readStdout, readStderr]);
     } finally {
-      const tail = parseWorkItem(buffer);
-      if (tail) batcher.push(tail);
-      batcher.flush();
+      chunker.flush(true);
       entry.proc = null;
       await delivery;
     }
@@ -440,7 +462,9 @@ export class WatcherRunner {
       return true;
     }
     const detail = stderrTail.trim();
-    this.onStatus(w.id, { lastError: `${w.command} exited with code ${code}${detail ? `: ${detail}` : ""}` });
+    // A command line can be a whole loop, so shell watchers don't repeat it in the error.
+    const label = w.args?.length ? w.command : "Command";
+    this.onStatus(w.id, { lastError: `${label} exited with code ${code}${detail ? `: ${detail}` : ""}` });
     return false;
   }
 }
@@ -464,33 +488,65 @@ async function readText(stream: ReadableStream<Uint8Array>, onChunk: (text: stri
   }
 }
 
-/** Groups items that arrive close together; flushes on idle, on max age, or explicitly. */
-class Batcher {
-  private items: WorkItem[] = [];
+/**
+ * Collects stdout text into chunks. Untimed (interval mode): one chunk, flushed at exit. Timed
+ * (loop mode): a chunk ends when output goes quiet for idleMs, which delivers everything (a
+ * response without a trailing newline is still finished), or when it is maxMs old while output
+ * is still streaming, which stops at the last complete line and keeps the partial line for the
+ * next chunk. Text past `limit` is dropped and the chunk marked truncated.
+ */
+class Chunker {
+  private text = "";
+  private truncated = false;
   private firstAt = 0;
   private timer: Timer | null = null;
 
   constructor(
-    private readonly deliver: (items: WorkItem[]) => void,
-    private readonly idleMs: number,
-    private readonly maxMs: number,
+    private readonly deliver: (output: WatcherOutput) => void,
+    private readonly limit: number,
+    private readonly timed: { idleMs: number; maxMs: number } | null,
   ) {}
 
-  push(item: WorkItem): void {
-    if (this.items.length === 0) this.firstAt = Date.now();
-    this.items.push(item);
+  push(chunk: string): void {
+    if (!chunk) return;
+    if (this.text === "" && !this.truncated) this.firstAt = Date.now();
+    const room = this.limit - this.text.length;
+    if (chunk.length > room) {
+      this.text += chunk.slice(0, Math.max(0, room));
+      this.truncated = true;
+    } else {
+      this.text += chunk;
+    }
+    if (!this.timed) return;
     if (this.timer) clearTimeout(this.timer);
     const age = Date.now() - this.firstAt;
-    const wait = Math.max(0, Math.min(this.idleMs, this.maxMs - age));
-    this.timer = setTimeout(() => this.flush(), wait);
+    const untilMax = this.timed.maxMs - age;
+    // Whichever comes first: quiet for idleMs (the burst is over) or the max age (still streaming).
+    const idle = this.timed.idleMs <= untilMax;
+    this.timer = setTimeout(() => this.flush(idle), Math.max(0, idle ? this.timed.idleMs : untilMax));
   }
 
-  flush(): void {
+  /** Deliver what's collected. `all` false (a max-age flush) keeps a trailing partial line, unless truncated. */
+  flush(all: boolean): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    if (this.items.length === 0) return;
-    const batch = this.items;
-    this.items = [];
-    this.deliver(batch);
+    let take = this.text;
+    let rest = "";
+    if (!all && !this.truncated) {
+      const nl = this.text.lastIndexOf("\n");
+      if (nl >= 0) {
+        take = this.text.slice(0, nl + 1);
+        rest = this.text.slice(nl + 1);
+      }
+    }
+    const output = toOutput(take, this.limit, this.truncated);
+    this.text = rest;
+    this.truncated = false;
+    if (rest) {
+      this.firstAt = Date.now();
+      // Nothing more within idleMs means the partial line was the end of the output.
+      if (this.timed) this.timer = setTimeout(() => this.flush(true), this.timed.idleMs);
+    }
+    if (output) this.deliver(output);
   }
 }

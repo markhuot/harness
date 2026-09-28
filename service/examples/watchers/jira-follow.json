@@ -1,7 +1,8 @@
 {
   "name": "jira-sprint",
-  "command": "/bin/zsh",
-  "args": ["-lc", "exec watch-jira --project=PLAYR,MEDL,RFAWC,CEPFR --assigned=@me --open-sprints --follow --interval=300"],
+  "command": "watch-jira --project=PLAYR,MEDL,RFAWC,CEPFR --assigned=@me --open-sprints --follow --interval=300",
+  "args": [],
+  "prompt": "These are Jira tickets assigned to me. Dispatch each one that is well scoped to the project its key maps to; decline the rest and say what is missing.",
   "cwd": null,
   "env": {},
   "mode": "loop",

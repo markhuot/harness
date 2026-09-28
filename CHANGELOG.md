@@ -26,9 +26,23 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   (for example, a read-only agent messaging or editing a ticket that runs in auto). It can still
   tighten that ticket's mode. Only a ticket still in
   Planning can be moved straight to Done.
+- Watchers now take any command that prints text, plus a prompt that tells triage what you
+  want done with the output (for example, "If this event is assigned to me and has actionable
+  next steps, dispatch it to an agent"). The command runs in your login shell, so pipes, your
+  PATH, and loops like `while true; do curl -s …; sleep 60; done` all work. Output doesn't
+  need a particular format anymore.
+- Whatever a watcher prints shows up in the Inbox. In interval mode each run becomes one item,
+  and in loop mode each burst of output does. Blank output is skipped, output the watcher
+  already printed isn't triaged twice, and output over 16,000 characters is cut off with a
+  note. Each item is titled with its first line until triage gives it a better title.
+- When one piece of output covers several tickets (like a batch of Jira issues), triage can
+  dispatch each of them. When the output is about a ticket you already have, the update goes
+  to that ticket as a message.
 
 ### Fixed
 
+- On iPhone, opening a watcher's edit screen from a link while the app was closed no longer
+  shows an empty form.
 - The Changes tab stays on a ticket after it's completed. Once the branch is merged and its
   worktree removed, the tab shows the diff as it was when the work was approved, including any
   changes that were never committed, along with the branch's commits. A "Saved" label in the
@@ -37,6 +51,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The watcher form on Mac and iPhone has a single Command field and a new Prompt field in
+  place of the separate command and arguments fields. Watchers you already have keep running
+  as they are. Saving one from the form turns its command and arguments into one command line,
+  which then runs in your login shell too, so your shell's startup files apply to it.
+- Mappings are now hints for triage. When a key in a watcher's output (like FOO-123) matches a
+  mapping, triage is pointed at that project, and it can still choose another one.
 - A blocked ticket no longer repeats the agent's question in a red box at the top of the ticket.
   The Blocked pill shows the status and the question is on the Summary tab. Failed runs and
   worktrees that couldn't be created now put their error on the Summary tab too, so every
