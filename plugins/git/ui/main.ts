@@ -7,6 +7,7 @@ import type { Ticket } from "@harness/shared";
 import type { ChangedFile, Changes, Commit } from "../git";
 import { readSidebarCollapsed, readStyle, saveSidebarCollapsed, saveStyle, type DiffStyle } from "./prefs";
 import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "./theme";
+import { fingerprint, hash, isCollapsed, prune, readViewed, sameMarks, saveViewed, type Viewed } from "./viewed";
 
 interface Log {
   mode: Changes["mode"];
@@ -28,6 +29,7 @@ const ICONS = {
   branch: "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
   refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   chevron: "M6 9l6 6 6-6",
+  disclosure: "M9 6l6 6-6 6",
   sidebar: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 4v16",
   commit: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1.05 12H8M16 12h6.95",
   alert: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
@@ -53,6 +55,21 @@ function relTime(ms: number) {
   const hr = Math.round(m / 60);
   if (hr < 24) return `${hr}h ago`;
   return `${Math.round(hr / 24)}d ago`;
+}
+
+/** A changed file's tree-row decoration: its line counts, or what kind of change it is when there are none. */
+function fileDecoration(f: ChangedFile): { text: string; title: string; parts?: { text: string; color?: string }[] } | null {
+  if (f.binary) return { text: "bin", title: "Binary file" };
+  if (f.status === "renamed" && !f.additions && !f.deletions) return f.oldPath ? { text: "moved", title: `Renamed from ${f.oldPath}` } : null;
+  return {
+    text: `+${f.additions} −${f.deletions}`,
+    title: `${f.additions} additions, ${f.deletions} deletions`,
+    parts: [
+      { text: `+${f.additions}`, color: "var(--add)" },
+      { text: " " },
+      { text: `−${f.deletions}`, color: "var(--del)" },
+    ],
+  };
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -84,12 +101,25 @@ class ChangesView {
   private themeSeq = 0;
   private treeVars: string[] = [];
   private diffsById = new Map<string, FileDiffMetadata>();
+  /** Items as last given to the viewer, keyed by id; an item is only replaced (with a bumped version) when its diff or collapse changes. */
+  private items = new Map<string, { item: CodeViewDiffItem; fp: string }>();
+  private itemVersion = 0;
+  /** Fingerprint of each parsed file's current diff, by path */
+  private fps = new Map<string, string>();
+  /** Files marked viewed (path → fingerprint of the diff that was viewed), persisted per ticket */
+  private viewed: Viewed;
+  /** This session's disclosure-arrow toggles, for the version of the diff they were made on */
+  private toggles = new Map<string, { fp: string; collapsed: boolean }>();
+  /** Header controls per path, reused across header renders so they keep focus */
+  private headerControls = new Map<string, { arrow: HTMLButtonElement; label: HTMLLabelElement; box: HTMLInputElement }>();
+  private refocus: HTMLElement | null = null;
 
   constructor(
     private root: HTMLElement,
     private host: HarnessPlugin,
   ) {
     this.themeName = PIERRE_DEFAULT[host.theme];
+    this.viewed = readViewed(host.ticketKey);
     const saved = readStyle();
     this.styleChosen = !!saved;
     this.diffStyle = saved ?? (innerWidth >= 1000 ? "split" : "unified");
@@ -227,6 +257,8 @@ class ChangesView {
             : "The working tree is clean. Changes appear here as the agent edits files.";
       this.showState("check", c.mode === "pinned" ? "No changes" : "No changes yet", detail);
       this.lastPatchKey = "";
+      this.items.clear();
+      this.fps.clear();
       this.viewer?.setItems([]);
       this.tree?.resetPaths([]);
       return;
@@ -279,7 +311,17 @@ class ChangesView {
       c?.mode === "branch" || c?.mode === "pinned"
         ? h("button", { class: `chip ${this.showCommits ? "on" : ""}`, title: "Show commits", "data-action": "commits", ...(commits.length ? {} : { disabled: "" }) }, icon("commit", 13), plural(commits.length, "commit"), commits.length ? icon("chevron", 12) : null)
         : null;
-    const stat = c && c.files.length ? h("span", { class: "stat" }, h("span", { class: "add" }, `+${c.additions}`), h("span", { class: "del" }, `−${c.deletions}`), h("span", { class: "muted" }, `across ${plural(c.files.length, "file")}`)) : null;
+    const stat =
+      c && c.files.length
+        ? h(
+            "span",
+            { class: "stat" },
+            h("span", { class: "add" }, `+${c.additions}`),
+            h("span", { class: "del" }, `−${c.deletions}`),
+            h("span", { class: "muted" }, `across ${plural(c.files.length, "file")}`),
+            this.fps.size ? h("span", { class: "viewed-count", title: "Files marked viewed" }, `${this.viewedCount()} / ${this.fps.size} viewed`) : null,
+          )
+        : null;
     const filesShown = this.narrow ? this.showFiles : !this.filesCollapsed;
     const filesBtn = h(
       "button",
@@ -350,17 +392,11 @@ class ChangesView {
         renderRowDecoration: ({ item }) => {
           const f = stats.get(item.path);
           if (!f || item.kind !== "file") return null;
-          if (f.binary) return { text: "bin", title: "Binary file" };
-          if (f.status === "renamed" && !f.additions && !f.deletions) return f.oldPath ? { text: "moved", title: `Renamed from ${f.oldPath}` } : null;
-          return {
-            text: `+${f.additions} −${f.deletions}`,
-            title: `${f.additions} additions, ${f.deletions} deletions`,
-            parts: [
-              { text: `+${f.additions}`, color: "var(--add)" },
-              { text: " " },
-              { text: `−${f.deletions}`, color: "var(--del)" },
-            ],
-          };
+          const base = fileDecoration(f);
+          if (!this.isViewed(item.path)) return base;
+          const check = { text: "✓", color: "var(--accent)" };
+          if (!base) return { text: "✓", title: "Viewed", parts: [check] };
+          return { text: `✓ ${base.text}`, title: `Viewed · ${base.title}`, parts: [check, { text: " " }, ...(base.parts ?? [{ text: base.text }])] };
         },
         onSelectionChange: (selected) => {
           const path = selected[0];
@@ -384,6 +420,7 @@ class ChangesView {
       if (paths.length !== current.size || paths.some((p) => !current.has(p))) this.tree.resetPaths(paths);
       this.tree.setGitStatus(git);
     }
+
     this.lastPaths = paths;
   }
   private treeStats = new Map<string, ChangedFile>();
@@ -400,6 +437,8 @@ class ChangesView {
       overflow: "scroll",
       layout: { paddingTop: 12, paddingBottom: 24, gap: 12 },
       loadDiffFiles: (d: FileDiffMetadata) => this.loadFiles(d),
+      renderHeaderPrefix: (d: { name: string }) => this.headerControl(d.name, "arrow"),
+      renderHeaderMetadata: (d: { name: string }) => this.headerControl(d.name, "label"),
     } as const;
   }
 
@@ -422,23 +461,129 @@ class ChangesView {
     this.lastPatchKey = patchKey;
     const parsed = parsePatchFiles(c.patch, `p${patchKey}`).flatMap((p) => p.files);
     this.diffsById.clear();
-    const items: CodeViewDiffItem[] = parsed.map((fileDiff) => {
+    this.fps = new Map(parsed.map((d) => [d.name, fingerprint(d)]));
+    const viewed = prune(this.viewed, this.fps, new Set(c.files.map((f) => f.path)));
+    if (!sameMarks(viewed, this.viewed)) saveViewed(this.host.ticketKey, (this.viewed = viewed));
+    for (const [path, t] of this.toggles) if (this.fps.get(path) !== t.fp) this.toggles.delete(path);
+    const prev = this.items;
+    this.items = new Map();
+    const items = parsed.map((fileDiff) => {
       const id = itemId(fileDiff.name);
       this.diffsById.set(id, fileDiff);
-      return { id, type: "diff", fileDiff };
+      const fp = this.fps.get(fileDiff.name)!;
+      const collapsed = this.collapsed(fileDiff.name);
+      // Keep the previous item (same version) for a file whose diff didn't change, so the viewer doesn't
+      // redraw it; a changed diff or collapse gets a new version, which the viewer requires to update it.
+      const old = prev.get(id);
+      const item: CodeViewDiffItem = old && old.fp === fp && !!old.item.collapsed === collapsed ? old.item : { id, type: "diff", fileDiff, collapsed, version: ++this.itemVersion };
+      this.items.set(id, { item, fp });
+      return item;
     });
+    for (const path of this.headerControls.keys()) if (!this.fps.has(path)) this.headerControls.delete(path);
     if (!this.viewer) {
       this.viewer = new CodeView(this.viewerOptions());
       this.viewer.setup($(".diffs", this.root));
     }
     this.viewer.setItems(items);
+    this.renderBar(); // the viewed count
+    this.redrawTree(); // the rows' viewed checks, now that fingerprints are known
   }
-}
 
-function hash(s: string) {
-  let x = 2166136261;
-  for (let i = 0; i < s.length; i++) x = Math.imul(x ^ s.charCodeAt(i), 16777619);
-  return (x >>> 0).toString(36);
+  /** Re-run the tree's row decorations. The tree has no call for that, but setting its (unused) composition re-renders it. */
+  private redrawTree() {
+    this.tree?.setComposition(undefined);
+  }
+
+  // --- viewed -----------------------------------------------------------------------------
+
+  private isViewed(path: string) {
+    const fp = this.fps.get(path);
+    return fp !== undefined && this.viewed.get(path) === fp;
+  }
+
+  private collapsed(path: string) {
+    const fp = this.fps.get(path);
+    return fp !== undefined && isCollapsed(this.isViewed(path), this.toggles.get(path), fp);
+  }
+
+  private viewedCount() {
+    let n = 0;
+    for (const path of this.fps.keys()) if (this.isViewed(path)) n++;
+    return n;
+  }
+
+  private setViewed(path: string, on: boolean) {
+    const fp = this.fps.get(path);
+    if (fp === undefined) return;
+    this.viewed.delete(path); // re-adding moves it to the end, which is what storage keeps when capped
+    if (on) this.viewed.set(path, fp);
+    this.toggles.delete(path); // viewing collapses, unviewing expands
+    saveViewed(this.host.ticketKey, this.viewed);
+    this.syncCollapse(path);
+    this.renderBar();
+    this.redrawTree();
+  }
+
+  private toggleCollapsed(path: string) {
+    const fp = this.fps.get(path);
+    if (fp === undefined) return;
+    this.toggles.set(path, { fp, collapsed: !this.collapsed(path) });
+    this.syncCollapse(path);
+  }
+
+  /** Push a file's collapse state to the viewer, keeping its header on screen when it collapses. */
+  private syncCollapse(path: string) {
+    const id = itemId(path);
+    const old = this.items.get(id);
+    const collapsed = this.collapsed(path);
+    if (!old || !this.viewer || !!old.item.collapsed === collapsed) {
+      this.updateHeaderControls(path);
+      return;
+    }
+    const item = { ...old.item, collapsed, version: ++this.itemVersion };
+    this.items.set(id, { item, fp: old.fp });
+    this.refocus = document.activeElement instanceof HTMLElement && document.activeElement.closest("[slot]") ? document.activeElement : null;
+    const scroller = $(".diffs", this.root);
+    const top = this.viewer.getTopForItem(id);
+    this.viewer.updateItem(item);
+    // Collapsing from partway down a long file would otherwise leave the viewport on the files below.
+    if (collapsed && top !== undefined && top < scroller.scrollTop) this.viewer.scrollTo({ type: "item", id, align: "start", behavior: "instant" });
+  }
+
+  /** The header's disclosure arrow (prefix slot) or Viewed checkbox (metadata slot) for a file. */
+  private headerControl(path: string, part: "arrow" | "label") {
+    let ctl = this.headerControls.get(path);
+    if (!ctl) {
+      const arrow = h("button", { class: "disclosure", type: "button", "data-path": path }, icon("disclosure", 12));
+      arrow.addEventListener("click", () => this.toggleCollapsed(path));
+      const box = h("input", { type: "checkbox" });
+      box.addEventListener("change", () => this.setViewed(path, box.checked));
+      const label = h("label", { class: "viewed", title: "Mark this file as viewed to collapse it", "data-path": path }, box, "Viewed");
+      ctl = { arrow, label, box };
+      this.headerControls.set(path, ctl);
+    }
+    this.updateHeaderControls(path);
+    const el = ctl[part];
+    // Rendering the header moves the control, which drops focus; put it back for keyboard users.
+    if (this.refocus && el.contains(this.refocus)) {
+      const f = this.refocus;
+      this.refocus = null;
+      queueMicrotask(() => f.focus({ preventScroll: true }));
+    }
+    return el;
+  }
+
+  private updateHeaderControls(path: string) {
+    const ctl = this.headerControls.get(path);
+    if (!ctl) return;
+    const collapsed = this.collapsed(path);
+    const viewed = this.isViewed(path);
+    ctl.arrow.setAttribute("aria-expanded", String(!collapsed));
+    ctl.arrow.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} ${path}`);
+    ctl.arrow.title = collapsed ? "Show diff" : "Hide diff";
+    ctl.box.checked = viewed;
+    ctl.label.classList.toggle("on", viewed);
+  }
 }
 
 async function main() {
