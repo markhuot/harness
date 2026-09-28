@@ -1,8 +1,10 @@
 // The board: five columns as horizontally paged lists with a status bar (counts) on top, the
-// project filter in the header (sidebar equivalent in /projects), server-side search in the native
-// search bar, "Show child tickets" in the header menu (off by default), pull to refresh.
+// project filter in the header (sidebar equivalent in /projects), "Show child tickets" in the header
+// menu (off by default), pull to refresh.
 // Done is paged: it scrolls into older pages (onEndReached, footer spinner) and its count is the
-// server's total. Search results page the same way, across every column.
+// server's total.
+// The Search tab is this same board with server-side search in the native search bar; results page
+// the same way, across every column. The Board tab never shows search results.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
@@ -18,7 +20,7 @@ import { ConnectionBanner } from "./ConnectionBanner";
 import { haptic } from "../ui/haptics";
 import { action, buttonItem, primaryItemStyle, menuItem } from "../ui/header";
 
-export function BoardScreen() {
+export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
   const { state, client, dispatch, refresh, loader, setBoardScope } = useStore();
   const { prefs, setPref } = useApp();
   const act = useAction();
@@ -45,9 +47,12 @@ export function BoardScreen() {
   useEffect(() => setBoardScope(projectId), [projectId, setBoardScope]);
   useEffect(() => void loader.ensureFirstPage(projectId), [loader, projectId, state.ready, state.donePaging]);
   // Every keystroke: local matches at once, the server's after a pause (see BoardLoader).
-  useEffect(() => loader.setQuery(query, projectId), [loader, query, projectId]);
+  const searchTab = mode === "search";
+  useEffect(() => {
+    if (searchTab) loader.setQuery(query, projectId);
+  }, [searchTab, loader, query, projectId]);
 
-  const search = state.search;
+  const search = searchTab ? state.search : null;
   const searching = search !== null;
   const board = useMemo(() => boardColumns(state, projectId), [state.tickets, state.donePaging, state.keyAliases, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = useMemo(() => searchColumns(state, projectId), [state.tickets, state.search, state.keyAliases, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -136,19 +141,24 @@ export function BoardScreen() {
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen
         options={{
-          title: project ? project.name : "All projects",
+          title: searchTab ? "Search" : project ? project.name : "All projects",
           headerTransparent: false,
           headerStyle: { backgroundColor: c.bg },
           headerShadowVisible: false,
-          headerSearchBarOptions: {
-            placeholder: "Search tickets",
-            onChangeText: (e) => setQuery(e.nativeEvent.text),
-            onCancelButtonPress: () => setQuery(""),
-            hideWhenScrolling: false,
-            autoCapitalize: "none",
-          },
-          unstable_headerLeftItems: () => [buttonItem("Projects", "sidebar.left", () => router.push("/projects"))],
-          unstable_headerRightItems: () => [
+          // "automatic" lets UIKit move the field into the tab bar once the Search tab is a UISearchTab.
+          headerSearchBarOptions: searchTab
+            ? {
+                placeholder: project ? `Search ${project.name}` : "Search tickets",
+                placement: "automatic",
+                onChangeText: (e) => setQuery(e.nativeEvent.text),
+                onCancelButtonPress: () => setQuery(""),
+                hideWhenScrolling: false,
+                autoCapitalize: "none",
+              }
+            : undefined,
+          unstable_headerLeftItems: () => [buttonItem("Projects", "sidebar.left", () => router.push({ pathname: "/projects", params: searchTab ? { from: "search" } : {} }))],
+          // The Search tab keeps the project scope and leaves board chores to the Board tab.
+          unstable_headerRightItems: () => searchTab ? [] : [
             menuItem("Board options", "ellipsis", [
               action("Show child tickets", "arrow.turn.down.right", () => setPref("hideChildren", !hideChildren), { state: hideChildren ? "off" : "on" }),
               ...(project ? [action("Project settings", "gearshape", () => router.push({ pathname: "/project/[id]", params: { id: project.id } }))] : []),
@@ -215,7 +225,7 @@ export function BoardScreen() {
               renderItem={({ item }) => <TicketCard ticket={item} state={state} showProject={!projectId} onMove={move} onOpenKey={openKey} />}
               ListEmptyComponent={
                 <View style={[styles.emptyCol, { borderColor: c.borderStrong }]}>
-                  {total === 0 && status === "planning" && !searching ? (
+                  {total === 0 && status === "planning" && !searchTab ? (
                     <Empty icon="plus" title="No sessions yet">
                       Start one with + in the top right.
                     </Empty>
