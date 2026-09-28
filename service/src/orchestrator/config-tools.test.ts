@@ -336,4 +336,40 @@ describe("config tools behind human approval", () => {
     expect(h.orch.listWatchers()[0]!.lastError).toBeNull();
     await h.orch.stop();
   });
+
+  // HARNESS-22 adds watcher.prompt (validation, storage, migration). Until it lands the orchestrator
+  // drops the field, so this runs only once storage keeps it.
+  const storesPrompt = (() => {
+    const probe = makeOrchestrator();
+    const w = probe.orch.createWatcher({ name: "probe", command: "/bin/echo", prompt: "p" } as Parameters<typeof probe.orch.createWatcher>[0]);
+    return (w as { prompt?: string }).prompt === "p";
+  })();
+
+  test.if(storesPrompt)("prompt round-trips through storage and list_watchers", async () => {
+    const out: string[] = [];
+    let next = 0;
+    const h = scripted(async (req) => {
+      if (req.kind !== "work") return;
+      const calls = [
+        ["create_watcher", { name: "status", command: "curl -s https://status.test/api", prompt: "  Dispatch outages to PROJ.  " }],
+        ["update_watcher", { watcher: "status", prompt: "Only major outages." }],
+        ["list_watchers", {}],
+      ] as const;
+      for (; next < calls.length; next++) {
+        const r = await executeTool(req.tools, calls[next]![0], calls[next]![1], req.toolContext);
+        out.push(text(r));
+        if (r.isError) return;
+      }
+    });
+    const prompt = () => (h.orch.listWatchers()[0] as { prompt?: string }).prompt;
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    await h.orch.idle();
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(prompt()).toBe("Dispatch outages to PROJ.");
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(prompt()).toBe("Only major outages.");
+    expect(JSON.parse(out.at(-1)!)[0]).toMatchObject({ prompt: "Only major outages.", command_line: "curl -s https://status.test/api" });
+  });
 });

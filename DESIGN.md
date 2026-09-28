@@ -172,13 +172,13 @@ Harness tools (always exposed, via MCP for claude-code):
 | `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
-| `list_mappings` | all | `{}` |
+| `list_mappings` | all | `{}` (triage routing hints) |
 | `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
 | `list_drivers` | all | `{}` → drivers with their models |
-| `create_watcher` | work, conductor (gated) | `{ name, command, args?, cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
+| `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_mapping` | ″ | `{ pattern, project_key, notes? }` |
+| `create_mapping` | ″ | `{ pattern, project_key, notes? }` (a routing hint for triage) |
 | `delete_mapping` | ″ | `{ id }` |
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
@@ -196,12 +196,15 @@ Harness tools (always exposed, via MCP for claude-code):
 ### Config tools
 
 The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
-screens, so a ticket like "add a watcher that runs watch-jira --project=FOO --follow for project
-X" can be done end to end. There's no built-in watcher: the agent wires up a tool the user already
-has. `create_watcher`'s description teaches the contract above (NDJSON `key`/`summary`/`url`/
-`updated`, loop vs interval, exit codes 0/4, the key prefix a mapping needs) and to run the tool
-through a login shell (`/bin/zsh -lc "exec <tool> …"`) so the user's PATH resolves, with the
-`service/examples/watchers/jira-*.json` shapes as its examples.
+screens, so a ticket like "add a watcher that runs watch-jira --project=FOO --follow and dispatches
+anything assigned to me to project X" can be done end to end. Watchers are generic, so the tool
+descriptions don't teach an output format. `command` is any shell command line whose stdout text
+goes to the Inbox, `prompt` is the user's instructions to the triage agent for that output, and
+`mode` is `loop` (long-running or self-looping, like `while true; do curl …; sleep 60; done`) or
+`interval`. The tools pass `prompt` straight through to `Orchestrator.createWatcher` /
+`updateWatcher`, which own its validation and storage. `create_mapping` / `delete_mapping`
+describe mappings as optional routing hints for triage. Approval cards show a shell command line
+as typed (`commandLine` in `shared/src/commandLine.ts`) and quote legacy `command` + `args`.
 
 Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
 `tools/util.ts`), because a watcher's command runs as the user outside any ticket sandbox and
@@ -212,8 +215,8 @@ gated call:
    the HTTP API), so a bad call is a tool error and never reaches a human;
 2. calls `requestApproval` with `{ summary, reason, source: "policy", onceOnly: true }` whatever
    the ticket's permission mode. Read-only tickets are denied outright; otherwise the ticket
-   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "jira-sprint" (loop): /bin/zsh
-   -lc 'exec watch-jira …'`) is the card's subtitle and blocked reason;
+   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "jira-sprint" (loop):
+   watch-jira --project=PLAYR --follow`) is the card's subtitle and blocked reason;
 3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
    grant and runs the op.
 

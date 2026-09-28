@@ -74,6 +74,13 @@ test("approval input: Write/Edit show file_path, WebFetch shows the url as plain
 });
 
 test("approval input: config tools show the watcher command line and what they act on", () => {
+  // a shell command line (no args) is shown as typed, not quoted as one word
+  expect(describeApprovalInput("create_watcher", { name: "status", command: "while true; do curl -s https://x.test; sleep 60; done", prompt: "Dispatch outages." })).toEqual({
+    primary: { label: "Command", value: "while true; do curl -s https://x.test; sleep 60; done", code: true },
+    description: null,
+    rest: { name: "status", prompt: "Dispatch outages." },
+  });
+  // legacy command + args are quoted as the argv they are
   expect(describeApprovalInput("create_watcher", { name: "jira", command: "/bin/zsh", args: ["-lc", "exec watch-jira --project=FOO --follow"], mode: "loop" })).toEqual({
     primary: { label: "Command", value: "/bin/zsh -lc 'exec watch-jira --project=FOO --follow'", code: true },
     description: null,
