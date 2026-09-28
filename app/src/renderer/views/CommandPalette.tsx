@@ -19,18 +19,7 @@ import { openTicket } from "../state/panes";
 import { paneScopeOf } from "../state/route";
 import { parsePaletteQuery, pushRecent, rankCommands, readRecents, recentRanks, type MatchRange, type PaletteItem } from "../state/palette";
 import { StatusDot, STATUS_LABEL } from "../components/bits";
-
-// Settings.tsx's sections (its list isn't exported).
-const SETTINGS_SECTIONS = [
-  ["appearance", "Appearance"],
-  ["drivers", "Drivers"],
-  ["general", "General"],
-  ["models", "Models"],
-  ["permissions", "Permissions"],
-  ["network", "Network"],
-  ["watchers", "Watchers"],
-  ["projects", "Projects"],
-] as const;
+import { SETTINGS_SECTIONS } from "./Settings";
 
 const SEARCH_DEBOUNCE_MS = 150;
 const SEARCH_LIMIT = 20;
