@@ -41,10 +41,10 @@ import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT } fro
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
-import type { HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
+import type { ApprovalMeta, HarnessOps, ProjectView, ToolContext, ToolDefinition } from "../tools/types";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
-import { toolsForRun } from "../tools/index";
+import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
 import * as prompts from "./prompts";
 import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
@@ -130,6 +130,8 @@ interface TriageMeta {
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+/** Run kinds that get the (human-gated) config tools */
+const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -371,6 +373,16 @@ export class Orchestrator {
   }
 
   createProject(body: CreateProjectBody): Project {
+    const { input, mode } = this.prepareProject(body);
+    const project = this.store.projects.create(input);
+    if (mode) this.store.projects.setPermissionMode(project.id, mode);
+    const created = this.store.projects.get(project.id)!;
+    this.bus.emit({ kind: "project.upserted", project: created });
+    return created;
+  }
+
+  /** Validate a CreateProjectBody without writing anything. */
+  private prepareProject(body: CreateProjectBody) {
     if (!body || typeof body.path !== "string" || !body.path.trim()) throw badRequest("path is required");
     const path = this.projectDir(body.path);
     if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
@@ -379,7 +391,7 @@ export class Orchestrator {
     if (key) {
       if (this.store.projects.getByKey(key)) throw conflict(`Project key ${key} is already used by another project`);
     }
-    const project = this.store.projects.create({
+    const input = {
       path,
       name: body.name?.trim() || basename(path),
       key,
@@ -389,12 +401,8 @@ export class Orchestrator {
       autoComplete: body.autoComplete,
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
-    });
-    const mode = validPermissionMode(body.permissionMode);
-    if (mode) this.store.projects.setPermissionMode(project.id, mode);
-    const created = this.store.projects.get(project.id)!;
-    this.bus.emit({ kind: "project.upserted", project: created });
-    return created;
+    };
+    return { input, mode: validPermissionMode(body.permissionMode) };
   }
 
   /** Resolve (and ~-expand) a project directory, which must exist. */
@@ -419,28 +427,7 @@ export class Orchestrator {
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
     const existing = this.store.projects.get(id);
     if (!existing) throw notFound(`Unknown project: ${id}`);
-    if (!body || typeof body !== "object") throw badRequest("body is required");
-    if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
-    if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) throw badRequest("name cannot be empty");
-    const path = body.path !== undefined ? this.projectDir(String(body.path)) : undefined;
-    let newKey: string | null = null;
-    if (body.key !== undefined) {
-      const key = this.validProjectKey(String(body.key));
-      if (key !== existing.key) {
-        const other = this.store.projects.getByKey(key);
-        if (other && other.id !== id) throw conflict(`Project key ${key} is already used by ${other.name}`);
-        const collisions = this.store.projects.rekeyConflicts(id, key);
-        if (collisions.length) {
-          const list = collisions.slice(0, 3).join(", ") + (collisions.length > 3 ? ` and ${collisions.length - 3} more` : "");
-          throw conflict(`Can't rename to ${key}: ${list} already exist${collisions.length === 1 ? "s" : ""}`);
-        }
-        newKey = key;
-      }
-    }
-    const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
-    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, ...rest } = body;
-    const defaultModels =
-      modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
+    const { newKey, permissionMode, rest, path, defaultModels } = this.prepareProjectUpdate(existing, body);
     const renamed = this.store.transaction(() => {
       this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, defaultModels });
       if (permissionMode !== undefined) this.store.projects.setPermissionMode(id, permissionMode);
@@ -467,6 +454,33 @@ export class Orchestrator {
       this.log(`project ${existing.key} → ${project.key}: renamed ${renamed.renames.size} ticket(s)`);
     }
     return project;
+  }
+
+  /** Validate a project PATCH without writing anything. */
+  private prepareProjectUpdate(existing: Project, body: Partial<CreateProjectBody>) {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
+    if (body.name !== undefined && (typeof body.name !== "string" || !body.name.trim())) throw badRequest("name cannot be empty");
+    const path = body.path !== undefined ? this.projectDir(String(body.path)) : undefined;
+    let newKey: string | null = null;
+    if (body.key !== undefined) {
+      const key = this.validProjectKey(String(body.key));
+      if (key !== existing.key) {
+        const other = this.store.projects.getByKey(key);
+        if (other && other.id !== existing.id) throw conflict(`Project key ${key} is already used by ${other.name}`);
+        const collisions = this.store.projects.rekeyConflicts(existing.id, key);
+        if (collisions.length) {
+          const list = collisions.slice(0, 3).join(", ") + (collisions.length > 3 ? ` and ${collisions.length - 3} more` : "");
+          throw conflict(`Can't rename to ${key}: ${list} already exist${collisions.length === 1 ? "s" : ""}`);
+        }
+        newKey = key;
+      }
+    }
+    const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
+    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, ...rest } = body;
+    const defaultModels =
+      modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
+    return { newKey, permissionMode, rest, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -769,7 +783,10 @@ export class Orchestrator {
     if (decision !== "allow_once" && decision !== "allow_tool" && decision !== "deny") {
       throw badRequest("decision must be allow_once, allow_tool or deny");
     }
-    const what = `${pa.toolName} (${summarizeToolInput(pa.input)})`;
+    if (decision === "allow_tool" && (pa.onceOnly || GATED_TOOL_NAMES.has(pa.toolName))) {
+      throw badRequest(`${pa.toolName} can only be allowed once: every call needs its own approval`);
+    }
+    const what = `${pa.toolName} (${pa.summary ?? summarizeToolInput(pa.input)})`;
     const note = typeof body.message === "string" ? body.message.trim().replace(/[.\s]+$/, "") : "";
     let prompt: string;
     let allowedTools = ticket.allowedTools;
@@ -965,6 +982,12 @@ export class Orchestrator {
   }
 
   createMapping(body: { pattern: string; projectId: string; notes?: string }): Mapping {
+    const m = this.store.mappings.create(this.validateMapping(body));
+    this.bus.emit({ kind: "mapping.upserted", mapping: m });
+    return m;
+  }
+
+  private validateMapping(body: { pattern: string; projectId: string; notes?: string }) {
     if (!body || typeof body.pattern !== "string" || !body.pattern.trim()) throw badRequest("pattern is required");
     const pattern = body.pattern.trim();
     const rx = /^\/(.+)\/([a-z]*)$/.exec(pattern);
@@ -976,9 +999,7 @@ export class Orchestrator {
       }
     }
     if (!this.store.projects.get(body.projectId)) throw badRequest(`Unknown project: ${body.projectId}`);
-    const m = this.store.mappings.create({ pattern, projectId: body.projectId, notes: body.notes });
-    this.bus.emit({ kind: "mapping.upserted", mapping: m });
-    return m;
+    return { pattern, projectId: body.projectId, notes: body.notes };
   }
 
   deleteMapping(id: string) {
@@ -1190,8 +1211,8 @@ export class Orchestrator {
     return this.completeTicket(child.key, { instructions });
   }
 
-  async listProjects_(_ctx: ToolContext) {
-    return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
+  async listProjects_(_ctx: ToolContext): Promise<ProjectView[]> {
+    return this.store.projects.list().map((p) => this.projectView(p));
   }
 
   private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
@@ -1230,11 +1251,187 @@ export class Orchestrator {
     return t;
   }
 
+  // =========================================================================
+  // Config tools (DESIGN.md "Config tools"). The tools gate every mutation behind a human
+  // approval; these check the run may make config changes at all and resolve agent-facing
+  // references (keys, names). dryRun validates only.
+  // =========================================================================
+
+  /** A run that may change configuration: work or conductor, acting for its ticket. */
+  private configWriter(ctx: ToolContext): Ticket {
+    if (!CONFIG_RUNS.includes(ctx.runKind) || !ctx.ticket) throw new Error(`Configuration can't be changed during a ${ctx.runKind} run.`);
+    return this.ctxTicket(ctx);
+  }
+
+  private projectView(p: Project): ProjectView {
+    return {
+      key: p.key,
+      name: p.name,
+      path: p.path,
+      defaultDriver: p.defaultDriver,
+      defaultModels: p.defaultModels,
+      useWorktrees: p.useWorktrees,
+      requireHumanReview: p.requireHumanReview,
+      autoComplete: p.autoComplete,
+      permissionMode: p.permissionMode,
+    };
+  }
+
+  private projectByKey(key: string): Project {
+    const p = this.store.projects.getByKey(String(key ?? "").trim().toUpperCase());
+    if (!p) throw new Error(`Unknown project: ${key}. Use list_projects for the keys.`);
+    return p;
+  }
+
+  private watcherByRef(ref: string): Watcher {
+    const byId = this.store.watchers.get(ref);
+    if (byId) return byId;
+    const named = this.store.watchers.list().filter((w) => w.name === ref);
+    if (named.length === 1) return named[0]!;
+    throw new Error(named.length ? `Several watchers are named "${ref}"; use its id (list_watchers).` : `Unknown watcher: ${ref}. Use list_watchers.`);
+  }
+
+  /** HTTP-style errors (badRequest…) become plain errors: the message is what the model sees. */
+  private asToolError<T>(fn: () => T): T {
+    try {
+      return fn();
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  async listWatchers_(_ctx: ToolContext): Promise<Watcher[]> {
+    return this.listWatchers();
+  }
+
+  async listMappings_(_ctx: ToolContext) {
+    return this.listMappings().map((m) => ({ ...m, projectKey: this.store.projects.get(m.projectId)?.key ?? null }));
+  }
+
+  async getSettings_(_ctx: ToolContext): Promise<PublicSettings> {
+    return this.publicSettings();
+  }
+
+  async listDrivers_(_ctx: ToolContext) {
+    const infos = await this.driverInfos();
+    return Promise.all(infos.map(async (info) => ({ ...info, models: await this.listModels(info.id) })));
+  }
+
+  async createWatcher_(ctx: ToolContext, input: WatcherInput & { name: string; command: string }, dryRun = false): Promise<Watcher | null> {
+    this.configWriter(ctx);
+    return this.asToolError(() => {
+      if (dryRun) return (this.validateWatcher(input, true), null);
+      const w = this.createWatcher(input);
+      this.log(`watcher "${w.name}" created by ${ctx.ticket!.key}`);
+      return w;
+    });
+  }
+
+  async updateWatcher_(ctx: ToolContext, ref: string, input: WatcherInput, dryRun = false): Promise<Watcher | null> {
+    this.configWriter(ctx);
+    const w = this.watcherByRef(ref);
+    const body: WatcherInput = { ...input };
+    if (input.env !== undefined) {
+      // Tools merge env (a model never sees the stored values): "" removes a variable.
+      const env = { ...w.env };
+      for (const [k, v] of Object.entries(input.env ?? {})) {
+        if (v === "" || v === null) delete env[k];
+        else env[k] = v;
+      }
+      body.env = env;
+    }
+    return this.asToolError(() => (dryRun ? (this.validateWatcher(body, false), null) : this.updateWatcher(w.id, body)));
+  }
+
+  async deleteWatcher_(ctx: ToolContext, ref: string, dryRun = false): Promise<Watcher> {
+    this.configWriter(ctx);
+    const w = this.watcherByRef(ref);
+    if (!dryRun) this.deleteWatcher(w.id);
+    return w;
+  }
+
+  async runWatcher_(ctx: ToolContext, ref: string, dryRun = false): Promise<Watcher> {
+    this.configWriter(ctx);
+    const w = this.watcherByRef(ref);
+    if (!this.watcherRunner) throw new Error("Watchers are disabled in this service.");
+    if (!dryRun) await this.runWatcher(w.id);
+    return w;
+  }
+
+  async createMapping_(ctx: ToolContext, input: { pattern: string; projectKey: string; notes?: string }, dryRun = false): Promise<Mapping | null> {
+    this.configWriter(ctx);
+    const body = { pattern: input.pattern, projectId: this.projectByKey(input.projectKey).id, notes: input.notes };
+    return this.asToolError(() => (dryRun ? (this.validateMapping(body), null) : this.createMapping(body)));
+  }
+
+  async deleteMapping_(ctx: ToolContext, id: string, dryRun = false): Promise<Mapping> {
+    this.configWriter(ctx);
+    const m = this.store.mappings.get(id);
+    if (!m) throw new Error(`Unknown mapping: ${id}. Use list_mappings.`);
+    if (!dryRun) this.deleteMapping(id);
+    return m;
+  }
+
+  async createProject_(ctx: ToolContext, input: CreateProjectBody, dryRun = false): Promise<ProjectView | null> {
+    this.configWriter(ctx);
+    return this.asToolError(() => (dryRun ? (this.prepareProject(input), null) : this.projectView(this.createProject(input))));
+  }
+
+  async updateProject_(ctx: ToolContext, key: string, input: Partial<CreateProjectBody>, dryRun = false): Promise<ProjectView | null> {
+    this.configWriter(ctx);
+    const p = this.projectByKey(key);
+    return this.asToolError(() => (dryRun ? (this.prepareProjectUpdate(p, input), null) : this.projectView(this.updateProject(p.id, input))));
+  }
+
+  async deleteProject_(ctx: ToolContext, key: string, dryRun = false): Promise<ProjectView> {
+    const own = this.configWriter(ctx);
+    const p = this.projectByKey(key);
+    if (this.lineage(own).some((t) => t.projectId === p.id)) {
+      throw new Error(`You can't delete ${p.key}: your ticket ${own.key}${own.projectId === p.id ? " is in it" : " descends from a ticket in it"}.`);
+    }
+    if (!dryRun) await this.deleteProject(p.id);
+    return this.projectView(p);
+  }
+
+  async updateSettings_(ctx: ToolContext, patch: Record<string, unknown>, dryRun = false): Promise<PublicSettings> {
+    this.configWriter(ctx);
+    // Secrets never pass through a model; the legacy/echo keys aren't for tools either.
+    for (const k of ["anthropicApiKey", "anthropicApiKeySet", "claudePermissionMode"]) {
+      if (patch && k in patch) throw new Error(`${k} can't be changed with a tool${k === "anthropicApiKey" ? ": ask the human to enter it in Settings" : ""}.`);
+    }
+    return this.asToolError(() => {
+      if (dryRun) return (validateSettingsPatch(patch, [...this.drivers.keys()]), this.publicSettings());
+      return this.updateSettings(patch);
+    });
+  }
+
+  async deleteTicket_(ctx: ToolContext, key: string, dryRun = false): Promise<Ticket> {
+    const own = this.configWriter(ctx);
+    const t = this.store.tickets.getByKey(String(key ?? "").trim().toUpperCase());
+    if (!t) throw new Error(`Unknown ticket: ${key}`);
+    if (this.lineage(own).some((a) => a.id === t.id)) {
+      throw new Error(t.id === own.id ? `You can't delete your own ticket (${t.key}).` : `You can't delete ${t.key}: it is an ancestor of your ticket ${own.key}.`);
+    }
+    if (!dryRun) await this.deleteTicket(t.key);
+    return t;
+  }
+
+  /** The ticket and its ancestors (parent chain), nearest first. */
+  private lineage(t: Ticket): Ticket[] {
+    const out: Ticket[] = [];
+    const seen = new Set<string>();
+    for (let cur: Ticket | null = t; cur && !seen.has(cur.id); cur = cur.parentId ? this.store.tickets.get(cur.parentId) : null) {
+      seen.add(cur.id);
+      out.push(cur);
+    }
+    return out;
+  }
+
   async requestApproval(
     ctx: ToolContext,
     toolName: string,
     input: unknown,
-    meta: { reason?: string; source?: "classifier" | "policy" } = {},
+    meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
     if (!APPROVABLE_RUNS.includes(ctx.runKind) || !ctx.ticket) {
       return {
@@ -1249,9 +1446,11 @@ export class Orchestrator {
     }
     // A matching one-time grant is used up first, even when the tool is also allowed outright.
     if (this.store.tickets.consumeGrant(t.id, toolName, input)) return { behavior: "allow", updatedInput: input };
-    if (t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
+    // Gated harness tools are never allowed wholesale, even if a name ended up in allowedTools.
+    const onceOnly = !!meta.onceOnly || GATED_TOOL_NAMES.has(toolName);
+    if (!onceOnly && t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
     if (t.pendingApproval) return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE }; // one request at a time
-    this.openApproval(t, ctx.runId, toolName, input, meta);
+    this.openApproval(t, ctx.runId, toolName, input, onceOnly ? { ...meta, onceOnly } : meta);
     return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
   }
 
@@ -1259,11 +1458,13 @@ export class Orchestrator {
    * Put a tool call in front of a human: pendingApproval + blocked. A ticket the agent already
    * blocked (it called block after a denial) keeps its question; the approval is attached to it.
    */
-  private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: { reason?: string; source?: "classifier" | "policy" }) {
+  private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: ApprovalMeta) {
     const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: Date.now() };
     if (meta.reason) pending.reason = meta.reason;
     if (meta.source) pending.source = meta.source;
-    const reason = `Permission needed: ${toolName} — ${summarizeToolInput(input)}`;
+    if (meta.summary) pending.summary = meta.summary;
+    if (meta.onceOnly) pending.onceOnly = true;
+    const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
     this.addSummary(t.sessionId, t.id, "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
     if (t.status === "blocked") {
       this.store.tickets.update(t.id, { pendingApproval: pending });
@@ -1280,11 +1481,13 @@ export class Orchestrator {
     if (this.permissionModeFor(ticket, project) === "read_only") return undefined;
     const grants = this.store.tickets.listGrants(ticket.id);
     active.offeredGrants = grants.map((g) => g.id);
-    const once = grants.map((g) => {
+    // Gated harness tools consume their grants in-process (requestApproval); the driver never
+    // sees them (claude-code would downgrade an auto run to acceptEdits for a grant it can't express).
+    const once = grants.filter((g) => !GATED_TOOL_NAMES.has(g.toolName)).map((g) => {
       const viaPrompt = this.ruleFailures.has(`${ticket.id}\u0000${grantKey(g.toolName, g.input)}`);
       return viaPrompt ? { toolName: g.toolName, input: g.input, viaPrompt } : { toolName: g.toolName, input: g.input };
     });
-    return { tools: [...ticket.allowedTools], once };
+    return { tools: ticket.allowedTools.filter((name) => !GATED_TOOL_NAMES.has(name)), once };
   }
 
   /**
@@ -1857,6 +2060,21 @@ export class Orchestrator {
       declineWork: (c, r) => this.declineWork(c, r),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
+      listWatchers: (c) => this.listWatchers_(c),
+      listMappings: (c) => this.listMappings_(c),
+      getSettings: (c) => this.getSettings_(c),
+      listDrivers: (c) => this.listDrivers_(c),
+      createWatcher: (c, i, d) => this.createWatcher_(c, i, d),
+      updateWatcher: (c, r, i, d) => this.updateWatcher_(c, r, i, d),
+      deleteWatcher: (c, r, d) => this.deleteWatcher_(c, r, d),
+      runWatcher: (c, r, d) => this.runWatcher_(c, r, d),
+      createMapping: (c, i, d) => this.createMapping_(c, i, d),
+      deleteMapping: (c, id, d) => this.deleteMapping_(c, id, d),
+      createProject: (c, i, d) => this.createProject_(c, i, d),
+      updateProject: (c, k, i, d) => this.updateProject_(c, k, i, d),
+      deleteProject: (c, k, d) => this.deleteProject_(c, k, d),
+      updateSettings: (c, p, d) => this.updateSettings_(c, p, d),
+      deleteTicket: (c, k, d) => this.deleteTicket_(c, k, d),
     };
   }
 

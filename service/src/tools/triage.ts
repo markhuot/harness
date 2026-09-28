@@ -4,7 +4,8 @@ import { defineTool, json, schema } from "./util";
 
 export const listProjects = defineTool<Record<string, never>>({
   name: "list_projects",
-  description: "List the local projects work can be dispatched to, with their ticket key prefix, name and directory.",
+  description:
+    "List the local projects with their ticket key prefix, name, directory and settings (default driver and models, worktrees, human review, auto-complete, permission mode; null means the settings default).",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const projects = await ctx.ops.listProjects(ctx);

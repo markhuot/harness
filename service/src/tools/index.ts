@@ -3,6 +3,7 @@
 import type { RunKind } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { browserClick, browserContent, browserEval, browserOpen, browserScreenshot, browserType } from "./browser";
+import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, createTicket, getTicket, listTickets, messageTicket, reviewTicket, startTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
@@ -12,11 +13,12 @@ import type { ToolDefinition } from "./types";
 
 export * from "./browser";
 export * from "./conductor";
+export * from "./config";
 export * from "./native";
 export * from "./permission";
 export * from "./ticket";
 export * from "./triage";
-export { defineTool, validateInput } from "./util";
+export { defineGatedTool, defineTool, validateInput } from "./util";
 
 export const browserTools: ToolDefinition[] = [browserOpen, browserContent, browserClick, browserType, browserEval, browserScreenshot];
 export const conductorTools: ToolDefinition[] = [createTicket, listTickets, getTicket, startTicket, messageTicket, reviewTicket, completeTicket];
@@ -31,10 +33,19 @@ export const allTools: ToolDefinition[] = [
   reviewDecision,
   ...conductorTools,
   ...triageTools,
+  ...configReadTools,
+  ...configWriteTools,
   ...browserTools,
   permissionPrompt,
   ...nativeTools,
 ];
+
+/**
+ * Config reads for ticket runs. list_projects is a triage tool (already in triage's set); every
+ * ticket run gets it here with the other reads. Config writes (all human-gated) go to work and
+ * conductor runs only: plan/review/triage have no human in the loop to approve them.
+ */
+const configRead: ToolDefinition[] = [listProjects, ...configReadTools];
 
 /**
  * Harness tools per run kind (see DESIGN.md "Tools"), plus which native set the
@@ -46,12 +57,12 @@ export const allTools: ToolDefinition[] = [
  *  - "none": triage only routes work
  */
 const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
-  plan: { harness: [postSummary, updatePlan, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, ...browserTools], native: "full" },
-  review: { harness: [postSummary, reviewDecision, ...browserTools], native: "read" },
-  complete: { harness: [postSummary], native: "full" },
-  conductor: { harness: [postSummary, submitForReview, ...conductorTools, ...browserTools], native: "read" },
-  triage: { harness: [...triageTools], native: "none" },
+  plan: { harness: [postSummary, updatePlan, ...configRead, ...browserTools], native: "read" },
+  work: { harness: [postSummary, block, submitForReview, ...configRead, ...configWriteTools, ...browserTools], native: "full" },
+  review: { harness: [postSummary, reviewDecision, ...configRead, ...browserTools], native: "read" },
+  complete: { harness: [postSummary, ...configRead], native: "full" },
+  conductor: { harness: [postSummary, submitForReview, ...conductorTools, ...configRead, ...configWriteTools, ...browserTools], native: "read" },
+  triage: { harness: [...triageTools, ...configReadTools], native: "none" },
 };
 
 /**

@@ -7,18 +7,33 @@ const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files
 const NATIVE_READ = ["read_file", "list_files", "bash"];
 const CONDUCTOR = ["create_ticket", "list_tickets", "get_ticket", "start_ticket", "message_ticket", "review_ticket", "complete_ticket"];
 
+const CONFIG_READ = ["list_projects", "list_watchers", "list_mappings", "get_settings", "list_drivers"];
+const CONFIG_WRITE = [
+  "create_watcher",
+  "update_watcher",
+  "delete_watcher",
+  "run_watcher",
+  "create_mapping",
+  "delete_mapping",
+  "create_project",
+  "update_project",
+  "delete_project",
+  "update_settings",
+  "delete_ticket",
+];
+
 const builtin = { hasBuiltinTools: true };
 const bare = { hasBuiltinTools: false };
 const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }) => toolsForRun(kind, driver).map((t) => t.name);
 
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
-    plan: ["post_summary", "update_plan", ...BROWSER],
-    work: ["post_summary", "block", "submit_for_review", ...BROWSER],
-    review: ["post_summary", "review_decision", ...BROWSER],
-    complete: ["post_summary"],
-    conductor: ["post_summary", "submit_for_review", ...CONDUCTOR, ...BROWSER],
-    triage: ["list_projects", "dispatch_ticket", "decline_work"],
+    plan: ["post_summary", "update_plan", ...CONFIG_READ, ...BROWSER],
+    work: ["post_summary", "block", "submit_for_review", ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    review: ["post_summary", "review_decision", ...CONFIG_READ, ...BROWSER],
+    complete: ["post_summary", ...CONFIG_READ],
+    conductor: ["post_summary", "submit_for_review", ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    triage: ["list_projects", "dispatch_ticket", "decline_work", ...CONFIG_READ.slice(1)],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -56,6 +71,13 @@ describe("toolsForRun", () => {
     expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor"]);
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor"]);
+  });
+
+  test("config reads go to every run kind; config writes only to work and conductor runs", () => {
+    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+    const who = (tool: string) => kinds.filter((k) => names(k, bare).includes(tool));
+    for (const tool of CONFIG_READ) expect(who(tool)).toEqual(kinds);
+    for (const tool of CONFIG_WRITE) expect(who(tool)).toEqual(["work", "conductor"]);
   });
 
   test("permission_prompt is added for every kind when the driver uses it, and only then", () => {

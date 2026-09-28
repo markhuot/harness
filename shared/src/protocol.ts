@@ -151,6 +151,13 @@ export interface PendingApproval {
   reason?: string;
   /** What sent it to the human: the auto-mode classifier or a static policy (ask mode, ...) */
   source?: "classifier" | "policy";
+  /** One-line description of the call for the card and the blocked reason (harness config tools) */
+  summary?: string;
+  /**
+   * Only "allow once" or "deny" may answer it: harness config tools (watchers, settings,
+   * deletes) are never allowed for the rest of a ticket.
+   */
+  onceOnly?: boolean;
 }
 
 export interface ExternalRef {
