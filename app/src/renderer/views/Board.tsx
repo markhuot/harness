@@ -12,7 +12,6 @@ import {
   doneCount,
   hasCustomDriver,
   hideOnBoard,
-  isReady,
   latestSummary,
   plainText,
   progressOf,
@@ -255,7 +254,6 @@ const TicketCard = memo(function TicketCard({
   const progress = t.kind === "conductor" ? progressOf(children) : null;
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
-  const ready = isReady(t);
   const customDriver = hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
@@ -328,17 +326,10 @@ const TicketCard = memo(function TicketCard({
         </div>
       )}
 
-      {(customDriver || t.model || ready) && (
+      {(customDriver || t.model) && (
         <div className="card-foot">
           {customDriver && <DriverBadge driver={t.driver} />}
           <ModelBadge model={t.model} driver={t.driver} />
-          <div className="grow" />
-          {ready && (
-            <span className="badge badge-green">
-              <Icon name="check" strokeWidth={2.5} />
-              Ready
-            </span>
-          )}
         </div>
       )}
     </article>
