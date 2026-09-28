@@ -12,6 +12,7 @@
     "sim-check": "bun scripts/sim-check.ts"
   },
   "dependencies": {
+    "@expo/ui": "~57.0.20",
     "@harness/shared": "workspace:*",
     "expo": "~57.0.25",
     "expo-camera": "~57.0.5",

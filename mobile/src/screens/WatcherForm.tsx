@@ -8,8 +8,8 @@ import { MONO } from "../theme/tokens";
 import { Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
-import { PickerButton } from "../ui/selects";
-import { pick } from "../ui/pick";
+import { Select } from "../ui/selects";
+import { driverOptions } from "../lib/selectOptions";
 import { buttonItem, primaryItemStyle } from "../ui/header";
 import { toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
 
@@ -41,10 +41,6 @@ export function WatcherFormScreen() {
     setBusy(false);
     if (ok) router.dismiss();
   };
-  const chooseDriver = async () => {
-    const v = await pick({ title: "Triage driver", selected: d.driver, choices: [{ value: "", label: "Default" }, ...state.drivers.map((x) => ({ value: x.id, label: x.name }))] });
-    if (v !== undefined) set("driver", v);
-  };
   return (
     <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen
@@ -69,7 +65,7 @@ export function WatcherFormScreen() {
         </FormField>
         <FormField label="Triage driver">
           <View style={{ alignItems: "flex-start" }}>
-            <PickerButton label={d.driver ? (state.drivers.find((x) => x.id === d.driver)?.name ?? d.driver) : "Default"} onPress={() => void chooseDriver()} />
+            <Select value={d.driver} options={driverOptions(state.drivers, { none: "Default" })} onChange={(v) => set("driver", v)} placeholder={d.driver || "Default"} title="Triage driver" accessibilityName="Triage driver" />
           </View>
         </FormField>
         <FormField label="Mode" hint={d.mode === "loop" ? "Re-runs as soon as the command exits." : "Runs on a fixed schedule."}>

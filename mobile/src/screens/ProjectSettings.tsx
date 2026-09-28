@@ -13,8 +13,9 @@ import { MONO } from "../theme/tokens";
 import { Button, Empty } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
-import { confirm, pick } from "../ui/pick";
+import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { driverOptions } from "../lib/selectOptions";
+import { confirm } from "../ui/pick";
 
 export function ProjectSettingsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -71,11 +72,7 @@ function ProjectSettings({ project }: { project: Project }) {
     if (!(await confirm("Change the project folder?", `Agents start new runs in ${p}.`, "Change", false))) return setPath(project.path);
     await save({ path: p }, "Project folder updated");
   };
-  const chooseDriver = async () => {
-    const fallbackName = state.drivers.find((d) => d.id === state.settings?.defaultDriver)?.name ?? state.settings?.defaultDriver;
-    const v = await pick({ title: "Default driver", selected: project.defaultDriver ?? "", choices: [{ value: "", label: `Global default${fallbackName ? ` (${fallbackName})` : ""}` }, ...state.drivers.map((d) => ({ value: d.id, label: d.name }))] });
-    if (v !== undefined) void save({ defaultDriver: v || null });
-  };
+  const fallbackName = state.drivers.find((d) => d.id === state.settings?.defaultDriver)?.name ?? state.settings?.defaultDriver;
   const inherited = state.settings?.permissionMode ?? "auto";
 
   return (
@@ -92,7 +89,14 @@ function ProjectSettings({ project }: { project: Project }) {
       </Group>
       <Group title="Agents">
         <SRow title="Default driver" sub="Used for new sessions in this project.">
-          <PickerButton label={project.defaultDriver ? (state.drivers.find((d) => d.id === project.defaultDriver)?.name ?? project.defaultDriver) : "Global default"} onPress={() => void chooseDriver()} />
+          <Select
+            value={project.defaultDriver ?? ""}
+            options={driverOptions(state.drivers, { none: `Global default${fallbackName ? ` (${fallbackName})` : ""}` })}
+            onChange={(v) => void save({ defaultDriver: v || null })}
+            placeholder={project.defaultDriver ?? "Global default"}
+            title="Default driver"
+            accessibilityName="Default driver"
+          />
         </SRow>
         <SRow title="Default models" sub="Per driver. Default follows the global setting." stacked>
           <View style={{ gap: 8 }}>

@@ -28,8 +28,8 @@ import { Badge, Button, Card, Chip, DriverBadge, Empty, ReviewMark, SectionTitle
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
-import { ModelPicker, PermissionPicker, PickerButton } from "../ui/selects";
-import { pick } from "../ui/pick";
+import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { driverOptions } from "../lib/selectOptions";
 import { useStickToBottom } from "../ui/stickToBottom";
 
 export function useOpenTicket() {
@@ -264,15 +264,6 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
     if (!depsDirty || badDeps.length) return;
     void act(() => client.updateTicket(ticket.key, { dependsOn: parsedDeps }));
   };
-  const chooseDriver = async () => {
-    const d = await pick({
-      title: "Driver",
-      message: "Changing the driver clears the ticket's model.",
-      selected: ticket.driver,
-      choices: state.drivers.map((x) => ({ value: x.id, label: `${x.name}${!x.available ? " (unavailable)" : ""}` })),
-    });
-    if (d && d !== ticket.driver) void act(() => client.updateTicket(ticket.key, { driver: d }));
-  };
 
   const input = { borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 15.5 } as const;
 
@@ -308,7 +299,15 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
 
       <Card>
         <Prop label="Driver">
-          <PickerButton label={state.drivers.find((d) => d.id === ticket.driver)?.name ?? ticket.driver} onPress={() => void chooseDriver()} disabled={!editable || ticket.busy} icon="bot" />
+          <Select
+            value={ticket.driver}
+            options={driverOptions(state.drivers, { unavailable: "mark" })}
+            onChange={(d) => void act(() => client.updateTicket(ticket.key, { driver: d }))}
+            placeholder={ticket.driver}
+            title="Changing the driver clears the ticket's model."
+            accessibilityName="Driver"
+            disabled={!editable || ticket.busy}
+          />
         </Prop>
         <Prop label="Model" hint="Applies from the next run">
           <ModelPicker driver={ticket.driver} value={ticket.model} disabled={!editable} inherited={inheritedModel(ticket.driver, "ticket", project, state.settings)} onChange={(m) => void act(() => client.updateTicket(ticket.key, { model: m }))} />
