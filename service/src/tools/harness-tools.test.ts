@@ -27,7 +27,8 @@ describe("tool catalogue", () => {
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
     expect(props("create_ticket")).toEqual(["auto_start", "depends_on", "description", "title"]);
-    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title"]);
+    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title", "url"]);
+    expect(props("decline_work")).toEqual(["reason", "title"]);
     expect(props("browser_content")).toEqual(["format", "max_chars", "selector"]);
     expect(props("browser_type")).toEqual(["selector", "submit", "text"]);
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);

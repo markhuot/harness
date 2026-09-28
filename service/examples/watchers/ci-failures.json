@@ -1,0 +1,12 @@
+{
+  "name": "ci-failures",
+  "command": "gh run list --repo markhuot/harness --branch main --status failure --limit 5 --json databaseId,displayTitle,url",
+  "args": [],
+  "prompt": "Failed CI runs on main. If no ticket covers a failure yet, dispatch a fix to the HARNESS project; otherwise decline.",
+  "cwd": null,
+  "env": {},
+  "mode": "interval",
+  "intervalSec": 900,
+  "enabled": true,
+  "driver": null
+}

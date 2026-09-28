@@ -680,6 +680,29 @@ describe("triage", () => {
     expect(t.externalRef).toBeNull();
   });
 
+  test("one output with several items can dispatch each; decline is refused after a dispatch", async () => {
+    const h = setup();
+    let declineErr: unknown = null;
+    h.driver.script = async function* (req) {
+      const ops = req.toolContext.ops;
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "ACME-7", title: "First", description: "one" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "ACME-8", title: "Second", description: "two" });
+      try {
+        await ops.declineWork(req.toolContext, "changed my mind");
+      } catch (e) {
+        declineErr = e;
+      }
+    };
+    const s = await h.orch.injectOutput("jira", '{"key":"ACME-7"}\n{"key":"ACME-8"}');
+    await h.orch.idle();
+    const session = h.orch.getSession(s!.id);
+    expect(session.triageStatus).toBe("dispatched");
+    expect(session.outcome).toBe("Dispatched to ACME-7 in ACME; Dispatched to ACME-8 in ACME");
+    expect(session.title).toBe("First");
+    expect(h.orch.listTickets().map((t) => t.key).sort()).toEqual(["ACME-7", "ACME-8"]);
+    expect(String(declineErr)).toContain("already dispatched");
+  });
+
   test("decline_work can retitle the Inbox item", async () => {
     const h = setup();
     h.driver.script = async function* (req) {

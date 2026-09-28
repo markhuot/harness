@@ -1233,17 +1233,19 @@ export class Orchestrator {
     return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
   }
 
-  private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
+  /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
+  private triageMeta(ctx: ToolContext, more = false): { session: Session; meta: TriageMeta } {
     const session = this.store.sessions.get(ctx.session.id);
     if (!session || session.kind !== "triage") throw new Error("Not a triage session");
     const meta = this.store.sessions.getMeta<TriageMeta>(session.id);
     if (!meta) throw new Error("Triage session has no output");
-    if (session.triageStatus !== "triaging") throw new Error(`This item was already ${session.triageStatus}`);
+    const open = session.triageStatus === "triaging" || (more && session.triageStatus === "dispatched");
+    if (!open) throw new Error(`This output was already ${session.triageStatus}`);
     return { session, meta };
   }
 
   async dispatchTicket(ctx: ToolContext, input: Parameters<HarnessOps["dispatchTicket"]>[1]): Promise<Ticket> {
-    const { session, meta } = this.triageMeta(ctx);
+    const { session, meta } = this.triageMeta(ctx, true);
     const project = this.store.projects.getByKey(input.projectKey ?? "");
     if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
     const key = input.key?.trim().toUpperCase() || null;
@@ -1447,9 +1449,17 @@ export class Orchestrator {
     this.finishTriage(session.id, "declined", `Declined: ${reason?.trim() || "no reason given"}`, title);
   }
 
-  /** `title` (from triage) replaces the Inbox title derived from the raw output. */
+  /**
+   * `title` (from triage) replaces the Inbox title derived from the raw output. Later dispatches
+   * from the same output add to the outcome and keep the first title.
+   */
   private finishTriage(sessionId: string, status: "dispatched" | "declined" | "failed", outcome: string, title?: string) {
-    this.store.sessions.update(sessionId, { triageStatus: status, outcome, title: title?.trim() || undefined });
+    const prev = this.store.sessions.get(sessionId);
+    if (prev?.triageStatus === "dispatched" && status === "dispatched") {
+      this.store.sessions.update(sessionId, { outcome: `${prev.outcome}; ${outcome}` });
+    } else {
+      this.store.sessions.update(sessionId, { triageStatus: status, outcome, title: title?.trim() || undefined });
+    }
     this.appendStatus(sessionId, null, outcome);
     this.touchSession(sessionId);
   }

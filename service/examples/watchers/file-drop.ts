@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-// file-drop: a minimal harness watcher. Drop a JSON file into a folder and it becomes a
-// work item. Same contract as watch-jira: blocks until there is work, prints one JSON
-// object per line on stdout, exits 0. Use it with mode "loop" (see file-drop.json).
+// file-drop: a minimal harness watcher. Drop a JSON file into a folder and it shows up in the
+// Inbox. Harness takes any text a watcher prints; this one follows watch-jira's habits: it
+// blocks until there is work, prints one JSON object per line on stdout, and exits 0. Use it
+// with mode "loop" (see file-drop.json); the files it prints together become one Inbox item.
 //
 //   bun file-drop.ts <dir> [--once] [--poll=2000]
 //

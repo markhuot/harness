@@ -47,7 +47,7 @@ export const dispatchTicket = defineTool<{
       start: input.start,
       conductor: input.conductor,
     });
-    return `Dispatched as ${ticket.key} (${ticket.kind}, status: ${ticket.status}). Triage is done. Stop here.`;
+    return `Dispatched as ${ticket.key} (${ticket.kind}, status: ${ticket.status}). If the output holds other separate items that qualify, dispatch each of them; otherwise triage is done. Stop here.`;
   },
 });
 

@@ -1,7 +1,8 @@
 {
   "name": "jira",
-  "command": "/bin/zsh",
-  "args": ["-lc", "exec watch-jira --project=PLAYR --assigned=@me --status='To Do'"],
+  "command": "watch-jira --project=PLAYR --assigned=@me --status='To Do'",
+  "args": [],
+  "prompt": "PLAYR tickets assigned to me in To Do. Dispatch the ones with clear acceptance criteria.",
   "cwd": null,
   "env": {},
   "mode": "loop",
