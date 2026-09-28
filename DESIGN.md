@@ -698,7 +698,8 @@ opening bracket or quote, so `mark@example.com` never is), `insertMention` compl
 a trailing space; folders end in `/` and keep the list open inside them), `parseMentions` pulls
 the paths out of a prompt, and `rankPaths` orders candidates: path prefix, then name prefix, then
 folder-name prefix, then substring, with in-order letters (`fmt` → `format.ts`) only when nothing
-matches outright. A folder the query already names lists its contents, not itself.
+matches outright. A folder the query already names (`src/`) lists its contents, not itself; a
+file typed in full (`.env`) stays in the list, first.
 
 - **Autocomplete.** `/projects/:id/files` searches the project folder (new session);
   `/tickets/:key/files` searches where the ticket's next run works: its worktree, else the
@@ -711,7 +712,9 @@ matches outright. A folder the query already names lists its contents, not itsel
   git repo, on top of git's own list), so shallow files make the cut in a huge tree. `.git`, `.hg`,
   `.svn` and `.DS_Store` are left out; `node_modules` is listed as a folder but not walked. A query
   inside a folder (`node_modules/react/`) also lists that folder straight from disk, so anything the
-  index skipped or cut short can still be reached one level at a time, never outside the root.
+  index skipped or cut short can still be reached one level at a time. Browsing resolves
+  symlinks and refuses a folder whose real path is outside the root, never enters or lists
+  `.git`/`.hg`/`.svn`, and drops `.DS_Store`.
   Every folder that holds a file is added, and the list is cached per folder for 5 seconds so
   typing doesn't re-run git on each key.
 - **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts

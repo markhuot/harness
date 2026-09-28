@@ -100,8 +100,8 @@ export function rankPaths(paths: readonly string[], query: string, limit = 50): 
   const q = query.toLowerCase();
   const scored: { path: string; score: number }[] = [];
   for (const path of paths) {
-    // A picked folder ("src/") lists what's in it, not itself again.
-    if (q && path.toLowerCase() === q) continue;
+    // A picked folder ("src/") lists what's in it, not itself again. A file typed in full stays.
+    if (q.endsWith("/") && path.toLowerCase() === q) continue;
     const score = q ? matchScore(path.toLowerCase(), q) : topLevel(path) ? 0 : -1;
     if (score >= 0) scored.push({ path, score });
   }

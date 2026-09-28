@@ -104,6 +104,11 @@ describe("rankPaths", () => {
     expect(rankPaths(paths, "src/")).toEqual(["src/lib/", "src/app.ts", "src/lib/format.ts"]);
   });
 
+  test("a file typed in full is still listed, first", () => {
+    expect(rankPaths([".envrc", ".env"], ".env")).toEqual([".env", ".envrc"]);
+    expect(rankPaths(paths, "README.md")).toEqual(["README.md"]);
+  });
+
   test("is case-insensitive", () => {
     expect(rankPaths(paths, "readme")).toEqual(["README.md"]);
   });

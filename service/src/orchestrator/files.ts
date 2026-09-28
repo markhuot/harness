@@ -116,17 +116,28 @@ function withDirs(entries: string[]): string[] {
 
 /**
  * The folder a query is inside ("node_modules/react/" for "node_modules/react/in"), listed from
- * disk, so folders the index skips or cut short can still be browsed one level at a time.
+ * disk, so folders the index skips or cut short can still be browsed one level at a time. Like
+ * the index it stays inside `root` (symlinks resolved, as attachMentions does) and out of
+ * VCS_DIRS, and leaves out JUNK_FILES.
  */
 function browse(root: string, query: string): string[] {
   const slash = query.lastIndexOf("/");
   if (slash === -1) return [];
   const dir = query.slice(0, slash + 1);
-  const abs = resolve(root, dir);
-  const rel = relative(root, abs);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return [];
+  if (dir.split("/").some((seg) => VCS_DIRS.has(seg))) return [];
+  let abs: string;
   try {
-    return readdirSync(abs, { withFileTypes: true }).map((e) => `${dir}${e.name}${e.isDirectory() ? "/" : ""}`);
+    const real = realpathSync(resolve(root, dir));
+    const rel = relative(realpathSync(root), real);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return [];
+    abs = real;
+  } catch {
+    return [];
+  }
+  try {
+    return readdirSync(abs, { withFileTypes: true })
+      .filter((e) => (e.isDirectory() ? !VCS_DIRS.has(e.name) : !JUNK_FILES.has(e.name)))
+      .map((e) => `${dir}${e.name}${e.isDirectory() ? "/" : ""}`);
   } catch {
     return [];
   }

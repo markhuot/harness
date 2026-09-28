@@ -81,10 +81,33 @@ describe("listPaths / searchPaths", () => {
     expect(await searchPaths(root, "node_modules/react/ind")).toEqual([{ path: "node_modules/react/index.js", kind: "file" }]);
   });
 
-  test("browsing never leaves the folder", async () => {
-    const root = tree({ "in.txt": "x" });
-    writeFileSync(join(root, "..", "outside.txt"), "x");
+  test("typing a gitignored file's full name finds it", async () => {
+    const root = tree({ ".gitignore": ".env\n", ".env": "x", ".envrc": "x" });
+    await git(["init", "-q"], root);
+    expect(await searchPaths(root, ".env")).toEqual([
+      { path: ".env", kind: "file" },
+      { path: ".envrc", kind: "file" },
+    ]);
+  });
+
+  test("browsing never leaves the folder, through .. or a symlink", async () => {
+    const root = tree({ "in.txt": "x", "src/a.ts": "x" });
+    const outside = join(root, "..", "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "leak.txt"), "x");
+    symlinkSync(outside, join(root, "src", "link"));
     expect(await searchPaths(root, "../out")).toEqual([]);
+    expect(await searchPaths(root, "src/link/")).toEqual([]);
+    expect(await searchPaths(root, "src/link/le")).toEqual([]);
+  });
+
+  test("browsing doesn't list VCS internals or junk files", async () => {
+    const root = tree({ "node_modules/pkg/index.js": "x", "node_modules/pkg/.DS_Store": "x", "node_modules/pkg/.git/HEAD": "x" });
+    await git(["init", "-q"], root);
+    expect(await searchPaths(root, ".git/")).toEqual([]);
+    expect(await searchPaths(root, ".git/HE")).toEqual([]);
+    expect(await searchPaths(root, "node_modules/pkg/.git/")).toEqual([]);
+    expect(await searchPaths(root, "node_modules/pkg/")).toEqual([{ path: "node_modules/pkg/index.js", kind: "file" }]);
   });
 
   test("a missing folder has no files", async () => {
