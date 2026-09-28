@@ -10,6 +10,7 @@ export * from "./pluginBridge";
 export * from "./tabs";
 export * from "./subagents";
 export * from "./format";
+export * from "./chatMode";
 export * from "./markdown";
 export * from "./icons";
 export * from "./stickToBottom";

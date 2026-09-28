@@ -463,6 +463,8 @@ describe("chat messages (sendMessage with chat)", () => {
     expect(chat.toolNames).not.toContain("submit_for_review");
     expect(chat.toolNames).not.toContain("block");
     expect(h.orch.summaries(t.key).some((s) => s.body.startsWith("Question:"))).toBe(false);
+    // The exchange reads in the summaries: the question, then the agent's answer.
+    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:why a button?", "agent:Chatting about: why a button??"]);
 
     // A regular message still sends the ticket back to work.
     expect((await h.orch.sendMessage(t.key, "make it red")).status).toBe("in_progress");
@@ -499,6 +501,7 @@ describe("chat messages (sendMessage with chat)", () => {
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "human", body: "hello" }); // no answer to post
   });
 
   test("a done ticket whose worktree is gone chats from the project checkout", async () => {

@@ -769,6 +769,8 @@ export class Orchestrator {
     if (opts.chat) {
       if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
       this.notCompleting(ticket, "messaged");
+      // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
+      this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
       this.enqueueRun(ticket.sessionId, "chat", text);
       return this.store.tickets.get(ticket.id)!;
     }
@@ -2375,8 +2377,10 @@ export class Orchestrator {
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
         break;
-      case "plan":
       case "chat":
+        if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
+        break;
+      case "plan":
         break;
     }
   }

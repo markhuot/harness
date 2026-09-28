@@ -9,8 +9,16 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Ticket } from "@harness/shared";
 import {
+  CHAT_PLACEHOLDER,
+  chatHint,
+  chatModes,
   childrenOf,
+  closeChatMode,
   hasCustomDriver,
+  isChatMode,
+  moveSwitchLabel,
+  openChatMode,
+  setChatMode,
   ticketByKey,
   COMPOSER_PLACEHOLDER,
   composerHint,
@@ -289,29 +297,62 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<TextInput>(null);
-  const hint = composerHint(ticket);
+  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
+  // Leaving the ticket starts the chat mode's TTL; coming back within it picks the chat back up.
+  useEffect(() => {
+    openChatMode(chatModes, ticket.key, Date.now());
+    return () => closeChatMode(chatModes, ticket.key, Date.now());
+  }, [ticket.key]);
+  const switchLabel = moveSwitchLabel(ticket);
+  const chat = !!switchLabel && chatMode;
+  const toggleMove = (move: boolean) => {
+    haptic("select");
+    setChatMode(chatModes, ticket.key, !move);
+    setChat(!move);
+  };
+  const hint = chat ? chatHint(ticket) : composerHint(ticket);
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
     setSending(false);
     if (ok) {
       haptic("success");
       setText("");
     }
   };
-  const attention = ticket.status === "blocked";
+  const attention = ticket.status === "blocked" && !chat;
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
-      {!!hint && <Text style={{ color: c.text3, fontSize: 12, paddingHorizontal: 6 }}>{hint}</Text>}
+      {(!!switchLabel || !!hint) && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 6 }}>
+          {switchLabel && (
+            <>
+              <Switch
+                value={!chat}
+                onValueChange={toggleMove}
+                trackColor={{ true: c.accent }}
+                style={{ transform: [{ scale: 0.75 }], marginHorizontal: -6 }}
+                accessibilityLabel={switchLabel}
+              />
+              <Text style={{ color: c.text2, fontSize: 13 }}>{switchLabel}</Text>
+            </>
+          )}
+          {!!hint && (
+            <Text style={{ flex: 1, color: c.text3, fontSize: 12, textAlign: switchLabel ? "right" : "left" }} numberOfLines={1}>
+              {hint}
+            </Text>
+          )}
+        </View>
+      )}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <TextInput
           ref={ref}
           multiline
           value={text}
           onChangeText={setText}
-          placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+          placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}
           accessibilityLabel="Message the agent"
