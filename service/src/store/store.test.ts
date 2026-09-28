@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { MIGRATIONS, migrate, openDb, SCHEMA_VERSION } from "../db";
-import type { ExternalRef } from "@harness/shared";
+import type { ExternalRef, SummaryAttachment } from "@harness/shared";
 import { Store } from "./index";
 import { insideGitCheckout } from "./projects";
 import { tempDir } from "@harness/shared/testing";
@@ -422,5 +422,58 @@ describe("misc", () => {
     const p = s.watchers.update(w.id, { prompt: "Dispatch anything assigned to me" })!;
     expect(p.prompt).toBe("Dispatch anything assigned to me");
     expect(s.watchers.update(w.id, { name: "renamed" })!.prompt).toBe("Dispatch anything assigned to me");
+  });
+});
+
+describe("summary attachments", () => {
+  const shot = (id: string, patch: Partial<SummaryAttachment> = {}): SummaryAttachment => ({ id, kind: "image", mimeType: "image/png", name: `${id}.png`, size: 10, width: 4, height: 3, ...patch });
+
+  test("migration 14 adds the table to a database with existing summaries, which get no attachments", () => {
+    const db = new Database(":memory:", { strict: true });
+    db.exec("PRAGMA foreign_keys = ON;");
+    for (const [v, sql] of MIGRATIONS.slice(0, 13).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO summaries (id, session_id, ticket_id, author, body, created_at) VALUES ('old', 's1', NULL, 'agent', 'before', 1)`);
+    migrate(db);
+    const s = new Store(db);
+    expect(s.summaries.listBySession("s1")).toEqual([{ id: "old", sessionId: "s1", ticketId: null, author: "agent", body: "before", createdAt: 1, attachments: [] }]);
+    const added = s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "after", attachments: [shot("a1")] });
+    expect(added.attachments).toEqual([shot("a1")]);
+  });
+
+  test("round-trip keeps each summary's attachments in the given order, apart from other summaries and sessions", () => {
+    const s = mk();
+    // ids sort the opposite way from the order given, so ordering can't come from the id
+    const first = s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "one", attachments: [shot("z"), shot("m", { kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined }), shot("a")] });
+    const plain = s.summaries.add({ sessionId: "s1", ticketId: null, author: "human", body: "two" });
+    s.summaries.add({ sessionId: "s2", ticketId: null, author: "agent", body: "elsewhere", attachments: [shot("other")] });
+    const list = s.summaries.listBySession("s1");
+    expect(list.map((x) => x.id)).toEqual([first.id, plain.id]);
+    expect(list[0]!.attachments.map((a) => a.id)).toEqual(["z", "m", "a"]);
+    expect(list[0]!.attachments[1]).toEqual({ id: "m", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 10 });
+    expect(list[1]!.attachments).toEqual([]);
+    expect(s.summaries.attachment("m")).toEqual(list[0]!.attachments[1]!);
+    expect(s.summaries.attachment("nope")).toBeNull();
+    expect(s.summaries.attachmentsBySession("s1").map((a) => a.id).sort()).toEqual(["a", "m", "z"]);
+  });
+
+  test("a duplicate attachment id rolls back the whole summary", () => {
+    const s = mk();
+    s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "one", attachments: [shot("dup")] });
+    expect(() => s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "two", attachments: [shot("fresh"), shot("dup")] })).toThrow();
+    expect(s.summaries.listBySession("s1").map((x) => x.body)).toEqual(["one"]);
+    expect(s.summaries.attachment("fresh")).toBeNull();
+  });
+
+  test("deleting the session deletes its attachment rows", () => {
+    const s = mk();
+    const session = s.sessions.create({ key: "X-1", kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: "x" });
+    s.summaries.add({ sessionId: session.id, ticketId: null, author: "agent", body: "b", attachments: [shot("gone")] });
+    s.summaries.add({ sessionId: "keep", ticketId: null, author: "agent", body: "b", attachments: [shot("kept")] });
+    s.sessions.delete(session.id);
+    expect(s.summaries.attachment("gone")).toBeNull();
+    expect(s.summaries.attachment("kept")).not.toBeNull();
   });
 });

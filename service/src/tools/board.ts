@@ -41,7 +41,7 @@ export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string
 export const getTicket = defineTool<{ key: string; include_transcript?: number }>({
   name: "get_ticket",
   description:
-    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, and the summaries its agent and humans have posted. Old keys from before a project rename work too. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
+    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },

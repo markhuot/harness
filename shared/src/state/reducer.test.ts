@@ -74,6 +74,7 @@ const summary = (id: string, createdAt: number, body = id): Summary => ({
   author: "agent",
   body,
   createdAt,
+  attachments: [],
 });
 
 const run = (id: string, status: Run["status"]): Run => ({

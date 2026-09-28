@@ -178,6 +178,10 @@ export class HarnessClient {
   listSummaries(key: string) {
     return this.request<Summary[]>("GET", `/tickets/${key}/summaries`);
   }
+  /** Absolute URL of a summary attachment, token in the query so <img>/<video> can load it. */
+  attachmentUrl(id: string): string {
+    return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
+  }
 
   // Sessions (ticket + triage) and transcripts
   listSessions(kind?: "ticket" | "triage") {

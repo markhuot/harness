@@ -131,6 +131,23 @@ describe("systemPrompt tool references", () => {
     });
   }
 
+  test("the Summaries section offers attachments in every ticket run, with capture tools the run has", () => {
+    const summariesOf = (text: string) => /## Summaries\n([\s\S]*?)(?=\n## |$)/.exec(text)?.[1] ?? null;
+    for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as RunKind[]) {
+      const s = summariesOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
+      expect(s).not.toBeNull();
+      expect(s).toContain("`attachments`");
+      // submit_for_review is named (and preferred) only where the run can call it
+      expect(s!.includes("`submit_for_review`")).toBe(kind === "work" || kind === "conductor");
+      expect(s!.includes("submit summary")).toBe(kind === "work" || kind === "conductor");
+      // complete runs have no browser, so no save_to hint
+      expect(s!.includes("`save_to`")).toBe(kind !== "complete");
+      // read-only run kinds are told their save_to goes to the scratch folder
+      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan" || kind === "review" || kind === "chat");
+    }
+    expect(summariesOf(sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } }))).toBeNull();
+  });
+
   test("work runs never mention triage, review or plan tools", () => {
     const text = sys("work");
     for (const name of ["dispatch_ticket", "review_decision", "update_plan"]) {
@@ -343,15 +360,39 @@ describe("run prompts", () => {
 
   test("reviewPrompt includes the brief and summaries oldest first with authors", () => {
     const summaries: Summary[] = [
-      { id: "b", sessionId: "s1", ticketId: "t1", author: "agent", body: "Second: tests pass", createdAt: 2000 },
-      { id: "a", sessionId: "s1", ticketId: "t1", author: "human", body: "First: use CSS vars", createdAt: 1000 },
+      { id: "b", sessionId: "s1", ticketId: "t1", author: "agent", body: "Second: tests pass", createdAt: 2000, attachments: [] },
+      { id: "a", sessionId: "s1", ticketId: "t1", author: "human", body: "First: use CSS vars", createdAt: 1000, attachments: [] },
     ];
     const text = reviewPrompt(ticket(), summaries);
     expect(text).toContain("Add a dark theme toggle to the header.");
     expect(text.indexOf("First: use CSS vars")).toBeLessThan(text.indexOf("Second: tests pass"));
     expect(text).toContain("[human, 1970-01-01T00:00:01.000Z]");
     expect(text).toContain("`review_decision` exactly once");
+    expect(text).not.toContain("Attachments:");
     expect(reviewPrompt(ticket(), [])).toContain("no summaries were posted");
+  });
+
+  test("reviewPrompt lists each summary's attachments under it with the stored path", () => {
+    const summaries: Summary[] = [
+      { id: "a", sessionId: "s1", ticketId: "t1", author: "agent", body: "Built the toggle", createdAt: 1000, attachments: [] },
+      {
+        id: "b",
+        sessionId: "s1",
+        ticketId: "t1",
+        author: "agent",
+        body: "Done",
+        createdAt: 2000,
+        attachments: [
+          { id: "att1", kind: "image", mimeType: "image/png", name: "after.png", size: 10 },
+          { id: "att2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 20 },
+        ],
+      },
+    ];
+    const text = reviewPrompt(ticket(), summaries, (a) => `/home/attachments/${a.id}.bin`);
+    const [first, second] = text.split("2. [agent");
+    expect(first).not.toContain("Attachments:");
+    expect(second).toContain("Done\nAttachments:\n* after.png (image): /home/attachments/att1.bin\n* flow.mp4 (video): /home/attachments/att2.bin");
+    expect(text).not.toMatch(/^- /m);
   });
 
   test("completePrompt is branch-dependent and includes instructions", () => {
