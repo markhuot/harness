@@ -2,68 +2,66 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Mapping, Watcher, WorkItem } from "@harness/shared";
-import { matchMapping, parseWorkItem, WatcherRunner, type SpawnFn, type WatcherTiming } from "./watchers";
+import type { Mapping, Watcher } from "@harness/shared";
+import {
+  findKeys,
+  loginShell,
+  matchMapping,
+  toOutput,
+  watcherArgv,
+  WatcherRunner,
+  type SpawnFn,
+  type WatcherOutput,
+  type WatcherTiming,
+} from "./watchers";
 
 // ---------------------------------------------------------------------------
-// parseWorkItem
+// Output helpers
 // ---------------------------------------------------------------------------
 
-describe("parseWorkItem", () => {
-  test("reads a watch-jira line", () => {
-    const line = JSON.stringify({
-      event: "new",
-      key: "RFAWC-742",
-      url: "https://jira.example/browse/RFAWC-742",
-      summary: "Super user feature",
-      updated: "2026-08-12T14:29:49.000+0000",
-    });
-    const item = parseWorkItem(line)!;
-    expect(item.key).toBe("RFAWC-742");
-    expect(item.title).toBe("Super user feature");
-    expect(item.url).toBe("https://jira.example/browse/RFAWC-742");
-    expect(item.version).toBe("2026-08-12T14:29:49.000+0000");
-    expect((item.raw as { event: string }).event).toBe("new");
+describe("toOutput", () => {
+  test("trims, and whitespace-only output is nothing", () => {
+    expect(toOutput("\n  hello\n\n")).toEqual({ text: "hello", truncated: false });
+    expect(toOutput(" \n\t\r\n")).toBeNull();
+    expect(toOutput("")).toBeNull();
   });
 
-  test("falls back through key fields, numbers become strings", () => {
-    expect(parseWorkItem('{"id": 42}')!.key).toBe("42");
-    expect(parseWorkItem('{"identifier": "LIN-7"}')!.key).toBe("LIN-7");
-    expect(parseWorkItem('{"key": "", "id": "X-1"}')!.key).toBe("X-1");
+  test("cuts at the limit and marks it truncated; exactly the limit is not truncated", () => {
+    expect(toOutput("abcdefgh", 5)).toEqual({ text: "abcde", truncated: true });
+    expect(toOutput("abcde", 5)).toEqual({ text: "abcde", truncated: false });
+    expect(toOutput("abc", 5, true)).toEqual({ text: "abc", truncated: true });
+  });
+});
+
+describe("findKeys", () => {
+  test("finds upper-case keys once each, in order", () => {
+    expect(findKeys('{"key":"FOO-12","parent":"BAR_X-3"} see FOO-12 and foo-9, notFOO-4')).toEqual(["FOO-12", "BAR_X-3"]);
   });
 
-  test("title falls back summary → title → name → key", () => {
-    expect(parseWorkItem('{"key":"A-1","title":"T","name":"N"}')!.title).toBe("T");
-    expect(parseWorkItem('{"key":"A-1","name":"N"}')!.title).toBe("N");
-    expect(parseWorkItem('{"key":"A-1","summary":"  "}')!.title).toBe("A-1");
+  test("is capped", () => {
+    expect(findKeys("A-1 A-2 A-3 A-4", 2)).toEqual(["A-1", "A-2"]);
+  });
+});
+
+describe("watcherArgv", () => {
+  test("a command line runs through the login shell", () => {
+    expect(watcherArgv({ command: "while true; do curl -s x | jq .; sleep 60; done", args: [] }, "/bin/zsh")).toEqual([
+      "/bin/zsh",
+      ["-lc", "while true; do curl -s x | jq .; sleep 60; done"],
+    ]);
   });
 
-  test("url and version fallbacks", () => {
-    const a = parseWorkItem('{"key":"A-1","html_url":"https://gh/1","updated_at":"v9"}')!;
-    expect(a.url).toBe("https://gh/1");
-    expect(a.version).toBe("v9");
-    const b = parseWorkItem('{"key":"A-1","self":"https://api/1","updatedAt":"x","version":"y"}')!;
-    expect(b.url).toBe("https://api/1");
-    expect(b.version).toBe("y"); // version outranks updatedAt
-    const c = parseWorkItem('{"key":"A-1","url":5,"updated":{}}')!;
-    expect(c.url).toBeNull();
-    expect(c.version).toBeNull();
-    expect(parseWorkItem('{"key":"A-1","version":17}')!.version).toBe("17");
+  test("a legacy command + args is spawned directly, without a shell", () => {
+    expect(watcherArgv({ command: "node", args: ["watch-jira.js", "--project", "FOO BAR"] }, "/bin/zsh")).toEqual([
+      "node",
+      ["watch-jira.js", "--project", "FOO BAR"],
+    ]);
   });
 
-  test("rejects blank, non-JSON, non-objects and keyless objects", () => {
-    expect(parseWorkItem("")).toBeNull();
-    expect(parseWorkItem("   \r")).toBeNull();
-    expect(parseWorkItem("watch-jira: polling…")).toBeNull();
-    expect(parseWorkItem('{"key": "A-1"')).toBeNull();
-    expect(parseWorkItem('["A-1"]')).toBeNull();
-    expect(parseWorkItem('"A-1"')).toBeNull();
-    expect(parseWorkItem('{"summary":"no key"}')).toBeNull();
-    expect(parseWorkItem('{"key": null, "id": false}')).toBeNull();
-  });
-
-  test("tolerates CRLF", () => {
-    expect(parseWorkItem('{"key":"A-1"}\r')!.key).toBe("A-1");
+  test("loginShell uses an absolute $SHELL and falls back otherwise", () => {
+    expect(loginShell({ SHELL: "/opt/homebrew/bin/fish" })).toBe("/opt/homebrew/bin/fish");
+    expect(loginShell({ SHELL: "zsh" })).toMatch(/^\/bin\/(zsh|sh)$/);
+    expect(loginShell({})).toMatch(/^\/bin\/(zsh|sh)$/);
   });
 });
 
@@ -186,6 +184,7 @@ function watcher(patch: Partial<Watcher> = {}): Watcher {
     name: "test",
     command: "watch",
     args: [],
+    prompt: "",
     cwd: null,
     env: {},
     mode: "loop",
@@ -221,17 +220,25 @@ async function waitFor(cond: () => boolean, timeoutMs = 2000, label = "condition
 
 type StatusPatch = { lastRunAt?: number; lastError?: string | null };
 
-function harness(spawn: SpawnFn, timing: Partial<WatcherTiming> = FAST, onItems?: (w: Watcher, items: WorkItem[]) => void | Promise<void>) {
-  const batches: { watcher: Watcher; items: WorkItem[] }[] = [];
+function harness(
+  spawn: SpawnFn,
+  timing: Partial<WatcherTiming> = FAST,
+  onOutput?: (w: Watcher, output: WatcherOutput) => void | Promise<void>,
+  maxOutputChars?: number,
+) {
+  const outputs: { watcher: Watcher; text: string; truncated: boolean }[] = [];
   const statuses: { id: string; patch: StatusPatch }[] = [];
   const runner = new WatcherRunner({
     spawn,
     timing,
-    onItems: onItems ?? ((w, items) => void batches.push({ watcher: w, items })),
+    shell: "/bin/test-sh",
+    maxOutputChars,
+    onOutput: onOutput ?? ((w, o) => void outputs.push({ watcher: w, ...o })),
     onStatus: (id, patch) => void statuses.push({ id, patch }),
   });
   const errors = () => statuses.filter((s) => "lastError" in s.patch).map((s) => s.patch.lastError);
-  return { runner, batches, statuses, errors };
+  const texts = () => outputs.map((o) => o.text);
+  return { runner, outputs, texts, statuses, errors };
 }
 
 let active: WatcherRunner[] = [];
@@ -245,18 +252,18 @@ function track<T extends { runner: WatcherRunner }>(h: T): T {
 }
 
 describe("WatcherRunner loop mode", () => {
-  test("delivers items and re-runs after exit 0", async () => {
+  test("delivers a run's output as one chunk and re-runs after exit 0", async () => {
     const { spawn, procs } = fakeSpawn((p, n) => {
       if (n === 0) {
         p.line({ key: "A-1", summary: "one" });
-        p.line({ key: "A-2", summary: "two" });
+        p.write("plain text, not json\n");
         p.exit(0);
       }
     });
     const h = track(harness(spawn));
     h.runner.sync([watcher()]);
     await waitFor(() => procs.length >= 2, 2000, "restart");
-    expect(h.batches.flatMap((b) => b.items.map((i) => i.key))).toEqual(["A-1", "A-2"]);
+    expect(h.texts()).toEqual(['{"key":"A-1","summary":"one"}\nplain text, not json']);
     expect(h.errors()).toEqual([null]);
     expect(h.statuses.filter((s) => s.patch.lastRunAt !== undefined).length).toBeGreaterThanOrEqual(2);
   });
@@ -267,7 +274,7 @@ describe("WatcherRunner loop mode", () => {
     h.runner.sync([watcher()]);
     await waitFor(() => procs.length >= 3, 1000, "three runs");
     expect(h.errors().every((e) => e === null)).toBe(true);
-    expect(h.batches).toHaveLength(0);
+    expect(h.outputs).toHaveLength(0);
   });
 
   test("failures report stderr and back off exponentially; success resets", async () => {
@@ -280,7 +287,7 @@ describe("WatcherRunner loop mode", () => {
       }
     });
     const h = track(harness(spawn, { ...FAST, backoffBaseMs: 50, restartDelayMs: 10 }));
-    h.runner.sync([watcher({ command: "watch-jira" })]);
+    h.runner.sync([watcher({ command: "watch-jira", args: ["--follow"] })]);
     await waitFor(() => procs.length >= 5, 3000, "five runs");
     const err = h.errors().find((e) => typeof e === "string")!;
     expect(err).toContain("watch-jira exited with code 1");
@@ -316,77 +323,107 @@ describe("WatcherRunner loop mode", () => {
     expect(h.errors()[0]).toContain("ENOENT");
   });
 
-  test("batches a long-lived stream while it is still running", async () => {
+  test("splits a long-lived stream into bursts while it is still running", async () => {
     let proc!: FakeProc;
     const { spawn } = fakeSpawn((p) => (proc = p));
     const h = track(harness(spawn, { ...FAST, batchIdleMs: 30 }));
     h.runner.sync([watcher()]);
     await waitFor(() => !!proc, 1000, "spawn");
-    proc.line({ key: "A-1" });
-    proc.line({ key: "A-2" });
-    proc.line({ key: "A-3" });
-    await waitFor(() => h.batches.length === 1, 1000, "first batch");
-    expect(h.batches[0]!.items.map((i) => i.key)).toEqual(["A-1", "A-2", "A-3"]);
-    proc.line({ key: "A-4" });
-    await waitFor(() => h.batches.length === 2, 1000, "second batch");
-    expect(h.batches[1]!.items.map((i) => i.key)).toEqual(["A-4"]);
+    proc.write("event 1\n");
+    proc.write("event 1 detail\n");
+    await waitFor(() => h.outputs.length === 1, 1000, "first burst");
+    expect(h.texts()).toEqual(["event 1\nevent 1 detail"]);
+    proc.write("event 2\n");
+    await waitFor(() => h.outputs.length === 2, 1000, "second burst");
+    expect(h.texts()[1]).toBe("event 2");
     expect(proc.killed).toBe(false);
   });
 
-  test("a steady trickle is still flushed by the max batch age", async () => {
+  test("whitespace-only bursts are skipped", async () => {
+    let proc!: FakeProc;
+    const { spawn } = fakeSpawn((p) => (proc = p));
+    const h = track(harness(spawn, { ...FAST, batchIdleMs: 20 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => !!proc, 1000, "spawn");
+    proc.write("\n   \n\t\n");
+    await sleep(60);
+    proc.write("  real  \n");
+    await waitFor(() => h.outputs.length === 1, 1000, "burst");
+    await sleep(40);
+    expect(h.texts()).toEqual(["real"]);
+  });
+
+  test("a steady trickle is still flushed by the max burst age", async () => {
     let proc!: FakeProc;
     const { spawn } = fakeSpawn((p) => (proc = p));
     const h = track(harness(spawn, { ...FAST, batchIdleMs: 60, batchMaxMs: 100 }));
     h.runner.sync([watcher()]);
     await waitFor(() => !!proc, 1000, "spawn");
     for (let i = 0; i < 12; i++) {
-      proc.line({ key: `T-${i}` });
+      proc.write(`tick ${i}\n`);
       await sleep(20); // never idle for 60ms
     }
-    expect(h.batches.length).toBeGreaterThanOrEqual(1);
-    expect(h.batches.length).toBeLessThan(12);
+    expect(h.outputs.length).toBeGreaterThanOrEqual(1);
+    expect(h.outputs.length).toBeLessThan(12);
   });
 
-  test("reassembles lines split across chunks and keeps a final unterminated line", async () => {
+  test("a timed flush keeps a partial line for the next burst", async () => {
+    let proc!: FakeProc;
+    const { spawn } = fakeSpawn((p) => (proc = p));
+    const h = track(harness(spawn, { ...FAST, batchIdleMs: 30, restartDelayMs: 10_000 }));
+    h.runner.sync([watcher()]);
+    await waitFor(() => !!proc, 1000, "spawn");
+    proc.write("line one\nline tw");
+    await waitFor(() => h.outputs.length === 1, 1000, "first burst");
+    expect(h.texts()[0]).toBe("line one");
+    proc.write("o\n");
+    proc.exit(0);
+    await waitFor(() => h.outputs.length === 2, 1000, "rest");
+    expect(h.texts()[1]).toBe("line two");
+  });
+
+  test("a huge burst is cut at maxOutputChars and marked truncated", async () => {
     const { spawn } = fakeSpawn((p) => {
-      p.write('{"key":"S-');
-      p.write('1"}\nnot json\n\n{"ke');
-      p.write('y":"S-2"}');
+      p.write("a".repeat(30) + "\n");
+      p.write("b".repeat(30) + "\n");
       p.exit(0);
     });
-    const h = track(harness(spawn, { ...FAST, restartDelayMs: 10_000 }));
+    const h = track(harness(spawn, { ...FAST, restartDelayMs: 10_000 }, undefined, 40));
     h.runner.sync([watcher()]);
-    await waitFor(() => h.batches.flatMap((b) => b.items).length >= 2, 1000, "items");
-    expect(h.batches.flatMap((b) => b.items.map((i) => i.key))).toEqual(["S-1", "S-2"]);
+    await waitFor(() => h.outputs.length === 1, 1000, "burst");
+    await sleep(40);
+    expect(h.outputs).toHaveLength(1);
+    expect(h.outputs[0]!.truncated).toBe(true);
+    expect(h.outputs[0]!.text).toBe("a".repeat(30) + "\n" + "b".repeat(9));
   });
 
-  test("an onItems throw is reported and does not stop the runner", async () => {
+  test("an onOutput throw is reported and does not stop the runner", async () => {
     const { spawn, procs } = fakeSpawn((p, n) => {
-      p.line({ key: `E-${n}` });
+      p.write(`E-${n}\n`);
       p.exit(0);
     });
     const seen: string[] = [];
     const h = track(
-      harness(spawn, FAST, (_w, items) => {
-        seen.push(...items.map((i) => i.key));
+      harness(spawn, FAST, (_w, o) => {
+        seen.push(o.text);
         if (seen.length === 1) throw new Error("db locked");
       }),
     );
     h.runner.sync([watcher()]);
     await waitFor(() => seen.length >= 3, 2000, "later deliveries");
-    expect(h.errors()[0]).toBe("Failed to handle items: db locked");
+    expect(h.errors()[0]).toBe("Failed to handle output: db locked");
     // The run whose delivery failed must not clear its own error on exit 0: between the
     // first and second run starts, the only error patch is the failure.
     const starts = h.statuses.flatMap((s, i) => (s.patch.lastRunAt !== undefined ? [i] : []));
     const firstRun = h.statuses.slice(starts[0], starts[1]).filter((s) => "lastError" in s.patch);
-    expect(firstRun.map((s) => s.patch.lastError)).toEqual(["Failed to handle items: db locked"]);
+    expect(firstRun.map((s) => s.patch.lastError)).toEqual(["Failed to handle output: db locked"]);
     expect(h.errors().at(-1)).toBeNull();
     expect(procs.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("async onItems rejections are caught too", async () => {
+  test("async onOutput rejections are caught too", async () => {
     const { spawn } = fakeSpawn((p) => {
-      p.line({ key: "R-1" });
+      p.write("R-1\n");
       p.exit(0);
     });
     const h = track(harness(spawn, { ...FAST, restartDelayMs: 10_000 }, async () => {
@@ -431,6 +468,23 @@ describe("WatcherRunner interval mode", () => {
     await waitFor(() => procs.length >= 2, 1000, "next tick");
     procs[1]!.exit(0);
     await waitFor(() => procs.length >= 3, 1000, "another tick");
+  });
+
+  test("each run's output is one chunk, however slowly it arrives; empty runs deliver nothing", async () => {
+    const { spawn, procs } = fakeSpawn(async (p, n) => {
+      if (n === 0) {
+        p.write("first\n");
+        await sleep(80); // longer than batchIdleMs: loop mode would split here
+        p.write("second\n");
+      } else {
+        p.write("  \n");
+      }
+      p.exit(0);
+    });
+    const h = track(harness(spawn, { ...FAST, batchIdleMs: 20 }));
+    h.runner.sync([watcher({ mode: "interval", intervalSec: 0.03 })]);
+    await waitFor(() => procs.length >= 3, 2000, "three runs");
+    expect(h.texts()).toEqual(["first\nsecond"]);
   });
 
   test("interval is floored by minIntervalMs", async () => {
@@ -483,8 +537,18 @@ describe("WatcherRunner sync", () => {
     await waitFor(() => procs.length === 1, 1000, "spawn");
     await sleep(30);
     expect(procs.length).toBe(1);
+    expect(procs[0]!.cmd).toBe("watch");
     expect(procs[0]!.args).toEqual(["-p", "FOO"]);
     expect(procs[0]!.opts).toEqual({ cwd: "/tmp", env: { JIRA_EMAIL: "x" } });
+  });
+
+  test("a command line without args is run through the shell", async () => {
+    const { spawn, procs } = fakeSpawn();
+    const h = track(harness(spawn));
+    h.runner.sync([watcher({ command: "while true; do curl -s https://x/events; sleep 60; done" })]);
+    await waitFor(() => procs.length === 1, 1000, "spawn");
+    expect(procs[0]!.cmd).toBe("/bin/test-sh");
+    expect(procs[0]!.args).toEqual(["-lc", "while true; do curl -s https://x/events; sleep 60; done"]);
   });
 
   test("stops removed and disabled watchers", async () => {
@@ -506,7 +570,7 @@ describe("WatcherRunner sync", () => {
     h.runner.sync([w]);
     await waitFor(() => procs.length === 1, 1000, "spawn");
 
-    h.runner.sync([{ ...w, name: "renamed", driver: "dummy", updatedAt: 5 }]);
+    h.runner.sync([{ ...w, name: "renamed", driver: "dummy", prompt: "only mine", updatedAt: 5 }]);
     await sleep(40);
     expect(procs.length).toBe(1);
     expect(procs[0]!.killed).toBe(false);
@@ -521,17 +585,18 @@ describe("WatcherRunner sync", () => {
     expect(procs[1]!.killed).toBe(true);
   });
 
-  test("items are delivered with the latest watcher object", async () => {
+  test("output is delivered with the latest watcher object (and its prompt)", async () => {
     let proc!: FakeProc;
     const { spawn } = fakeSpawn((p) => (proc = p));
     const h = track(harness(spawn));
     const w = watcher();
     h.runner.sync([w]);
     await waitFor(() => !!proc, 1000, "spawn");
-    h.runner.sync([{ ...w, driver: "claude-code" }]);
+    h.runner.sync([{ ...w, driver: "claude-code", prompt: "only mine" }]);
     proc.line({ key: "D-1" });
-    await waitFor(() => h.batches.length === 1, 1000, "batch");
-    expect(h.batches[0]!.watcher.driver).toBe("claude-code");
+    await waitFor(() => h.outputs.length === 1, 1000, "output");
+    expect(h.outputs[0]!.watcher.driver).toBe("claude-code");
+    expect(h.outputs[0]!.watcher.prompt).toBe("only mine");
   });
 
   test("runNow on a disabled watcher does a one-off run; unknown ids throw", async () => {
@@ -544,7 +609,7 @@ describe("WatcherRunner sync", () => {
     await sleep(20);
     expect(procs.length).toBe(0);
     await h.runner.runNow("w1");
-    await waitFor(() => h.batches.length === 1, 1000, "one-off items");
+    await waitFor(() => h.outputs.length === 1, 1000, "one-off output");
     await sleep(40);
     expect(procs.length).toBe(1); // not looped
     await expect(h.runner.runNow("missing")).rejects.toThrow("Unknown watcher");
@@ -575,18 +640,16 @@ describe("WatcherRunner with Bun.spawn", () => {
 if (mode === "fail") { console.error("watch: bad credentials"); process.exit(1); }
 console.log(JSON.stringify({ key: "REAL-1", summary: "from " + process.env.HARNESS_TEST_VAR, cwd: process.cwd(), hasPath: !!process.env.PATH }));
 console.log("noise that is not json");
-await Bun.sleep(20);
-console.log(JSON.stringify({ key: "REAL-2", updated: "v2" }));
 process.exit(4);
 `,
   );
 
-  test("emits NDJSON items with the watcher env and cwd", async () => {
+  test("a legacy command + args runs directly, with the watcher env and cwd", async () => {
     // No spawn override: exercises the default Bun.spawn implementation.
-    const batches: WorkItem[][] = [];
+    const outputs: WatcherOutput[] = [];
     const errors: (string | null | undefined)[] = [];
     const runner = new WatcherRunner({
-      onItems: (_w, items) => void batches.push(items),
+      onOutput: (_w, o) => void outputs.push(o),
       onStatus: (_id, patch) => void ("lastError" in patch && errors.push(patch.lastError)),
       timing: { ...FAST, minIntervalMs: 60_000 },
     });
@@ -595,20 +658,43 @@ process.exit(4);
       watcher({ mode: "interval", intervalSec: 3600, command: process.execPath, args: [script], cwd: dir, env: { HARNESS_TEST_VAR: "env" } }),
     ]);
     await waitFor(() => errors.length > 0, 10_000, "exit");
-    const items = batches.flat();
-    expect(items.map((i) => i.key)).toEqual(["REAL-1", "REAL-2"]);
-    const raw = items[0]!.raw as { summary: string; cwd: string; hasPath: boolean };
-    expect(items[0]!.title).toBe("from env");
+    expect(outputs).toHaveLength(1);
+    const [json, noise] = outputs[0]!.text.split("\n");
+    const raw = JSON.parse(json!) as { summary: string; cwd: string; hasPath: boolean };
+    expect(raw.summary).toBe("from env");
     expect(raw.hasPath).toBe(true); // merged over process.env
     expect(raw.cwd.endsWith(dir.split("/").pop()!)).toBe(true);
-    expect(items[1]!.version).toBe("v2");
+    expect(noise).toBe("noise that is not json");
     expect(errors).toEqual([null]);
+  });
+
+  test("a shell command line gets pipes, variables and the watcher env", async () => {
+    const outputs: WatcherOutput[] = [];
+    const errors: (string | null | undefined)[] = [];
+    const runner = new WatcherRunner({
+      onOutput: (_w, o) => void outputs.push(o),
+      onStatus: (_id, patch) => void ("lastError" in patch && errors.push(patch.lastError)),
+      timing: { ...FAST, minIntervalMs: 60_000 },
+      shell: "/bin/sh",
+    });
+    active.push(runner);
+    runner.sync([
+      watcher({
+        mode: "interval",
+        intervalSec: 3600,
+        command: `for i in 1 2; do echo "{\\"event\\":\\"assigned\\",\\"to\\":\\"$WHO\\",\\"n\\":$i}"; done | tr a-z A-Z`,
+        env: { WHO: "mark" },
+      }),
+    ]);
+    await waitFor(() => errors.length > 0, 10_000, "exit");
+    expect(errors).toEqual([null]);
+    expect(outputs.map((o) => o.text)).toEqual(['{"EVENT":"ASSIGNED","TO":"MARK","N":1}\n{"EVENT":"ASSIGNED","TO":"MARK","N":2}']);
   });
 
   test("a failing process reports its stderr", async () => {
     const errors: (string | null | undefined)[] = [];
     const runner = new WatcherRunner({
-      onItems: () => {},
+      onOutput: () => {},
       onStatus: (_id, patch) => void ("lastError" in patch && errors.push(patch.lastError)),
       timing: { ...FAST, backoffBaseMs: 60_000 },
     });
@@ -622,12 +708,12 @@ process.exit(4);
   test("a missing executable is reported, not thrown", async () => {
     const errors: (string | null | undefined)[] = [];
     const runner = new WatcherRunner({
-      onItems: () => {},
+      onOutput: () => {},
       onStatus: (_id, patch) => void ("lastError" in patch && errors.push(patch.lastError)),
       timing: { ...FAST, backoffBaseMs: 60_000 },
     });
     active.push(runner);
-    runner.sync([watcher({ command: join(dir, "does-not-exist") })]);
+    runner.sync([watcher({ command: join(dir, "does-not-exist"), args: ["--x"] })]);
     await waitFor(() => errors.length > 0, 5000, "failure");
     expect(errors[0]).toBeTruthy();
   });
