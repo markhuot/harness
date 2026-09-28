@@ -28,6 +28,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On the Mac, deleting a ticket now closes its pane on every board, and removing a project closes
   its tickets' panes on All projects.
+- A ticket's working spinner now goes away when its run crashes. If Harness can't save a run's
+  result (when the disk is full, for example), the run is marked failed as soon as saving
+  works again, and the agent behind it is stopped. Before, the card stayed stuck on working
+  until the next restart, even after the ticket moved to Done.
 
 ## [app-20260928.1438](https://github.com/markhuot/harness/releases/tag/app-20260928.1438) - 2026-09-28
 
