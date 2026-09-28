@@ -10,16 +10,27 @@
 //   the watcher wraps the fixture and its prompt carries the rule;
 //   each of the fixture's three events becomes an Inbox triage session carrying that prompt;
 //   triage (claude-code too) dispatches E1 to SHOP and declines E2 and E3.
-// Prints the transcript highlights. Exit code 0 only when every check passed.
+// Prints the transcript highlights. Exit code 0 only when every check passed; 2 (before
+// booting anything) when `claude` isn't installed or logged in.
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Project, Session, Ticket, TicketDetail, TranscriptEntry, Watcher } from "@harness/shared";
+import type { Project, Session, Settings, Ticket, TicketDetail, TranscriptEntry, Watcher } from "@harness/shared";
+import { ClaudeCodeDriver } from "../src/drivers/claude-code";
 
 const serviceDir = resolve(import.meta.dir, "..");
 const fixture = join(serviceDir, "src/orchestrator/__fixtures__/events-api.ts");
 const model = process.argv.includes("--model") ? process.argv[process.argv.indexOf("--model") + 1] : undefined;
+
+// Before booting anything: the driver's own availability and login check (`claude auth status`).
+const settings: Settings = { defaultDriver: "claude-code", maxConcurrentRuns: 1, permissionMode: "ask", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKey: null };
+const claude = await new ClaudeCodeDriver({ settings: () => settings }).info();
+if (!claude.available || !claude.authenticated) {
+  console.error(`claude isn't available: ${claude.detail}`);
+  process.exit(2);
+}
+console.log(`claude: ${claude.detail}`);
 
 const home = mkdtempSync(join(tmpdir(), "harness-watcher-check-home-"));
 const projectDir = mkdtempSync(join(tmpdir(), "harness-watcher-check-shop-"));

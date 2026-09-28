@@ -326,6 +326,46 @@ describe("dummy driver", () => {
     expect(ops.calls.map((c) => c.method)).toEqual(["declineWork"]);
   });
 
+  describe("/tools directive", () => {
+    const FALLBACK = "The /tools directive needs a JSON array of {name, input}.";
+    const texts = (events: DriverEvent[]) => events.flatMap((e) => (e.type === "text" ? [e.text] : []));
+    const stateOf = (events: DriverEvent[]) => events.findLast((e) => e.type === "state") as Extract<DriverEvent, { type: "state" }> | undefined;
+
+    for (const [name, arg] of [
+      ["invalid JSON", '[{"name": "list_projects",'],
+      ["a non-array value", '{"name": "list_projects", "input": {}}'],
+    ] as const) {
+      test(`${name} says what the directive needs and calls no tool`, async () => {
+        const { req, ops } = makeReq("work", `/tools ${arg}`);
+        const { events, error } = await collect(driver, req);
+        expect(error).toBeNull();
+        expect(texts(events)).toContain(FALLBACK);
+        expect(calls(events)).toEqual([]);
+        expect(ops.calls).toEqual([]);
+      });
+    }
+
+    test("a tool error stops the run and keeps the rest; 'Retry it now' resumes from the failed call", async () => {
+      const failing = fakeOps({ postSummary: async () => { throw new Error("awaiting approval"); } });
+      const script = [
+        { name: "list_projects", input: {} },
+        { name: "post_summary", input: { summary: "halfway" } },
+        { name: "list_mappings", input: {} },
+      ];
+      const first = makeReq("work", `/tools ${JSON.stringify(script)}`, { ctx: { ops: failing } });
+      const run1 = await collect(driver, first.req);
+      expect(run1.error).toBeNull();
+      // Stopped at the failed call: nothing after it, and no submit_for_review
+      expect(first.ops.calls.map((c) => c.method)).toEqual(["listProjects", "postSummary"]);
+      const state = stateOf(run1.events)!.state as { pendingCalls?: unknown };
+      expect(state.pendingCalls).toEqual(script.slice(1));
+
+      const retry = makeReq("work", "The human approved your request. Retry it now and continue.", { state });
+      await collect(driver, retry.req);
+      expect(retry.ops.calls.map((c) => c.method)).toEqual(["postSummary", "listMappings", "submitForReview"]);
+    });
+  });
+
   describe("timing", () => {
     const saved = process.env.HARNESS_DUMMY_DELAY_MS;
     afterEach(() => {
