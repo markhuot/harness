@@ -36,14 +36,16 @@ interface TicketRow {
 
 /**
  * Identity of a tool call for one-time grants: tool name + canonical input. A Bash call's
- * `description` is a label the model writes (and rewrites on a retry); it isn't part of what
- * the human approved, so it's left out. Everything else (command, timeout, ...) must match.
+ * `description`, `timeout` and `run_in_background` are how the model labels and runs the command
+ * (and it changes them on a retry); they aren't part of what the human approved, so they're left
+ * out. Everything else (command, dangerouslyDisableSandbox, ...) must match.
  */
+const BASH_EXECUTION_KEYS = ["description", "timeout", "run_in_background"];
+
 export function grantKey(toolName: string, input: unknown): string {
   let i = input;
   if (toolName === "Bash" && i && typeof i === "object" && !Array.isArray(i)) {
-    const { description: _d, ...rest } = i as Record<string, unknown>;
-    i = rest;
+    i = Object.fromEntries(Object.entries(i as Record<string, unknown>).filter(([k]) => !BASH_EXECUTION_KEYS.includes(k)));
   }
   return `${toolName}\u0000${canonicalJson(i)}`;
 }
@@ -476,6 +478,12 @@ export class TicketRepo {
     if (!row) return false;
     this.db.query("DELETE FROM approval_grants WHERE id = $id").run({ id: row.id });
     return true;
+  }
+
+  /** Drop these one-time grants of the ticket (ones already used up are ignored). */
+  dropGrants(ticketId: string, ids: number[]) {
+    const q = this.db.query("DELETE FROM approval_grants WHERE ticket_id = $ticketId AND id = $id");
+    for (const id of ids) q.run({ ticketId, id });
   }
 
   /** The ticket's unconsumed one-time grants, oldest first. */

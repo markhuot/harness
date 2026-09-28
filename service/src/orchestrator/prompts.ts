@@ -128,7 +128,7 @@ When the human replies with feedback, revise and call \`update_plan\` again. Put
 
 function workInstructions(ticket: Ticket | null): string {
   const git = ticket?.branch
-    ? `You are in a git worktree dedicated to this ticket, on branch \`${ticket.branch}\`. Commit your work to this branch in logical steps with clear messages. Do not switch branches, merge, rebase onto other branches, or push; the merge happens when the ticket is completed.`
+    ? `You are in a git worktree dedicated to this ticket, on branch \`${ticket.branch}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the merge happens when the ticket is completed.`
     : `You are working directly in the project checkout, not a dedicated worktree. Do not commit, switch branches or push unless the ticket asks for it.`;
   return section(
     "This run: work",

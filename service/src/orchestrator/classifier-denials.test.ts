@@ -21,6 +21,11 @@ interface Sim {
   freshCommands: boolean;
   /** After the denial the agent retries the same call in the same run, and it runs */
   retryInRun: boolean;
+  /**
+   * A viaPrompt grant's call runs without the CLI asking the prompt tool (acceptEdits runs
+   * read-only Bash itself), so nothing consumes the grant
+   */
+  cliRunsItself: boolean;
 }
 
 /**
@@ -29,7 +34,7 @@ interface Sim {
  * grant, if the prompt tool (requestApproval) allows it. Otherwise the classifier denies it.
  */
 function setup(sim: Partial<Sim> = {}) {
-  const s: Sim = { after: "none", ruleIgnored: false, freshCommands: false, retryInRun: false, ...sim };
+  const s: Sim = { after: "none", ruleIgnored: false, freshCommands: false, retryInRun: false, cliRunsItself: false, ...sim };
   const driver = new FakeDriver();
   const h = makeOrchestrator({ driver });
   const dir = join(h.home, "acme");
@@ -47,7 +52,7 @@ function setup(sim: Partial<Sim> = {}) {
     const grant = req.grants?.once.find((g) => grantKey(g.toolName, g.input) === grantKey("Bash", call));
     let ran = false;
     if (grant?.viaPrompt) {
-      ran = (await ctx.ops.requestApproval(ctx, "Bash", call)).behavior === "allow";
+      ran = s.cliRunsItself || (await ctx.ops.requestApproval(ctx, "Bash", call)).behavior === "allow";
     } else if (grant) {
       yield { type: "grant_applied", toolName: grant.toolName, input: grant.input };
       ran = !s.ruleIgnored;
@@ -193,6 +198,40 @@ describe("classifier denials → approval cards", () => {
     expect(h.store.tickets.listGrants(t.id)).toEqual([]);
   });
 
+  test("a grant the CLI never asked about expires with the run it was handed to", async () => {
+    const h = setup({ ruleIgnored: true, cliRunsItself: true });
+    const t = await denied(h);
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle(); // exact rule ignored → card again
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(work(h)[2]!.grants!.once).toEqual([{ toolName: "Bash", input: CALL, viaPrompt: true }]);
+    expect(ticket(h, t.key).status).toBe("review"); // ran without the prompt tool
+    expect(h.store.tickets.listGrants(t.id)).toEqual([]);
+    // the next run isn't handed the stale grant (which would put it in ask mode)
+    await h.orch.sendMessage(t.key, "and one more thing");
+    await h.orch.idle();
+    expect(work(h)[3]!.grants).toEqual({ tools: [], once: [] });
+  });
+
+  test("a failed run keeps its grants for the next run", async () => {
+    const h = setup();
+    const t = await denied(h);
+    const script = h.driver.script;
+    h.driver.script = async function* () {
+      yield { type: "error", message: "CLI crashed" };
+    };
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.store.runs.listBySession(t.sessionId).at(-1)!.status).toBe("failed");
+    expect(h.store.tickets.listGrants(t.id)).toHaveLength(1);
+    h.driver.script = script;
+    await h.orch.sendMessage(t.key, "try again");
+    await h.orch.idle();
+    expect(work(h).at(-1)!.grants!.once).toEqual([{ toolName: "Bash", input: CALL }]);
+    expect(ticket(h, t.key).status).toBe("review");
+  });
+
   test("deny still resumes with the denial and no grant", async () => {
     const h = setup();
     const t = await denied(h);
@@ -242,9 +281,12 @@ describe("classifier denials → approval cards", () => {
 });
 
 describe("grantKey", () => {
-  test("a Bash call's description isn't part of the grant; everything else is", () => {
+  test("a Bash call's description, timeout and run_in_background aren't part of the grant; everything else is", () => {
     expect(grantKey("Bash", { command: "ls", description: "a" })).toBe(grantKey("Bash", { description: "b", command: "ls" }));
-    expect(grantKey("Bash", { command: "ls", timeout: 5 })).not.toBe(grantKey("Bash", { command: "ls", timeout: 6 }));
+    expect(grantKey("Bash", { command: "ls", timeout: 5 })).toBe(grantKey("Bash", { command: "ls", timeout: 6 }));
+    expect(grantKey("Bash", { command: "ls", run_in_background: true, timeout: 600000 })).toBe(grantKey("Bash", { command: "ls" }));
+    expect(grantKey("Bash", { command: "ls" })).not.toBe(grantKey("Bash", { command: "ls -a" }));
+    expect(grantKey("Bash", { command: "ls", dangerouslyDisableSandbox: true })).not.toBe(grantKey("Bash", { command: "ls" }));
     expect(grantKey("Write", { file_path: "a", description: "a" })).not.toBe(grantKey("Write", { file_path: "a", description: "b" }));
   });
 });

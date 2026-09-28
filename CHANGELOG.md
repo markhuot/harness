@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Approving a tool call once no longer puts the rest of a ticket in ask mode. Before, an approval
+  the agent didn't end up needing stayed on the ticket, and every later turn asked you about
+  commands that auto mode would have allowed on its own.
+- Approving a command once now covers the agent's retry even when it changes how the command
+  runs (in the background, or with a longer timeout), so you're no longer asked to approve the
+  same command again.
+- Agents working on a ticket that asks for a release or deploy are no longer told never to push,
+  which could lead Claude Code's auto mode to block the push.
+
 ## [app-20260928.0155](https://github.com/markhuot/harness/releases/tag/app-20260928.0155) - 2026-09-28
 
 ### Fixed

@@ -54,7 +54,7 @@ describe("tool permission approvals", () => {
     // grant was consumed: the same call now needs approval again; key order doesn't matter for matching
     expect(h.store.tickets.consumeGrant(t.id, "Bash", { timeout: 5, command: "ls" })).toBe(false);
     h.store.tickets.addGrant(t.id, "Bash", { command: "ls", timeout: 5 });
-    expect(h.store.tickets.consumeGrant(t.id, "Bash", { command: "ls", timeout: 6 })).toBe(false);
+    expect(h.store.tickets.consumeGrant(t.id, "Bash", { command: "ls -a", timeout: 5 })).toBe(false);
     expect(h.store.tickets.consumeGrant(t.id, "Bash", { timeout: 5, command: "ls" })).toBe(true);
   });
 

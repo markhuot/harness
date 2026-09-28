@@ -276,9 +276,12 @@ pipelines (checked per segment), globs (`*` makes the rule a wildcard; `\*` didn
 either), redirections (`>`, `2>/dev/null`) or `$(…)`; multi-line commands and a trailing
 backslash aren't risked. Auto mode also strips allow rules it treats as arbitrary code
 execution before its classifier runs: bare `Bash` and `Bash(npx:*)` had no effect (they work in
-ask mode). One-time grants match on tool + canonical input; a Bash call's `description` is
-ignored (the model rewrites it on a retry). A matching one-time grant is consumed before
-`allowedTools` is checked, so it never lingers.
+ask mode). One-time grants match on tool + canonical input; a Bash call's `description`,
+`timeout` and `run_in_background` are ignored (the model changes them on a retry). A matching
+one-time grant is consumed before `allowedTools` is checked. A grant is for the run it's handed
+to: when that run succeeds, whatever it didn't consume is dropped (the CLI doesn't always ask:
+acceptEdits runs read-only Bash itself, so a leftover grant would keep every later run in ask
+mode). A failed or cancelled run's grants carry over to the next run.
 
 **PermissionGate** (`service/src/permissions/gate.ts`) for bash, write_file, edit_file and
 read_file/list_files, per call:

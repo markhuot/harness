@@ -117,6 +117,8 @@ interface ActiveRun {
   calls: Map<string, { toolName: string; input: unknown }>;
   /** grantKey()s of the one-time grants the driver pre-approved for this run (grant_applied) */
   appliedGrants: Set<string>;
+  /** ids of the one-time grants handed to this run (RunRequest.grants.once) */
+  offeredGrants: number[];
 }
 
 interface TriageMeta {
@@ -1249,10 +1251,12 @@ export class Orchestrator {
   }
 
   /** RunRequest.grants: human grants for runs that act for the ticket (not review/plan/triage, not read_only). */
-  private runGrants(kind: RunKind, ticket: Ticket | null, project: Project | null): RunGrants | undefined {
+  private runGrants(kind: RunKind, ticket: Ticket | null, project: Project | null, active: ActiveRun): RunGrants | undefined {
     if (!ticket || !APPROVABLE_RUNS.includes(kind)) return undefined;
     if (this.permissionModeFor(ticket, project) === "read_only") return undefined;
-    const once = this.store.tickets.listGrants(ticket.id).map((g) => {
+    const grants = this.store.tickets.listGrants(ticket.id);
+    active.offeredGrants = grants.map((g) => g.id);
+    const once = grants.map((g) => {
       const viaPrompt = this.ruleFailures.has(`${ticket.id}\u0000${grantKey(g.toolName, g.input)}`);
       return viaPrompt ? { toolName: g.toolName, input: g.input, viaPrompt } : { toolName: g.toolName, input: g.input };
     });
@@ -1583,6 +1587,7 @@ export class Orchestrator {
       denials: [],
       calls: new Map(),
       appliedGrants: new Set(),
+      offeredGrants: [],
     };
     this.active.set(run.id, active);
     run = this.store.runs.markRunning(run.id);
@@ -1621,7 +1626,7 @@ export class Orchestrator {
           cwd,
           model,
           permissionMode: this.permissionModeFor(ticket, project),
-          grants: this.runGrants(run.kind, ticket, project),
+          grants: this.runGrants(run.kind, ticket, project, active),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
           toolContext: ctx,
@@ -1640,6 +1645,11 @@ export class Orchestrator {
     const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
     run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
     this.active.delete(run.id);
+    // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
+    // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
+    // input), and a grant left over would put every later run in ask mode (planGrants). A failed
+    // or cancelled run may not have reached the call, so its grants carry over to the next run.
+    if (status === "succeeded" && ticket && active.offeredGrants.length) this.store.tickets.dropGrants(ticket.id, active.offeredGrants);
     this.bus.emit({ kind: "run.upserted", run });
     this.appendStatus(
       session.id,

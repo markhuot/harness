@@ -134,11 +134,12 @@ describe("native tools behind the PermissionGate (dummy /bash)", () => {
     expect(bashResult(h.store.transcript.list(t.sessionId))).toEqual({ isError: true, text: APPROVAL_PENDING_MESSAGE });
 
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
-    // The retry run's prompt doesn't carry the directive; replay the same call through the gate.
-    await h.orch.idle();
+    // The retry run's prompt doesn't carry the directive; replay the same call through the gate
+    // while that run holds the grant (it expires with the run).
     const ctx = { runId: "r", runKind: "work" as const, session: h.store.sessions.get(t.sessionId)!, ticket: h.orch.ticketDetail(t.key).ticket, cwd: h.dir, ops: h.orch.ops, browser: h.browser, signal: new AbortController().signal };
     expect(await h.orch.checkPermission(ctx, "bash", { command: "touch approved.txt" })).toEqual({ behavior: "allow" });
     expect(c.calls).toHaveLength(1); // the grant short-circuited the classifier
+    await h.orch.idle();
     // one-time: consumed
     await h.orch.checkPermission(ctx, "bash", { command: "touch approved.txt" });
     expect(c.calls).toHaveLength(2);
