@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Type `@` in the New session prompt or a ticket's message box to mention a file in the project.
+  A list of matching files and folders appears as you type; pick one with a tap, or on the Mac with
+  ↑/↓ and Enter or Tab (Escape closes the list). Picking a folder shows what's inside it. When the
+  agent starts, it gets the mentioned files' contents with your message, so it doesn't have to go
+  and read them, and the transcript shows which files were attached.
+
 ## [app-20260928.1438](https://github.com/markhuot/harness/releases/tag/app-20260928.1438) - 2026-09-28
 
 ### Fixed
