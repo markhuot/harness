@@ -93,10 +93,11 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
 | Human message in planning | enqueue plan run with the message |
-| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (worktree if enabled); enqueue work run: "The plan is approved. Begin work." + plan |
+| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
+| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
@@ -203,7 +204,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model?, use_worktree? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
@@ -230,7 +231,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor | `{ url }` |
+| `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
 | `browser_click` | ″ | `{ selector }` |
 | `browser_type` | ″ | `{ selector, text, submit? }` |
@@ -418,7 +419,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
-`auto`). Null at a level means "inherit". Plan (and triage) runs are always read-only.
+`auto`). Null at a level means "inherit". Plan, triage and chat runs are always read-only
+(claude-code runs chat runs with `--permission-mode dontAsk`).
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -643,7 +645,7 @@ GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages {text, chat?} | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]
@@ -704,10 +706,10 @@ matches outright. A folder the query already names lists its contents, not itsel
   `git ls-files --cached --others --exclude-standard` in a git repo, or walks the folder (skipping
   `.git` and `node_modules`, at most 20,000 files) otherwise, adds every folder that holds a file,
   and caches the list per folder for 5 seconds so typing doesn't re-run git on each key.
-- **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and complete prompts
-  through `attachMentions` with the run's cwd before the driver sees them; review and triage
-  prompts are left alone (a review prompt quotes the brief, and triage prompts are watcher
-  output). Each mention that resolves to a file or folder inside the cwd is appended in a
+- **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
+  through `attachMentions` with the run's cwd before the driver sees them; review, complete and
+  triage prompts are left alone (review and complete prompts quote the brief, whose files the
+  earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
   `<mentioned-files>` block: `<file path="…">` with the contents, or `<directory path="…/">` with
   a one-level listing. Mentions that aren't paths (`@someone`) are ignored. Paths that resolve
   outside the cwd, symlinks included, are refused; binary files (a NUL in the first 8 KB) are
@@ -958,10 +960,31 @@ Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The l
 collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows Inbox,
 Settings, project settings, or on the board route the pane workspace.
 
-- **Pane workspace.** A tmux-style split tree (`state/panes.ts`, persisted as `harness.panes`):
-  leaves show content (`{ kind: "board" }` or `{ kind: "ticket", ticketKey, tab }`), splits lay
-  their children out side by side (`row`) or stacked (`column`) with sizes that sum to 1. There's
-  always exactly one board pane and a ticket is open in at most one pane. `PaneWorkspace.tsx`
+- **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
+  board has its own, and All projects has one too. `harness.panes` stores
+  `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`: the project id, or
+  `ALL_SCOPE` = `"*"`), and a board with no entry shows a bare board. The operations work on one
+  scope's `PaneState`. The store takes the scope (`usePanes(scope)`, `updatePanes(scope, fn)`),
+  and `updateAllPanes` covers the edits that reach every board: a deleted ticket (`ticket.deleted`
+  runs `pruneTickets`) and a renamed key (`renameTicketKey`). Removing a project, from the sidebar
+  or through `project.deleted`, drops its scope and closes its tickets on All projects
+  (`forgetProject`). A snapshot drops the scopes of projects that no longer exist, apart from the
+  one on screen. The single tree stored before scopes existed migrates into All projects. It was
+  shared by every board, and All projects is the board that can show all of its tickets; project
+  boards start bare. Parsing drops a scope entry it can't read. Pane ids are unique across all
+  scopes, because content is keyed by leaf id (and a terminal pane's id will name its PTY
+  session): loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
+  that repeats an id gets a new one, and a scope that isn't stored yet gets the fixed board id
+  `b:<scope>`, so re-reading the store (another window wrote it) doesn't remount that board.
+  `paneScopeOf(route)` (`state/route.ts`) is the route's scope. `PaneWorkspace` takes it as a
+  prop and provides it to the panes (`usePaneScope`, `components/paneContext.ts`). Switching
+  scope unmounts the other board's panes rather than keeping every board mounted. Leaves mount
+  again by id when you come back, and content that lives outside the renderer (a terminal's PTY)
+  can reattach by that id. Keeping every board mounted would mean running a board per project,
+  each with its own search. Leaves show content (`{ kind: "board" }` or
+  `{ kind: "ticket", ticketKey, tab }`), splits lay their children out side by side (`row`) or
+  stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board pane, and
+  a ticket is open in at most one of its panes. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -1012,8 +1035,10 @@ Settings, project settings, or on the board route the pane workspace.
   in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
   hash alone. After that the hash mirrors the focused ticket
   pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
-  board. Opening an already focused ticket is a no-op, so the two never fight. Leaving for Inbox
-  or Settings and coming back restores the saved panes.
+  board. Opening an already focused ticket is a no-op, so the two never fight. All of this is per
+  scope: `#/board/<project>/ticket/<KEY>` opens the ticket in that project's panes, and the mirror
+  reads the route's scope. Leaving for Inbox or Settings, or for another project, and coming back
+  restores that board's panes.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a
@@ -1027,6 +1052,23 @@ Settings, project settings, or on the board route the pane workspace.
   keeps it inside the window. It shifts the menu left or right at the sides and flips it above
   the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
   and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
+- **Terminals (process side).** `TerminalManager` (`main/terminals.ts`) keeps one PTY per id,
+  and the id is the renderer's pane leaf id. Each PTY runs the user's login shell (`$SHELL -l`,
+  else `/bin/zsh`) with `TERM=xterm-256color` and without `ELECTRON_*` or `NODE_OPTIONS`. The
+  preload exposes it as `window.harness.terminal` over `harness:terminal:*` IPC. `ensure(id,
+  { cwd, cols, rows })` is idempotent. It spawns on the first call (`~` expands, and a missing
+  directory falls back to home), and later calls re-attach to the same shell and return its
+  bounded scrollback (1 MiB), so a remounted pane replays what it missed. Output is coalesced
+  for a few ms, then broadcast as `terminal:data` to every window, and the exit code goes out as
+  `terminal:exit`. An exited session stays until `kill`, so the pane can show the exit. `list()`
+  lets the renderer kill sessions no pane shows any more. `kill` sends SIGHUP, then SIGKILL after
+  3 s, and every shell is killed on quit. IPC arguments are validated (id pattern, dimensions
+  1–1000, writes up to 1 MiB) because the main process trusts nothing from a renderer. node-pty
+  is an N-API addon, so its prebuilt `pty.node` loads in Electron without a rebuild. The bundle
+  keeps it external, and `package.ts` copies it unpacked beside `app.asar`, where `sign-mac.ts`
+  signs it. Its `spawn-helper` ships without the executable bit, which `package.ts` fixes (and
+  `pty.ts` fixes for dev). `scripts/terminal-check.ts [--packaged]` drives the bridge in a real
+  app over CDP.
 
 ## iPhone app (`mobile/`)
 

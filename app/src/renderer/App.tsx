@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConnectionError, ConnectionResult } from "../main/types";
 import { StoreProvider, useStore } from "./state/store";
+import { paneScopeOf } from "./state/route";
 import { Icon } from "./components/Icon";
 import { Sidebar } from "./views/Sidebar";
 import { InboxView } from "./views/Inbox";
@@ -230,7 +231,7 @@ function Shell() {
         ) : route.view === "project" ? (
           <ProjectSettingsView />
         ) : (
-          <PaneWorkspace />
+          <PaneWorkspace scope={paneScopeOf(route)!} />
         )}
       </main>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}

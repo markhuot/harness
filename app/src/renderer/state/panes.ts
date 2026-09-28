@@ -3,6 +3,11 @@
 // (a "column" split). The pure helpers (the click-a-card rule, docking, closing, resizing, parsing)
 // are tested in panes.test.ts; the store at the bottom persists to localStorage like layout.ts.
 //
+// Each board scope (a project, or ALL_SCOPE for "All projects") has its own tree: the operations
+// work on one scope's PaneState, and the store keeps a PaneState per scope. Pane ids are unique
+// across every scope, since a pane's id is what its content is keyed by (and, for terminal panes,
+// the session they reattach to).
+//
 // Every operation returns a new, normalized state (see `normalize`), so these always hold:
 //   • exactly one board leaf, and a ticket key is open in at most one leaf;
 //   • no split has fewer than 2 children, and no split directly holds a split with the same dir;
@@ -10,7 +15,7 @@
 //   • focusedId/zoomedId name an existing leaf, or are null.
 
 import { useSyncExternalStore } from "react";
-import { isTicketTab, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, isTicketTab, type TicketTab } from "@harness/shared/state";
 
 /** What a pane shows. Terminal panes will join this union later. */
 export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab };
@@ -52,6 +57,18 @@ let idCounter = 0;
 /** Restart the id sequence (p1, p2, …) so tests get deterministic ids. */
 export function resetPaneIds() {
   idCounter = 0;
+}
+
+/**
+ * Move the id sequence past every `p<N>` in `ids`. Other scopes' ids never reach the operations
+ * (they only see their own tree), so the sequence itself has to stay clear of them: the store runs
+ * every id it loads through here.
+ */
+export function seedPaneIds(ids: Iterable<string>) {
+  for (const id of ids) {
+    const m = /^p(\d+)$/.exec(id);
+    if (m) idCounter = Math.max(idCounter, Number(m[1]));
+  }
 }
 
 /** A new id that isn't already used in `taken`. */
@@ -160,10 +177,10 @@ function prune(node: PaneNode, keep: (l: PaneLeaf) => boolean): PaneNode | null 
   return children.length ? { ...node, children, sizes } : null;
 }
 
-/** Give every node a unique, non-empty id (the first holder of an id keeps it). */
-function uniqueIds(root: PaneNode): PaneNode {
-  const taken = allIds(root);
-  const seen = new Set<string>();
+/** Give every node a unique, non-empty id that isn't `reserved` (the first holder of an id keeps it). */
+function uniqueIds(root: PaneNode, reserved: ReadonlySet<string>): PaneNode {
+  const taken = new Set([...reserved, ...allIds(root)]);
+  const seen = new Set(reserved);
   const walk = (n: PaneNode): PaneNode => {
     const id = n.id && !seen.has(n.id) ? n.id : freshId(taken);
     seen.add(id);
@@ -176,9 +193,10 @@ function uniqueIds(root: PaneNode): PaneNode {
 /**
  * Repair a state so every invariant holds: later duplicate boards and duplicate ticket keys are
  * dropped, a missing board comes back on the left, the tree is collapsed/flattened, sizes are fixed,
- * ids are made unique, and a focus/zoom pointing at no leaf becomes null.
+ * ids are made unique (and kept clear of `reserved`, e.g. other scopes' ids), and a focus/zoom
+ * pointing at no leaf becomes null.
  */
-export function normalize(s: { root: PaneNode | null; focusedId?: string | null; zoomedId?: string | null }): PaneState {
+export function normalize(s: { root: PaneNode | null; focusedId?: string | null; zoomedId?: string | null }, reserved: ReadonlySet<string> = new Set()): PaneState {
   let sawBoard = false;
   const keys = new Set<string>();
   let root =
@@ -194,7 +212,7 @@ export function normalize(s: { root: PaneNode | null; focusedId?: string | null;
     const board: PaneLeaf = { type: "leaf", id: "", content: { kind: "board" } };
     root = root ? normalizeNode({ type: "split", id: "", dir: "row", children: [board, root], sizes: [BOARD_SHARE, 1 - BOARD_SHARE] })! : board;
   }
-  root = uniqueIds(root);
+  root = uniqueIds(root, reserved);
   const ids = new Set(leaves(root).map((l) => l.id));
   const keepId = (id: string | null | undefined) => (id && ids.has(id) ? id : null);
   return { root, focusedId: keepId(s.focusedId), zoomedId: keepId(s.zoomedId) };
@@ -308,8 +326,9 @@ const zoomFor = (state: PaneState, id: string) => (state.zoomedId === id ? id : 
 // Operations
 // ---------------------------------------------------------------------------
 
-export function defaultPanes(): PaneState {
-  return { root: { type: "leaf", id: freshId(new Set()), content: { kind: "board" } }, focusedId: null, zoomedId: null };
+/** Just the board. `boardId` defaults to a fresh id. */
+export function defaultPanes(boardId: string = freshId(new Set())): PaneState {
+  return { root: { type: "leaf", id: boardId, content: { kind: "board" } }, focusedId: null, zoomedId: null };
 }
 
 /**
@@ -712,23 +731,85 @@ function parseNode(v: unknown, depth: number): PaneNode | null {
   return { type: "split", id, dir: v.dir, children, sizes };
 }
 
-/** Read the stored panes, tolerating anything (missing, corrupt, older shapes, junk, broken invariants). */
+const idOrNull = (x: unknown) => (typeof x === "string" ? x : null);
+
+/** Read one stored tree, tolerating anything (missing, corrupt, older shapes, junk, broken invariants). */
 export function parsePanes(raw: string | null | undefined): PaneState {
-  if (!raw) return defaultPanes();
   let v: unknown;
   try {
-    v = JSON.parse(raw);
-  } catch {
-    return defaultPanes();
-  }
-  if (!isObject(v)) return defaultPanes();
-  const root = parseNode(v.root, 0);
-  if (!root) return defaultPanes();
-  const idOrNull = (x: unknown) => (typeof x === "string" ? x : null);
-  return normalize({ root, focusedId: idOrNull(v.focusedId), zoomedId: idOrNull(v.zoomedId) });
+    v = raw ? JSON.parse(raw) : null;
+  } catch {}
+  const root = isObject(v) ? parseNode(v.root, 0) : null;
+  return root && isObject(v) ? normalize({ root, focusedId: idOrNull(v.focusedId), zoomedId: idOrNull(v.zoomedId) }) : defaultPanes();
 }
 
 export const serializePanes = (s: PaneState) => JSON.stringify(s);
+
+/** Every board scope's panes, keyed by scope (a project id, or ALL_SCOPE). A scope that isn't here shows just the board. */
+export interface PaneStore {
+  scopes: Record<string, PaneState>;
+}
+
+/**
+ * Read the stored scopes, tolerating anything. An entry that doesn't parse is dropped (that board
+ * starts bare), and ids are made unique across scopes, the first scope to use an id keeping it.
+ * The id sequence moves past every stored id (seedPaneIds), so new panes never reuse one.
+ *
+ * The single tree from before layouts were per board (`{ root, focusedId, zoomedId }`) becomes the
+ * All projects scope: it was shared by every board, and All projects is the one board that shows
+ * every ticket it could hold. Project boards start bare.
+ */
+export function parsePaneStore(raw: string | null | undefined): PaneStore {
+  let v: unknown;
+  try {
+    v = raw ? JSON.parse(raw) : null;
+  } catch {}
+  const entries: [string, unknown][] = !isObject(v) ? [] : isObject(v.scopes) ? Object.entries(v.scopes) : "root" in v ? [[ALL_SCOPE, v]] : [];
+  const parsed = entries.flatMap(([scope, e]) => {
+    const root = scope && isObject(e) ? parseNode(e.root, 0) : null;
+    return root && isObject(e) ? [{ scope, root, focusedId: idOrNull(e.focusedId), zoomedId: idOrNull(e.zoomedId) }] : [];
+  });
+  seedPaneIds(parsed.flatMap((p) => [...allIds(p.root)]));
+  const taken = new Set<string>();
+  const scopes: Record<string, PaneState> = {};
+  for (const { scope, ...s } of parsed) {
+    const state = normalize(s, taken);
+    allIds(state.root, taken);
+    scopes[scope] = state;
+  }
+  return { scopes };
+}
+
+export const serializePaneStore = (s: PaneStore) => JSON.stringify(s);
+
+/** The board leaf id of a scope that has no stored panes yet: the same every time, so re-reading the store doesn't remount the board. */
+const bareBoardId = (scope: string) => `b:${scope}`;
+
+/** `store` with `fn` applied to every stored scope; the same object when nothing changed. */
+export function mapScopes(store: PaneStore, fn: (s: PaneState, scope: string) => PaneState): PaneStore {
+  let changed = false;
+  const scopes: Record<string, PaneState> = {};
+  for (const [scope, s] of Object.entries(store.scopes)) {
+    scopes[scope] = fn(s, scope);
+    if (scopes[scope] !== s) changed = true;
+  }
+  return changed ? { scopes } : store;
+}
+
+/** `store` without the scopes `keep` rejects; the same object when none go. */
+export function retainScopes(store: PaneStore, keep: (scope: string) => boolean): PaneStore {
+  const scopes = Object.fromEntries(Object.entries(store.scopes).filter(([scope]) => keep(scope)));
+  return Object.keys(scopes).length === Object.keys(store.scopes).length ? store : { scopes };
+}
+
+/**
+ * A project was removed: its board's panes go, and its tickets (keys `<projectKey>-<n>`) close in
+ * every other scope (All projects could have them open).
+ */
+export function forgetProject(store: PaneStore, projectId: string, projectKey: string | null): PaneStore {
+  const rest = retainScopes(store, (scope) => scope !== projectId);
+  return projectKey ? mapScopes(rest, (s) => pruneTickets(s, (k) => !k.startsWith(`${projectKey}-`))) : rest;
+}
 
 // ---------------------------------------------------------------------------
 // Store
@@ -736,33 +817,62 @@ export const serializePanes = (s: PaneState) => JSON.stringify(s);
 
 export const PANES_KEY = "harness.panes";
 
-function load(): PaneState {
+function load(): PaneStore {
   try {
-    return parsePanes(localStorage.getItem(PANES_KEY));
+    return parsePaneStore(localStorage.getItem(PANES_KEY));
   } catch {
-    return defaultPanes();
+    return { scopes: {} };
   }
 }
 
-let current: PaneState | null = null;
+let current: PaneStore | null = null;
 const listeners = new Set<() => void>();
-const get = () => (current ??= load());
+const getStore = () => (current ??= load());
 
-function publish(next: PaneState) {
+/** A scope's panes. One that isn't stored yet gets a bare board, kept in memory until it's first changed. */
+function get(scope: string): PaneState {
+  const store = getStore();
+  return (store.scopes[scope] ??= defaultPanes(bareBoardId(scope)));
+}
+
+function publish(next: PaneStore) {
   current = next;
   for (const fn of listeners) fn();
 }
 
-/** Apply an operation (e.g. `updatePanes((s) => openTicket(s, key))`); a no-op returning the same state writes nothing. */
-export function updatePanes(fn: (s: PaneState) => PaneState) {
-  const prev = get();
-  const next = fn(prev);
-  if (next === prev) return;
+/** Write the whole store (every scope) unless `next` is the store as it is. */
+function commit(next: PaneStore) {
+  if (next === getStore()) return;
   try {
-    localStorage.setItem(PANES_KEY, serializePanes(next));
+    localStorage.setItem(PANES_KEY, serializePaneStore(next));
   } catch {}
   publish(next);
 }
+
+/** Apply an operation to one scope (e.g. `updatePanes(scope, (s) => openTicket(s, key))`); a no-op returning the same state writes nothing. */
+export function updatePanes(scope: string, fn: (s: PaneState) => PaneState) {
+  const prev = get(scope);
+  const next = fn(prev);
+  if (next !== prev) commit({ scopes: { ...getStore().scopes, [scope]: next } });
+}
+
+/** Apply an operation to every scope (a ticket deleted or renamed can be open in several). */
+export function updateAllPanes(fn: (s: PaneState) => PaneState) {
+  commit(mapScopes(getStore(), fn));
+}
+
+/** Drop the scopes `keep` rejects (projects that no longer exist). */
+export function retainPaneScopes(keep: (scope: string) => boolean) {
+  commit(retainScopes(getStore(), keep));
+}
+
+/** A project was removed (see forgetProject). */
+export function forgetProjectPanes(projectId: string, projectKey: string | null) {
+  commit(forgetProject(getStore(), projectId, projectKey));
+}
+
+/** Re-read the stored panes (another window wrote them). */
+export const reloadPanes = () => publish(load());
 
 let started = false;
 function subscribe(fn: () => void) {
@@ -770,16 +880,16 @@ function subscribe(fn: () => void) {
     started = true;
     // Another window (or a test/screenshot setup) changed it: follow.
     window.addEventListener("storage", (e: StorageEvent) => {
-      if (e.key === PANES_KEY || e.key === null) publish(load());
+      if (e.key === PANES_KEY || e.key === null) reloadPanes();
     });
   }
   listeners.add(fn);
   return () => void listeners.delete(fn);
 }
 
-/** The current panes outside React (e.g. an effect checking that its render isn't already stale). */
-export const getPanes = (): PaneState => get();
+/** A scope's current panes outside React (e.g. an effect checking that its render isn't already stale). */
+export const getPanes = (scope: string): PaneState => get(scope);
 
-export function usePanes(): PaneState {
-  return useSyncExternalStore(subscribe, get);
+export function usePanes(scope: string): PaneState {
+  return useSyncExternalStore(subscribe, () => get(scope));
 }

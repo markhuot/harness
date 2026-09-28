@@ -68,6 +68,7 @@ export interface RecordedCall {
   toolNames: string[];
   model: string | null;
   grants: RunRequest["grants"];
+  permissionMode: RunRequest["permissionMode"];
 }
 
 /**
@@ -131,6 +132,7 @@ export class FakeDriver implements Driver {
       toolNames: req.tools.map((t) => t.name),
       model: req.model,
       grants: req.grants,
+      permissionMode: req.permissionMode,
     });
     this.running++;
     this.maxRunning = Math.max(this.maxRunning, this.running);
@@ -206,6 +208,11 @@ export class FakeDriver implements Driver {
         } else {
           await ops.reviewDecision(ctx, "approve", "LGTM");
         }
+        return;
+      }
+      case "chat": {
+        yield { type: "text", text: `Chatting about: ${p}?` };
+        yield { type: "state", state: { turns } };
         return;
       }
       case "complete": {
@@ -293,6 +300,8 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     classifier: opts.classifier === undefined ? null : opts.classifier,
     autoModeRules: opts.autoModeRules,
     classifierTimeoutMs: opts.classifierTimeoutMs,
+    // Tests drive reconcileRuns() directly unless they ask for the timer.
+    reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
   });
   store.settings.set({ defaultDriver: driver.id });
   return { orch, store, bus, driver, browser, paths, home };

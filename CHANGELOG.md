@@ -11,11 +11,37 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- New session has a **Use worktree** switch next to **Start immediately**, on the Mac and the
+  iPhone. It starts out matching the project's Worktree per ticket setting. Turn it off and the
+  agent works directly in the project folder instead of its own worktree and branch. The switch
+  only appears for projects in a git repository. On the Mac, the two switches now sit on their own
+  row with the start button.
+- The message box on a ticket in planning, blocked or review has a "Move to in progress" switch
+  ("Revise the plan" in planning), on by default. Turn it off to just talk with the agent about
+  the ticket: it answers without changing any files, and the ticket stays where it is. Your
+  question and its answer show in Summaries. The switch stays off while the ticket is open and
+  for 5 minutes after you close it, so you can come back and keep chatting.
 - Type `@` in the New session prompt or a ticket's message box to mention a file in the project.
   A list of matching files and folders appears as you type; pick one with a tap, or on the Mac with
   ↑/↓ and Enter or Tab (Escape closes the list). Picking a folder shows what's inside it. When the
   agent starts, it gets the mentioned files' contents with your message, so it doesn't have to go
   and read them, and the transcript shows which files were attached.
+
+### Changed
+
+- On the Mac, each project remembers its own panes, and so does All projects. Open a ticket
+  beside one project's board, switch to another project, and you'll see that project's panes (or
+  just its board the first time). Switch back and the first project's panes are where you left
+  them. The panes you had open before this update stay on All projects.
+
+### Fixed
+
+- On the Mac, deleting a ticket now closes its pane on every board, and removing a project closes
+  its tickets' panes on All projects.
+- A ticket's working spinner now goes away when its run crashes. If Harness can't save a run's
+  result (when the disk is full, for example), the run is marked failed as soon as saving
+  works again, and the agent behind it is stopped. Before, the card stayed stuck on working
+  until the next restart, even after the ticket moved to Done.
 
 ## [app-20260928.1438](https://github.com/markhuot/harness/releases/tag/app-20260928.1438) - 2026-09-28
 

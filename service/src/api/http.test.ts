@@ -69,6 +69,7 @@ describe("http api", () => {
     expect(dup.status).toBe(409);
     await expect(client.request("POST", "/tickets", "not json" as any)).rejects.toMatchObject({ status: 400 });
     await expect(client.humanReview("EXT-1", { decision: "maybe" as any })).rejects.toMatchObject({ status: 400 });
+    await expect(client.createTicket({ projectId: p.id, prompt: "x", useWorktree: "yes" as any })).rejects.toMatchObject({ status: 400 });
     await expect(client.updateSettings({ maxConcurrentRuns: 0 })).rejects.toMatchObject({ status: 400 });
   });
 
@@ -130,6 +131,10 @@ describe("http api", () => {
     const t = await client.createTicket({ projectId: p.id, prompt: "please /block Which color?" });
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.blockedReason).toBe("Which color?");
+    const chatted = await client.sendMessage(t.key, "which colors are there?", { chat: true });
+    expect(chatted.status).toBe("blocked");
+    await h.orchestrator.idle();
+    expect((await client.getTicket(t.key)).ticket.status).toBe("blocked");
     const replied = await client.sendMessage(t.key, "blue");
     expect(replied.status).toBe("in_progress");
     await h.orchestrator.idle();

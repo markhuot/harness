@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import {
@@ -29,6 +29,7 @@ import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { focusedTicket, leaves, openTicket, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
+import { usePaneScope } from "../components/paneContext";
 import "./board.css";
 
 /** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
@@ -44,7 +45,10 @@ export function BoardPane() {
   useEffect(() => () => setSearch(""), [setSearch]);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
-  const panes = usePanes();
+  const scope = usePaneScope();
+  const panes = usePanes(scope);
+  // The click-a-card rule (panes.ts openTicket): reuse the ticket pane beside the board, or split.
+  const openCard = useCallback((key: string) => updatePanes(scope, (s) => openTicket(s, key)), [scope]);
   const focusedKey = focusedTicket(panes)?.ticketKey ?? null;
   const openKeys = useMemo(() => new Set(leaves(panes.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []))), [panes.root]);
   const selection = (key: string): CardSelection => (key === focusedKey ? "focused" : openKeys.has(key) ? "open" : null);
@@ -185,9 +189,6 @@ export function BoardPane() {
   );
 }
 
-/** The click-a-card rule (panes.ts openTicket): reuse the ticket pane beside the board, or split. */
-const openCard = (key: string) => updatePanes((s) => openTicket(s, key));
-
 /** A checkable menu row (the check sits in a fixed gutter so labels line up). */
 function MenuCheckbox({ checked, onToggle, testId, title, children }: { checked: boolean; onToggle: () => void; testId?: string; title?: string; children: ReactNode }) {
   return (
@@ -257,6 +258,7 @@ const TicketCard = memo(function TicketCard({
   const ready = isReady(t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
+  const scope = usePaneScope();
 
   return (
     <article
@@ -268,7 +270,7 @@ const TicketCard = memo(function TicketCard({
       onClick={() => onOpen(t.key)}
       // Drag onto a half of the board or an open ticket to open it in a split there.
       {...dragProps(t.key, t.title)}
-      onContextMenu={(e) => void ticketContextMenu(e, t.key, () => onOpen(t.key))}
+      onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key))}
       tabIndex={0}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onOpen(t.key))}
     >

@@ -41,15 +41,19 @@ const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id
 const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
 const search = (q: string) =>
   `(() => { const el = document.querySelector("[data-testid=board-search]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(q)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
+// Picks a project in the composer by key (the select is controlled, so set it the way React sees).
+const pickProject = (key: string) =>
+  `(() => { const el = document.querySelector(".project-picker select"); const opt = [...el.options].find((o) => o.textContent?.includes("(${key})")); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, opt.value); el.dispatchEvent(new Event("change", { bubbles: true })); })()`;
 const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
   `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
-// The pane store follows storage events too. Board | tickets, each ticket in its own pane.
+// The pane store follows storage events too. Board | tickets, each ticket in its own pane, on the
+// All projects board ("*": every board has its own panes).
 const board = { type: "leaf", id: "b", content: { kind: "board" } };
 const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
 const panes = (children: object[], sizes: number[], focusedId: string) =>
-  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
+  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": { root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null } } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
 // Starts dragging a card and holds it over a pane (fx/fy of the way across it) so the drop preview
 // shows. executeJavaScript waits for the returned promise.
 const holdDrag = (cardKey: string, paneId: string, fx: number, fy: number) => `(async () => {
@@ -82,6 +86,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
   { name: "compose", route: "#/compose" },
+  { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
   { name: "permissions", route: "#/settings/permissions" },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },

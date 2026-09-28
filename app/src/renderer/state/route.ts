@@ -7,7 +7,7 @@
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
 
-import { isTicketTab, type TicketTab } from "@harness/shared/state";
+import { isTicketTab, scopeOf, type TicketTab } from "@harness/shared/state";
 
 // Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
@@ -56,6 +56,13 @@ export function formatRoute(r: Route): string {
     }
   }
 }
+
+/**
+ * Which board scope's panes (state/panes.ts) the route shows: the board's project, or ALL_SCOPE
+ * for All projects; null off the board. The route's project id is taken as it is, so a link to a
+ * project that's gone still has one scope throughout (its board shows every project).
+ */
+export const paneScopeOf = (r: Route): string | null => (r.view === "board" ? scopeOf(r.projectId) : null);
 
 /** The board route the hash should show for the focused ticket pane (none focused = just the board). */
 export function mirrorRoute(r: Route, focused: { ticketKey: string; tab: TicketTab } | null): Route {

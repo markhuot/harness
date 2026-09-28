@@ -437,6 +437,106 @@ describe("ticket lifecycle", () => {
   });
 });
 
+describe("chat messages (sendMessage with chat)", () => {
+  test("in review: the agent answers in a chat run and the ticket keeps its status and reviews", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    await h.orch.idle();
+    const before = h.orch.ticketDetail(t.key).ticket;
+    expect(before).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+
+    const cur = await h.orch.sendMessage(t.key, "why a button?", { chat: true });
+    expect(cur.status).toBe("review");
+    expect(cur.busy).toBe(true);
+    await h.orch.idle();
+    const after = h.orch.ticketDetail(t.key).ticket;
+    expect(after).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending", blockedReason: null });
+    // No new work or review run, and no auto-block on the chat reply's trailing question.
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded"]);
+    const chat = h.driver.calls.at(-1)!;
+    expect(chat.kind).toBe("chat");
+    expect(chat.prompt).toBe("why a button?");
+    expect(chat.permissionMode).toBe("read_only");
+    // It continues the work agent's conversation (not the reviewer's), and later work picks it up.
+    expect(chat.state).toEqual({ turns: 1 });
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+    expect(chat.toolNames).not.toContain("submit_for_review");
+    expect(chat.toolNames).not.toContain("block");
+    expect(h.orch.summaries(t.key).some((s) => s.body.startsWith("Question:"))).toBe(false);
+    // The exchange reads in the summaries: the question, then the agent's answer.
+    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:why a button?", "agent:Chatting about: why a button??"]);
+
+    // A regular message still sends the ticket back to work.
+    expect((await h.orch.sendMessage(t.key, "make it red")).status).toBe("in_progress");
+  });
+
+  test("in blocked: the question stays open", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "what are the options?", { chat: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded"]);
+  });
+
+  test("in planning: no plan run, the plan is unchanged", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Refactor auth", start: false });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "is this risky?", { chat: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", description: "1. Do Refactor auth" });
+    expect(runKinds(h, t)).toEqual(["plan:succeeded", "chat:succeeded"]);
+  });
+
+  test("a failed chat run doesn't block the ticket", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.driver.script = async function* (req) {
+      if (req.kind === "chat") yield { type: "error", message: "boom" };
+    };
+    await h.orch.sendMessage(t.key, "hello", { chat: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "human", body: "hello" }); // no answer to post
+  });
+
+  test("a done ticket whose worktree is gone chats from the project checkout", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    h.store.tickets.update(t.id, { workdir: join(h.home, "gone") });
+    await h.orch.sendMessage(t.key, "what did you change?", { chat: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
+    expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
+  });
+
+  test("refused while a tool approval is pending or the ticket is completing; text is required", async () => {
+    const h = setup({ autoComplete: false });
+    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"npm install"}' });
+    await h.orch.idle();
+    await expect(h.orch.sendMessage(a.key, "what is npm?", { chat: true })).rejects.toThrow(/waiting on a tool approval/);
+    expect(h.orch.ticketDetail(a.key).ticket.pendingApproval).not.toBeNull();
+
+    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    await h.orch.idle();
+    h.orch.humanReview(b.key, { decision: "approve" });
+    h.driver.script = async function* () {
+      await Bun.sleep(20);
+    };
+    await h.orch.completeTicket(b.key);
+    await expect(h.orch.sendMessage(b.key, "wait", { chat: true })).rejects.toThrow(/is completing/);
+    await expect(h.orch.sendMessage(b.key, "  ", { chat: true })).rejects.toThrow(/text is required/);
+    await h.orch.idle();
+  });
+});
+
 describe("scheduling", () => {
   test("dependsOn + autoStart: dependent starts when its dependency is done", async () => {
     const h = setup();
@@ -877,6 +977,70 @@ describe("worktrees", () => {
     expect(new TextDecoder().decode(git("branch", "--list", "harness/*").stdout)).toContain("harness/repo-1");
   });
 
+  /** A git repo with one commit, as a project (worktree setting as given). */
+  const gitProject = (h: ReturnType<typeof setup>, useWorktrees: boolean) => {
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+    const git = (...args: string[]) => new TextDecoder().decode(Bun.spawnSync(["git", ...args], { cwd: repo, env }).stdout);
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    return { repo, git, project: h.orch.createProject({ path: repo, key: "repo", useWorktrees }) };
+  };
+
+  test("useWorktree false: a git project with worktrees on runs the ticket in the project checkout", async () => {
+    const h = setup();
+    const { repo, git, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch, cur.useWorktree]).toEqual([repo, null, false]);
+    expect(h.driver.calls[0]!.cwd).toBe(repo);
+    expect(existsSync(join(h.paths.worktreesDir, "REPO-1"))).toBe(false);
+    expect(git("branch", "--list", "harness/*")).toBe("");
+  });
+
+  test("useWorktree true: a project with worktrees off still gets one for that ticket", async () => {
+    const h = setup();
+    const { project } = gitProject(h, false);
+    const off = await h.orch.createTicket({ projectId: project.id, prompt: "follows the project" });
+    const on = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(off.key).ticket.branch).toBeNull();
+    const cur = h.orch.ticketDetail(on.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([join(h.paths.worktreesDir, on.key), `harness/${on.key.toLowerCase()}`]);
+    expect(existsSync(join(cur.workdir!, ".git"))).toBe(true);
+  });
+
+  test("the choice is kept through planning: started later, it still runs in the project checkout", async () => {
+    const h = setup();
+    const { repo, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", start: false, useWorktree: false });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.workdir).toBeNull();
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([repo, null]);
+    expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
+  });
+
+  test("re-opening a done project-checkout ticket keeps it in the project checkout", async () => {
+    const h = setup();
+    const { repo, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    await h.orch.reopenTicket(t.key, { notes: "one more fix" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([repo, null]);
+    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.cwd).toBe(repo);
+    expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
+  });
+
   test("a message to a done ticket with a removed worktree recreates it too", async () => {
     const h = setup();
     const repo = join(h.home, "repo");
@@ -920,6 +1084,25 @@ describe("@-mentioned files", () => {
     await h.orch.idle();
     expect(h.driver.calls[1]!.prompt).toContain('<file path="src/app.ts">\nexport {}\n</file>');
     expect(h.driver.calls[1]!.prompt).not.toContain("notes.md");
+  });
+
+  test("a chat question gets its files; review and complete runs don't re-attach the brief's", async () => {
+    const h = setup({ autoComplete: false });
+    writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "what does @notes.md say?", { chat: true });
+    await h.orch.idle();
+    const chat = h.driver.calls.find((c) => c.kind === "chat")!;
+    expect(chat.prompt).toContain('<file path="notes.md">');
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.completeTicket(t.key, {});
+    await h.orch.idle();
+    for (const kind of ["review", "complete"]) {
+      const call = h.driver.calls.find((c) => c.kind === kind)!;
+      expect(call.prompt).toContain("@notes.md");
+      expect(call.prompt).not.toContain("<mentioned-files>");
+    }
   });
 
   test("a prompt without mentions reaches the agent as typed, with no status line", async () => {

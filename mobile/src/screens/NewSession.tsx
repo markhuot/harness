@@ -1,4 +1,4 @@
-// New session: project, prompt, Task/Conductor, driver, model, permission mode, Start immediately.
+// New session: project, prompt, Task/Conductor, driver, model, permission mode, Start immediately, Use worktree.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -36,6 +36,14 @@ export function NewSessionScreen() {
   useEffect(() => {
     if (!touchedDriver.current) setDriver(defaultDriver);
   }, [defaultDriver]);
+  // Follows the project's worktree setting until flipped; only shown for git projects.
+  const projectWorktrees = project?.useWorktrees ?? true;
+  const [worktree, setWorktree] = useState(projectWorktrees);
+  const touchedWorktree = useRef(false);
+  useEffect(() => {
+    if (!touchedWorktree.current) setWorktree(projectWorktrees);
+  }, [projectWorktrees]);
+  const canWorktree = project?.isGit !== false;
   const [model, setModel] = useState<string | null>(null);
   useEffect(() => setModel(null), [driver]);
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
@@ -46,7 +54,8 @@ export function NewSessionScreen() {
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode }));
+    const useWorktree = canWorktree ? worktree : null;
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode, useWorktree }));
     setBusy(false);
     if (!t) return;
     haptic("success");
@@ -122,6 +131,18 @@ export function NewSessionScreen() {
           <Line label="Start immediately">
             <Switch value={start} onValueChange={setStart} trackColor={{ true: c.accent }} />
           </Line>
+          {canWorktree && (
+            <Line label="Use worktree">
+              <Switch
+                value={worktree}
+                onValueChange={(v) => {
+                  touchedWorktree.current = true;
+                  setWorktree(v);
+                }}
+                trackColor={{ true: c.accent }}
+              />
+            </Line>
+          )}
         </View>
         <Button title={start ? "Start session" : "Plan first"} variant="primary" icon={start ? "play" : "fileText"} onPress={() => void submit()} disabled={!canSubmit} loading={busy} hapticKind={null} />
       </ScrollView>

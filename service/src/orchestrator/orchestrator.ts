@@ -112,6 +112,8 @@ export interface OrchestratorOptions {
   /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
   autoModeRules?: AutoModeRulesProvider;
   classifierTimeoutMs?: number;
+  /** How often start() re-checks for runs no live job owns (default 60s; 0 disables) */
+  reconcileIntervalMs?: number;
 }
 
 interface ActiveRun {
@@ -160,10 +162,12 @@ export interface IngestInput {
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+/** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
+const READ_ONLY_RUNS: RunKind[] = ["plan", "triage", "chat"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
-/** Runs that carry a human's words (the brief, a message, notes) and get their @-mentioned files attached. */
-const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "complete"]);
+/** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
+const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -208,6 +212,13 @@ function validPermissionMode(value: unknown): PermissionMode | null {
   if (value === undefined || value === null || value === "") return null;
   if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
   return value as PermissionMode;
+}
+
+/** Validate a ticket's worktree choice from a request body (null / omitted → the project's). */
+function validUseWorktree(value: unknown): boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") throw badRequest("useWorktree must be true, false or null");
+  return value;
 }
 
 /** Validate a project color from a request body: a preset id or "#rrggbb" (null / "" → none). */
@@ -255,6 +266,8 @@ export class Orchestrator {
   private starting = new Set<string>();
   private watcherRunner: WatcherSupervisor | null;
   private stopping = false;
+  private reconcileIntervalMs: number;
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -288,8 +301,12 @@ export class Orchestrator {
     this.queue = new RunQueue({
       limit: () => this.settings().maxConcurrentRuns,
       execute: (job) => this.execute(job),
-      onError: (job, err) => this.log(`run ${job.runId} crashed: ${errMsg(err)}`),
+      onError: (job, err) => {
+        this.log(`run ${job.runId} crashed: ${errMsg(err)}`);
+        this.failCrashedRun(job.runId, errMsg(err));
+      },
     });
+    this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver });
@@ -311,28 +328,65 @@ export class Orchestrator {
     const stale = this.recoverStaleRuns();
     if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
     this.syncWatchers();
+    if (this.reconcileIntervalMs > 0) {
+      this.reconcileTimer = setInterval(() => {
+        try {
+          const n = this.reconcileRuns();
+          if (n) this.log(`marked ${n} orphaned run(s) as failed`);
+        } catch (err) {
+          this.log(`run reconciliation failed: ${errMsg(err)}`);
+        }
+      }, this.reconcileIntervalMs);
+      this.reconcileTimer.unref?.();
+    }
   }
 
   /** Runs left queued/running by a previous process become failed ("service restarted"). */
   recoverStaleRuns(): number {
-    const stale = this.store.runs.listUnfinished();
-    for (const run of stale) {
-      if (this.active.has(run.id)) continue;
-      const r = this.store.runs.finish(run.id, "failed", "service restarted");
-      this.bus.emit({ kind: "run.upserted", run: r });
-      for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
-      this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): service restarted`);
-      const session = this.store.sessions.get(run.sessionId);
-      if (session?.kind === "triage" && session.triageStatus === "triaging") {
-        this.store.sessions.update(session.id, { triageStatus: "failed", outcome: "Interrupted: service restarted" });
-      }
-      this.touchSession(run.sessionId);
+    return this.failOrphanedRuns("service restarted");
+  }
+
+  /**
+   * Runs the database still has as queued/running that no live job owns become failed. A run
+   * ends up like that when recording its end threw (a full disk fails every SQLite write), so
+   * the record is repaired once writes work again rather than on the next restart.
+   */
+  reconcileRuns(): number {
+    return this.failOrphanedRuns("the run ended without recording a result");
+  }
+
+  private failOrphanedRuns(reason: string): number {
+    const orphans = this.store.runs.listUnfinished().filter((r) => !this.active.has(r.id) && !this.queue.has(r.id));
+    for (const run of orphans) this.interruptRun(run, reason);
+    return orphans.length;
+  }
+
+  /** A run that threw out of execute(): record it failed now, or leave it to reconcileRuns. */
+  private failCrashedRun(runId: string, message: string) {
+    try {
+      const run = this.store.runs.get(runId);
+      if (run && (run.status === "queued" || run.status === "running")) this.interruptRun(run, message);
+    } catch (err) {
+      this.log(`couldn't record crashed run ${runId} as failed (${errMsg(err)}); will retry`);
     }
-    return stale.length;
+  }
+
+  private interruptRun(run: Run, reason: string) {
+    const r = this.store.runs.finish(run.id, "failed", reason);
+    this.bus.emit({ kind: "run.upserted", run: r });
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
+    const session = this.store.sessions.get(run.sessionId);
+    if (session?.kind === "triage" && session.triageStatus === "triaging") {
+      this.store.sessions.update(session.id, { triageStatus: "failed", outcome: `Interrupted: ${reason}` });
+    }
+    this.touchSession(run.sessionId);
   }
 
   async stop() {
     this.stopping = true;
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
     this.queue.pause();
     await this.watcherRunner?.stopAll().catch(() => {});
     const actives = [...this.active.values()];
@@ -632,6 +686,7 @@ export class Orchestrator {
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
     const model = validateModelId("model", body.model);
     const permissionMode = validPermissionMode(body.permissionMode);
+    const useWorktree = validUseWorktree(body.useWorktree);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -667,6 +722,7 @@ export class Orchestrator {
         externalRef: body.externalRef ?? null,
         workdir: null,
         model,
+        useWorktree,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -778,9 +834,22 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
-  async sendMessage(key: string, text: string): Promise<Ticket> {
+  /**
+   * A human message to the ticket's agent. By default it acts on the ticket: a blocked or review
+   * ticket goes back to in progress. With chat, the agent answers in a read-only chat run and the
+   * ticket keeps its status and reviews.
+   */
+  async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
+    if (opts.chat) {
+      if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
+      this.notCompleting(ticket, "messaged");
+      // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
+      this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
+      this.enqueueRun(ticket.sessionId, "chat", text);
+      return this.store.tickets.get(ticket.id)!;
+    }
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
@@ -1403,6 +1472,7 @@ export class Orchestrator {
           driver: input.driver ?? own.driver,
           model: input.model !== undefined ? input.model : input.driver ? null : own.model,
           permissionMode,
+          useWorktree: input.useWorktree,
         }),
       );
     }
@@ -1418,6 +1488,7 @@ export class Orchestrator {
         driver: input.driver,
         model: input.model,
         permissionMode,
+        useWorktree: input.useWorktree,
       }),
     );
   }
@@ -1883,8 +1954,9 @@ export class Orchestrator {
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
-    // Plan runs are read-only for every driver (claude-code runs them in --permission-mode plan).
-    const mode: PermissionMode = ctx.runKind === "plan" || ctx.runKind === "triage" ? "read_only" : this.permissionModeFor(ticket);
+    // Plan, triage and chat runs are read-only for every driver (claude-code runs plan runs in
+    // --permission-mode plan, chat runs in dontAsk).
+    const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
     return this.gate.check(toolName, input, {
       mode,
       runKind: ctx.runKind,
@@ -1974,7 +2046,7 @@ export class Orchestrator {
         branch = null;
         const project = this.store.projects.get(ticket.projectId)!;
         workdir = project.path;
-        if (project.useWorktrees && (await isGitRepo(project.path))) {
+        if ((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path))) {
           try {
             ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
           } catch (err) {
@@ -2161,14 +2233,58 @@ export class Orchestrator {
       offeredGrants: [],
     };
     this.active.set(run.id, active);
-    run = this.store.runs.markRunning(run.id);
+    let error: string | null;
+    try {
+      error = await this.drive(active, session, ticket, project, driver);
+    } catch (err) {
+      // Bookkeeping threw (e.g. a full disk fails every SQLite write): stop the agent, fail the run.
+      controller.abort();
+      error = errMsg(err);
+    }
+
+    const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
+    try {
+      run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
+    } finally {
+      // Even when the write fails, the run is over: reconcileRuns fails the row once it can.
+      this.active.delete(run.id);
+    }
+    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
+    // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
+    // input), and a grant left over would put every later run in ask mode (planGrants). A failed
+    // or cancelled run may not have reached the call, so its grants carry over to the next run.
+    if (status === "succeeded" && ticket && active.offeredGrants.length) this.store.tickets.dropGrants(ticket.id, active.offeredGrants);
+    this.bus.emit({ kind: "run.upserted", run });
+    this.appendStatus(
+      session.id,
+      run.id,
+      status === "succeeded" ? `Run finished (${run.kind})` : status === "cancelled" ? `Run cancelled (${run.kind})` : `Run failed (${run.kind}): ${error}`,
+    );
+    this.touchSession(session.id);
+    if (this.stopping) return;
+    try {
+      await this.afterRun(run, active, error);
+    } catch (err) {
+      this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
+    }
+    this.kickScheduler();
+  }
+
+  /** Start the driver and consume its events; returns the run error, if any. */
+  private async drive(active: ActiveRun, session: Session, ticket: Ticket | null, project: Project | null, driver: Driver | undefined): Promise<string | null> {
+    const { controller } = active;
+    const run = this.store.runs.markRunning(active.run.id);
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
     const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
-    const cwd = (run.kind === "plan" ? null : ticket?.workdir) ?? session.cwd ?? project?.path ?? this.paths.home;
+    // A chat about a done ticket falls back to the checkout once the complete run removed the worktree.
+    const workdir = run.kind === "plan" || (run.kind === "chat" && ticket?.workdir && !existsSync(ticket.workdir)) ? null : ticket?.workdir;
+    const cwd = workdir ?? session.cwd ?? project?.path ?? this.paths.home;
     if (!driver) error = `Unknown driver: ${run.driver}`;
     else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
     else {
@@ -2197,7 +2313,7 @@ export class Orchestrator {
           systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
           cwd,
           model,
-          permissionMode: this.permissionModeFor(ticket, project),
+          permissionMode: run.kind === "chat" ? "read_only" : this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
@@ -2213,31 +2329,7 @@ export class Orchestrator {
         active.mcpToken = null;
       }
     }
-
-    const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
-    run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
-    this.active.delete(run.id);
-    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
-    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
-    // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
-    // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
-    // input), and a grant left over would put every later run in ask mode (planGrants). A failed
-    // or cancelled run may not have reached the call, so its grants carry over to the next run.
-    if (status === "succeeded" && ticket && active.offeredGrants.length) this.store.tickets.dropGrants(ticket.id, active.offeredGrants);
-    this.bus.emit({ kind: "run.upserted", run });
-    this.appendStatus(
-      session.id,
-      run.id,
-      status === "succeeded" ? `Run finished (${run.kind})` : status === "cancelled" ? `Run cancelled (${run.kind})` : `Run failed (${run.kind}): ${error}`,
-    );
-    this.touchSession(session.id);
-    if (this.stopping) return;
-    try {
-      await this.afterRun(run, active, error);
-    } catch (err) {
-      this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
-    }
-    this.kickScheduler();
+    return error;
   }
 
   /**
@@ -2272,7 +2364,15 @@ export class Orchestrator {
         return error;
       }
       if (next.done) return error;
-      const e = this.handleEvent(active, next.value);
+      let e: string | null;
+      try {
+        e = this.handleEvent(active, next.value);
+      } catch (err) {
+        // Recording the event failed: close the driver so its finally stops the agent process.
+        const r = it.return?.();
+        if (r) r.catch(() => {});
+        throw err;
+      }
       if (e) error = e;
     }
   }
@@ -2397,6 +2497,9 @@ export class Orchestrator {
         break;
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+        break;
+      case "chat":
+        if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
         break;
       case "plan":
         break;

@@ -80,9 +80,9 @@ export function Modal({ onClose, children, width }: { onClose: () => void; child
 }
 
 /** On/off switch. Pass ariaLabel when there's no visible label (e.g. the title sits in a settings Row). */
-export function Switch({ checked, onChange, label, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; ariaLabel?: string }) {
+export function Switch({ checked, onChange, label, ariaLabel, title }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; ariaLabel?: string; title?: string }) {
   return (
-    <label className="switch">
+    <label className="switch" title={title}>
       <input type="checkbox" role="switch" aria-label={ariaLabel} checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span className="switch-track" />
       {label}

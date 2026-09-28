@@ -34,6 +34,7 @@ describe("toolsForRun", () => {
     complete: ["post_summary", ...BOARD, ...CONFIG_READ],
     conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
+    chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -42,6 +43,7 @@ describe("toolsForRun", () => {
     complete: NATIVE_FULL,
     conductor: NATIVE_READ,
     triage: [],
+    chat: NATIVE_READ,
   };
 
   for (const kind of Object.keys(harnessByKind) as RunKind[]) {
@@ -54,37 +56,39 @@ describe("toolsForRun", () => {
     });
   }
 
-  test("review runs can never write files", () => {
-    const review = names("review", bare);
-    expect(review).not.toContain("write_file");
-    expect(review).not.toContain("edit_file");
-    expect(review).toContain("read_file");
+  test("review and chat runs can never write files", () => {
+    for (const kind of ["review", "chat"] as RunKind[]) {
+      const tools = names(kind, bare);
+      expect(tools).not.toContain("write_file");
+      expect(tools).not.toContain("edit_file");
+      expect(tools).toContain("read_file");
+    }
   });
 
   test("ticket-state tools are only offered to the run kinds that may use them", () => {
-    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
     const who = (tool: string) => kinds.filter((k) => names(k, builtin).includes(tool));
     expect(who("block")).toEqual(["work"]);
     expect(who("submit_for_review")).toEqual(["work", "conductor"]);
     expect(who("update_plan")).toEqual(["plan"]);
     expect(who("review_decision")).toEqual(["review"]);
-    expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor"]);
+    expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor", "chat"]);
     expect(who("dispatch_ticket")).toEqual(["triage"]);
-    expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor"]);
+    expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor", "chat"]);
     for (const read of BOARD) expect(who(read)).toEqual(kinds);
     for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor"]);
     for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["conductor"]);
   });
 
   test("config reads go to every run kind; config writes only to work and conductor runs", () => {
-    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
     const who = (tool: string) => kinds.filter((k) => names(k, bare).includes(tool));
     for (const tool of CONFIG_READ) expect(who(tool)).toEqual(kinds);
     for (const tool of CONFIG_WRITE) expect(who(tool)).toEqual(["work", "conductor"]);
   });
 
   test("permission_prompt is added for every kind when the driver uses it, and only then", () => {
-    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+    const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
     for (const kind of kinds) {
       expect(names(kind, { hasBuiltinTools: true, usesPermissionPromptTool: true })).toEqual([...names(kind, builtin), "permission_prompt"]);
       expect(names(kind, builtin)).not.toContain("permission_prompt");

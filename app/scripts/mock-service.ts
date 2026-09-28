@@ -281,7 +281,7 @@ function simulateRun(t: Ticket, kind: RunKind, prompt: string, text: string, aft
 // Seed
 // ---------------------------------------------------------------------------
 
-function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null): Project {
+function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null, isGit = true): Project {
   const p: Project = {
     id: newId("proj"),
     key,
@@ -291,6 +291,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     defaultDriver: null,
     defaultModels: {},
     useWorktrees: true,
+    isGit,
     requireHumanReview,
     autoComplete: true,
     permissionMode: null,
@@ -358,7 +359,7 @@ function seedTicket(s: SeedTicket): Ticket {
   const key = s.key ?? `${s.project.key}-${s.project.nextSeq++}`;
   const id = newId("tkt");
   const session = makeSession(key, "ticket", id, s.driver, s.project.path, s.title, createdAt);
-  const worktree = s.status !== "planning" && s.project.useWorktrees;
+  const worktree = s.status !== "planning" && s.project.useWorktrees && s.project.isGit !== false;
   const t: Ticket = {
     id,
     key,
@@ -701,7 +702,8 @@ function seed() {
   // A long-lived project with a deep Done column (paging, search): 130 done tickets, completed
   // over the last ~65 minutes (so they fill the first Done pages, newest first), renumbered from
   // an old WWW key (WWW-n → SITE-n resolve as aliases).
-  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange");
+  // Not a git checkout: the composer hides its Use worktree switch for it.
+  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange", false);
   const verbs = ["Fix", "Refactor", "Polish", "Document", "Speed up", "Test", "Localize", "Harden"];
   const nouns = ["hero banner", "pricing table", "footer links", "blog index", "contact form", "sitemap", "RSS feed", "404 page", "cookie notice", "search page", "case studies grid", "team page", "careers list"];
   for (let i = 1; i <= 130; i++) {
@@ -927,6 +929,7 @@ function createTicket(body: Record<string, any>): Ticket {
   const title: string = body.title ?? body.prompt.split("\n")[0]!.slice(0, 80);
   const session = makeSession(key, "ticket", id, driver, project.path, title, now());
   const start = body.start ?? true;
+  const worktree = (body.useWorktree ?? project.useWorktrees) && project.isGit !== false;
   const t: Ticket = {
     id,
     key,
@@ -943,8 +946,9 @@ function createTicket(body: Record<string, any>): Ticket {
     agentReview: "pending",
     humanReview: "pending",
     externalRef: body.externalRef ?? null,
-    workdir: start && project.useWorktrees ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
-    branch: start && project.useWorktrees ? `harness/${key.toLowerCase()}` : null,
+    workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
+    branch: start && worktree ? `harness/${key.toLowerCase()}` : null,
+    useWorktree: body.useWorktree ?? null,
     blockedReason: null,
     permissionMode: body.permissionMode ?? null,
     busy: false,
@@ -1008,6 +1012,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         defaultDriver: body.defaultDriver ?? null,
         defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
+        isGit: true,
         requireHumanReview: body.requireHumanReview ?? true,
         autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
@@ -1114,7 +1119,13 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
-          if (t.status === "planning") {
+          if (body.chat === true) {
+            if (t.pendingApproval) throw new HttpError(409, `${t.key} is waiting on a tool approval; answer it before chatting`);
+            appendEntry(t.sessionId, null, "user", { type: "text", text });
+            addSummary(t.sessionId, t.id, "human", text);
+            const answer = `Here's what I know about that: "${text}". The ticket stays where it is.`;
+            simulateRun(t, "chat", text, answer, (cur) => addSummary(cur.sessionId, cur.id, "agent", answer));
+          } else if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             simulateRun(t, "plan", text, `Updated the plan to account for: "${text}"`, () => {});
           } else {

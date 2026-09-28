@@ -36,6 +36,7 @@ const TOOLS: Record<RunKind, string[]> = {
   complete: ["post_summary", ...BOARD, ...CONFIG_READ],
   conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
+  chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];
 
@@ -119,7 +120,7 @@ function sys(kind: RunKind, t: Ticket | null = ticket(), extra: Partial<Paramete
 }
 
 describe("systemPrompt tool references", () => {
-  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
   for (const kind of kinds) {
     test(`${kind} mentions only tools its run can call`, () => {
       const t = kind === "conductor" ? ticket({ kind: "conductor" }) : kind === "triage" ? null : ticket(worktree);

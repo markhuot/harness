@@ -45,6 +45,11 @@ export class RunQueue {
     return this.running.get(sessionId)?.job ?? null;
   }
 
+  /** True while the run is pending or executing. */
+  has(runId: string): boolean {
+    return this.pending.some((j) => j.runId === runId) || [...this.running.values()].some((r) => r.job.runId === runId);
+  }
+
   /** Promise settling when the session's current run finishes (resolved if none). */
   whenSessionIdle(sessionId: string): Promise<void> {
     return this.running.get(sessionId)?.done ?? Promise.resolve();
