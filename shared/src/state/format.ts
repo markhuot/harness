@@ -127,7 +127,6 @@ export function describeApprovalInput(toolName: string, input: unknown): { prima
     delete o.args;
   }
   if (/^(delete|run)_watcher$/.test(tool) || tool === "update_watcher") pick("watcher", "Watcher", false);
-  if (tool === "create_mapping") pick("pattern", "Key pattern", true);
   if (/^(create|delete|update)_project$/.test(tool)) {
     pick("path", "Directory", true);
     pick("project_key", "Project", false);

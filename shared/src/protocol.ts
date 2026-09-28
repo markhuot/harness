@@ -275,19 +275,6 @@ export interface Watcher {
   updatedAt: number;
 }
 
-/**
- * Maps external ticket keys to local projects. pattern is a key prefix ("FOO") or /regex/.
- * Mappings are routing hints for triage: keys found in a watcher's output that match one are
- * pointed out to the triage agent, which makes the final call.
- */
-export interface Mapping {
-  id: string;
-  pattern: string;
-  projectId: string;
-  notes: string;
-  createdAt: number;
-}
-
 export interface DriverInfo {
   id: string;
   name: string;
@@ -412,8 +399,6 @@ export type HarnessEvent =
   | { kind: "summary.added"; summary: Summary }
   | { kind: "watcher.upserted"; watcher: Watcher }
   | { kind: "watcher.deleted"; id: string }
-  | { kind: "mapping.upserted"; mapping: Mapping }
-  | { kind: "mapping.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
   | { kind: "browser.frame"; sessionId: string; data: string; width: number; height: number }
   | { kind: "browser.state"; sessionId: string; state: BrowserState };

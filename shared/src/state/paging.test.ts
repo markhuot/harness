@@ -59,7 +59,7 @@ const done = (id: string, at: number, over: Partial<Ticket> = {}) => tk(id, { st
 const page = (tickets: Ticket[], nextCursor: string | null, total: number): TicketPage => ({ tickets, nextCursor, total });
 
 function snapshot(tickets: Ticket[], donePage?: Snapshot["donePage"]): Action {
-  return { type: "snapshot", snapshot: { projects: [], tickets, sessions: [], watchers: [], mappings: [], settings: null, drivers: [], donePage } };
+  return { type: "snapshot", snapshot: { projects: [], tickets, sessions: [], watchers: [], settings: null, drivers: [], donePage } };
 }
 const run = (s: State, ...actions: Action[]) => actions.reduce(reducer, s);
 const upsert = (ticket: Ticket): Action => ({ type: "event", event: { kind: "ticket.upserted", ticket } });

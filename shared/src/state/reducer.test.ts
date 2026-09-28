@@ -229,22 +229,20 @@ describe("entities", () => {
     expect(s.tickets).toEqual({});
   });
 
-  test("deleting a project drops its tickets and mappings", () => {
+  test("deleting a project drops its tickets", () => {
     const s = apply(
       initialState,
       ev({ kind: "project.upserted", project: project("p1", "A") }),
       ev({ kind: "project.upserted", project: project("p2", "B") }),
       ev({ kind: "ticket.upserted", ticket: ticket("t1", { projectId: "p1" }) }),
       ev({ kind: "ticket.upserted", ticket: ticket("t2", { projectId: "p2" }) }),
-      ev({ kind: "mapping.upserted", mapping: { id: "m1", pattern: "FOO", projectId: "p1", notes: "", createdAt: 0 } }),
       ev({ kind: "project.deleted", id: "p1" }),
     );
     expect(Object.keys(s.projects)).toEqual(["p2"]);
     expect(Object.keys(s.tickets)).toEqual(["t2"]);
-    expect(s.mappings).toEqual({});
   });
 
-  test("watcher and mapping deletes", () => {
+  test("watcher deletes", () => {
     const w = {
       id: "w1",
       name: "jira",
@@ -272,7 +270,7 @@ describe("entities", () => {
     let s = apply(initialState, ev({ kind: "ticket.upserted", ticket: ticket("gone") }));
     s = apply(s, {
       type: "snapshot",
-      snapshot: { projects: [], tickets: [ticket("t1")], sessions: [], watchers: [], mappings: [], settings: null, drivers: [] },
+      snapshot: { projects: [], tickets: [ticket("t1")], sessions: [], watchers: [], settings: null, drivers: [] },
     });
     expect(Object.keys(s.tickets)).toEqual(["t1"]);
     expect(s.ready).toBe(true);
@@ -281,7 +279,7 @@ describe("entities", () => {
   test("snapshot doesn't clobber a newer live update that raced the REST request", () => {
     const snap = (t: Ticket) => ({
       type: "snapshot" as const,
-      snapshot: { projects: [], tickets: [t], sessions: [], watchers: [], mappings: [], settings: null, drivers: [] },
+      snapshot: { projects: [], tickets: [t], sessions: [], watchers: [], settings: null, drivers: [] },
     });
     let s = apply(initialState, ev({ kind: "ticket.upserted", ticket: ticket("t1", { status: "review", updatedAt: 20 }) }));
     s = apply(s, snap(ticket("t1", { status: "in_progress", updatedAt: 10 })));

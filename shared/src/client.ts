@@ -12,7 +12,6 @@ import type {
   HumanReviewBody,
   ReopenBody,
   ApprovalBody,
-  Mapping,
   Project,
   PublicSettings,
   ServerMessage,
@@ -174,7 +173,7 @@ export class HarnessClient {
     return this.request<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=${afterSeq}`);
   }
 
-  // Watchers & mappings
+  // Watchers
   listWatchers() {
     return this.request<Watcher[]>("GET", "/watchers");
   }
@@ -197,15 +196,6 @@ export class HarnessClient {
    */
   injectOutput(source: string, text: unknown, prompt?: string) {
     return this.request<Session | null>("POST", `/watchers/inject`, { source, text, prompt });
-  }
-  listMappings() {
-    return this.request<Mapping[]>("GET", "/mappings");
-  }
-  createMapping(body: { pattern: string; projectId: string; notes?: string }) {
-    return this.request<Mapping>("POST", "/mappings", body);
-  }
-  deleteMapping(id: string) {
-    return this.request<{ ok: true }>("DELETE", `/mappings/${id}`);
   }
 
   // Drivers & settings
