@@ -11,21 +11,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- Agents can now read other tickets on the board for context. Any agent (planning, working,
-  reviewing, completing, conducting, or triaging) can search tickets by key or words, list a
-  project's tickets by status, and open a ticket to see its brief, its summaries and, when it
-  asks, the last few messages of that ticket's agent. They can only read these tickets, not change them.
-- Working and conducting agents can now change other cards on the board the way you do. They can
-  file a new ticket for work they find along the way (it lands in Planning unless they start it),
-  edit a card's title, brief, agent, model or dependencies, drag it to another column or reorder
-  it, start it, message its agent, stop its agent, and re-open a done ticket with notes. Agents
-  can't touch their own ticket this way. They also can't move a ticket into or out of Review, mark
-  finished work done, answer or cancel a ticket that's waiting on your tool approval, or relax a
-  ticket's permission mode. Tickets an agent creates never run under a looser permission mode than
-  the agent's own, and an agent can't hand work to a ticket whose mode is looser than its own
-  (for example, a read-only agent messaging or editing a ticket that runs in auto). It can still
-  tighten that ticket's mode. Only a ticket still in
-  Planning can be moved straight to Done.
 - Watchers now take any command that prints text, plus a prompt that tells triage what you
   want done with the output (for example, "If this event is assigned to me and has actionable
   next steps, dispatch it to an agent"). The command runs in your login shell, so pipes, your
@@ -38,13 +23,29 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - When one piece of output covers several tickets (like a batch of Jira issues), triage can
   dispatch each of them. When the output is about a ticket you already have, the update goes
   to that ticket as a message.
+- Agents can now read other tickets on the board for context. Any agent (planning, working,
+  reviewing, completing, conducting, or triaging) can search tickets by key or words, list a
+  project's tickets by status, and open a ticket to see its brief, its summaries and, when it
+  asks, the last few messages of that ticket's agent. They can also see the Inbox: what each
+  watcher printed and what triage did with it. All of this is read-only.
+- Working and conducting agents can now change other cards on the board the way you do. They can
+  file a new ticket for work they find along the way (it lands in Planning unless they start it),
+  edit a card's title, brief, agent, model or dependencies, drag it to another column or reorder
+  it, start it, message its agent, stop its agent, and re-open a done ticket with notes. Agents
+  can't touch their own ticket this way. They also can't move a ticket into or out of Review, mark
+  finished work done, answer or cancel a ticket that's waiting on your tool approval, or relax a
+  ticket's permission mode. Tickets an agent creates never run under a looser permission mode than
+  the agent's own, and an agent can't hand work to a ticket whose mode is looser than its own
+  (for example, a read-only agent messaging or editing a ticket that runs in auto). It can still
+  tighten that ticket's mode. Only a ticket still in Planning can be moved straight to Done.
 - Agents can now set up watchers, mappings, projects, and settings for you. A ticket like "add a
   watcher that polls our events API every minute and dispatches anything assigned to me with next
   steps" gets the watcher's command, schedule, and triage instructions filled in for you. Agents
   can also delete tickets and projects, though never their own ticket, its parent tickets, or the
   project they're working in. Each of these changes waits for you: the ticket shows an approval
-  card with a plain description of the change (for a watcher, the exact command it will run and
-  its triage instructions) and moves on only after you tap Allow once. These cards have no
+  card with a plain description of the change (for a watcher, the exact command it will run, its
+  triage instructions, and the names of any environment variables or working folder it sets,
+  never their values) and moves on only after you tap Allow once. These cards have no
   "Always allow" button, and a read-only ticket can't make these changes at all. Agents can't see
   or set your Anthropic API key, pair devices, or rotate the access token.
 

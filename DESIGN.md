@@ -208,6 +208,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings |
+| `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
 | `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
@@ -238,9 +239,12 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_screenshot` | ″ | `{}` → image |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
-The four board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
+The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
 `HarnessOps`) only read: every run kind gets them so an agent can look up related or earlier
-work anywhere on the board, and each prompt has a short "Board" section naming them.
+work anywhere on the board, or check what a watcher it set up has put in the Inbox. Each prompt
+has a short "Board" section naming them, and a "Harness configuration" section naming the
+config reads. Work and conductor prompts add the board write tools and the gated config tools,
+and say that every config call waits for a human and is then repeated exactly.
 
 ### Board changes by agents
 
@@ -311,7 +315,11 @@ gated call:
 2. calls `requestApproval` with `{ summary, reason, source: "policy", onceOnly: true }` whatever
    the ticket's permission mode. Read-only tickets are denied outright; otherwise the ticket
    blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "events" (loop): while
-   true; do curl …; done; prompt: "…"`) is the card's subtitle and blocked reason;
+   true; do curl …; done; prompt: "…"; env: EVENTS_TOKEN, ZDOTDIR; cwd: ~/work`) is the card's
+   subtitle and blocked reason. Watcher summaries name `env` keys and a non-empty `cwd`, since
+   both change what the command does (`ZDOTDIR` changes what the login shell runs), but never
+   env values; `update_watcher` lists keys set and keys removed separately and says
+   `cwd: service default` when it's cleared;
 3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
    grant and runs the op.
 
@@ -328,6 +336,42 @@ refuses it and `list_watchers` hides env values), device pairing and token rotat
 hand out access to the service itself), driver login (interactive OAuth in the user's browser),
 the network status readout (`GET /network`; `get_settings` has the listen setting), and the
 appearance/theme settings (client-side preferences, not service state).
+
+### UI parity
+
+What a person can do in the Mac and iPhone apps, against the agent tools. "Local" rows are
+client state, not service state.
+
+| Area | In the apps | Agent tool | Left out, and why |
+| --- | --- | --- | --- |
+| Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
+| Board | create a ticket (task or conductor, driver, model, permission mode, start or plan) | `create_ticket` | |
+| Board | edit title, brief, dependencies, driver, model, permission mode | `update_ticket` | permission modes only tighten |
+| Board | drag to another column, reorder | `move_ticket` | not into or out of review; done only from planning |
+| Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
+| Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
+| Board | approve a review, request changes, re-run the agent review, complete or mark done | conductors only, for their children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
+| Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
+| Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
+| Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
+| Mappings | add, delete | `create_mapping`, `delete_mapping` (gated); `list_mappings` | |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, human review, auto-complete, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode | `update_settings` (gated), `get_settings` | |
+| Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
+| Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
+| Drivers | list drivers and models, refresh models | `list_drivers` | |
+| Drivers | log in to a driver | none | interactive OAuth in the human's browser |
+| Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
+| Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
+| Local | appearance and themes, layout, board project filter, show or hide children, last-used project | none | client preferences, not service state |
+
+`service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
+dummy driver: a work run creates a looping `zsh -lc` watcher around
+`__fixtures__/events-api.ts` (a stand-in for `curl` against an events API) after an approval,
+each event becomes an Inbox item carrying the watcher's prompt, and triage dispatches or
+declines it by that prompt. `service/scripts/claude-code-watcher-check.ts` runs the same
+scenario by hand with the real claude-code driver for both the setup and triage, against a
+throwaway `HARNESS_HOME`.
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`.
