@@ -19,7 +19,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Right-click a card (or press the context-menu key on it) and pick Open to the Right, Below, to
   the Left or Above to do the same thing without dragging. Cards now take keyboard focus, and
   Enter opens them.
-
 - The Changes tab has a button at the left of its toolbar that hides and shows the file list, so
   the diffs can use the full width. Harness remembers your choice, so the file list stays the
   way you left it when you reload or move to another ticket. In a narrow pane the same button

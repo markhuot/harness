@@ -949,12 +949,21 @@ try {
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
     await until("browser canvas", () => exists(".browser-canvas"));
     await Bun.sleep(400);
-    const overCanvas = await dragTo(card("NYTIMES-4"), "NYTIMES-1", 0.5, 0.85, false);
-    const foreign = await js<boolean>(`(() => { const dt = new DataTransfer(); dt.setData("text/plain", "hello");
-      return !document.querySelector("[data-testid=pane-drop-layer]").dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: 400, clientY: 300 })); })()`);
-    await endDrag();
+    const overCanvas = await dragTo(card("NYTIMES-4"), "NYTIMES-1", 0.5, 0.85);
+    // While our drag is up, a dragover that carries only text isn't accepted (one evaluation, so
+    // nothing ends the drag in between).
+    const foreign = await js<boolean | null>(`(async () => {
+      const src = document.querySelector(${JSON.stringify(card("NYTIMES-4"))});
+      src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+      await new Promise(r => setTimeout(r, 60));
+      const layer = document.querySelector("[data-testid=pane-drop-layer]");
+      const dt = new DataTransfer(); dt.setData("text/plain", "hello");
+      const accepted = layer ? !layer.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: 400, clientY: 300 })) : null;
+      src.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+      return accepted;
+    })()`);
     check("dragging over the browser canvas reaches the drop layer", overCanvas.accepted && overCanvas.zone === "bottom" && overCanvas.topAtPoint === "pane-drop-layer", JSON.stringify(overCanvas));
-    check("a drag that isn't a ticket or pane (text, files) isn't accepted", !foreign);
+    check("a drag that isn't a ticket or pane (text, files) isn't accepted", foreign === false, String(foreign));
 
     // A conductor's child row dragged onto the right half of the conductor's own pane.
     await setPanes(boardOnly);
