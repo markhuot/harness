@@ -24,11 +24,15 @@
 //      Needs the simulator's software keyboard (I/O → Keyboard → uncheck Connect Hardware
 //      Keyboard); keyboard-*.png
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard]
+//   9. --mentions: only the @-mention checks: in New session and the ticket composer, typing `@…`
+//      lists the project's files, tapping one completes it, and the run the prompt starts gets the
+//      file attached ("Attached @…" in the transcript); mentions-*.png in light and dark
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type Watcher } from "@harness/shared";
+import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 
 const here = resolve(import.meta.dir, "..");
@@ -45,6 +49,7 @@ const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
 const stickOnly = flag("stick");
 const keyboardOnly = flag("keyboard");
+const mentionsOnly = flag("mentions");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
@@ -593,12 +598,116 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedSti
   return results.every((r) => r[1]);
 }
 
+/** --mentions: a project with a few files, and a ticket in review to message. */
+async function seedMentions() {
+  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+  const dir = join(scratch, "mentions");
+  mkdirSync(join(dir, "src", "lib"), { recursive: true });
+  writeFileSync(join(dir, "README.md"), "# Mentions\n\nThe readme the agent gets without reading it.\n");
+  writeFileSync(join(dir, "src", "app.ts"), "export const app = 1;\n");
+  writeFileSync(join(dir, "src", "lib", "format.ts"), "export const format = 2;\n");
+  const project = await api<Project>("POST", "/projects", { path: dir, name: "mentions", key: "MENT", defaultDriver: "dummy" });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Warm up", driver: "dummy", start: true });
+  await settle(ticket.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+  return { project, ticket };
+}
+
+/** --mentions: real typing and taps in New session and the composer. Returns false when a check failed. */
+async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMentions>>): Promise<boolean> {
+  const results: [string, boolean, string][] = [];
+  const check = async (name: string, fn: () => Promise<string | boolean>) => {
+    try {
+      const r = await fn();
+      results.push([name, r !== false, typeof r === "string" ? r : ""]);
+    } catch (e) {
+      results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    }
+  };
+  const fresh = async (url: string) => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+    await openUrl(udid, url);
+    await Bun.sleep(2500);
+  };
+  const has = async (label: string) => (await labels(udid)).includes(label);
+  const texts = async (key: string) => {
+    const d = await api<TicketDetail>("GET", `/tickets/${key}`);
+    return (await api<TranscriptEntry[]>("GET", `/sessions/${d.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
+  };
+  const newSession = `harness://new?projectId=${encodeURIComponent(p.project.id)}`;
+  const composer = `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`;
+
+  await check("New session: @READ lists README.md, a tap completes it, the run gets the file", async () => {
+    await fresh(newSession);
+    await tapWhere(udid, "Prompt");
+    await axe("type", "Summarize @READ", "--udid", udid);
+    await until("README.md suggested", () => has("README.md"), 8000);
+    await tapWhere(udid, "README.md");
+    await until("list closed", async () => !(await has("README.md")), 4000);
+    // The header's Start: the sheet's own button can sit behind the keyboard.
+    await tapWhere(udid, "Start");
+    const t = await until("ticket created", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key), 10000);
+    if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
+    return `${t.key}: ${t.description}`;
+  });
+
+  await check("New session: a folder keeps the list open inside it", async () => {
+    await fresh(newSession);
+    await tapWhere(udid, "Prompt");
+    await axe("type", "@sr", "--udid", udid);
+    await until("src/ suggested", () => has("src/"), 8000);
+    await tapWhere(udid, "src/");
+    await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
+    return (await has("src/lib/")) ? "src/app.ts, src/lib/ …" : "src/app.ts";
+  });
+
+  await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
+    await fresh(composer);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await axe("type", "see @src/a", "--udid", udid);
+    await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
+    await simctl("io", udid, "screenshot", join(shots, "mentions-composer-light.png"));
+    await tapWhere(udid, "src/app.ts");
+    await tapWhere(udid, "Send");
+    await until("message with the mention", async () => (await texts(p.ticket.key)).includes("see @src/app.ts"), 10000);
+    await until("Attached status", async () => (await texts(p.ticket.key)).includes("Attached @src/app.ts"), 15000);
+    return "see @src/app.ts";
+  });
+
+  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+  for (const theme of ["light", "dark"] as const) {
+    await simctl("ui", udid, "appearance", theme);
+    await fresh(newSession);
+    await tapWhere(udid, "Prompt").catch(() => {});
+    await axe("type", "Read @", "--udid", udid);
+    await until("suggestions", () => has("README.md"), 8000).catch(() => {});
+    await Bun.sleep(600);
+    await simctl("io", udid, "screenshot", join(shots, `mentions-new-session-${theme}.png`));
+    await fresh(composer);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent")).catch(() => {});
+    await axe("type", "@src/", "--udid", udid);
+    await until("suggestions", () => has("src/app.ts"), 8000).catch(() => {});
+    await Bun.sleep(600);
+    await simctl("io", udid, "screenshot", join(shots, `mentions-composer-${theme}.png`));
+  }
+  await simctl("ui", udid, "appearance", "light");
+  return results.every((r) => r[1]);
+}
+
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
   await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
   token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded, paged, sticky] = await Promise.all([pickDevice(), pagingOnly || stickOnly || keyboardOnly ? null : seed(), pagingOnly ? seedPaging() : null, stickOnly || keyboardOnly ? seedStick() : null]);
+  const [udid, seeded, paged, sticky, mentioned] = await Promise.all([
+    pickDevice(),
+    pagingOnly || stickOnly || keyboardOnly || mentionsOnly ? null : seed(),
+    pagingOnly ? seedPaging() : null,
+    stickOnly || keyboardOnly ? seedStick() : null,
+    mentionsOnly ? seedMentions() : null,
+  ]);
   if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
@@ -622,6 +731,7 @@ try {
   if (paged) failed = !(await pagingChecks(udid, paged));
   if (sticky && stickOnly) failed = !(await stickChecks(udid, sticky));
   if (sticky && keyboardOnly) failed = !(await keyboardChecks(udid, sticky));
+  if (mentioned) failed = !(await mentionChecks(udid, mentioned));
   if (seeded) {
     const k = (t: Ticket) => encodeURIComponent(t.key);
     const screens: [string, string, number?][] = [

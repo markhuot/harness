@@ -2,7 +2,7 @@
 // breadcrumb, title, badges, approval card, actions), tabs (built-in + plugin)
 // and the message composer with the desktop's state-dependent placeholders.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -39,6 +39,7 @@ import { Icon } from "../ui/Icon";
 import { isIconName } from "@harness/shared/state";
 import { confirm } from "../ui/pick";
 import { haptic } from "../ui/haptics";
+import { MentionList, useFileMentions } from "../ui/mentions";
 import { action, menuItem } from "../ui/header";
 import { ApprovalCard } from "./Approval";
 import { Transcript } from "./Transcript";
@@ -289,6 +290,8 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<TextInput>(null);
+  const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
+  const mentions = useFileMentions(text, setText, searchFiles);
   const hint = composerHint(ticket);
   const send = async () => {
     const body = text.trim();
@@ -304,6 +307,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const attention = ticket.status === "blocked";
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
+      <MentionList mentions={mentions} maxHeight={200} />
       {!!hint && <Text style={{ color: c.text3, fontSize: 12, paddingHorizontal: 6 }}>{hint}</Text>}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <TextInput
@@ -315,6 +319,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}
           accessibilityLabel="Message the agent"
+          {...mentions.inputProps}
         />
         <Pressable
           accessibilityRole="button"
