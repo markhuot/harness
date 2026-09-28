@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clampPage, fitSize, formatSize, isDismissDrag, pageAt, shouldDismiss, thumbSize, THUMB } from "./attachments";
+import { clampPage, dismissOnRelease, fitSize, formatSize, pageAt, pullOf, shouldDismiss, thumbSize, THUMB } from "./attachments";
 
 const img = (width?: number, height?: number) => ({ kind: "image" as const, width, height });
 
@@ -68,11 +68,18 @@ describe("swipe down to close", () => {
     expect(shouldDismiss(-200, -3)).toBe(false); // upward
   });
 
-  test("only mostly-vertical downward drags start it, so horizontal paging still works", () => {
-    expect(isDismissDrag(2, 30)).toBe(true);
-    expect(isDismissDrag(30, 30)).toBe(false);
-    expect(isDismissDrag(0, -30)).toBe(false);
-    expect(isDismissDrag(0, 6)).toBe(false);
+  test("the pull comes from the page's negative bounce offset, and not while zoomed", () => {
+    expect(pullOf(-80)).toBe(80);
+    expect(pullOf(40)).toBe(0); // scrolled up past the top: no pull
+    expect(pullOf(-80, 2)).toBe(0);
+  });
+
+  test("releasing a page: iOS's downward velocity is negative; a zoomed page never closes", () => {
+    expect(dismissOnRelease(-150, 0)).toBe(true);
+    expect(dismissOnRelease(-60, -1.2)).toBe(true); // short flick down
+    expect(dismissOnRelease(-60, 1.2)).toBe(false); // flicked back up before letting go
+    expect(dismissOnRelease(-60, -0.2)).toBe(false);
+    expect(dismissOnRelease(-300, -3, 2)).toBe(false);
   });
 });
 

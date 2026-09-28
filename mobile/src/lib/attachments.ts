@@ -50,9 +50,23 @@ export function shouldDismiss(dy: number, vy: number): boolean {
   return dy >= DISMISS.distance || (dy >= DISMISS.flickDistance && vy >= DISMISS.flickVelocity);
 }
 
-/** Whether a drag should become the viewer's swipe-down: mostly vertical, downward, and past a small slop. */
-export function isDismissDrag(dx: number, dy: number): boolean {
-  return dy > 10 && dy > Math.abs(dx) * 1.5;
+/** A zoomed page pans instead: its top-edge bounce isn't a pull. */
+const isZoomed = (zoomScale: number) => zoomScale > 1.01;
+
+/**
+ * How far a viewer page is pulled down, from its scroll view's bounce: iOS reports a pull as a
+ * negative content offset. Zero when zoomed or scrolled the other way.
+ */
+export function pullOf(offsetY: number, zoomScale = 1): number {
+  return isZoomed(zoomScale) ? 0 : Math.max(0, -offsetY);
+}
+
+/**
+ * Whether letting go of a page closes the viewer. `velocityY` is the scroll view's end-drag
+ * velocity (points/ms, negative while pulling content down).
+ */
+export function dismissOnRelease(offsetY: number, velocityY: number, zoomScale = 1): boolean {
+  return !isZoomed(zoomScale) && shouldDismiss(pullOf(offsetY), -velocityY);
 }
 
 /** "after.png · 1.2 MB" style sizes. */

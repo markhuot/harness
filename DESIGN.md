@@ -1318,9 +1318,12 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   its first frame. A tap opens `AttachmentViewer`, a transparent full-screen `Modal`: a paging
   `ScrollView` over the summary's attachments, images in a zooming `ScrollView` (pinch, or
   double-tap for 2.5×) sized to fit without upscaling, and a `VideoView` with native controls
-  for the page that's showing (only that page holds a player, so paging away stops it). A
-  `PanResponder` that captures mostly-vertical downward drags (not while zoomed) closes it past a
-  distance or on a flick. A load or decode error shows a placeholder in the thumb and the page.
+  for the page that's showing (only that page holds a player, so paging away stops it). Every
+  page is a vertical `ScrollView` that always bounces, so swipe-down is native. The pull is the
+  negative content offset, which fades the chrome, and letting go past a distance or on a flick
+  closes the viewer (`pullOf` / `dismissOnRelease`, never while zoomed). A JS `PanResponder` lost
+  those drags to the zoom scroll view's own pan. A load or decode error shows a placeholder in
+  the thumb and the page.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
   Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.

@@ -756,6 +756,8 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   };
   const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
   const counter = (n: number) => (l: string) => l.startsWith(`${n} of 4`);
+  const swipeLeft = () => axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
+  const swipeDown = () => axe("swipe", "--start-x", "200", "--start-y", "330", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
 
   await check("every attachment has a thumbnail", async () => {
     await fresh();
@@ -769,7 +771,8 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await fresh();
     await tapWhere(udid, "Image wide.png");
     await until("viewer on 2 of 4", () => has(counter(2)), 5000);
-    await axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
+    await Bun.sleep(900); // the modal's fade-in swallows gestures
+    await swipeLeft();
     await until("paged to 3 of 4", () => has(counter(3)), 5000);
     await tapWhere(udid, "Close");
     await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
@@ -779,7 +782,20 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await fresh();
     await tapWhere(udid, "Image phone.png");
     await until("viewer open", () => has(counter(1)), 5000);
-    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
+    await Bun.sleep(900);
+    await swipeDown();
+    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    return "closed";
+  });
+  await check("the video page plays and swiping down closes it too", async () => {
+    await fresh();
+    await tapWhere(udid, "Image wide.png");
+    await until("viewer open", () => has(counter(2)), 5000);
+    await Bun.sleep(900);
+    await swipeLeft();
+    await until("on the video", () => has(counter(3)), 5000);
+    await Bun.sleep(1500);
+    await swipeDown();
     await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
     return "closed";
   });
@@ -790,18 +806,18 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await simctl("ui", udid, "appearance", theme);
     await fresh().catch(() => {});
     await simctl("io", udid, "screenshot", join(shots, `attachments-thumbnails-${theme}.png`));
-    const pages: [string, string, number][] = [
-      ["Image wide.png", "viewer-image", 1500],
-      ["Video flow.mp4", "viewer-video", 2500],
-      ["Image broken.png", "viewer-failed", 1500],
-    ];
-    for (const [thumb, name, wait] of pages) {
-      if (theme === "dark" && name !== "viewer-image") continue; // the viewer is black in both themes
-      await fresh().catch(() => {});
-      await tapWhere(udid, thumb).catch(() => {});
-      await Bun.sleep(wait);
-      await simctl("io", udid, "screenshot", join(shots, `attachments-${name}-${theme}.png`));
-    }
+    // The video and the broken file sit past the screen edge in the row, so page to them in the viewer.
+    await fresh().catch(() => {});
+    await tapWhere(udid, "Image wide.png").catch(() => {});
+    await Bun.sleep(1500);
+    await simctl("io", udid, "screenshot", join(shots, `attachments-viewer-image-${theme}.png`));
+    if (theme === "dark") continue; // the viewer is black in both themes
+    await swipeLeft();
+    await Bun.sleep(2500);
+    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-video-light.png"));
+    await swipeLeft();
+    await Bun.sleep(1500);
+    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-failed-light.png"));
   }
   await simctl("ui", udid, "appearance", "light");
   return results.every((r) => r[1]);
