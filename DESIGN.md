@@ -161,13 +161,17 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | conductor | `{ title, description, depends_on?: string[], auto_start?: boolean }` (depends_on takes keys returned by earlier create_ticket calls) |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
+| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
+| `move_ticket` | work, conductor | `{ key, status, position? }`: a drag on the board (`updateTicket` with status/position). `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the app; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` |
-| `start_ticket` | conductor | `{ key }` |
-| `message_ticket` | conductor | `{ key, text }` |
+| `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
+| `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
+| `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
+| `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | conductor | `{ key, decision, notes }` |
 | `complete_ticket` | conductor | `{ key, instructions? }` |
 | `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
@@ -183,6 +187,34 @@ Harness tools (always exposed, via MCP for claude-code):
 The four board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
 `HarnessOps`) only read: every run kind gets them so an agent can look up related or earlier
 work anywhere on the board, and each prompt has a short "Board" section naming them.
+
+### Board changes by agents
+
+The write tools (`service/src/tools/board-write.ts`, the `// --- board (write) ---` section of
+`HarnessOps`) let work and conductor runs do to other cards what a person does on the board.
+They call the same `Orchestrator` methods as the HTTP API, so validation and side effects
+(moving to in_progress starts a work run, a drag back from done re-opens, and so on) are shared.
+The guard rails live in the orchestrator ops, not in tool text, so a driver calling ops directly
+hits them too:
+
+- **Run kinds.** Only work and conductor runs. Plan, review, complete and triage runs don't get
+  the tools, and the ops throw for them.
+- **Never the caller's own ticket.** Its own state changes go through `block` /
+  `submit_for_review`. Keys resolve like the HTTP API (old aliases too), so an alias of the
+  caller's key is refused as well.
+- **Reviews stay with reviewers.** No move goes into review (only the ticket's own agent submits)
+  or out of it (the agent reviewer, then the human or the parent conductor via `review_ticket` /
+  `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
+  message sends it back to in progress, unless the caller is that ticket's parent conductor.
+- **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
+  (closing one that isn't needed). Anything that ran goes through review and a complete run.
+- **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a
+  message would deny it), moved to another column, or started. There is no tool to answer one.
+- **Permission modes only tighten.** `update_ticket` compares the ticket's effective mode before
+  and after (`resolvePermissionMode`, order auto < ask < read_only) and refuses a looser one,
+  including `"inherit"` when the project's mode is looser.
+
+Deleting tickets isn't a tool.
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`.
