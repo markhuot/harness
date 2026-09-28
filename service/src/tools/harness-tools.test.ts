@@ -26,7 +26,11 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "depends_on", "description", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title"]);
+    expect(props("update_ticket")).toEqual(["depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
+    expect(props("move_ticket")).toEqual(["key", "position", "status"]);
+    expect(props("cancel_ticket")).toEqual(["key"]);
+    expect(props("reopen_ticket")).toEqual(["key", "notes"]);
     expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title"]);
     expect(props("browser_content")).toEqual(["format", "max_chars", "selector"]);
     expect(props("browser_type")).toEqual(["selector", "submit", "text"]);
@@ -97,6 +101,67 @@ describe("ticket tools → HarnessOps", () => {
   test("errors thrown by ops propagate (executeTool turns them into isError)", async () => {
     const ops = fakeOps({ block: async () => { throw new Error("Only work runs can block"); } });
     await expect(tool("block").execute({ question: "q" }, fakeContext({ ops }))).rejects.toThrow("Only work runs can block");
+  });
+});
+
+describe("board write tools → HarnessOps", () => {
+  test("create_ticket passes start, conductor, project, driver; an empty model means the driver default", async () => {
+    const ops = fakeOps();
+    await tool("create_ticket").execute(
+      { title: "Docs", description: "Write docs", project_key: "WEB", start: true, conductor: true, driver: "claude-code", model: " " },
+      fakeContext({ ops }),
+    );
+    expect(ops.calls[0]!.args[0]).toEqual({
+      title: "Docs",
+      description: "Write docs",
+      projectKey: "WEB",
+      start: true,
+      conductor: true,
+      driver: "claude-code",
+      model: null,
+    });
+  });
+
+  test("update_ticket maps permission_mode \"inherit\" to null", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    const r = await tool("update_ticket").execute({ key: "TEST-2", title: "Renamed", permission_mode: "inherit", depends_on: [] }, ctx);
+    await tool("update_ticket").execute({ key: "TEST-2", permission_mode: "read_only", model: "claude-opus-5-5" }, ctx);
+    const patches = ops.calls.filter((c) => c.method === "updateTicket").map((c) => c.args);
+    expect(patches[0]).toEqual(["TEST-2", { title: "Renamed", permissionMode: null, dependsOn: [] }]);
+    expect(patches[1]).toEqual(["TEST-2", { permissionMode: "read_only", model: "claude-opus-5-5" }]);
+    expect(JSON.parse(text(r).split("\n").slice(1).join("\n"))).toMatchObject({ key: "TEST-2", title: "Renamed" });
+  });
+
+  test("update_ticket and move_ticket reject unknown enum values before calling ops", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    const bad = await tool("update_ticket").execute({ key: "TEST-2", permission_mode: "yolo" } as any, ctx);
+    expect(text(bad)).toContain('"permission_mode" must be one of');
+    const move = await tool("move_ticket").execute({ key: "TEST-2", status: "archived" } as any, ctx);
+    expect(text(move)).toContain('"status" must be one of');
+    const pos = await tool("move_ticket").execute({ key: "TEST-2", status: "planning", position: 1.5 }, ctx);
+    expect(text(pos)).toContain('"position" must be an integer');
+    expect(ops.calls).toEqual([]);
+  });
+
+  test("move/cancel/reopen map key and arguments", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    const m = await tool("move_ticket").execute({ key: "TEST-2", status: "in_progress", position: 0 }, ctx);
+    await tool("move_ticket").execute({ key: "TEST-2", status: "blocked" }, ctx);
+    await tool("cancel_ticket").execute({ key: "TEST-2" }, ctx);
+    await tool("reopen_ticket").execute({ key: "TEST-2", notes: "the footer is still broken" }, ctx);
+    expect(ops.calls.slice(1)).toEqual([
+      { method: "moveTicket", args: ["TEST-2", "in_progress", 0] },
+      { method: "moveTicket", args: ["TEST-2", "blocked", undefined] },
+      { method: "cancelTicket", args: ["TEST-2"] },
+      { method: "reopenTicket", args: ["TEST-2", "the footer is still broken"] },
+    ]);
+    expect(text(m)).toBe("Moved TEST-2 (status: in_progress).");
+    expect((await tool("reopen_ticket").execute({ key: "TEST-2", notes: " " }, ctx)).isError).toBe(true);
   });
 });
 

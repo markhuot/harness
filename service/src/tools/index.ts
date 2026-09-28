@@ -4,7 +4,8 @@ import type { RunKind } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { getTicket, listProjects, listTickets, searchTickets } from "./board";
 import { browserClick, browserContent, browserEval, browserOpen, browserScreenshot, browserType } from "./browser";
-import { completeTicket, createTicket, messageTicket, reviewTicket, startTicket } from "./conductor";
+import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
+import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
 import { block, postSummary, reviewDecision, submitForReview, updatePlan } from "./ticket";
@@ -12,6 +13,7 @@ import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
 export * from "./board";
+export * from "./board-write";
 export * from "./browser";
 export * from "./conductor";
 export * from "./native";
@@ -23,7 +25,9 @@ export { defineTool, validateInput } from "./util";
 export const browserTools: ToolDefinition[] = [browserOpen, browserContent, browserClick, browserType, browserEval, browserScreenshot];
 /** Read-only board tools: every run kind gets these (DESIGN.md "Tools"). */
 export const boardTools: ToolDefinition[] = [listTickets, getTicket, searchTickets, listProjects];
-export const conductorTools: ToolDefinition[] = [createTicket, startTicket, messageTicket, reviewTicket, completeTicket];
+/** Board tools that change other tickets: work and conductor runs only (DESIGN.md "Board changes by agents"). */
+export const boardWriteTools: ToolDefinition[] = [createTicket, updateTicket, moveTicket, startTicket, messageTicket, cancelTicket, reopenTicket];
+export const conductorTools: ToolDefinition[] = [reviewTicket, completeTicket];
 export const triageTools: ToolDefinition[] = [dispatchTicket, declineWork];
 
 /** Every tool definition, for lookup/documentation. */
@@ -34,6 +38,7 @@ export const allTools: ToolDefinition[] = [
   submitForReview,
   reviewDecision,
   ...boardTools,
+  ...boardWriteTools,
   ...conductorTools,
   ...triageTools,
   ...browserTools,
@@ -52,10 +57,10 @@ export const allTools: ToolDefinition[] = [
  */
 const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postSummary, updatePlan, ...boardTools, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...browserTools], native: "full" },
+  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...browserTools], native: "full" },
   review: { harness: [postSummary, reviewDecision, ...boardTools, ...browserTools], native: "read" },
   complete: { harness: [postSummary, ...boardTools], native: "full" },
-  conductor: { harness: [postSummary, submitForReview, ...boardTools, ...conductorTools, ...browserTools], native: "read" },
+  conductor: { harness: [postSummary, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...browserTools], native: "read" },
   triage: { harness: [...boardTools, ...triageTools], native: "none" },
 };
 

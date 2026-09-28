@@ -15,13 +15,14 @@ import { nativeTools, readOnlyNativeTools } from "../tools";
 // the prompts module so a prompt that names a tool its run can't call fails here.
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
-const CONDUCTOR_ONLY = ["create_ticket", "start_ticket", "message_ticket", "review_ticket", "complete_ticket"];
+const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
+const CONDUCTOR_ONLY = ["review_ticket", "complete_ticket"];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_summary", "update_plan", ...BOARD, ...BROWSER],
-  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BROWSER],
+  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...BROWSER],
   review: ["post_summary", "review_decision", ...BOARD, ...BROWSER],
   complete: ["post_summary", ...BOARD],
-  conductor: ["post_summary", "submit_for_review", ...BOARD, ...CONDUCTOR_ONLY, ...BROWSER],
+  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work"],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];

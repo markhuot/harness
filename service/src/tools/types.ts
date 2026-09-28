@@ -2,7 +2,7 @@
 //  - natively, to drivers that run their own agent loop (dummy, anthropic-api)
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
-import type { RunKind, Session, Ticket, TicketStatus, ToolResultContent, TranscriptRole } from "@harness/shared";
+import type { PermissionMode, RunKind, Session, Ticket, TicketStatus, ToolResultContent, TranscriptRole } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 
 /** JSON Schema object describing the tool input */
@@ -57,6 +57,30 @@ export interface BoardTicketDetail {
   summaries: { author: string; body: string; createdAt: number }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
+}
+
+export interface CreateTicketInput {
+  title: string;
+  description: string;
+  dependsOn?: string[];
+  /** Start once every dependency is done. Default: true for a conductor's child, false otherwise. */
+  autoStart?: boolean;
+  /** Start now (or as soon as dependencies finish). Default false. */
+  start?: boolean;
+  /** Make the new ticket a conductor. */
+  conductor?: boolean;
+  projectKey?: string;
+  driver?: string;
+  model?: string | null;
+}
+
+export interface UpdateTicketInput {
+  title?: string;
+  description?: string;
+  driver?: string;
+  model?: string | null;
+  permissionMode?: PermissionMode | null;
+  dependsOn?: string[];
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -115,13 +139,32 @@ export interface HarnessOps {
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
   listProjects(ctx: ToolContext): Promise<{ key: string; name: string; path: string }[]>;
 
-  // --- conductor runs (act on child tickets) ---
-  createTicket(
-    ctx: ToolContext,
-    input: { title: string; description: string; dependsOn?: string[]; autoStart?: boolean; projectKey?: string },
-  ): Promise<Ticket>;
+  // --- board (write): work and conductor runs ---
+  // What a person does to cards on the board, through the same Orchestrator methods as the HTTP
+  // API. Every method refuses the caller's own ticket (it has block / submit_for_review) and
+  // throws for plan, review, complete and triage runs. See DESIGN.md "Board changes by agents".
+  /**
+   * Conductor run: a child of the conductor (autoStart default true, its driver/model by default).
+   * Work run: a top-level ticket in the run's project or `projectKey` (start default false → planning).
+   */
+  createTicket(ctx: ToolContext, input: CreateTicketInput): Promise<Ticket>;
+  /** Edit a card: PATCH /tickets/:key without status/position. Can't loosen its permission mode. */
+  updateTicket(ctx: ToolContext, key: string, patch: UpdateTicketInput): Promise<Ticket>;
+  /**
+   * Drag a card: change column and/or position, with the same effects as the board. Refuses
+   * moves into or out of review, to done from anything but planning, and tickets waiting on a
+   * tool approval.
+   */
+  moveTicket(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket>;
   startTicket(ctx: ToolContext, key: string): Promise<Ticket>;
+  /** As if a human wrote it. Refused while a tool approval is pending, and in review unless the caller is its conductor. */
   messageTicket(ctx: ToolContext, key: string, text: string): Promise<void>;
+  /** Abort the ticket's active run and drop its queued runs; status unchanged. */
+  cancelTicket(ctx: ToolContext, key: string): Promise<Ticket>;
+  /** Send a done ticket back to in progress with notes. */
+  reopenTicket(ctx: ToolContext, key: string, notes: string): Promise<Ticket>;
+
+  // --- conductor runs (act on child tickets) ---
   /** Conductor stands in for the human reviewer of its children. */
   reviewTicket(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket>;
   completeTicket(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket>;

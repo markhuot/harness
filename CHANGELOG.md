@@ -15,6 +15,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   reviewing, completing, conducting, or triaging) can search tickets by key or words, list a
   project's tickets by status, and open a ticket to see its brief, its summaries and, when it
   asks, the last few messages of that ticket's agent. They can only read these tickets, not change them.
+- Working and conducting agents can now change other cards on the board the way you do. They can
+  file a new ticket for work they find along the way (it lands in Planning unless they start it),
+  edit a card's title, brief, agent, model or dependencies, drag it to another column or reorder
+  it, start it, message its agent, stop its agent, and re-open a done ticket with notes. Agents
+  can't touch their own ticket this way. They also can't move a ticket into or out of Review, mark
+  finished work done, answer or cancel a ticket that's waiting on your tool approval, or relax a
+  ticket's permission mode. Tickets an agent creates never run under a looser permission mode than
+  the agent's own, and an agent can't hand work to a ticket whose mode is looser than its own
+  (for example, a read-only agent messaging or editing a ticket that runs in auto). It can still
+  tighten that ticket's mode. Only a ticket still in
+  Planning can be moved straight to Done.
 
 ### Fixed
 
