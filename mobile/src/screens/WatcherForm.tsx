@@ -1,5 +1,5 @@
 // Create / edit a watcher (the desktop's WatcherForm).
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useColors } from "../state/app";
@@ -23,7 +23,16 @@ export function WatcherFormScreen() {
   const existing = id ? state.watchers[String(id)] : undefined;
   const [d, setD] = useState<Draft>(() => toDraft(existing));
   const [busy, setBusy] = useState(false);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const edited = useRef(false);
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+    edited.current = true;
+    setD((p) => ({ ...p, [k]: v }));
+  };
+  // A cold start through a deep link renders before the snapshot has the watcher: fill the form
+  // once it arrives, unless the user has already started typing.
+  useEffect(() => {
+    if (existing && !edited.current) setD(toDraft(existing));
+  }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const valid = !!d.name.trim() && !!d.command.trim();
   const submit = async () => {
     if (!valid || busy) return;
