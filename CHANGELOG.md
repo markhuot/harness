@@ -23,6 +23,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   The Blocked pill shows the status and the question is on the Summary tab. Failed runs and
   worktrees that couldn't be created now put their error on the Summary tab too, so every
   reason a ticket is blocked still shows up there.
+- Board cards only show the agent (Claude Code, Codex) when a ticket runs on something other
+  than the project's default, the same as the ticket's detail view already did.
 
 ## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
 
