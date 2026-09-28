@@ -45,6 +45,8 @@ const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
   `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
+// Opens the first watcher's edit form and keeps the Watchers section in view.
+const editWatcher = `document.querySelector("#settings-watchers .settings-row button[title=Edit]")?.click(); setTimeout(() => document.getElementById("settings-watchers")?.scrollIntoView({ block: "start" }), 50)`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -57,6 +59,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "inbox", route: "#/inbox" },
   { name: "settings", route: "#/settings" },
   { name: "appearance", route: "#/settings/appearance" },
+  { name: "watchers", route: "#/settings/watchers" },
+  { name: "watcher-edit", route: "#/settings/watchers", setup: editWatcher },
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },

@@ -81,10 +81,16 @@ you answer.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
-- **Watchers** are commands that print NDJSON work items, such as `watch-jira`. Examples
-  are in `service/examples/watchers/`. Each new item starts a triage session in the
-  Inbox. Triage either dispatches the item to a local ticket keyed by the external ID
-  (`FOO-123`, in the project your mappings point to) or declines it.
+- **Watchers** are any command that prints text, plus a prompt that says what you want done
+  with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
+  loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in
+  `service/examples/watchers/`. In interval mode, each run's output becomes an Inbox item. In
+  loop mode, each burst of output does. Output identical to something the watcher already
+  printed is skipped. Each item starts a triage session in the Inbox. The triage agent reads
+  the output and your prompt, then either dispatches it to a ticket in the right project or
+  declines it. Mappings (a key prefix like `FOO`, or a `/regex/`, pointing at a project) help
+  it pick the project for keys like `FOO-123`. An update about an existing ticket is sent to
+  that ticket as a message.
 
 ## Plugins
 

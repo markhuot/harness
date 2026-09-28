@@ -1,8 +1,7 @@
 // Create / edit a watcher (the desktop's WatcherForm).
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import type { Watcher } from "@harness/shared";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -12,38 +11,7 @@ import { FormField, SSwitch, useInputStyle } from "../ui/settings";
 import { PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
 import { buttonItem, primaryItemStyle } from "../ui/header";
-
-interface Draft {
-  name: string;
-  command: string;
-  args: string;
-  cwd: string;
-  mode: Watcher["mode"];
-  intervalSec: string;
-  enabled: boolean;
-  driver: string;
-}
-
-const toDraft = (w?: Watcher): Draft =>
-  w
-    ? { name: w.name, command: w.command, args: w.args.join("\n"), cwd: w.cwd ?? "", mode: w.mode, intervalSec: String(w.intervalSec), enabled: w.enabled, driver: w.driver ?? "" }
-    : { name: "", command: "", args: "", cwd: "", mode: "loop", intervalSec: "300", enabled: true, driver: "" };
-
-export function watcherBody(d: Draft): Partial<Watcher> & { name: string; command: string } {
-  return {
-    name: d.name.trim(),
-    command: d.command.trim(),
-    args: d.args
-      .split("\n")
-      .map((a) => a.trim())
-      .filter(Boolean),
-    cwd: d.cwd.trim() || null,
-    mode: d.mode,
-    intervalSec: Math.max(1, Math.round(Number(d.intervalSec)) || 60),
-    enabled: d.enabled,
-    driver: d.driver || null,
-  };
-}
+import { toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
 
 export function WatcherFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -55,7 +23,16 @@ export function WatcherFormScreen() {
   const existing = id ? state.watchers[String(id)] : undefined;
   const [d, setD] = useState<Draft>(() => toDraft(existing));
   const [busy, setBusy] = useState(false);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const edited = useRef(false);
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+    edited.current = true;
+    setD((p) => ({ ...p, [k]: v }));
+  };
+  // A cold start through a deep link renders before the snapshot has the watcher: fill the form
+  // once it arrives, unless the user has already started typing.
+  useEffect(() => {
+    if (existing && !edited.current) setD(toDraft(existing));
+  }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const valid = !!d.name.trim() && !!d.command.trim();
   const submit = async () => {
     if (!valid || busy) return;
@@ -81,11 +58,11 @@ export function WatcherFormScreen() {
         <FormField label="Name">
           <TextInput style={input} value={d.name} placeholder="jira" placeholderTextColor={c.text3} onChangeText={(v) => set("name", v)} autoCapitalize="none" autoFocus={!existing} />
         </FormField>
-        <FormField label="Command">
-          <TextInput style={[input, { fontFamily: MONO, fontSize: 15 }]} value={d.command} placeholder="node" placeholderTextColor={c.text3} onChangeText={(v) => set("command", v)} autoCapitalize="none" autoCorrect={false} />
+        <FormField label="Command" hint="Runs in your login shell, so pipes, PATH and loops like while true; do curl -s …; sleep 60; done work. Whatever it prints shows up in the Inbox.">
+          <TextInput style={[input, { fontFamily: MONO, fontSize: 14, minHeight: 70, textAlignVertical: "top" }]} multiline value={d.command} placeholder="node ~/Sites/Jira/watch-jira.js" placeholderTextColor={c.text3} onChangeText={(v) => set("command", v)} autoCapitalize="none" autoCorrect={false} spellCheck={false} />
         </FormField>
-        <FormField label="Arguments" hint="One argument per line. Executed without a shell; the command should print NDJSON work items.">
-          <TextInput style={[input, { fontFamily: MONO, fontSize: 14, minHeight: 70, textAlignVertical: "top" }]} multiline value={d.args} placeholder="~/Sites/Jira/watch-jira.js" placeholderTextColor={c.text3} onChangeText={(v) => set("args", v)} autoCapitalize="none" autoCorrect={false} />
+        <FormField label="Prompt" hint="Optional. What triage should do with the output.">
+          <TextInput style={[input, { minHeight: 70, textAlignVertical: "top" }]} multiline value={d.prompt} placeholder="If this event is assigned to me and has actionable next steps, dispatch it to an agent." placeholderTextColor={c.text3} onChangeText={(v) => set("prompt", v)} />
         </FormField>
         <FormField label="Working directory">
           <TextInput style={[input, { fontFamily: MONO, fontSize: 15 }]} value={d.cwd} placeholder="Optional" placeholderTextColor={c.text3} onChangeText={(v) => set("cwd", v)} autoCapitalize="none" autoCorrect={false} />

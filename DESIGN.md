@@ -133,22 +133,62 @@ conductor for review automatically.
 
 ### Watchers and triage
 
-A watcher is a command that prints NDJSON work items (see `~/Sites/Jira/watch-jira.js`:
-lines carry `key`, `summary`, `url`, `updated`). `mode: "loop"` re-runs the command as soon
-as it exits (for blocking watchers), `mode: "interval"` runs it every `intervalSec`.
-Items are normalized to `WorkItem` (`key` ← key|id, `title` ← summary|title, `version` ←
-updated|version) and deduped by `(watcher, key, version)`.
+A watcher is **any command that prints text**, plus a **prompt** in the user's words saying what
+to do with that text ("If this event is assigned to me and has actionable next steps, dispatch
+it to an agent"). Nothing about the output's shape is required: JSON, log lines and prose all
+work. `watch-jira`'s NDJSON is just text now.
 
-Each new item starts an **ephemeral triage session** (`kind: "triage"`, key `TRIAGE-n`,
-visible in the app's Inbox, not on the board). The triage prompt includes the item, the
-project list and the mapping-resolved project suggestion. Triage tools:
-`list_projects`, `dispatch_ticket` (creates a local ticket whose key **is the external key**,
-e.g. `FOO-123`, in the mapped project; `conductor: true` for big jobs), `decline_work`.
-If a local ticket with that key already exists, dispatch posts the update as a message
-instead of creating a duplicate.
+**Command representation.** `command` + `args` (`Watcher` in `shared/src/protocol.ts`):
 
-Mappings: `pattern` is a key prefix (`FOO` matches `FOO-123`) or `/regex/` against the key.
-First match wins (longest prefix first).
+* `args` empty (every watcher the apps create): `command` is one shell command line, run as
+  `$SHELL -lc <command>` (`/bin/zsh` when `$SHELL` isn't absolute). The login shell gives it the
+  user's PATH, and pipes and loops like `while true; do curl -s …; sleep 60; done` work.
+* `args` non-empty (watchers created before prompts existed): `command` is an executable,
+  spawned directly with `args` and no shell, exactly as before. Saving such a watcher from a
+  form turns it into a shell command line (`watcherCommandLine` in `shared/src/watchers.ts`
+  quotes the args).
+
+The prompt is read at delivery time, so editing it doesn't restart the process. Changing the
+command, args, cwd, env, mode or interval does.
+
+**Output → Inbox items** (`WatcherRunner`, `service/src/orchestrator/watchers.ts`):
+
+* `mode: "interval"` runs the command every `intervalSec`. Each run's stdout is one item.
+* `mode: "loop"` re-runs the command as soon as it exits (for blocking or long-running
+  commands). Each **burst** of output is one item: lines that arrive close together, ended by
+  `batchIdleMs` (200ms) of quiet or `batchMaxMs` (1s) of age. Going quiet delivers everything,
+  so a response without a trailing newline (pretty JSON from `curl`) stays whole. Hitting the
+  max age while output is still streaming stops at the last complete line and carries the
+  partial line into the next item.
+* Output is trimmed, and whitespace-only output is dropped. A chunk is cut at 16,000
+  characters and marked truncated, and the triage prompt says so.
+* Identical output from the same watcher is triaged once: `seen_items` records
+  `(watcher id, sha256:<hash of the trimmed text>)`. Output that changes at all is a new item.
+* Supervision is unchanged: exit 0 = ok, 4 = nothing to report, anything else is a failure
+  (`lastError` carries the stderr tail, and loop mode backs off exponentially).
+
+Each item starts an **ephemeral triage session** (`kind: "triage"`, key `TRIAGE-n`, visible in
+the app's Inbox, not on the board). Its title is the output's first line with letters or digits
+in it, cut at 80 characters. Triage replaces it with the dispatched ticket's title, or with
+`decline_work`'s `title`. The triage prompt carries, in order: `Mapping hint:` lines, the
+provisional title, the user's prompt, the local tickets whose keys appear in the output, the
+raw output in a fence it can't close, the project list and the mappings. Triage works out the
+title, key, link and project, then calls `dispatch_ticket` (once per separate item in the
+output that qualifies) or `decline_work`. `dispatch_ticket` with a `key` makes a ticket that
+mirrors the external key (`FOO-123`) and records `externalRef`. Without one, the ticket gets
+the project's next key. If a local ticket with that key already exists, dispatch posts the
+description to it as a message instead of creating a duplicate. Triage runs get the board
+read tools, and the triage instructions tell the agent to use `search_tickets` / `get_ticket` to
+find tickets the output doesn't name by key (they're named only while triage runs have them).
+
+**Mappings** are routing hints. `pattern` is a key prefix (`FOO` matches `FOO-123`, longest
+prefix first) or a `/regex/`. The orchestrator finds ticket-style keys (`[A-Z][A-Z0-9_]*-\d+`)
+in the output, and each key a mapping matches becomes a `Mapping hint: FOO-123 → PROJ` line.
+The first hint's project also becomes the triage session's cwd. Triage can override hints.
+
+`POST /watchers/inject { source, text, prompt? }` feeds output as if a watcher named `source`
+printed it (`HarnessClient.injectOutput`). An object `text` (or the older `{ source, item }`
+shape) is sent as its one-line JSON.
 
 ## Tools
 
@@ -174,8 +214,8 @@ Harness tools (always exposed, via MCP for claude-code):
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | conductor | `{ key, decision, notes }` |
 | `complete_ticket` | conductor | `{ key, instructions? }` |
-| `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
-| `decline_work` | triage | `{ reason }` |
+| `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
+| `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `list_mappings` | all | `{}` (triage routing hints) |
 | `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
@@ -249,19 +289,17 @@ Deleting tickets isn't a board tool: `delete_ticket` is a config tool behind a h
 
 The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
 screens, so a ticket like "add a watcher that polls our events API every minute and dispatches
-anything assigned to me with next steps" can be done end to end. Watchers are generic, so the tool
-descriptions don't teach an output format: a watcher runs a shell command line (taught as
-`command: "/bin/zsh"`, `args: ["-lc", "<line>"]`, a login shell that works with the item-based
-and output-based watcher models alike). What it prints goes to the Inbox with the watcher's
-`prompt`, the user's instructions to the triage agent. `mode` is `loop` for long-running or
-self-looping commands (`while true; do curl …; sleep 60; done`) or `interval`, and a non-zero exit
-shows as the watcher's error. The tools pass `prompt` straight through to `Orchestrator.createWatcher` /
-`updateWatcher`, where HARNESS-22 validates and stores it. `list_watchers` shows it when
-set, and the approval summary includes it, since the prompt decides what happens to the output.
-`create_mapping` / `delete_mapping` describe mappings as optional routing hints for triage.
-Approval cards show a shell command line as the user wrote it (`commandLine` in
-`shared/src/commandLine.ts`: a bare command, or the line in `zsh|bash|sh -c/-lc`) and quote
-other `command` + `args`.
+anything assigned to me with next steps" can be done end to end. Watchers are generic (see
+"Watchers and triage"), so the tool descriptions don't teach an output format. `command` is a
+shell command line whose stdout text goes to the Inbox, `prompt` is the user's instructions to
+the triage agent, and `mode` is `loop` for long-running or self-looping commands (`while true; do
+curl …; sleep 60; done`) or `interval`. A non-zero exit shows as the watcher's error. `args` is
+described as legacy only. The tools pass `prompt` straight through to
+`Orchestrator.createWatcher` / `updateWatcher`, which validate and store it like the HTTP API.
+`list_watchers` shows it when set, and the approval summary includes it, since the prompt decides
+what happens to the output. `create_mapping` / `delete_mapping` describe mappings as optional
+routing hints for triage. Approval cards show the command line as written (`commandLine` in
+`shared/src/commandLine.ts`: `watcherCommandLine`, plus the line inside a legacy `zsh -lc`).
 
 Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
 `tools/util.ts`), because a watcher's command runs as the user outside any ticket sandbox and
@@ -491,7 +529,7 @@ Directives are read from the run prompt:
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
-| triage | reads `Suggested project: KEY` from the prompt; `[unscoped]` in the item → `decline_work`; `[big]` → `dispatch_ticket` with `conductor: true`; no suggestion → decline; else `dispatch_ticket(start: true)` |
+| triage | reads the first `Mapping hint: KEY → PROJECT` line from the hint lines at the top of the prompt; `[unscoped]` in the output → `decline_work`; `[big]` → `dispatch_ticket` with `conductor: true`; no hint → decline; else `dispatch_ticket(start: true)` with the hinted key, project and the `Inbox title` |
 
 ## HTTP API
 
@@ -511,7 +549,7 @@ POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel
 GET    /tickets/:key/summaries
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
-POST   /watchers/:id/run         POST /watchers/inject { source, item }
+POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
 GET    /mappings                 POST /mappings            DELETE /mappings/:id
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)

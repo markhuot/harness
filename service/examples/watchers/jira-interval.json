@@ -1,7 +1,8 @@
 {
   "name": "jira-once",
-  "command": "/bin/zsh",
-  "args": ["-lc", "exec watch-jira --project=CEPFR --assigned=unassigned --open-sprints --once"],
+  "command": "watch-jira --project=CEPFR --assigned=unassigned --open-sprints --once",
+  "args": [],
+  "prompt": "Unassigned CEPFR tickets in open sprints. Dispatch only small, well-scoped fixes to the CEPFR project, left in planning so I can sign off.",
   "cwd": null,
   "env": {},
   "mode": "interval",

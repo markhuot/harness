@@ -1,7 +1,8 @@
 {
   "name": "inbox",
-  "command": "bun",
-  "args": ["file-drop.ts", "~/.harness/inbox"],
+  "command": "bun file-drop.ts ~/.harness/inbox",
+  "args": [],
+  "prompt": "Each JSON object is a request someone dropped in. Dispatch it when it names a project and says what should change.",
   "cwd": "~/Sites/harness/service/examples/watchers",
   "env": {},
   "mode": "loop",

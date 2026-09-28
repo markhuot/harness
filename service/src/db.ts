@@ -285,6 +285,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN auto_complete INTEGER NOT NULL DEFAULT 1;
   `,
+  // 8: watchers.prompt: the user's instructions for triaging a watcher's output. Existing
+  //    watchers get an empty prompt and keep their command + args (direct exec, no shell).
+  `
+  ALTER TABLE watchers ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**

@@ -1,0 +1,14 @@
+{
+  "name": "events",
+  "command": "while true; do curl -fsS -H \"Authorization: Bearer $EVENTS_TOKEN\" \"https://api.example.com/v1/events?since=$(date -u -v-60S +%s)\"; sleep 60; done",
+  "args": [],
+  "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent. Ignore everything else.",
+  "cwd": null,
+  "env": {
+    "EVENTS_TOKEN": "replace-me"
+  },
+  "mode": "loop",
+  "intervalSec": 60,
+  "enabled": true,
+  "driver": null
+}

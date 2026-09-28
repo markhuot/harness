@@ -31,7 +31,8 @@ describe("tool catalogue", () => {
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
-    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title"]);
+    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title", "url"]);
+    expect(props("decline_work")).toEqual(["reason", "title"]);
     expect(props("browser_content")).toEqual(["format", "max_chars", "selector"]);
     expect(props("browser_type")).toEqual(["selector", "submit", "text"]);
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);

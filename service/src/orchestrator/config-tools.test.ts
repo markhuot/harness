@@ -50,8 +50,7 @@ const watcherCall = {
   name: "create_watcher",
   input: {
     name: "jira-once",
-    command: "/bin/zsh",
-    args: ["-lc", "watch-jira --project=SITE --assigned=unassigned --once"],
+    command: "watch-jira --project=SITE --assigned=unassigned --once",
     prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ.",
     mode: "interval",
     interval_sec: 600,
@@ -82,7 +81,7 @@ describe("config tools behind human approval", () => {
     await h.orch.idle();
     const watchers = h.orch.listWatchers();
     expect(watchers.map((w) => [w.name, w.command, w.args, w.mode, w.intervalSec])).toEqual([
-      ["jira-once", "/bin/zsh", watcherCall.input.args, "interval", 600],
+      ["jira-once", watcherCall.input.command, [], "interval", 600],
     ]);
     // The mapping is its own approval; the watcher's grant was used up
     cur = h.orch.ticketDetail(t.key).ticket;
@@ -314,12 +313,12 @@ describe("config tools behind human approval", () => {
     const dir = join(h.home, "site");
     mkdirSync(dir);
     const project = h.orch.createProject({ path: dir, key: "SITE", useWorktrees: false });
-    // Stands in for a tool the user has installed. Its output is one JSON line with a key, which
-    // both the item-based and the output-based (HARNESS-22) watcher models send to triage.
+    // Stands in for a tool the user has installed: prints plain text, no particular format.
     const tool = join(h.home, "watch-fake");
-    writeFileSync(tool, `#!/bin/sh\necho '{"key":"ACME-7","summary":"Fix the footer"}'\n`);
+    writeFileSync(tool, `#!/bin/sh\necho "ACME-7 Fix the footer (assigned to $1)"\n`);
     chmodSync(tool, 0o755);
-    const input = { name: "fake", command: tool, args: ["--once"], mode: "interval", interval_sec: 600, prompt: "File footer bugs in SITE." };
+    // A shell command line (pipe included), the way create_watcher teaches it
+    const input = { name: "fake", command: `${tool} mark | tr a-z A-Z`, mode: "interval", interval_sec: 600, prompt: "File footer bugs in SITE." };
     let done = false;
     const worker = driver.run.bind(driver);
     driver.run = async function* (req) {
@@ -334,19 +333,15 @@ describe("config tools behind human approval", () => {
     while (h.orch.listSessions("triage").length === 0 && Date.now() < deadline) await Bun.sleep(20);
     await h.orch.idle();
     expect(h.orch.listSessions("triage")).toHaveLength(1);
+    // The output went through the login shell, and triage got it with the watcher's prompt
+    const triage = driver.calls.find((c) => c.kind === "triage")!;
+    expect(triage.prompt).toContain("ACME-7 FIX THE FOOTER (ASSIGNED TO MARK)");
+    expect(triage.prompt).toContain("File footer bugs in SITE.");
     expect(h.orch.listWatchers()[0]!.lastError).toBeNull();
     await h.orch.stop();
   });
 
-  // HARNESS-22 adds watcher.prompt (validation, storage, migration). Until it lands the orchestrator
-  // drops the field, so this runs only once storage keeps it.
-  const storesPrompt = (() => {
-    const probe = makeOrchestrator();
-    const w = probe.orch.createWatcher({ name: "probe", command: "/bin/echo", prompt: "p" } as Parameters<typeof probe.orch.createWatcher>[0]);
-    return (w as { prompt?: string }).prompt === "p";
-  })();
-
-  test.if(storesPrompt)("prompt round-trips through storage and list_watchers", async () => {
+  test("prompt round-trips through storage and list_watchers", async () => {
     const out: string[] = [];
     let next = 0;
     const h = scripted(async (req) => {
@@ -362,7 +357,7 @@ describe("config tools behind human approval", () => {
         if (r.isError) return;
       }
     });
-    const prompt = () => (h.orch.listWatchers()[0] as { prompt?: string }).prompt;
+    const prompt = () => h.orch.listWatchers()[0]!.prompt;
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "allow_once" });

@@ -12,14 +12,14 @@ import { defineGatedTool, defineTool, json, schema } from "./util";
 
 // What a watcher is, for an agent setting one up from the user's description. The output format
 // is up to the command: whatever it prints goes to the Inbox with the watcher's prompt, and the
-// triage agent decides what to do with it (HARNESS-22's generic watchers).
+// triage agent decides what to do with it (DESIGN.md "Watchers and triage").
 const WATCHER_GUIDE = [
   `A watcher runs a command and sends whatever text it prints to the Inbox, together with the watcher's prompt. A triage agent reads each piece of output with that prompt and decides what to do: dispatch it to an agent in a project, send it to an existing ticket, or decline it. The output can be in any format (JSON, a table, plain lines). The harness service runs the command on this machine as the user, outside any ticket sandbox.`,
-  `command and args: run the user's shell command line through their login shell so their PATH, pipes, quoting and loops work: command "/bin/zsh", args ["-lc", "<the command line, exactly as they'd type it in a terminal>"].`,
+  `command: the user's shell command line, exactly as they'd type it in a terminal. It runs through their login shell, so their PATH, pipes, quoting and loops work. Leave args out: args are only for older watchers whose command is an executable run directly, without a shell.`,
   `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." Name the project when the user does.`,
   `mode: "loop" for a command that runs for a long time or loops by itself; it's restarted when it exits, and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10), and each run's output becomes one Inbox item.`,
   `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
-  `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "/bin/zsh", "args": ["-lc", "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done"], "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "/bin/zsh", "args": ["-lc", "watch-jira --project=PLAYR --assigned=@me --once"], "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
+  `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "watch-jira --project=PLAYR --assigned=@me --once", "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
   `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run. Mappings (create_mapping) are optional routing hints for the triage agent; a watcher works without them.`,
 ].join(" ");
 
@@ -37,8 +37,8 @@ const modelMapProp = {
 
 const watcherProps = {
   name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"jira-sprint\"." },
-  command: { type: "string", minLength: 1, description: "\"/bin/zsh\", with the user's command line in args (see the description)." },
-  args: { type: "array", items: { type: "string" }, description: "[\"-lc\", \"<shell command line>\"]: the command line whose stdout text goes to the Inbox." },
+  command: { type: "string", minLength: 1, description: "A shell command line whose stdout text goes to the Inbox, e.g. \"watch-jira --project=PLAYR --once\"." },
+  args: { type: "array", items: { type: "string" }, description: "Legacy only: with args, command is an executable run directly with them and no shell. Leave it out; update_watcher with args [] turns a legacy watcher into a shell command line." },
   prompt: { type: "string", description: "The user's instructions to the triage agent for this watcher's output." },
   cwd: { type: "string", description: "Working directory; empty for the service's." },
   env: { type: "object", description: "Environment variables (string values)." },
@@ -85,7 +85,7 @@ function watcherView(w: Watcher) {
     command: w.command,
     args: w.args,
     command_line: commandLine(w.command, w.args),
-    ...((w as Watcher & { prompt?: string }).prompt ? { prompt: (w as Watcher & { prompt?: string }).prompt } : {}),
+    ...(w.prompt ? { prompt: w.prompt } : {}),
     cwd: w.cwd,
     env: Object.fromEntries(Object.keys(w.env ?? {}).map((k) => [k, "(set)"])),
     mode: w.mode,

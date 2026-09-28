@@ -50,7 +50,7 @@ export function InboxScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
         ListEmptyComponent={
           <Empty icon="inbox" title="Inbox zero">
-            Work items from watchers are triaged here before they become tickets.
+            Output from watchers is triaged here before it becomes tickets.
           </Empty>
         }
         renderItem={({ item: s }) => (

@@ -40,7 +40,7 @@ export function InboxView() {
             <div className="empty">
               <Icon name="inbox" />
               <strong>Inbox zero</strong>
-              Work items from watchers are triaged here before they become tickets.
+              Output from watchers is triaged here before it becomes tickets.
             </div>
           )}
           {sessions.map((s) => (

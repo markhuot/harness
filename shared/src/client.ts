@@ -190,9 +190,13 @@ export class HarnessClient {
   runWatcher(id: string) {
     return this.request<{ ok: true }>("POST", `/watchers/${id}/run`);
   }
-  /** Feed a work item directly (as if a watcher emitted it). Useful for testing triage. */
-  injectWorkItem(source: string, item: unknown) {
-    return this.request<Session | null>("POST", `/watchers/inject`, { source, item });
+  /**
+   * Feed output directly, as if a watcher named `source` printed `text` (objects are sent as JSON
+   * text). `prompt` plays the watcher's prompt. Null when the same text was already seen.
+   * Useful for testing triage.
+   */
+  injectOutput(source: string, text: unknown, prompt?: string) {
+    return this.request<Session | null>("POST", `/watchers/inject`, { source, text, prompt });
   }
   listMappings() {
     return this.request<Mapping[]>("GET", "/mappings");

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings } from "@harness/shared";
+import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, watcherCommandLine, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings } from "@harness/shared";
 import { CLASSIFIER_LABELS, inheritedModel, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -391,14 +391,14 @@ function WatchersSection() {
   return (
     <Group
       title="Watchers"
-      footer="Commands that emit work items. Each new item opens a triage session in the Inbox."
+      footer="Shell commands whose output lands in the Inbox. Each new batch of output opens a triage session with the watcher's prompt."
       right={
         <Pressable onPress={() => router.push("/watcher")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Add watcher">
           <Icon name="plus" size={17} color={c.accent} strokeWidth={2.25} />
         </Pressable>
       }
     >
-      {watchers.length === 0 && <SRow title="No watchers yet" sub="Add a command like watch-jira to feed work into triage." onPress={() => router.push("/watcher")} last />}
+      {watchers.length === 0 && <SRow title="No watchers yet" sub="Add a command like watch-jira, or a curl loop, to feed its output into triage." onPress={() => router.push("/watcher")} last />}
       {watchers.map((w, i) => (
         <SRow
           key={w.id}
@@ -414,8 +414,13 @@ function WatchersSection() {
           sub={
             <View style={{ gap: 2 }}>
               <Text style={{ color: c.text3, fontSize: 12.5, fontFamily: MONO }} numberOfLines={2}>
-                {[w.command, ...w.args].join(" ")}
+                {watcherCommandLine(w)}
               </Text>
+              {w.prompt ? (
+                <Text style={{ color: c.text2, fontSize: 12.5 }} numberOfLines={2}>
+                  {w.prompt}
+                </Text>
+              ) : null}
               <Text style={{ color: c.text3, fontSize: 12.5 }}>
                 {driverName(w.driver)} · last run {relativeTime(w.lastRunAt)}
                 {w.cwd ? ` · in ${w.cwd}` : ""}
@@ -455,7 +460,7 @@ function MappingsSection() {
     if (v) setProjectId(v);
   };
   return (
-    <Group title="Mappings" footer="Route external ticket keys to local projects. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
+    <Group title="Mappings" footer="Routing hints for triage: when watcher output mentions a matching key, triage is pointed at that project. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
       {mappings.length === 0 && <SRow title={<Text style={{ color: c.text3, fontSize: 15 }}>No mappings. Triage picks a project on its own.</Text>} />}
       {mappings.map((m) => {
         const p = state.projects[m.projectId];
