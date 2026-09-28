@@ -11,6 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Each file in the Changes tab has a Viewed checkbox in its header, like a pull request review on
+  GitHub. Checking it folds that file's diff down to its header, the file list marks it with a
+  check, and the toolbar counts how many files you've viewed. The arrow at the left of the header
+  opens a viewed file again without unchecking it, and it can fold any other file too. Harness
+  remembers what you've viewed through reloads and when you switch tickets. If the agent changes
+  a file after you viewed it, the file comes back unviewed and open.
 - The Changes tab has a button at the left of its toolbar that hides and shows the file list, so
   the diffs can use the full width. Harness remembers your choice, so the file list stays the
   way you left it when you reload or move to another ticket. In a narrow pane the same button
@@ -62,6 +68,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- When the agent edits a file again while the Changes tab is open, that file's diff now updates
+  to show the new lines. Before, the tab kept showing the older diff for that file until you
+  reloaded it.
 - A ticket that's finishing up (merging its branch and removing its worktree) no longer gets
   stuck in Blocked with "Working directory does not exist" when someone messages it or asks for
   changes mid-merge. Those now get an error that says to wait until it's done and re-open it, and
