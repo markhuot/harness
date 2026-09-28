@@ -12,6 +12,10 @@ import { ResizeHandle } from "./components/ResizeHandle";
 import { PaneWorkspace } from "./components/PaneWorkspace";
 import { ServiceBanner } from "./components/ServiceBanner";
 import { sidebarBounds, toggleSidebar, updateLayout, useLayout } from "./state/layout";
+import { GLOBAL_OWNER, commandOrigin, useCommands, useKeyboardDispatcher } from "./components/commands";
+import { usePaneCommands } from "./components/paneCommands";
+import { CommandPalette } from "./views/CommandPalette";
+import { ShortcutsOverlay } from "./views/Shortcuts";
 
 interface Toast {
   id: number;
@@ -129,14 +133,8 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
   );
 }
 
-/** ⌃⌘S (View → Show Sidebar). The menu shows it; the renderer handles the key so it's testable. */
-const isSidebarShortcut = (e: KeyboardEvent) => e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "KeyS";
-
 function Shell() {
-  const { route, state, openTerminal } = useStore();
-  // The menu listener is registered once; the action it calls is the current one.
-  const openTerminalRef = useRef(() => openTerminal());
-  openTerminalRef.current = () => openTerminal();
+  const { route, state, openTerminal, navigate } = useStore();
   const layout = useLayout();
   const appRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -147,6 +145,9 @@ function Shell() {
   // false = closed; otherwise open, optionally preselecting a project ("New session in X").
   const [composer, setComposerState] = useState<false | { projectId: string | null }>(false);
   const setComposer = useCallback((open: boolean, projectId: string | null = null) => setComposerState(open ? { projectId } : false), []);
+  // The palette remembers where the focus was, so its commands act there (and focus goes back).
+  const [palette, setPalette] = useState<Element | null>(null);
+  const [shortcuts, setShortcuts] = useState(false);
 
   useEffect(() => {
     // #/compose opens the composer on top of the board (handy for links, tests and screenshots).
@@ -157,37 +158,23 @@ function Shell() {
     };
     compose();
     addEventListener("hashchange", compose);
-    // A keypress the renderer handled shouldn't also arrive as the menu command.
-    let keyToggledAt = 0;
-    const off = window.harness?.onMenu((cmd) => {
-      if (cmd === "toggle-sidebar") {
-        if (Date.now() - keyToggledAt > 400) toggleSidebar();
-      } else if (cmd === "new-session") setComposer(true);
-      else if (cmd === "new-terminal") openTerminalRef.current();
-      else if (cmd === "settings") location.hash = "#/settings";
-      else if (cmd === "inbox") location.hash = "#/inbox";
-      else if (cmd === "board") location.hash = "#/board/all";
-    });
-    // Outside Electron the menu accelerators don't exist; handle ⌘N here (a terminal needs Electron anyway).
-    const key = (e: KeyboardEvent) => {
-      if (isSidebarShortcut(e)) {
-        e.preventDefault();
-        keyToggledAt = Date.now();
-        toggleSidebar();
-        return;
-      }
-      if (!window.harness && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        setComposer(true);
-      }
-    };
-    addEventListener("keydown", key);
-    return () => {
-      off?.();
-      removeEventListener("keydown", key);
-      removeEventListener("hashchange", compose);
-    };
+    return () => removeEventListener("hashchange", compose);
   }, []);
+
+  // Every shortcut and menu command goes through the registry (state/keys.ts).
+  useKeyboardDispatcher();
+  usePaneCommands(route.view === "board" ? paneScopeOf(route) : null, !layout.sidebarCollapsed);
+  useCommands(GLOBAL_OWNER, {
+    palette: () => setPalette((open) => (open ? null : commandOrigin() ?? document.body)),
+    shortcuts: () => setShortcuts((open) => !open),
+    "new-session": () => setComposer(true),
+    // A terminal needs the desktop app's PTYs.
+    "new-terminal": !!window.harness && (() => openTerminal()),
+    board: () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" }),
+    inbox: () => navigate({ view: "inbox", sessionId: null }),
+    settings: () => navigate({ view: "settings", section: null }),
+    "toggle-sidebar": toggleSidebar,
+  });
 
   return (
     <div
@@ -246,6 +233,8 @@ function Shell() {
         <ServiceBanner />
       </main>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}
+      {palette && <CommandPalette origin={palette} onClose={() => setPalette(null)} onShortcuts={() => setShortcuts(true)} />}
+      {shortcuts && <ShortcutsOverlay onClose={() => setShortcuts(false)} />}
     </div>
   );
 }

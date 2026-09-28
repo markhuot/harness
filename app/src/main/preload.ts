@@ -14,7 +14,7 @@ const bridge: HarnessBridge = {
   revealInFinder: (path) => ipcRenderer.invoke("harness:revealInFinder", path),
   showContextMenu: (items) => ipcRenderer.invoke("harness:contextMenu", items),
   onMenu: (cb) => {
-    const listener = (_e: IpcRendererEvent, cmd: MenuCommand) => cb(cmd);
+    const listener = (_e: IpcRendererEvent, cmd: MenuCommand, viaKey?: boolean) => cb(cmd, !!viaKey);
     ipcRenderer.on("menu", listener);
     return () => ipcRenderer.removeListener("menu", listener);
   },

@@ -15,17 +15,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {
   applyDrop,
-  closePane,
   dropPreview,
   dropTargetAt,
-  findLeaf,
   focusPane,
   keySplit,
   layoutPanes,
   minSize,
   resizeSplit,
   setSizes,
-  toggleZoom,
   updatePanes,
   usePanes,
   type DividerBox,
@@ -42,6 +39,8 @@ import { TerminalPane } from "../views/TerminalPane";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
+import { focusPaneDom, rememberPaneFocus, takePaneFocusRequest } from "./paneFocus";
+import { userInputWithin } from "../state/inputModality";
 import "./panes.css";
 
 const pct = (n: number) => `${n * 100}%`;
@@ -70,13 +69,6 @@ function applyLayout(root: HTMLElement, layout: PaneLayout) {
   }
 }
 
-/** Escape ends a zoom, or else closes the focused ticket pane (never the board, nor a terminal: Escape is the shell's). */
-function escapePanes(s: PaneState): PaneState {
-  if (s.zoomedId) return toggleZoom(s, s.zoomedId);
-  const leaf = s.focusedId ? findLeaf(s.root, s.focusedId) : null;
-  return leaf?.content.kind === "ticket" ? closePane(s, leaf.id) : s;
-}
-
 /**
  * The panes of one board scope (a project, or all projects). Switching scope swaps the whole tree:
  * the other scope's panes unmount, and its leaves (keyed by their ids, unique across scopes) mount
@@ -102,26 +94,21 @@ export function PaneWorkspace({ scope }: { scope: string }) {
   // reloads it), new ones are simply added.
   const boxes = useMemo(() => [...layout.leaves].sort((a, b) => a.leaf.id.localeCompare(b.leaf.id, undefined, { numeric: true })), [layout]);
 
+  // A keyboard command moved the focused pane (components/paneFocus.ts): move DOM focus into it.
+  useLayoutEffect(() => {
+    if (takePaneFocusRequest() && panes.focusedId) focusPaneDom(panes.focusedId);
+  }, [panes]);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
-      // Text fields, the browser canvas and terminals keep their Escape; an open modal or menu closes first.
-      const el = e.target as HTMLElement;
-      if (el.closest?.("input, textarea, select, [contenteditable=true], canvas, [data-terminal]") || document.querySelector(".modal, .menu")) return;
-      updatePanes(scope, escapePanes);
-    };
+    // Keys (Escape and the rest) are handled by the app's dispatcher (components/commands.tsx).
     // A click inside a plugin iframe never reaches this document; the window blurs instead.
     const onBlur = () =>
       setTimeout(() => {
         const id = document.activeElement?.closest<HTMLElement>("[data-pane-id]")?.dataset.paneId;
         if (id) updatePanes(scope, (s) => focusPane(s, id));
       });
-    addEventListener("keydown", onKey);
     addEventListener("blur", onBlur);
-    return () => {
-      removeEventListener("keydown", onKey);
-      removeEventListener("blur", onBlur);
-    };
+    return () => removeEventListener("blur", onBlur);
   }, [scope]);
 
   return (
@@ -173,14 +160,20 @@ function Pane({
   const c = leaf.content;
   return (
     <section
-      className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
+      className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
       data-pane-id={leaf.id}
       data-testid={`pane-${c.kind}`}
       style={leafStyle(rect)}
       aria-hidden={hidden || undefined}
+      // The pane itself takes focus when a keyboard move lands on it with nothing inside to focus.
+      tabIndex={-1}
       onPointerDownCapture={focus}
-      // Tabbing into a pane focuses it (focus events alone would also fire for programmatic focus).
-      onKeyUpCapture={(e) => e.key === "Tab" && focus()}
+      onFocusCapture={(e) => {
+        rememberPaneFocus(leaf.id, e.target as HTMLElement);
+        // Focus the user moved here (Tab, a click) makes this the focused pane; focus moved by
+        // code with no input nearby (an autofocus, a ticket asking for an answer) doesn't.
+        if (userInputWithin(300)) focus();
+      }}
     >
       <PaneContext.Provider value={ctx}>
         {c.kind === "board" ? (

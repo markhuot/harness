@@ -633,6 +633,37 @@ export function layoutPanes(state: PaneState, area?: PaneArea): PaneLayout {
   return out;
 }
 
+export type PaneDir = "left" | "right" | "up" | "down";
+const EDGE = 1e-6;
+
+/**
+ * The pane you land on moving `dir` from the pane `fromId` (⌥⌘arrows, ⌃hjkl): the nearest visible
+ * pane beyond that edge that overlaps it across the axis, preferring the one sharing the most of its
+ * edge, then the topmost/leftmost. Moving left from a pane on the workspace's left edge gives
+ * "sidebar" when `sidebar` is set (the nav is open); otherwise null where there's nothing there.
+ */
+export function paneInDirection(layout: PaneLayout, fromId: string, dir: PaneDir, opts: { sidebar?: boolean } = {}): string | "sidebar" | null {
+  const from = layout.leaves.find((b) => b.leaf.id === fromId && !b.hidden);
+  if (!from) return null;
+  const a = from.rect;
+  const horizontal = dir === "left" || dir === "right";
+  let best: { id: string; gap: number; overlap: number; across: number } | null = null;
+  for (const b of layout.leaves) {
+    if (b.hidden || b.leaf.id === fromId) continue;
+    const r = b.rect;
+    const gap = dir === "left" ? a.x - (r.x + r.w) : dir === "right" ? r.x - (a.x + a.w) : dir === "up" ? a.y - (r.y + r.h) : r.y - (a.y + a.h);
+    if (gap < -EDGE) continue;
+    const overlap = horizontal ? Math.min(a.y + a.h, r.y + r.h) - Math.max(a.y, r.y) : Math.min(a.x + a.w, r.x + r.w) - Math.max(a.x, r.x);
+    if (overlap <= EDGE) continue;
+    const across = horizontal ? r.y : r.x;
+    const better =
+      !best || gap < best.gap - EDGE || (Math.abs(gap - best.gap) <= EDGE && (overlap > best.overlap + EDGE || (Math.abs(overlap - best.overlap) <= EDGE && across < best.across)));
+    if (better) best = { id: b.leaf.id, gap, overlap, across };
+  }
+  if (best) return best.id;
+  return dir === "left" && opts.sidebar && a.x <= EDGE ? "sidebar" : null;
+}
+
 /**
  * A split's `sizes` adjusted so each child gets at least `mins[i]` px of the split's `totalPx`:
  * children below their minimum are raised to it, and the rest share what's left in proportion to

@@ -8,6 +8,7 @@ import { nodePtySpawn } from "./pty";
 import { ensureService, reloadToken, restartService } from "./service";
 import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
+import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
 import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
 
 // The app root holds package.json, resources/ and dist/ — in dev and inside the packaged .app.
@@ -236,14 +237,30 @@ function createWindow() {
   return win;
 }
 
-function sendMenu(cmd: MenuCommand) {
+/** `viaKey`: the item's shortcut was pressed (Electron's triggeredByAccelerator), not the item clicked. */
+function sendMenu(cmd: MenuCommand, viaKey = false) {
   const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!win) {
-    createWindow();
+    // With no window there's no pane to close; anything else opens one.
+    if (cmd !== "pane.close") createWindow();
     return;
   }
-  win.webContents.send("menu", cmd);
+  win.webContents.send("menu", cmd, viaKey);
   win.show();
+}
+
+/**
+ * A menu item for a keyboard command (renderer/state/keys.ts): its label and ⌘ chord come from the
+ * registry, and choosing it sends the command's id to the renderer, which runs it where the focus
+ * is. The renderer handles the same keys itself; the menu is what reaches them from a plugin
+ * iframe or a terminal, which keep keys from the page.
+ */
+function commandItem(id: string, label?: string): MenuItemConstructorOptions {
+  return {
+    label: label ?? COMMAND_BY_ID.get(id)?.label ?? id,
+    accelerator: commandAccelerator(id),
+    click: (_item, _win, event) => sendMenu(id, !!event.triggeredByAccelerator),
+  };
 }
 
 function buildMenu() {
@@ -253,7 +270,7 @@ function buildMenu() {
       submenu: [
         { role: "about" },
         { type: "separator" },
-        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenu("settings") },
+        commandItem("settings", "Settings…"),
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -267,13 +284,14 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
-        { label: "New Session", accelerator: "CmdOrCtrl+N", click: () => sendMenu("new-session") },
-        { label: "New Terminal", accelerator: "CmdOrCtrl+T", click: () => sendMenu("new-terminal") },
+        commandItem("new-session", "New Session"),
+        commandItem("new-terminal"),
         { type: "separator" },
-        { label: "Board", accelerator: "CmdOrCtrl+1", click: () => sendMenu("board") },
-        { label: "Inbox", accelerator: "CmdOrCtrl+2", click: () => sendMenu("inbox") },
+        commandItem("board", "Board"),
+        commandItem("inbox", "Inbox"),
         { type: "separator" },
-        { role: "close" },
+        // ⌘W closes the focused pane, or the window when the board (or no pane) has focus.
+        commandItem("pane.close"),
       ],
     },
     { role: "editMenu" },
@@ -282,7 +300,17 @@ function buildMenu() {
       submenu: [
         // ⌃⌘S is the macOS standard (Finder, Mail, Notes' HIG entry); ⌘0 is already Actual Size.
         // The renderer handles the key itself and reports the state back for the checkmark.
-        { id: "toggle-sidebar", label: "Show Sidebar", type: "checkbox", checked: true, accelerator: "Ctrl+Cmd+S", click: () => sendMenu("toggle-sidebar") },
+        { id: "toggle-sidebar", label: "Show Sidebar", type: "checkbox", checked: true, accelerator: commandAccelerator("toggle-sidebar"), click: (_i, _w, e) => sendMenu("toggle-sidebar", !!e.triggeredByAccelerator) },
+        commandItem("palette"),
+        { type: "separator" },
+        commandItem("tab.next"),
+        commandItem("tab.prev"),
+        { type: "separator" },
+        commandItem("pane.left"),
+        commandItem("pane.right"),
+        commandItem("pane.up"),
+        commandItem("pane.down"),
+        commandItem("pane.zoom", "Maximize Pane"),
         { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
@@ -298,7 +326,7 @@ function buildMenu() {
     { role: "windowMenu" },
     {
       role: "help",
-      submenu: [{ label: "Harness on GitHub", click: () => void shell.openExternal("https://github.com/markhuot") }],
+      submenu: [commandItem("shortcuts"), { type: "separator" }, { label: "Harness on GitHub", click: () => void shell.openExternal("https://github.com/markhuot") }],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
