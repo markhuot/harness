@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
+  local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
+  `@node_modules/`) to browse what's inside.
+
 ## [app-20260928.1702](https://github.com/markhuot/harness/releases/tag/app-20260928.1702) - 2026-09-28
 
 ### Added
