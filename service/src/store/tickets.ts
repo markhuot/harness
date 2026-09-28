@@ -30,6 +30,7 @@ interface TicketRow {
   allowed_tools: string;
   review_rejections: number;
   model: string | null;
+  use_worktree: number | null;
   completed_at: number | null;
   busy: number;
 }
@@ -87,6 +88,7 @@ export interface NewTicket {
   externalRef: ExternalRef | null;
   workdir: string | null;
   model?: string | null;
+  useWorktree?: boolean | null;
 }
 
 export type TicketPatch = Partial<{
@@ -173,6 +175,7 @@ export class TicketRepo {
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
       model: r.model ?? null,
+      useWorktree: r.use_worktree === null || r.use_worktree === undefined ? null : bool(r.use_worktree),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
@@ -404,9 +407,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, created_at, updated_at)
+           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $t, $t)`,
+           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $t, $t)`,
       )
       .run({
         id,
@@ -424,6 +427,7 @@ export class TicketRepo {
         workdir: input.workdir,
         position: this.nextPosition(input.projectId),
         model: input.model ?? null,
+        useWorktree: input.useWorktree === null || input.useWorktree === undefined ? null : int(input.useWorktree),
         t,
       });
     this.setDeps(id, input.dependsOn);

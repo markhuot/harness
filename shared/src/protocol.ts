@@ -25,6 +25,11 @@ export interface Project {
   defaultModels: Record<string, string>;
   /** When the project path is a git repo, give each ticket its own worktree + branch */
   useWorktrees: boolean;
+  /**
+   * Whether the project path is inside a git checkout (checked each time the project is read).
+   * Clients hide worktree choices when it's false. Optional only so older payloads type-check.
+   */
+  isGit?: boolean;
   /** When false, the human review step is skipped (agent review alone gates completion) */
   requireHumanReview: boolean;
   /**
@@ -109,6 +114,11 @@ export interface Ticket {
   workdir: string | null;
   /** Git branch when running in a worktree */
   branch: string | null;
+  /**
+   * Per-ticket worktree choice, applied when work starts: true → its own worktree, false → the
+   * project checkout, null → the project's useWorktrees. Optional only so older payloads type-check.
+   */
+  useWorktree?: boolean | null;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -516,6 +526,8 @@ export interface CreateTicketBody {
   permissionMode?: PermissionMode | null;
   /** Skip planning and start work right away (default true for quick sessions) */
   start?: boolean;
+  /** Worktree for this ticket: false → the project checkout (null / omitted → project.useWorktrees) */
+  useWorktree?: boolean | null;
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;

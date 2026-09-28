@@ -23,6 +23,7 @@ export const createTicket = defineTool<{
   conductor?: boolean;
   driver?: string;
   model?: string;
+  use_worktree?: boolean;
 }>({
   name: "create_ticket",
   description:
@@ -38,6 +39,11 @@ export const createTicket = defineTool<{
       conductor: { type: "boolean", description: "Make it a conductor ticket that splits its goal into children. Default false." },
       driver: driverProp,
       model: modelProp,
+      use_worktree: {
+        type: "boolean",
+        description:
+          "Give the ticket its own git worktree and branch (true) or run it in the project directory (false). Omit to follow the project's setting, which is right almost always, a conductor's children included.",
+      },
     },
     ["title", "description"],
   ),
@@ -52,6 +58,7 @@ export const createTicket = defineTool<{
       conductor: input.conductor,
       driver: input.driver,
       model: modelInput(input.model),
+      useWorktree: input.use_worktree,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },

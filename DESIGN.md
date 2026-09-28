@@ -93,7 +93,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
 | Human message in planning | enqueue plan run with the message |
-| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (worktree if enabled); enqueue work run: "The plan is approved. Begin work." + plan |
+| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
@@ -203,7 +203,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model?, use_worktree? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |

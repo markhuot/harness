@@ -877,6 +877,70 @@ describe("worktrees", () => {
     expect(new TextDecoder().decode(git("branch", "--list", "harness/*").stdout)).toContain("harness/repo-1");
   });
 
+  /** A git repo with one commit, as a project (worktree setting as given). */
+  const gitProject = (h: ReturnType<typeof setup>, useWorktrees: boolean) => {
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+    const git = (...args: string[]) => new TextDecoder().decode(Bun.spawnSync(["git", ...args], { cwd: repo, env }).stdout);
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    return { repo, git, project: h.orch.createProject({ path: repo, key: "repo", useWorktrees }) };
+  };
+
+  test("useWorktree false: a git project with worktrees on runs the ticket in the project checkout", async () => {
+    const h = setup();
+    const { repo, git, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch, cur.useWorktree]).toEqual([repo, null, false]);
+    expect(h.driver.calls[0]!.cwd).toBe(repo);
+    expect(existsSync(join(h.paths.worktreesDir, "REPO-1"))).toBe(false);
+    expect(git("branch", "--list", "harness/*")).toBe("");
+  });
+
+  test("useWorktree true: a project with worktrees off still gets one for that ticket", async () => {
+    const h = setup();
+    const { project } = gitProject(h, false);
+    const off = await h.orch.createTicket({ projectId: project.id, prompt: "follows the project" });
+    const on = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(off.key).ticket.branch).toBeNull();
+    const cur = h.orch.ticketDetail(on.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([join(h.paths.worktreesDir, on.key), `harness/${on.key.toLowerCase()}`]);
+    expect(existsSync(join(cur.workdir!, ".git"))).toBe(true);
+  });
+
+  test("the choice is kept through planning: started later, it still runs in the project checkout", async () => {
+    const h = setup();
+    const { repo, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", start: false, useWorktree: false });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.workdir).toBeNull();
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([repo, null]);
+    expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
+  });
+
+  test("re-opening a done project-checkout ticket keeps it in the project checkout", async () => {
+    const h = setup();
+    const { repo, project } = gitProject(h, true);
+    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    await h.orch.reopenTicket(t.key, { notes: "one more fix" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.workdir, cur.branch]).toEqual([repo, null]);
+    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.cwd).toBe(repo);
+    expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
+  });
+
   test("a message to a done ticket with a removed worktree recreates it too", async () => {
     const h = setup();
     const repo = join(h.home, "repo");

@@ -69,6 +69,7 @@ describe("http api", () => {
     expect(dup.status).toBe(409);
     await expect(client.request("POST", "/tickets", "not json" as any)).rejects.toMatchObject({ status: 400 });
     await expect(client.humanReview("EXT-1", { decision: "maybe" as any })).rejects.toMatchObject({ status: 400 });
+    await expect(client.createTicket({ projectId: p.id, prompt: "x", useWorktree: "yes" as any })).rejects.toMatchObject({ status: 400 });
     await expect(client.updateSettings({ maxConcurrentRuns: 0 })).rejects.toMatchObject({ status: 400 });
   });
 
