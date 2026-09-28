@@ -9,7 +9,7 @@
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
 import type { Mapping, Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
-import { triageTools } from "../tools/index";
+import { toolsForRun } from "../tools/index";
 
 export interface PromptInfo {
   kind: RunKind;
@@ -228,6 +228,7 @@ ${current}`,
 
 function triageInstructions(): string {
   // Ticket lookup tools are named only when triage runs actually have them.
+  const triageTools = toolsForRun("triage", { hasBuiltinTools: true, usesPermissionPromptTool: false });
   const lookup = ["search_tickets", "get_ticket"].filter((n) => triageTools.some((t) => t.name === n)).map((n) => `\`${n}\``);
   const findOthers = lookup.length ? `, and use ${lookup.join(" or ")} to find tickets the output doesn't name by key` : "";
   return section(
