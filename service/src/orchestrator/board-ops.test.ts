@@ -231,3 +231,49 @@ describe("board tools over the real orchestrator", () => {
     expect(withTail.transcript).toEqual([expect.objectContaining({ role: "assistant", type: "text", text: "all done" })]);
   });
 });
+
+describe("listInbox (board)", () => {
+  async function inbox() {
+    const h = await setup();
+    const a = (await h.orch.injectOutput("events", '{"id":"E1","assignee":"mark"}', "Dispatch mine to WEB."))!;
+    const b = (await h.orch.injectOutput("jira", "WEB-9 Fix the footer"))!;
+    const c = (await h.orch.injectOutput("events", "x".repeat(BOARD_TRANSCRIPT_CHARS * 2), "Dispatch mine to WEB."))!;
+    await h.orch.idle();
+    // Newest first even when created in the same millisecond
+    h.store.sessions.update(a.id, { triageStatus: "dispatched", outcome: "Dispatched as WEB-1" });
+    h.store.sessions.update(b.id, { triageStatus: "declined", outcome: "Assigned to someone else" });
+    h.store.sessions.update(c.id, { triageStatus: "failed", outcome: "The triage run failed" });
+    return { ...h, a, b, c };
+  }
+
+  test("newest first, with source, status, outcome and the watcher prompt; output only on request", async () => {
+    const h = await inbox();
+    const { items, total } = await h.orch.ops.listInbox(h.ctx("work", null), {});
+    expect(total).toBe(3);
+    expect(items.map((i) => i.key)).toEqual([h.c.key, h.b.key, h.a.key]);
+    expect(items[2]).toMatchObject({ source: "events", status: "dispatched", outcome: "Dispatched as WEB-1", prompt: "Dispatch mine to WEB." });
+    expect(items[1]).toMatchObject({ source: "jira", status: "declined", prompt: "" });
+    expect(items.every((i) => i.output === undefined)).toBe(true);
+
+    const withOutput = await h.orch.ops.listInbox(h.ctx("work", null), { output: true });
+    expect(withOutput.items[2]!.output).toBe('{"id":"E1","assignee":"mark"}');
+    expect(withOutput.items[0]!.output!.length).toBeLessThan(BOARD_TRANSCRIPT_CHARS + 100); // long output is cut
+  });
+
+  test("filters by status and by source (case-insensitive), and limit keeps the total", async () => {
+    const h = await inbox();
+    const declined = await h.orch.ops.listInbox(h.ctx("review", null), { statuses: ["declined"] });
+    expect(declined.items.map((i) => i.key)).toEqual([h.b.key]);
+    const events = await h.orch.ops.listInbox(h.ctx("triage", null), { source: "EVENTS" });
+    expect(events.items.map((i) => i.key)).toEqual([h.c.key, h.a.key]);
+    const page = await h.orch.ops.listInbox(h.ctx("plan", null), { limit: 1 });
+    expect(page).toMatchObject({ total: 3, items: [{ key: h.c.key }] });
+
+    const listInbox = allTools.find((t) => t.name === "list_inbox")!;
+    const r = await listInbox.execute({ limit: 1 }, h.ctx("work", null));
+    const text = r.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+    expect(text.startsWith("Showing 1 of 3 items.")).toBe(true);
+    const none = await listInbox.execute({ source: "nope" }, h.ctx("work", null));
+    expect(none.content[0]).toEqual({ type: "text", text: "No Inbox items match." });
+  });
+});

@@ -91,7 +91,7 @@ const BROWSER = section(
 /** Read-only board tools, given to every run kind (tools/board.ts). */
 const BOARD = section(
   "Board",
-  `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), and \`list_projects\` gives the project keys. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
+  `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), \`list_projects\` gives the project keys, and \`list_inbox\` { status?, source?, limit?, include_output? } shows the Inbox: each piece of watcher output and what triage did with it. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
 );
 
 /** Board tools that change other tickets: work and conductor runs (tools/board-write.ts). */
@@ -105,6 +105,20 @@ const boardChanges = (kind: RunKind) =>
     } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on? }, move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
 Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide${kind === "conductor" ? " (for your children, that's you with review_ticket and complete_ticket)" : ""}. Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
   );
+
+/**
+ * Harness configuration (tools/config.ts): reads for every run kind; the gated writes only for
+ * work and conductor runs, which have a human to approve them.
+ */
+function configSection(kind: RunKind): string {
+  const reads = `\`list_watchers\`, \`list_mappings\`, \`get_settings\` and \`list_drivers\` show how the harness is set up: its watchers (commands whose output lands in the Inbox for a triage agent), the mappings that hint which project triage should pick, the settings, and the agent drivers with their models. They only read, and never show environment variable values or the API key.`;
+  if (kind !== "work" && kind !== "conductor") return section("Harness configuration", reads);
+  return section(
+    "Harness configuration",
+    `${reads}
+When your task is to change the harness itself, what a person does on the Settings screens is a tool: \`create_watcher\`, \`update_watcher\`, \`delete_watcher\`, \`run_watcher\`, \`create_mapping\`, \`delete_mapping\`, \`create_project\`, \`update_project\`, \`delete_project\`, \`update_settings\` and \`delete_ticket\`. A human approves every one of these calls: the ticket blocks on an approval card showing the call, you are resumed with their answer, and then you make exactly the same call again (a changed call asks again). Get the input right before calling, since each call is its own approval. To set up a watcher from a plain-English request, put the user's command line in command and their instructions for its output (what to dispatch, to which project, what to ignore) in prompt; create_watcher's description explains every field. Secrets such as the Anthropic API key, pairing and tokens are for the human to enter in the app.`,
+  );
+}
 
 /**
  * File tools over the shell. Claude Code's auto mode tells the model shell edits (sed, heredocs)
@@ -301,6 +315,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && SUMMARIES,
     BOARD,
     (kind === "work" || kind === "conductor") && boardChanges(kind),
+    configSection(kind),
     (kind === "work" || kind === "complete" || kind === "conductor") && approvals(kind),
     browser && BROWSER,
   );

@@ -14,16 +14,30 @@ import { nativeTools, readOnlyNativeTools } from "../tools";
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
-const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
+const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR_ONLY = ["review_ticket", "complete_ticket"];
+const CONFIG_READ = ["list_watchers", "list_mappings", "get_settings", "list_drivers"];
+const CONFIG_WRITE = [
+  "create_watcher",
+  "update_watcher",
+  "delete_watcher",
+  "run_watcher",
+  "create_mapping",
+  "delete_mapping",
+  "create_project",
+  "update_project",
+  "delete_project",
+  "update_settings",
+  "delete_ticket",
+];
 const TOOLS: Record<RunKind, string[]> = {
-  plan: ["post_summary", "update_plan", ...BOARD, ...BROWSER],
-  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...BROWSER],
-  review: ["post_summary", "review_decision", ...BOARD, ...BROWSER],
-  complete: ["post_summary", ...BOARD],
-  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...BROWSER],
-  triage: [...BOARD, "dispatch_ticket", "decline_work"],
+  plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  complete: ["post_summary", ...BOARD, ...CONFIG_READ],
+  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];
 
@@ -268,6 +282,20 @@ describe("work-run conduct rules", () => {
     // plan and review runs are denied outright by requestApproval, so no waiting guidance there
     expect(sys("plan")).not.toContain("denied pending human approval");
     expect(sys("review")).not.toContain("denied pending human approval");
+  });
+
+  test("config changes are explained as human-approved, and only to runs that can make them", () => {
+    for (const kind of ["work", "conductor"] as RunKind[]) {
+      const text = sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket());
+      expect(text).toContain("A human approves every one of these calls");
+      expect(text).toContain("make exactly the same call again");
+      expect(text).toMatch(/command line in command and their instructions for its output[^\n]*in prompt/);
+    }
+    for (const kind of ["plan", "review", "complete"] as RunKind[]) {
+      const text = sys(kind);
+      expect(text).toContain("## Harness configuration");
+      expect(text).not.toContain("A human approves every one of these calls");
+    }
   });
 });
 

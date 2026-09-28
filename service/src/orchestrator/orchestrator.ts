@@ -48,6 +48,7 @@ import type {
   BoardTicketDetail,
   CreateTicketInput,
   HarnessOps,
+  InboxItem,
   ProjectView,
   UpdateTicketInput,
   ToolContext,
@@ -168,6 +169,8 @@ export const BOARD_TRANSCRIPT_MAX = 50;
 export const BOARD_TRANSCRIPT_CHARS = 2000;
 /** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
 export const BOARD_SEARCH_LIMIT = 20;
+/** list_inbox default page size */
+export const BOARD_INBOX_LIMIT = 20;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -1292,6 +1295,30 @@ export class Orchestrator {
     return this.store.projects.list().map((p) => this.projectView(p));
   }
 
+  async listInbox_(_ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
+    const limit = Math.min(Math.max(1, filter.limit ?? BOARD_INBOX_LIMIT), 100);
+    const source = filter.source?.trim().toLowerCase();
+    const matches = this.store.sessions
+      .list("triage")
+      .map((s) => ({ s, meta: this.store.sessions.getMeta<TriageMeta>(s.id) }))
+      .filter(({ s, meta }) => {
+        if (filter.statuses?.length && !filter.statuses.includes(s.triageStatus ?? "triaging")) return false;
+        return !source || (meta?.source ?? "").toLowerCase() === source;
+      })
+      .sort((a, b) => b.s.createdAt - a.s.createdAt || b.s.key.localeCompare(a.s.key, undefined, { numeric: true }));
+    const items = matches.slice(0, limit).map(({ s, meta }): InboxItem => ({
+      key: s.key,
+      title: s.title,
+      source: meta?.source ?? "",
+      status: s.triageStatus ?? "triaging",
+      outcome: s.outcome,
+      prompt: meta?.prompt ?? "",
+      ...(filter.output ? { output: truncateMiddle(meta?.text ?? "", BOARD_TRANSCRIPT_CHARS) } : {}),
+      createdAt: s.createdAt,
+    }));
+    return { items, total: matches.length };
+  }
+
   // --- board (write): work and conductor runs; the HTTP API's code paths plus guard rails ---
 
   /** The caller's ticket, for a run kind that may change the board. */
@@ -2371,6 +2398,7 @@ export class Orchestrator {
       getTicket: (c, k, o) => this.getTicket_(c, k, o),
       searchTickets: (c, i) => this.searchTickets_(c, i),
       listProjects: (c) => this.listProjects_(c),
+      listInbox: (c, f) => this.listInbox_(c, f),
       // --- board (write) ---
       createTicket: (c, i) => this.createTicket_(c, i),
       updateTicket: (c, k, p) => this.updateTicket_(c, k, p),

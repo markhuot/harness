@@ -123,6 +123,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     }),
     completeTicket: async (_ctx: ToolContext, key: string) => find(key),
     listProjects: async () => [{ key: "WEB", name: "Website", path: "/code/web" }],
+    listInbox: async () => ({ items: [], total: 0 }),
     dispatchTicket: async (_ctx: ToolContext, input: { key?: string; conductor?: boolean; start?: boolean; title: string }) =>
       fakeTicket({ key: input.key ?? "WEB-1", kind: input.conductor ? "conductor" : "task", status: input.start ? "in_progress" : "planning", title: input.title }),
     declineWork: async () => {},

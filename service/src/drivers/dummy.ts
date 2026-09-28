@@ -59,7 +59,42 @@ function firstLine(text: string): string {
   return text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 }
 
-const DIRECTIVE = /(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
+/** Body of a `## <title…>` section of a prompt, up to the next `## ` heading. */
+function promptSection(prompt: string, title: string): string {
+  const start = prompt.indexOf(`\n## ${title}`);
+  if (start < 0) return "";
+  const body = prompt.slice(prompt.indexOf("\n", start + 1) + 1);
+  const end = body.search(/^## /m);
+  return end < 0 ? body : body.slice(0, end);
+}
+
+/** The watcher's output from a triage prompt, without its fence. */
+function watcherOutput(prompt: string): string {
+  const start = prompt.indexOf("\n## Output");
+  if (start < 0) return "";
+  const rest = prompt.slice(prompt.indexOf("\n", start + 1) + 1);
+  const fence = rest.match(/^`{3,}/)?.[0];
+  if (!fence) return "";
+  const body = rest.slice(fence.length + 1);
+  const end = body.indexOf(`\n${fence}`);
+  return end < 0 ? body : body.slice(0, end);
+}
+
+/** A `[dummy:dispatch-if /re/flags]` rule (and `[dummy:project KEY]`) from the watcher's prompt. */
+function watcherRule(prompt: string): { test: RegExp; project: string | null } | null {
+  const wants = promptSection(prompt, "What the human wants");
+  const m = wants.match(/\[dummy:dispatch-if \/(.+?)\/([a-z]*)\]/);
+  if (!m) return null;
+  let test: RegExp;
+  try {
+    test = new RegExp(m[1]!, m[2]);
+  } catch {
+    return null;
+  }
+  return { test, project: wants.match(/\[dummy:project ([A-Za-z0-9_]+)\]/)?.[1] ?? null };
+}
+
+const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
 
 interface ChildView {
   key: string;
@@ -330,7 +365,24 @@ export class DummyDriver implements Driver {
         const key = hint?.[1];
         const suggestion = hint?.[2];
         const title = prompt.match(/^Inbox title:[ \t]*"(.+)"$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
-        if (prompt.includes("[unscoped]")) {
+        // A watcher prompt can carry a rule: `[dummy:dispatch-if /regex/flags]` (+ optional
+        // `[dummy:project KEY]`). Only the watcher's prompt sets it and only the output is matched.
+        const rule = watcherRule(prompt);
+        if (rule) {
+          const project = rule.project ?? suggestion;
+          if (!rule.test.test(watcherOutput(prompt))) {
+            yield* say("This output doesn't match the watcher's rule.");
+            yield* call("decline_work", { reason: "The output doesn't match the watcher's prompt.", title });
+          } else if (!project) {
+            yield* say("The output matches, but no project is named.");
+            yield* call("decline_work", { reason: "No project for this output.", title });
+          } else {
+            yield* say(`Dispatching to ${project}.`);
+            const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}`, start: true };
+            if (key) input.key = key;
+            yield* call("dispatch_ticket", input);
+          }
+        } else if (prompt.includes("[unscoped]")) {
           yield* say("This item is not scoped well enough to work on.");
           yield* call("decline_work", { reason: "The item is marked [unscoped]." });
         } else if (!suggestion) {

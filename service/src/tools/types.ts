@@ -14,6 +14,7 @@ import type {
   Ticket,
   TicketStatus,
   ToolResultContent,
+  TriageStatus,
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
@@ -71,6 +72,22 @@ export interface BoardTicketDetail {
   summaries: { author: string; body: string; createdAt: number }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
+}
+
+/** One Inbox item (a triage session), for list_inbox. */
+export interface InboxItem {
+  key: string;
+  title: string;
+  /** The watcher's name (or the inject source) */
+  source: string;
+  status: TriageStatus;
+  /** What triage did: "Dispatched as SHOP-4", "Declined: …" */
+  outcome: string | null;
+  /** The watcher's prompt at the time ("" → none) */
+  prompt: string;
+  /** The watcher output, truncated; only when requested */
+  output?: string;
+  createdAt: number;
 }
 
 export interface CreateTicketInput {
@@ -153,6 +170,14 @@ export interface HarnessOps {
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
   /** Every project with its settings (null permissionMode → the settings default) */
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;
+  /**
+   * Inbox items (triage sessions), newest first, capped at `limit` (default 20, max 100);
+   * `total` counts every match. `source` is a watcher name; `output` adds its text, truncated.
+   */
+  listInbox(
+    ctx: ToolContext,
+    filter: { statuses?: TriageStatus[]; source?: string; limit?: number; output?: boolean },
+  ): Promise<{ items: InboxItem[]; total: number }>;
 
   // --- board (write): work and conductor runs ---
   // What a person does to cards on the board, through the same Orchestrator methods as the HTTP

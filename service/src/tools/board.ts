@@ -1,7 +1,7 @@
 // Board tools (read-only): every run kind can look around the board for context — list and
-// search tickets in any project, read one ticket in full, and list the projects.
+// search tickets in any project, read one ticket in full, list the projects and the Inbox.
 
-import { TICKET_STATUSES, type TicketStatus } from "@harness/shared";
+import { TICKET_STATUSES, type TicketStatus, type TriageStatus } from "@harness/shared";
 import type { BoardScope, BoardTicket } from "./types";
 import { defineTool, json, schema, ticketView } from "./util";
 
@@ -99,5 +99,44 @@ export const listProjects = defineTool<Record<string, never>>({
     const projects = await ctx.ops.listProjects(ctx);
     if (projects.length === 0) return "No projects are configured.";
     return json(projects);
+  },
+});
+
+const TRIAGE_STATUSES = ["triaging", "dispatched", "declined", "failed"] as const;
+
+/** list_inbox page size when no limit is given (the ops cap it at 100). */
+export const LIST_INBOX_DEFAULT_LIMIT = 20;
+
+export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; limit?: number; include_output?: boolean }>({
+  name: "list_inbox",
+  description:
+    "List the Inbox, newest first: one item per piece of watcher output, with the triage agent's decision. status is \"triaging\", \"dispatched\" (outcome names the ticket), \"declined\" (outcome says why) or \"failed\". Filter by status or by source (the watcher's name); include_output adds the output each item was triaged from (truncated). Use it to check that a watcher you set up is producing items and how they were handled.",
+  inputSchema: schema({
+    status: { type: "array", items: { type: "string", enum: [...TRIAGE_STATUSES] }, description: "Only items in these states." },
+    source: { type: "string", minLength: 1, description: "Only items from this watcher (its name)." },
+    limit: { type: "integer", minimum: 1, maximum: 100, description: `Most items to return. Default ${LIST_INBOX_DEFAULT_LIMIT}.` },
+    include_output: { type: "boolean", description: "Include each item's watcher output. Default false." },
+  }),
+  async run(input, ctx) {
+    const { items, total } = await ctx.ops.listInbox(ctx, {
+      statuses: input.status,
+      source: input.source,
+      limit: input.limit ?? LIST_INBOX_DEFAULT_LIMIT,
+      output: input.include_output ?? false,
+    });
+    if (items.length === 0) return input.status?.length || input.source ? "No Inbox items match." : "The Inbox is empty.";
+    const out = json(
+      items.map((i) => ({
+        key: i.key,
+        title: i.title,
+        source: i.source,
+        status: i.status,
+        outcome: i.outcome,
+        ...(i.prompt ? { prompt: i.prompt } : {}),
+        ...(i.output !== undefined ? { output: i.output } : {}),
+        created_at: new Date(i.createdAt).toISOString(),
+      })),
+    );
+    return items.length < total ? `Showing ${items.length} of ${total} items. Narrow with status or source, or raise limit.\n${out}` : out;
   },
 });

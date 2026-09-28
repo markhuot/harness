@@ -350,9 +350,9 @@ interface SeedTicket {
 const byKey = (key: string) => [...tickets.values()].find((t) => t.key === key);
 
 // HARNESS-20's approval card: a looping curl watcher with a triage prompt.
-const EVENTS_LOOP = "while true; do curl -s 'https://api.example.com/events?since=1m'; sleep 60; done";
 const EVENTS_PROMPT = "If this event is assigned to me and has actionable next steps, dispatch it to an agent.";
-const EVENTS_SUMMARY = `Create watcher "events" (loop): ${EVENTS_LOOP}; prompt: "${EVENTS_PROMPT}"`;
+const EVENTS_LOOP = "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done";
+const EVENTS_SUMMARY = `Create watcher "events" (loop): ${EVENTS_LOOP}; prompt: "${EVENTS_PROMPT}"; env: EVENTS_TOKEN`;
 
 function seedTicket(s: SeedTicket): Ticket {
   const createdAt = now() - s.ageMin * 60_000;
@@ -520,6 +520,7 @@ function seed() {
         command: EVENTS_LOOP,
         mode: "loop",
         prompt: EVENTS_PROMPT,
+        env: { EVENTS_TOKEN: "evt_live_2f9c" },
       },
       requestedAt: now() - 30_000,
       reason: "A watcher's command runs on this Mac as you, outside any ticket sandbox, every time the watcher fires.",
