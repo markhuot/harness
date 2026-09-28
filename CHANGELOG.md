@@ -39,9 +39,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   table's rows as plain text.
 - A loop watcher's old error now goes away once its process starts again. Before, a watcher that
   failed once and then ran fine for hours kept showing that first failure in Settings.
-
-### Fixed
-
+- When you chat with a ticket's agent (the composer switch turned off) and ask it to change
+  something, it now tells you which switch to turn on: "Revise the plan" for a planning ticket,
+  "Move to in progress" for a blocked or review ticket. Before, a chat about a plan could claim
+  the agent lacked permission, or suggest moving the ticket back to planning when it was already
+  there.
 - The Agents tab no longer lists an empty "Sub-agent" for every command the agent ran for more
   than 30 seconds. Those rows weren't sub-agents, and they're gone from existing tickets too.
 

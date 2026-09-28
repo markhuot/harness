@@ -212,13 +212,29 @@ Style preferences alone are not grounds for request_changes.`,
   );
 }
 
+/** How the human gets a requested change acted on, from a chat about a ticket in this status. */
+function chatActOn(status: TicketStatus | undefined): string {
+  switch (status) {
+    case "planning":
+      return `they can turn on the composer's "Revise the plan" switch and send it again, which starts a planning run that rewrites the plan (or press Start to approve the plan and run the work)`;
+    case "blocked":
+    case "review":
+      return `they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress`;
+    case "done":
+      return "they can re-open the ticket with it";
+    default:
+      return "they can send it as a regular message";
+  }
+}
+
 function chatInstructions(ticket: Ticket | null): string {
   const status = ticket ? ` The ticket stays in ${ticket.status} whatever you say or do.` : "";
   return section(
     "This run: chat",
-    `The human wants to talk about the ticket in its current state, not to move it along.${status} Answer their message in text: explain what was done or planned, answer questions, discuss options and tradeoffs.
+    `The human sent this message as a chat: they want to talk about the ticket in its current state, not to move it along.${status} Answer their message in text: explain what was done or planned, answer questions, discuss options and tradeoffs.
 Your last message is posted on the ticket as your answer, next to their question, so make it complete on its own.
-Investigate read-only when it helps: read files, search, run non-destructive commands such as git log, git diff or the tests. Do not create, modify or delete files, commit, or change the plan. There are no lifecycle tools in this run, so there is nothing to submit and nothing to block on: a question for the human can go at the end of your answer. If they ask for a change, say what you would do; they can send it as a regular message, which moves the ticket to in progress.`,
+Investigate read-only when it helps: read files, search, run non-destructive commands such as git log, git diff or the tests. Commands that change anything are denied in this run, whatever the ticket's permission mode; that is expected, not a setting to change. Do not create, modify or delete files, commit, or change the plan. There are no lifecycle tools in this run, so there is nothing to submit and nothing to block on: a question for the human can go at the end of your answer.
+If they ask for a change or approve something (revise the plan, do the work, go ahead), you can't act on it from a chat. Say what you would do and tell them how to get it done: ${chatActOn(ticket?.status)}.`,
   );
 }
 
