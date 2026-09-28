@@ -31,6 +31,10 @@ describe("outputTitle", () => {
     expect(outputTitle("y".repeat(OUTPUT_TITLE_MAX))).toBe("y".repeat(OUTPUT_TITLE_MAX));
   });
 
+  test("skips lines with nothing readable, like an opening brace", () => {
+    expect(outputTitle('{\n  "summary": "Fix login"\n}')).toBe('"summary": "Fix login"');
+  });
+
   test("blank output gets a placeholder", () => {
     expect(outputTitle("  \n\t")).toBe("Watcher output");
   });

@@ -24,11 +24,12 @@ export function watcherCommandLine(w: Pick<Watcher, "command" | "args">): string
 export const OUTPUT_TITLE_MAX = 80;
 
 /**
- * A readable Inbox title for raw watcher output: its first non-blank line, collapsed and cut at
+ * A readable Inbox title for raw watcher output: its first line with any letters or digits, collapsed and cut at
  * OUTPUT_TITLE_MAX characters with an ellipsis. Triage may replace it with a better one.
  */
 export function outputTitle(text: string): string {
-  const line = text.split(/\r?\n/).find((l) => l.trim() !== "") ?? "";
+  // Skip lines with nothing readable, like the "{" that opens pretty-printed JSON.
+  const line = text.split(/\r?\n/).find((l) => /[\p{L}\p{N}]/u.test(l)) ?? "";
   const flat = line.replace(/\s+/g, " ").trim();
   if (!flat) return "Watcher output";
   return flat.length > OUTPUT_TITLE_MAX ? flat.slice(0, OUTPUT_TITLE_MAX - 1).trimEnd() + "…" : flat;
