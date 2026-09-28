@@ -1119,7 +1119,13 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
-          if (t.status === "planning") {
+          if (body.chat === true) {
+            if (t.pendingApproval) throw new HttpError(409, `${t.key} is waiting on a tool approval; answer it before chatting`);
+            appendEntry(t.sessionId, null, "user", { type: "text", text });
+            addSummary(t.sessionId, t.id, "human", text);
+            const answer = `Here's what I know about that: "${text}". The ticket stays where it is.`;
+            simulateRun(t, "chat", text, answer, (cur) => addSummary(cur.sessionId, cur.id, "agent", answer));
+          } else if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             simulateRun(t, "plan", text, `Updated the plan to account for: "${text}"`, () => {});
           } else {

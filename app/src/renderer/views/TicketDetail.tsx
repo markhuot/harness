@@ -2,17 +2,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
+  CHAT_PLACEHOLDER,
+  chatHint,
+  chatModes,
   childrenOf,
+  closeChatMode,
   COMPOSER_PLACEHOLDER,
   composerHint,
   depChipTitle,
   dependencyStates,
   effectiveTab,
   hasCustomDriver,
+  isChatMode,
   isReady,
+  moveSwitchLabel,
+  openChatMode,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
+  setChatMode,
   showsAgentsTab,
   subagentsOf,
   subagentTabRoute,
@@ -460,6 +468,18 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
+  // Closing the ticket starts the chat mode's TTL; re-opening within it picks the chat back up.
+  useEffect(() => {
+    openChatMode(chatModes, ticket.key, Date.now());
+    return () => closeChatMode(chatModes, ticket.key, Date.now());
+  }, [ticket.key]);
+  const switchLabel = moveSwitchLabel(ticket);
+  const chat = !!switchLabel && chatMode;
+  const toggleMove = (move: boolean) => {
+    setChatMode(chatModes, ticket.key, !move);
+    setChat(!move);
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -477,18 +497,18 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
     setSending(false);
     if (ok) setText("");
   };
 
   return (
-    <div className={`composer ${ticket.status === "blocked" ? "attention" : ""}`}>
+    <div className={`composer ${ticket.status === "blocked" && !chat ? "attention" : ""}`}>
       <textarea
         ref={ref}
         rows={1}
         className="composer-input"
-        placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+        placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -499,7 +519,8 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         }}
       />
       <div className="composer-bar">
-        <span className="muted">{composerHint(ticket)}</span>
+        {switchLabel && <Switch checked={!chat} onChange={toggleMove} label={switchLabel} />}
+        <span className="muted">{chat ? chatHint(ticket) : composerHint(ticket)}</span>
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">

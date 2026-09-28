@@ -644,6 +644,9 @@
   margin-top: 7px;
   font-size: 11.5px;
 }
+.composer-bar .switch {
+  font-size: 11.5px;
+}
 
 /* Details tab */
 .details {
