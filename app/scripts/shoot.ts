@@ -45,11 +45,12 @@ const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
   `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
-// The pane store follows storage events too. Board | tickets, each ticket in its own pane.
+// The pane store follows storage events too. Board | tickets, each ticket in its own pane, on the
+// All projects board ("*": every board has its own panes).
 const board = { type: "leaf", id: "b", content: { kind: "board" } };
 const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
 const panes = (children: object[], sizes: number[], focusedId: string) =>
-  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
+  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": { root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null } } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
 // Starts dragging a card and holds it over a pane (fx/fy of the way across it) so the drop preview
 // shows. executeJavaScript waits for the returned promise.
 const holdDrag = (cardKey: string, paneId: string, fx: number, fy: number) => `(async () => {

@@ -39,7 +39,7 @@ import {
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { useDragOverlay } from "./ResizeHandle";
-import { PaneContext } from "./paneContext";
+import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
 import "./panes.css";
 
@@ -76,8 +76,13 @@ function escapePanes(s: PaneState): PaneState {
   return leaf?.content.kind === "ticket" ? closePane(s, leaf.id) : s;
 }
 
-export function PaneWorkspace() {
-  const panes = usePanes();
+/**
+ * The panes of one board scope (a project, or all projects). Switching scope swaps the whole tree:
+ * the other scope's panes unmount, and its leaves (keyed by their ids, unique across scopes) mount
+ * again when you come back.
+ */
+export function PaneWorkspace({ scope }: { scope: string }) {
+  const panes = usePanes(scope);
   const ref = useRef<HTMLDivElement>(null);
   // The workspace's size, so stored sizes are clamped to the panes' minimums (layoutPanes).
   const [area, setArea] = useState<PaneArea | null>(null);
@@ -102,13 +107,13 @@ export function PaneWorkspace() {
       // Text fields and the browser canvas keep their Escape; an open modal or menu closes first.
       const el = e.target as HTMLElement;
       if (el.closest?.("input, textarea, select, [contenteditable=true], canvas") || document.querySelector(".modal, .menu")) return;
-      updatePanes(escapePanes);
+      updatePanes(scope, escapePanes);
     };
     // A click inside a plugin iframe never reaches this document; the window blurs instead.
     const onBlur = () =>
       setTimeout(() => {
         const id = document.activeElement?.closest<HTMLElement>("[data-pane-id]")?.dataset.paneId;
-        if (id) updatePanes((s) => focusPane(s, id));
+        if (id) updatePanes(scope, (s) => focusPane(s, id));
       });
     addEventListener("keydown", onKey);
     addEventListener("blur", onBlur);
@@ -116,9 +121,10 @@ export function PaneWorkspace() {
       removeEventListener("keydown", onKey);
       removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [scope]);
 
   return (
+    <PaneScopeContext.Provider value={scope}>
     <div ref={ref} className={`pane-workspace ${multi ? "multi" : ""} ${panes.zoomedId ? "has-zoom" : ""}`} data-testid="pane-workspace">
       {boxes.map(({ leaf, rect, hidden }) => (
         <Pane
@@ -136,6 +142,7 @@ export function PaneWorkspace() {
       ))}
       <DropLayer layout={layout} panes={panes} area={area} workspace={ref} />
     </div>
+    </PaneScopeContext.Provider>
   );
 }
 
@@ -155,7 +162,8 @@ function Pane({
   zoomed: boolean;
 }) {
   const ctx = useMemo(() => ({ paneId: leaf.id }), [leaf.id]);
-  const focus = () => updatePanes((s) => focusPane(s, leaf.id));
+  const scope = usePaneScope();
+  const focus = () => updatePanes(scope, (s) => focusPane(s, leaf.id));
   const c = leaf.content;
   return (
     <section
@@ -198,7 +206,8 @@ function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: Pane
     const s = panesRef.current;
     if (el) applyLayout(el, layoutPanes(sizes ? setSizes(s, split.id, sizes) : s, area ?? undefined));
   };
-  const commit = (sizes: number[]) => updatePanes((s) => setSizes(s, split.id, sizes));
+  const scope = usePaneScope();
+  const commit = (sizes: number[]) => updatePanes(scope, (s) => setSizes(s, split.id, sizes));
   const end = (keep: boolean) => {
     const d = drag.current;
     drag.current = null;
@@ -261,6 +270,7 @@ type DropHit = { leafId: string; zone: DropZone; landing: Rect };
  */
 function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; panes: PaneState; area: PaneArea | null; workspace: RefObject<HTMLDivElement | null> }) {
   const source = useActiveDrag();
+  const scope = usePaneScope();
   const [hit, setHit] = useState<DropHit | null>(null);
   useEffect(() => {
     if (!source) setHit(null);
@@ -298,7 +308,7 @@ function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; pan
         const src = dragSourceOf(e.dataTransfer);
         setHit(null);
         endDrag();
-        if (t && src) updatePanes((s) => applyDrop(s, src, t.leafId, t.zone));
+        if (t && src) updatePanes(scope, (s) => applyDrop(s, src, t.leafId, t.zone));
       }}
     >
       {hit && <div className="pane-drop-preview" data-testid="pane-drop-preview" data-zone={hit.zone} data-target={hit.leafId} style={leafStyle(hit.landing)} />}

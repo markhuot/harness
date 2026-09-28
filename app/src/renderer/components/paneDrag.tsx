@@ -108,11 +108,12 @@ const SPLITS: { id: string; label: string; zone: DropZone }[] = [
 ];
 
 /**
- * Right-click (or the context-menu key on a focused card or row): Open, or open in a new split
- * beside the pane `fromPaneId` (a child row's own pane), else the focused pane, else the board.
+ * Right-click (or the context-menu key on a focused card or row): Open, or open in a new split in
+ * the `scope` workspace beside the pane `fromPaneId` (a child row's own pane), else the focused
+ * pane, else the board.
  * The keyboard way to do what dragging does. Outside Electron the browser's own menu shows.
  */
-export async function ticketContextMenu(e: MouseEvent, ticketKey: string, open: () => void, fromPaneId: string | null = null) {
+export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey: string, open: () => void, fromPaneId: string | null = null) {
   const bridge = window.harness;
   if (!bridge?.showContextMenu) return;
   e.preventDefault();
@@ -120,5 +121,5 @@ export async function ticketContextMenu(e: MouseEvent, ticketKey: string, open: 
   const choice = await bridge.showContextMenu([{ id: "open", label: "Open" }, { type: "separator" }, ...SPLITS.map(({ id, label }) => ({ id, label }))]);
   if (choice === "open") return open();
   const split = SPLITS.find((s) => s.id === choice);
-  if (split) updatePanes((s) => applyDrop(s, { kind: "ticket", ticketKey }, splitTarget(s, fromPaneId, ticketKey), split.zone));
+  if (split) updatePanes(scope, (s) => applyDrop(s, { kind: "ticket", ticketKey }, splitTarget(s, fromPaneId, ticketKey), split.zone));
 }

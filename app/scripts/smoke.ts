@@ -711,10 +711,11 @@ try {
     check("double-clicking the sidebar handle resets its width", (await settled(".sidebar", open)) && (await stored()).sidebarWidth === null, String(await width(".sidebar")));
 
     // Ticket panes: a card's ticket opens beside the board (60/40); the divider between them drags
-    // across an iframe (iframes swallow pointer events without the overlay).
-    const panes = () => js<{ root: { type: string; sizes?: number[]; children?: unknown[] }; focusedId: string | null; zoomedId: string | null }>(`JSON.parse(localStorage.getItem("harness.panes") ?? "null")`);
+    // across an iframe (iframes swallow pointer events without the overlay). Every board has its own
+    // panes (scopes keyed by project id, "*" for All projects); these checks run on All projects.
+    const panes = () => js<{ root: { type: string; sizes?: number[]; children?: unknown[] }; focusedId: string | null; zoomedId: string | null }>(`JSON.parse(localStorage.getItem("harness.panes") ?? "null")?.scopes?.["*"]`);
     const setPanes = (st: object) =>
-      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify(st))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
+      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": st } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
     const leftOf = (sel: string) => js<number>(`Math.round(document.querySelector(${JSON.stringify(sel)})?.getBoundingClientRect().left ?? -1)`);
     const padLeft = (sel: string) => js<number>(`parseFloat(getComputedStyle(document.querySelector(${JSON.stringify(sel)})).paddingLeft)`);
     const near = (a: number, b: number) => Math.abs(a - b) <= 1;
@@ -820,6 +821,24 @@ try {
       return inputs.some((l) => l.includes('"type":"resize"') && l.includes(`"width":${w}`)) && w;
     }).catch(() => 0);
     check("dragging a divider resizes the browser viewport", stageW > 0, String(stageW));
+
+    // Each board remembers its own panes: a project's board starts bare, a ticket opened there stays
+    // there, and All projects comes back with its panes as they were (and vice versa).
+    const nyBoard = `#/board/${nyProject.id}`;
+    await js(`location.hash = ${JSON.stringify(nyBoard)}`);
+    const bare = await until("project board", async () => (await exists(".pane-board")) && (await keysShown()).length === 0).catch(() => false);
+    check("a project board shows its own (bare) panes, not All projects'", bare, JSON.stringify(await keysShown()));
+    await js(`location.hash = ${JSON.stringify(`${nyBoard}/ticket/NYTIMES-2`)}`);
+    await until("project ticket pane", async () => (await keysShown()).join() === "NYTIMES-2").catch(() => {});
+    await js(`location.hash = "#/board/all"`);
+    const allBack = await until("All projects panes", async () => (await keysShown()).join() === "NYTIMES-1" && (await js<string>("location.hash"))).catch(() => "");
+    check("switching back to All projects restores its panes (and the hash mirrors them)", allBack === "#/board/all/ticket/NYTIMES-1/browser", `${JSON.stringify(await keysShown())} ${allBack}`);
+    await js(`location.hash = "#/inbox"`);
+    await js(`location.hash = ${JSON.stringify(nyBoard)}`);
+    const nyBack = await until("project panes", async () => (await keysShown()).join() === "NYTIMES-2").catch(() => false);
+    check("the project board keeps its own panes across Inbox and All projects", nyBack, JSON.stringify(await keysShown()));
+    const scopes = await js<string[]>(`Object.keys(JSON.parse(localStorage.getItem("harness.panes")).scopes).sort()`);
+    check("each board's panes are stored under its own scope", scopes.includes("*") && scopes.includes(nyProject.id), JSON.stringify(scopes));
     await setPanes({ root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null });
     await js(`location.hash = "#/board/all"`);
   }
@@ -829,7 +848,7 @@ try {
   // (Input.setInterceptDrags) checks the native path end to end.
   {
     const setPanes = (st: object) =>
-      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify(st))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
+      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": st } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
     const boardOnly = { root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null };
     await setPanes(boardOnly);
     await js(`location.hash = "#/board/all"`);

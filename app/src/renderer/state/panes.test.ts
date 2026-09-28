@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { ALL_SCOPE } from "@harness/shared/state";
 import {
   applyDrop,
   boardLeaf,
@@ -12,31 +13,43 @@ import {
   findLeaf,
   focusedTicket,
   focusPane,
+  forgetProject,
+  forgetProjectPanes,
+  getPanes,
   keySplit,
   layoutPanes,
   leaves,
+  mapScopes,
   minSize,
   movePane,
   normalize,
   openTicket,
+  PANES_KEY,
+  parsePaneStore,
   parsePanes,
   pruneTickets,
+  reloadPanes,
   renameTicketKey,
   replaceContent,
   resetPaneIds,
   resizeSplit,
+  retainScopes,
+  serializePaneStore,
   serializePanes,
   setSizes,
   setTab,
   splitTarget,
   ticketLeafByKey,
   toggleZoom,
+  updateAllPanes,
+  updatePanes,
   zoneAt,
   type PaneContent,
   type PaneLeaf,
   type PaneNode,
   type PaneSplit,
   type PaneState,
+  type PaneStore,
 } from "./panes";
 
 // Builders: leaf ids are the ticket key (or "B" for the board) so shapes and focus read naturally.
@@ -550,6 +563,158 @@ describe("ids", () => {
     const s = parsePanes(JSON.stringify({ root: row("p1", [{ ...B, id: "p2" }, T("A-1")].map((l, i) => (i ? { ...l, id: "p3" } : l))) }));
     const next = valid(dropContent(openTicket(s, "A-2"), "p2", "bottom", ticketContent("A-3")));
     expect(new Set(leaves(next.root).map((l) => l.id)).size).toBe(leaves(next.root).length);
+  });
+});
+
+describe("per-scope store", () => {
+  const allIdsOf = (store: PaneStore) => Object.values(store.scopes).flatMap((sc) => {
+    const out: string[] = [];
+    const walk = (n: PaneNode) => (out.push(n.id), n.type === "split" && n.children.forEach(walk));
+    walk(sc.root);
+    return out;
+  });
+  const keysOf = (s: PaneState) => leaves(s.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []));
+
+  test("the single tree from before scopes becomes the All projects scope, focus and zoom included", () => {
+    const old = JSON.stringify({ root: row("r", [B, T("A-1"), T("B-2")], [0.5, 0.25, 0.25]), focusedId: "B-2", zoomedId: "A-1" });
+    const store = parsePaneStore(old);
+    expect(Object.keys(store.scopes)).toEqual([ALL_SCOPE]);
+    const s = valid(store.scopes[ALL_SCOPE]!);
+    expect(shape(s.root)).toBe("row[board 0.5, A-1 0.25, B-2 0.25]");
+    expect([s.focusedId, s.zoomedId]).toEqual(["B-2", "A-1"]);
+  });
+
+  test("round-trips every scope", () => {
+    const store: PaneStore = { scopes: { [ALL_SCOPE]: valid(openTicket(defaultPanes(), "A-1", "transcript")), proj: valid(openTicket(defaultPanes(), "B-1")) } };
+    expect(parsePaneStore(serializePaneStore(store))).toEqual(store);
+  });
+
+  test("junk anywhere drops just that scope; unusable data is no scopes at all", () => {
+    const good = { root: row("r", [B, T("A-1")]) };
+    const raw = JSON.stringify({ scopes: { a: good, b: 7, c: { root: 9 }, d: null, e: [], "": good, f: { root: { type: "leaf", content: { kind: "board" } } } } });
+    const store = parsePaneStore(raw);
+    expect(Object.keys(store.scopes).sort()).toEqual(["a", "f"]);
+    expect(shape(valid(store.scopes.a!).root)).toBe("row[board 0.5, A-1 0.5]");
+    valid(store.scopes.f!); // the id-less board got one
+    for (const junk of [null, "", "{", "[]", "7", "{}", '{"scopes":[]}', '{"scopes":7}', '{"root":7}']) expect(parsePaneStore(junk)).toEqual({ scopes: {} });
+  });
+
+  test("ids are unique across scopes: a later scope reusing an id gets a new one", () => {
+    const raw = JSON.stringify({ scopes: { a: { root: row("r", [B, T("A-1")]), focusedId: "A-1" }, b: { root: row("r", [B, T("A-1")]), focusedId: "A-1" } } });
+    const store = parsePaneStore(raw);
+    const ids = allIdsOf(store);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(leaves(store.scopes.a!.root).map((l) => l.id)).toEqual(["B", "A-1"]); // the first scope keeps its ids
+    expect(store.scopes.b!.focusedId).toBeNull(); // focus named the renamed leaf
+  });
+
+  test("new panes in one scope never take an id another scope already uses", () => {
+    // Scope a was saved with p1..p5; after a reload the id sequence starts over.
+    const a = dropContent(openTicket(openTicket(defaultPanes(), "A-1"), "A-2"), "p1", "bottom", ticketContent("A-3"));
+    const raw = serializePaneStore({ scopes: { a } });
+    resetPaneIds();
+    const store = parsePaneStore(raw);
+    const b = openTicket(defaultPanes("b:b"), "B-1");
+    const taken = new Set(allIdsOf(store));
+    for (const l of leaves(b.root)) expect(taken.has(l.id)).toBe(false);
+  });
+
+  // Two tickets open side by side, with ids of its own (a leaf's id is the key plus a scope suffix).
+  const two = (sc: string, ...keys: string[]): PaneState =>
+    normalize(st(row(`r${sc}`, [{ ...B, id: `B${sc}` }, ...keys.map((k) => ({ ...T(k), id: `${k}${sc}` }))]), `${keys[0]}${sc}`));
+
+  test("mapScopes applies prune and rename to every scope, and changes nothing when nothing applies", () => {
+    const store: PaneStore = { scopes: { [ALL_SCOPE]: two("*", "A-1", "A-2"), a: two("a", "A-1"), b: two("b", "B-1") } };
+    const pruned = mapScopes(store, (s) => pruneTickets(s, (k) => k !== "A-1"));
+    expect(Object.values(pruned.scopes).map(keysOf)).toEqual([["A-2"], [], ["B-1"]]);
+    Object.values(pruned.scopes).forEach(valid);
+    expect(pruned.scopes.b).toBe(store.scopes.b!);
+    const renamed = mapScopes(store, (s) => renameTicketKey(s, "A-1", "Z-1"));
+    expect(Object.values(renamed.scopes).map(keysOf)).toEqual([["Z-1", "A-2"], ["Z-1"], ["B-1"]]);
+    expect(mapScopes(store, (s) => pruneTickets(s, () => true))).toBe(store);
+  });
+
+  test("forgetProject drops the project's scope and closes its tickets elsewhere, not a project whose key merely starts the same", () => {
+    const store: PaneStore = {
+      scopes: {
+        [ALL_SCOPE]: two("*", "A-1", "AB-1", "B-1"),
+        pa: two("pa", "A-2"),
+        pb: two("pb", "B-1"),
+      },
+    };
+    const next = forgetProject(store, "pa", "A");
+    expect(Object.keys(next.scopes)).toEqual([ALL_SCOPE, "pb"]);
+    expect(keysOf(valid(next.scopes[ALL_SCOPE]!)).sort()).toEqual(["AB-1", "B-1"]);
+    expect(next.scopes.pb).toBe(store.scopes.pb!);
+    // Without a key (the project wasn't loaded) only the scope goes.
+    expect(keysOf(forgetProject(store, "pa", null).scopes[ALL_SCOPE]!)).toEqual(keysOf(store.scopes[ALL_SCOPE]!));
+    expect(forgetProject(store, "gone", null)).toBe(store);
+  });
+
+  test("retainScopes keeps what it's told to, returning the same store when nothing goes", () => {
+    const store: PaneStore = { scopes: { [ALL_SCOPE]: defaultPanes(), a: defaultPanes(), b: defaultPanes() } };
+    expect(Object.keys(retainScopes(store, (s) => s !== "a").scopes)).toEqual([ALL_SCOPE, "b"]);
+    expect(retainScopes(store, () => true)).toBe(store);
+  });
+});
+
+describe("pane store (localStorage)", () => {
+  const saved = (globalThis as { localStorage?: Storage }).localStorage;
+  let data: Map<string, string>;
+  beforeEach(() => {
+    data = new Map();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+    reloadPanes();
+  });
+  afterEach(() => {
+    (globalThis as { localStorage?: unknown }).localStorage = saved;
+    reloadPanes();
+  });
+  const keysOf = (s: PaneState) => leaves(s.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []));
+
+  test("an operation in one scope leaves the others as they were, and survives a reload", () => {
+    const b = getPanes("b");
+    updatePanes("a", (s) => openTicket(s, "A-1"));
+    expect(keysOf(getPanes("a"))).toEqual(["A-1"]);
+    expect(getPanes("b")).toBe(b);
+    expect(getPanes(ALL_SCOPE).root.type).toBe("leaf");
+    reloadPanes();
+    expect(keysOf(getPanes("a"))).toEqual(["A-1"]);
+  });
+
+  test("a board that was never stored keeps its pane id when another window's write is re-read", () => {
+    const id = getPanes("b").root.id;
+    reloadPanes(); // nothing stored: b is made up again
+    expect(getPanes("b").root.id).toBe(id);
+  });
+
+  test("a no-op writes nothing", () => {
+    updatePanes("a", (s) => s);
+    updateAllPanes((s) => pruneTickets(s, () => true));
+    expect(data.has(PANES_KEY)).toBe(false);
+  });
+
+  test("updateAllPanes and forgetProjectPanes reach scopes that aren't on screen", () => {
+    updatePanes(ALL_SCOPE, (s) => openTicket(s, "A-1"));
+    updatePanes("pa", (s) => openTicket(s, "A-2"));
+    updatePanes("pb", (s) => openTicket(s, "A-1"));
+    updateAllPanes((s) => renameTicketKey(s, "A-1", "A-9"));
+    expect([keysOf(getPanes(ALL_SCOPE)), keysOf(getPanes("pb"))]).toEqual([["A-9"], ["A-9"]]);
+    forgetProjectPanes("pa", "A");
+    const stored = parsePaneStore(data.get(PANES_KEY));
+    expect(Object.keys(stored.scopes).sort()).toEqual([ALL_SCOPE, "pb"].sort());
+    expect(keysOf(stored.scopes[ALL_SCOPE]!)).toEqual([]);
+    expect(keysOf(getPanes("pa"))).toEqual([]); // a bare board again
+  });
+
+  test("an old single-tree value is read into All projects", () => {
+    data.set(PANES_KEY, JSON.stringify({ root: row("r", [B, T("A-1")]), focusedId: "A-1", zoomedId: null }));
+    reloadPanes();
+    expect(focusedTicket(getPanes(ALL_SCOPE))?.ticketKey).toBe("A-1");
+    expect(keysOf(getPanes("a"))).toEqual([]);
   });
 });
 
