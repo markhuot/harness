@@ -26,6 +26,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   waits until no agents are running and then restarts, so you don't have to restart it by hand
   after an update.
 
+### Fixed
+
+- Tables in plans, summaries, ticket descriptions, the transcript and the Inbox now show as real
+  tables on the Mac and the iPhone, instead of rows of `| pipes |` and `---` dashes. Columns
+  follow the alignment the agent asked for, and a wide table scrolls sideways. Board cards show a
+  table's rows as plain text.
+
 ## [app-20260928.1702](https://github.com/markhuot/harness/releases/tag/app-20260928.1702) - 2026-09-28
 
 ### Added

@@ -22,6 +22,43 @@ test("an unterminated fence swallows the rest instead of dropping it", () => {
   expect(parseBlocks("```\nconst x = 1")).toEqual([{ t: "code", lang: "", text: "const x = 1" }]);
 });
 
+test("a pipe table becomes one table block with alignments, padded rows and literal pipes", () => {
+  const blocks = parseBlocks(
+    "Intro line\n| Name | Size | Note |\n|:-----|-----:|:----:|\n| `a|b` | 1 | x \\| y |\n| short |\n\nafter",
+  );
+  expect(blocks).toEqual([
+    { t: "p", text: "Intro line" },
+    {
+      t: "table",
+      align: ["left", "right", "center"],
+      header: ["Name", "Size", "Note"],
+      rows: [
+        ["`a|b`", "1", "x | y"],
+        ["short", "", ""],
+      ],
+    },
+    { t: "p", text: "after" },
+  ]);
+});
+
+test("tables without outer pipes parse; a row ends the table at the first line without a pipe", () => {
+  const blocks = parseBlocks("a | b\n--- | ---\n1 | 2\nplain text");
+  expect(blocks).toEqual([
+    { t: "table", align: [null, null], header: ["a", "b"], rows: [["1", "2"]] },
+    { t: "p", text: "plain text" },
+  ]);
+});
+
+test("pipes without a matching delimiter row stay a paragraph; a lone --- stays a rule", () => {
+  expect(parseBlocks("a | b\n| --- |")).toEqual([{ t: "p", text: "a | b\n| --- |" }]);
+  expect(parseBlocks("a | b\nnot | delim")).toEqual([{ t: "p", text: "a | b\nnot | delim" }]);
+  expect(parseBlocks("para\n---").map((b) => b.t)).toEqual(["p", "hr"]);
+});
+
+test("plainText flattens table rows and drops the delimiter row", () => {
+  expect(plainText("| a | b |\n|---|---|\n| 1 | 2 |")).toBe("a · b 1 · 2");
+});
+
 test("plainText strips markup for card snippets", () => {
   expect(plainText("**Done**: `bun test` passes.\n```\nnoise\n```\n- next: [ship](https://x.y)")).toBe("Done: bun test passes. • next: ship");
 });
