@@ -1,26 +1,18 @@
 // claude-code driver × harness permission modes: argv per mode, auto-mode downgrade notice,
 // and Claude Code's own classifier denials surfaced as permission log events.
 
-import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionMode, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
 import { toolsForRun } from "../tools/index";
 import { buildClaudeArgs, ClaudeCodeDriver, cleanClaudeEnv, cliExactRule, cliToolRule, planGrants, StreamJsonParser } from "./claude-code";
 import type { DriverEvent, RunRequest } from "./types";
+import { tempDir } from "@harness/shared/testing";
 
 const FAKE = join(import.meta.dir, "__fixtures__", "fake-claude.ts");
-const dirs: string[] = [];
-afterAll(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
-const tmp = () => {
-  const d = mkdtempSync(join(tmpdir(), "harness-ccp-"));
-  dirs.push(d);
-  return d;
-};
+const tmp = () => tempDir("harness-ccp-");
 
 const settings: Settings = { defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: "auto", classifier: "claude-cli", defaultModels: {}, reviewModels: {}, anthropicApiKey: null };
 const base = { kind: "work" as const, systemPrompt: "", mcp: { url: "http://h/mcp/t", headers: {} } };

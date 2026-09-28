@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { outputTitle, type Project, type RunKind } from "@harness/shared";
 import { triagePrompt as buildTriagePrompt } from "../orchestrator/prompts";
@@ -9,6 +7,7 @@ import { toolsForRun } from "../tools/index";
 import type { ToolContext, ToolDefinition } from "../tools/types";
 import { DummyDriver } from "./dummy";
 import type { DriverEvent, RunRequest } from "./types";
+import { tempDir } from "@harness/shared/testing";
 
 function makeReq(kind: RunKind, prompt: string, opts: { state?: unknown; tools?: ToolDefinition[]; ctx?: Partial<ToolContext>; signal?: AbortSignal; model?: string | null } = {}) {
   const ops = fakeOps();
@@ -159,7 +158,7 @@ describe("dummy driver", () => {
   });
 
   test("/bash runs the native bash tool in cwd when present", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "dummy-bash-"));
+    const dir = tempDir("dummy-bash-");
     const { req } = makeReq("work", "/bash echo hi-$((2+3)) && pwd", { ctx: { cwd: dir } });
     const { events } = await collect(driver, req);
     const r = results(events).find((x) => x.name === "bash")!;

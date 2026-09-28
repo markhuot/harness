@@ -1,20 +1,17 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fakeContext } from "./fakes";
 import { bash, BASH_MAX_OUTPUT_CHARS, editFile, listFiles, readFile, resolvePath, writeFile } from "./native";
 import type { ToolResult } from "./types";
+import { tempDir } from "@harness/shared/testing";
 
-const root = mkdtempSync(join(tmpdir(), "harness-native-"));
+const root = tempDir("harness-native-");
 let dir: string;
 let n = 0;
 beforeEach(() => {
   dir = join(root, `case-${++n}`);
   mkdirSync(dir, { recursive: true });
-});
-afterAll(() => {
-  Bun.spawnSync(["rm", "-rf", root]);
 });
 
 const ctx = (extra: Parameters<typeof fakeContext>[0] = {}) => fakeContext({ cwd: dir, ...extra });
