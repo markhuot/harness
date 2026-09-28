@@ -1,15 +1,25 @@
 // Git plugin server: /plugins/git/api/{changes,log,file}?ticket=KEY
+// While a ticket branch's worktree exists, every ticket event re-pins its diff as refs in the repo
+// (git.ts pinChanges). Once the worktree is gone, the routes and the tab read that pin instead.
 import { definePlugin, PluginHttpError, type PluginContext } from "@harness/plugin-sdk/server";
-import { commitLog, computeChanges, DEFAULT_MAX_PATCH_BYTES, fileContents } from "./git";
+import type { Ticket } from "@harness/shared";
+import { commitLog, computeChanges, DEFAULT_MAX_PATCH_BYTES, fileContents, pinChanges, pinnedChanges, pinnedLog, readPin, unpinChanges, type Pin } from "./git";
 
-function target(ctx: PluginContext, query: URLSearchParams) {
+type Target =
+  | { kind: "live"; workdir: string; branch: string | null; projectPath: string | null }
+  | { kind: "pinned"; repoPath: string; branch: string | null; pin: Pin };
+
+async function target(ctx: PluginContext, query: URLSearchParams): Promise<Target> {
   const key = query.get("ticket");
   if (!key) throw new PluginHttpError(400, "ticket is required");
   const found = ctx.getTicket(key);
   if (!found) throw new PluginHttpError(404, `No ticket ${key}`);
+  const { ticket, project } = found;
   const workdir = ctx.ticketWorkdir(key);
-  if (!workdir) throw new PluginHttpError(409, `${key} has no workdir yet`);
-  return { workdir, branch: found.ticket.branch, projectPath: found.project.path };
+  if (workdir) return { kind: "live", workdir, branch: ticket.branch, projectPath: project.path };
+  const pin = ticket.branch ? await readPin(ctx.exec, project.path, ticket.id) : null;
+  if (pin) return { kind: "pinned", repoPath: project.path, branch: ticket.branch, pin };
+  throw new PluginHttpError(409, `${key} has no workdir yet`);
 }
 
 function int(query: URLSearchParams, name: string, fallback: number, max: number) {
@@ -17,17 +27,85 @@ function int(query: URLSearchParams, name: string, fallback: number, max: number
   return Number.isInteger(n) && n > 0 ? Math.min(n, max) : fallback;
 }
 
+/** Per ticket id: the pin in flight, and whether another event arrived meanwhile (run once more after). */
+const pinning = new Map<string, { again: boolean; done: Promise<void> }>();
+/** Ticket id → project path, so a deleted ticket's refs can be removed (the event only carries the id). */
+const projectOf = new Map<string, string>();
+
+async function pin(ctx: PluginContext, ticket: Ticket) {
+  const running = pinning.get(ticket.id);
+  if (running) {
+    running.again = true;
+    return;
+  }
+  let finish!: () => void;
+  const state = { again: true, done: new Promise<void>((r) => (finish = r)) };
+  pinning.set(ticket.id, state);
+  try {
+    while (state.again) {
+      state.again = false;
+      const found = ctx.getTicket(ticket.key);
+      const workdir = ctx.ticketWorkdir(ticket.key);
+      if (!found?.ticket.branch || !workdir || found.ticket.status === "done") return;
+      await pinChanges(ctx.exec, { workdir, branch: found.ticket.branch, projectPath: found.project.path, ticketId: found.ticket.id });
+    }
+  } catch (err) {
+    ctx.log.warn(`pinning ${ticket.key} failed: ${err instanceof Error ? err.message : err}`);
+  } finally {
+    pinning.delete(ticket.id);
+    finish();
+  }
+}
+
+const unpinning = new Set<Promise<void>>();
+
+/** Resolves once no pin or unpin is in flight (tests). */
+export async function pinsSettled(): Promise<void> {
+  while (pinning.size || unpinning.size) await Promise.all([...[...pinning.values()].map((s) => s.done), ...unpinning]);
+}
+
 export default definePlugin({
   routes(router, ctx) {
-    router.get("/changes", ({ query }) =>
-      computeChanges(ctx.exec, { ...target(ctx, query), maxPatchBytes: int(query, "maxBytes", DEFAULT_MAX_PATCH_BYTES, 64 * 1024 * 1024) }),
-    );
-    router.get("/log", ({ query }) => commitLog(ctx.exec, { ...target(ctx, query), limit: int(query, "limit", 200, 2000) }));
+    router.get("/changes", async ({ query }) => {
+      const t = await target(ctx, query);
+      const maxPatchBytes = int(query, "maxBytes", DEFAULT_MAX_PATCH_BYTES, 64 * 1024 * 1024);
+      return t.kind === "live" ? computeChanges(ctx.exec, { ...t, maxPatchBytes }) : pinnedChanges(ctx.exec, { ...t, maxPatchBytes });
+    });
+    router.get("/log", async ({ query }) => {
+      const t = await target(ctx, query);
+      const limit = int(query, "limit", 200, 2000);
+      return t.kind === "live" ? commitLog(ctx.exec, { ...t, limit }) : pinnedLog(ctx.exec, { ...t, limit });
+    });
     router.get("/file", async ({ query }) => {
       const side = query.get("side");
       if (side !== "old" && side !== "new") throw new PluginHttpError(400, "side must be old or new");
-      const contents = await fileContents(ctx.exec, { workdir: target(ctx, query).workdir, path: query.get("path") ?? "", side, ref: query.get("ref") });
+      const t = await target(ctx, query);
+      const path = query.get("path") ?? "";
+      const contents =
+        t.kind === "live"
+          ? await fileContents(ctx.exec, { workdir: t.workdir, path, side, ref: query.get("ref") })
+          : await fileContents(ctx.exec, { workdir: t.repoPath, path, side, ref: query.get("ref"), newRef: t.pin.worktree ?? t.pin.head });
       return { contents };
     });
+  },
+
+  // Changes stays on a ticket whose worktree is gone as long as its diff was pinned.
+  async showTab(tab, ctx) {
+    return tab.id === "changes" && !!tab.ticket.branch && !!tab.project && !!(await readPin(ctx.exec, tab.project.path, tab.ticket.id));
+  },
+
+  async onTicketEvent(event, ctx) {
+    if (event.kind === "ticket.deleted") {
+      const path = projectOf.get(event.id);
+      projectOf.delete(event.id);
+      if (!path) return;
+      const p = unpinChanges(ctx.exec, path, event.id).finally(() => unpinning.delete(p));
+      unpinning.add(p);
+      await p;
+      return;
+    }
+    const project = ctx.getTicket(event.ticket.key)?.project;
+    if (project) projectOf.set(event.ticket.id, project.path);
+    await pin(ctx, event.ticket);
   },
 });

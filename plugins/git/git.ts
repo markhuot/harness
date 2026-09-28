@@ -1,5 +1,7 @@
 // Git plumbing for the Changes tab. Never touches the user's index or worktree: untracked and
 // unstaged files are staged into a throwaway copy of the index (GIT_INDEX_FILE) and diffed from there.
+// A ticket branch's diff is also pinned as hidden refs (refs/harness/changes/<ticket id>/*), so the
+// tab still works once the worktree is removed and the branch deleted.
 
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,13 +22,16 @@ export interface ChangedFile {
 }
 
 export interface Changes {
-  /** "branch": ticket branch vs the base branch; "workdir": uncommitted changes vs HEAD */
-  mode: "branch" | "workdir";
+  /**
+   * "branch": ticket branch vs the base branch; "workdir": uncommitted changes vs HEAD;
+   * "pinned": the worktree is gone, so the diff comes from the refs saved while it existed
+   */
+  mode: "branch" | "workdir" | "pinned";
   /** Base ref name ("main", or "HEAD" in workdir mode); null when no base branch could be found */
   base: string | null;
   /** The commit the diff starts from (merge-base in branch mode, HEAD in workdir mode); null for an empty repo */
   baseSha: string | null;
-  /** HEAD of the workdir; null for an unborn branch */
+  /** HEAD of the workdir (the pinned branch head in pinned mode); null for an unborn branch */
   head: string | null;
   /** The ticket's branch, or the workdir's current branch in workdir mode */
   branch: string | null;
@@ -36,6 +41,16 @@ export interface Changes {
   truncated: boolean;
   additions: number;
   deletions: number;
+  /** Pinned mode only: the commit holding the pinned uncommitted changes, when there were any */
+  worktree?: string | null;
+}
+
+/** A ticket's pinned diff: base..(worktree ?? head). All commit shas. */
+export interface Pin {
+  base: string;
+  head: string;
+  /** Snapshot commit (parent: head) of changes that were never committed; null when the tree was clean */
+  worktree: string | null;
 }
 
 export interface Commit {
@@ -182,7 +197,6 @@ export async function computeChanges(
   opts: { workdir: string; branch: string | null; projectPath: string | null; maxPatchBytes?: number },
 ): Promise<Changes> {
   const repo = await Repo.open(exec, opts.workdir);
-  const maxBytes = opts.maxPatchBytes ?? DEFAULT_MAX_PATCH_BYTES;
   const head = await repo.revParse("HEAD");
 
   let mode: Changes["mode"] = "workdir";
@@ -193,44 +207,136 @@ export async function computeChanges(
     mode = "branch";
     branch = opts.branch;
     base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
-    if (base && head) {
-      const mb = await repo.git(["merge-base", base, "HEAD"]);
-      baseSha = mb.code === 0 ? mb.stdout.trim() : null; // unrelated histories: diff against the empty tree
-    }
+    baseSha = base && head ? await mergeBase(repo, base) : null; // unrelated histories: diff against the empty tree
   }
   const from = baseSha ?? EMPTY_TREE;
 
   const untracked = new Set((await repo.ok(["ls-files", "--others", "--exclude-standard", "-z"])).split("\0").filter(Boolean));
 
-  return repo.withWorkingTreeIndex(async (env) => {
-    const [nameStatus, numstat, rawPatch] = await Promise.all([
-      repo.ok(["diff", "--cached", ...DIFF_FLAGS, "-z", "--name-status", from], { env }),
-      repo.ok(["diff", "--cached", ...DIFF_FLAGS, "-z", "--numstat", from], { env }),
-      repo.git(["diff", "--cached", ...DIFF_FLAGS, from], { env, maxBytes: maxBytes + 1 }),
-    ]);
-    if (rawPatch.code !== 0 && !rawPatch.truncated) throw new GitError(500, `git diff failed: ${rawPatch.stderr.trim()}`);
-    const stats = parseNumstat(numstat);
-    const files: ChangedFile[] = parseNameStatus(nameStatus).map((e) => {
-      const s = stats.get(e.path) ?? { additions: 0, deletions: 0, binary: false };
-      const status: FileStatus =
-        e.status === "A" || e.status === "C" ? (untracked.has(e.path) ? "untracked" : "added") : e.status === "D" ? "deleted" : e.status === "R" ? "renamed" : "modified";
-      return { path: e.path, ...(e.status === "R" ? { oldPath: e.oldPath } : {}), status, ...s };
-    });
-    files.sort((a, b) => a.path.localeCompare(b.path));
-    const { patch, truncated } = truncatePatch(rawPatch.stdout, maxBytes);
-    return {
-      mode,
-      base,
-      baseSha,
-      head,
-      branch,
-      files,
-      patch,
-      truncated: truncated || rawPatch.truncated,
-      additions: files.reduce((n, f) => n + f.additions, 0),
-      deletions: files.reduce((n, f) => n + f.deletions, 0),
-    };
+  return repo.withWorkingTreeIndex(async (env) => ({
+    mode,
+    base,
+    baseSha,
+    head,
+    branch,
+    ...(await diff(repo, ["--cached", from], { env, untracked, maxBytes: opts.maxPatchBytes })),
+  }));
+}
+
+async function mergeBase(repo: Repo, base: string): Promise<string | null> {
+  const mb = await repo.git(["merge-base", base, "HEAD"]);
+  return mb.code === 0 ? mb.stdout.trim() : null;
+}
+
+/** Files, patch and totals for `git diff <range>` (`["--cached", from]` or `[from, to]`). */
+async function diff(repo: Repo, range: string[], opts: { env?: Record<string, string>; untracked?: Set<string>; maxBytes?: number }) {
+  const maxBytes = opts.maxBytes ?? DEFAULT_MAX_PATCH_BYTES;
+  const env = opts.env;
+  const [nameStatus, numstat, rawPatch] = await Promise.all([
+    repo.ok(["diff", ...DIFF_FLAGS, "-z", "--name-status", ...range], { env }),
+    repo.ok(["diff", ...DIFF_FLAGS, "-z", "--numstat", ...range], { env }),
+    repo.git(["diff", ...DIFF_FLAGS, ...range], { env, maxBytes: maxBytes + 1 }),
+  ]);
+  if (rawPatch.code !== 0 && !rawPatch.truncated) throw new GitError(500, `git diff failed: ${rawPatch.stderr.trim()}`);
+  const stats = parseNumstat(numstat);
+  const files: ChangedFile[] = parseNameStatus(nameStatus).map((e) => {
+    const s = stats.get(e.path) ?? { additions: 0, deletions: 0, binary: false };
+    const status: FileStatus =
+      e.status === "A" || e.status === "C" ? (opts.untracked?.has(e.path) ? "untracked" : "added") : e.status === "D" ? "deleted" : e.status === "R" ? "renamed" : "modified";
+    return { path: e.path, ...(e.status === "R" ? { oldPath: e.oldPath } : {}), status, ...s };
   });
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  const { patch, truncated } = truncatePatch(rawPatch.stdout, maxBytes);
+  return {
+    files,
+    patch,
+    truncated: truncated || rawPatch.truncated,
+    additions: files.reduce((n, f) => n + f.additions, 0),
+    deletions: files.reduce((n, f) => n + f.deletions, 0),
+  };
+}
+
+// --- pinned diffs -------------------------------------------------------------------------
+
+const PIN_NAMES = ["base", "head", "worktree"] as const;
+const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function pinRef(ticketId: string, name: (typeof PIN_NAMES)[number]): string {
+  if (!ID_RE.test(ticketId)) throw new GitError(400, `Invalid ticket id ${ticketId}`);
+  return `refs/harness/changes/${ticketId}/${name}`;
+}
+
+/** The ticket's pinned diff in the repo at dir, or null when there is none (or dir isn't a repo). */
+export async function readPin(exec: Exec, dir: string, ticketId: string): Promise<Pin | null> {
+  if (!ID_RE.test(ticketId) || !existsSync(dir)) return null;
+  const r = await exec("git", [...BASE_CONFIG, "for-each-ref", "--format=%(refname) %(objectname)", `refs/harness/changes/${ticketId}/`], { cwd: dir });
+  if (r.code !== 0) return null;
+  const got = new Map(
+    r.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => l.split(" ") as [string, string]),
+  );
+  const base = got.get(pinRef(ticketId, "base"));
+  const head = got.get(pinRef(ticketId, "head"));
+  if (!base || !head) return null;
+  return { base, head, worktree: got.get(pinRef(ticketId, "worktree")) ?? null };
+}
+
+const SNAPSHOT_ENV = {
+  GIT_AUTHOR_NAME: "Harness",
+  GIT_AUTHOR_EMAIL: "harness@localhost",
+  GIT_COMMITTER_NAME: "Harness",
+  GIT_COMMITTER_EMAIL: "harness@localhost",
+};
+
+/**
+ * Pin the ticket branch's current diff (merge-base..worktree as on disk) as refs, so it can be shown
+ * after the worktree and branch are gone. The refs also keep the commits reachable after a squash
+ * merge. An empty diff never replaces an existing pin: once the branch is merged, merge-base == HEAD
+ * and the live diff is empty, but the pin should keep showing what the ticket changed.
+ * Returns the pin written, or null when nothing was written.
+ */
+export async function pinChanges(exec: Exec, opts: { workdir: string; branch: string; projectPath: string | null; ticketId: string }): Promise<Pin | null> {
+  const repo = await Repo.open(exec, opts.workdir);
+  const head = await repo.revParse("HEAD");
+  const base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
+  const baseSha = head && base ? await mergeBase(repo, base) : null;
+  if (!head || !baseSha) return null;
+  const tree = await repo.withWorkingTreeIndex(async (env) => (await repo.ok(["write-tree"], { env })).trim());
+  const [baseTree, headTree] = await Promise.all([repo.ok(["rev-parse", `${baseSha}^{tree}`]), repo.ok(["rev-parse", `${head}^{tree}`])]);
+  if (tree === baseTree.trim()) return null;
+  const worktree =
+    tree === headTree.trim()
+      ? null
+      : (await repo.ok(["commit-tree", "--no-gpg-sign", "-p", head, "-m", `Harness: uncommitted changes on ${opts.branch}`, tree], { env: SNAPSHOT_ENV })).trim();
+  const pin: Pin = { base: baseSha, head, worktree };
+  const lines = PIN_NAMES.map((n) => (pin[n] ? `update ${pinRef(opts.ticketId, n)} ${pin[n]}` : `delete ${pinRef(opts.ticketId, n)}`));
+  await repo.ok(["update-ref", "--stdin"], { stdin: lines.join("\n") + "\n" });
+  return pin;
+}
+
+/** Remove a ticket's pinned refs (the ticket was deleted). */
+export async function unpinChanges(exec: Exec, dir: string, ticketId: string): Promise<void> {
+  if (!existsSync(dir)) return;
+  const lines = PIN_NAMES.map((n) => `delete ${pinRef(ticketId, n)}`);
+  await exec("git", [...BASE_CONFIG, "update-ref", "--stdin"], { cwd: dir, stdin: lines.join("\n") + "\n" });
+}
+
+/** The pinned diff, read from the project repo (the worktree is gone). */
+export async function pinnedChanges(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; maxPatchBytes?: number }): Promise<Changes> {
+  const repo = await Repo.open(exec, opts.repoPath);
+  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch) : null;
+  const to = opts.pin.worktree ?? opts.pin.head;
+  return {
+    mode: "pinned",
+    base,
+    baseSha: opts.pin.base,
+    head: opts.pin.head,
+    branch: opts.branch,
+    worktree: opts.pin.worktree,
+    ...(await diff(repo, [opts.pin.base, to], { maxBytes: opts.maxPatchBytes })),
+  };
 }
 
 export async function commitLog(exec: Exec, opts: { workdir: string; branch: string | null; projectPath: string | null; limit?: number }) {
@@ -238,10 +344,20 @@ export async function commitLog(exec: Exec, opts: { workdir: string; branch: str
   const head = await repo.revParse("HEAD");
   if (!opts.branch || !head) return { mode: opts.branch ? ("branch" as const) : ("workdir" as const), base: null, commits: [] as Commit[] };
   const base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
-  const mb = base ? await repo.git(["merge-base", base, "HEAD"]) : null;
-  const range = mb?.code === 0 ? [`${mb.stdout.trim()}..HEAD`] : ["HEAD"];
-  const out = await repo.ok(["log", `--max-count=${opts.limit ?? 200}`, "--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%at%x1e", ...range, "--"]);
-  const commits = out
+  const mb = base ? await mergeBase(repo, base) : null;
+  return { mode: "branch" as const, base, commits: await log(repo, mb ? [`${mb}..HEAD`] : ["HEAD"], opts.limit) };
+}
+
+/** The pinned branch's commits (base..head), read from the project repo. */
+export async function pinnedLog(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; limit?: number }) {
+  const repo = await Repo.open(exec, opts.repoPath);
+  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch) : null;
+  return { mode: "pinned" as const, base, commits: await log(repo, [`${opts.pin.base}..${opts.pin.head}`], opts.limit) };
+}
+
+async function log(repo: Repo, range: string[], limit = 200): Promise<Commit[]> {
+  const out = await repo.ok(["log", `--max-count=${limit}`, "--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%at%x1e", ...range, "--"]);
+  return out
     .split("\x1e")
     .map((r) => r.trim())
     .filter(Boolean)
@@ -249,25 +365,26 @@ export async function commitLog(exec: Exec, opts: { workdir: string; branch: str
       const [sha, shortSha, subject, author, email, at] = r.split("\x1f");
       return { sha: sha!, shortSha: shortSha!, subject: subject ?? "", author: author ?? "", email: email ?? "", date: Number(at) * 1000 };
     });
-  return { mode: "branch" as const, base, commits };
 }
 
 /** One side of a changed file, for expanding unchanged context in the UI. */
-export async function fileContents(exec: Exec, opts: { workdir: string; path: string; side: "old" | "new"; ref: string | null; maxBytes?: number }) {
+/** `newRef` reads the new side from that commit instead of the worktree on disk (pinned mode). */
+export async function fileContents(exec: Exec, opts: { workdir: string; path: string; side: "old" | "new"; ref: string | null; newRef?: string | null; maxBytes?: number }) {
   const repo = await Repo.open(exec, opts.workdir);
   const segments = opts.path.split("/");
   if (!opts.path || opts.path.includes("\0") || isAbsolute(opts.path) || segments.some((s) => s === ".." || s === "" || s === ".git")) {
     throw new GitError(400, "Invalid path");
   }
   const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024;
-  if (opts.side === "new") {
+  if (opts.side === "new" && !opts.newRef) {
     const file = resolve(repo.root, ...segments);
     if (!file.startsWith(repo.root + sep) || !existsSync(file) || !statSync(file).isFile()) return null;
     if (statSync(file).size > maxBytes) throw new GitError(413, "File too large");
     return readFileSync(file, "utf8");
   }
-  if (!opts.ref || !/^[0-9a-f]{7,64}$/.test(opts.ref)) throw new GitError(400, "ref must be a commit sha");
-  const r = await repo.git(["cat-file", "blob", `${opts.ref}:${opts.path}`], { maxBytes: maxBytes + 1 });
+  const ref = opts.side === "new" ? opts.newRef : opts.ref;
+  if (!ref || !/^[0-9a-f]{7,64}$/.test(ref)) throw new GitError(400, "ref must be a commit sha");
+  const r = await repo.git(["cat-file", "blob", `${ref}:${opts.path}`], { maxBytes: maxBytes + 1 });
   if (r.code !== 0) return null;
   if (r.truncated) throw new GitError(413, "File too large");
   return r.stdout;

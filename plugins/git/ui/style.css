@@ -120,6 +120,14 @@ code {
 .arrow {
   color: var(--text-3);
 }
+.pinned {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .chip {
   display: inline-flex;
   align-items: center;

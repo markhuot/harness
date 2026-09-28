@@ -78,6 +78,9 @@ export default definePlugin({
 - `ctx.exec` never uses a shell and never throws. It returns `{ code, stdout, stderr, truncated, timedOut }`.
   `maxBytes` caps stdout and `timeoutMs` kills slow commands (default 30 s).
 - Plugins run inside the service process with its permissions. Only install plugins you trust.
+- `showTab({ id, ticket, project }, ctx)` is optional. It's called for a tab whose `when` doesn't
+  hold; return `true` to show the tab anyway. The git plugin uses it to keep Changes after a
+  ticket's worktree is removed. A throw is logged and hides the tab.
 
 Plugins outside this repo can't resolve `@harness/plugin-sdk`. Since `definePlugin` returns its
 argument unchanged, a plain `export default { routes(router, ctx) { … } }` works the same way.

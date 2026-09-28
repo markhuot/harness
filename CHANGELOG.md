@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Changes tab stays on a ticket after it's completed. Once the branch is merged and its
+  worktree removed, the tab shows the diff as it was when the work was approved, including any
+  changes that were never committed, along with the branch's commits. A "Saved" label in the
+  tab's header marks it. Tickets completed before this update don't have a saved diff, so their
+  Changes tab still disappears.
+
 ### Changed
 
 - A blocked ticket no longer repeats the agent's question in a red box at the top of the ticket.
