@@ -5,7 +5,8 @@ import { toolsForRun } from "./index";
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
 const NATIVE_READ = ["read_file", "list_files", "bash"];
-const CONDUCTOR = ["create_ticket", "list_tickets", "get_ticket", "start_ticket", "message_ticket", "review_ticket", "complete_ticket"];
+const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects"];
+const CONDUCTOR = ["create_ticket", "start_ticket", "message_ticket", "review_ticket", "complete_ticket"];
 
 const builtin = { hasBuiltinTools: true };
 const bare = { hasBuiltinTools: false };
@@ -13,12 +14,12 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
-    plan: ["post_summary", "update_plan", ...BROWSER],
-    work: ["post_summary", "block", "submit_for_review", ...BROWSER],
-    review: ["post_summary", "review_decision", ...BROWSER],
-    complete: ["post_summary"],
-    conductor: ["post_summary", "submit_for_review", ...CONDUCTOR, ...BROWSER],
-    triage: ["list_projects", "dispatch_ticket", "decline_work"],
+    plan: ["post_summary", "update_plan", ...BOARD, ...BROWSER],
+    work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BROWSER],
+    review: ["post_summary", "review_decision", ...BOARD, ...BROWSER],
+    complete: ["post_summary", ...BOARD],
+    conductor: ["post_summary", "submit_for_review", ...BOARD, ...CONDUCTOR, ...BROWSER],
+    triage: [...BOARD, "dispatch_ticket", "decline_work"],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -56,6 +57,8 @@ describe("toolsForRun", () => {
     expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor"]);
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor"]);
+    for (const read of BOARD) expect(who(read)).toEqual(kinds);
+    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["conductor"]);
   });
 
   test("permission_prompt is added for every kind when the driver uses it, and only then", () => {

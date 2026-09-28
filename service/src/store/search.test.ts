@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { ensureSearchIndex, hasSearchIndex, migrate, MIGRATIONS, openDb } from "../db";
 import { Store } from "./index";
-import { clampLimit, CursorError, decodeCursor, encodeCursor, ftsQuery } from "./search";
+import { clampLimit, CursorError, decodeCursor, encodeCursor, ftsQuery, searchSnippet } from "./search";
 
 afterEach(() => setSystemTime());
 
@@ -359,5 +359,26 @@ describe("helpers", () => {
     expect(ftsQuery(`  foo  "bar" `)).toBe(`"foo"* """bar"""*`);
     expect(ftsQuery("a b", "title")).toBe(`{title} : ("a"* "b"*)`);
     expect(ftsQuery(" * - ")).toBeNull();
+  });
+});
+
+describe("searchSnippet", () => {
+  const long = `${"a".repeat(300)} the Payment widget ${"b".repeat(300)}`;
+
+  test("windows around the earliest matching term, case-insensitively, marking cut ends", () => {
+    const s = searchSnippet(["Title", long], "widget payment", 60);
+    expect(s).toStartWith("…");
+    expect(s).toEndWith("…");
+    expect(s).toContain("the Payment widget");
+    expect(s.length).toBeLessThanOrEqual(62);
+  });
+
+  test("uses the first source with a hit, collapsing whitespace", () => {
+    expect(searchSnippet(["No match here", "line one\n\n  checkout   flow"], "checkout")).toBe("line one checkout flow");
+  });
+
+  test("falls back to the start of the first non-empty source (e.g. a key-only match)", () => {
+    expect(searchSnippet([null, "", "First words of the brief"], "WEB-12", 11)).toBe("First words…");
+    expect(searchSnippet([null, undefined, "  "], "x")).toBe("");
   });
 });

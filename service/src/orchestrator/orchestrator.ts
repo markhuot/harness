@@ -37,11 +37,12 @@ import type {
 import { checkProjectKey, isTicketKey, PERMISSION_MODES, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
-import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT } from "../store/search";
+import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
-import type { HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
+import type { BoardListFilter, BoardScope, BoardTicket, BoardTicketDetail, HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
+import { truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { toolsForRun } from "../tools/index";
@@ -133,6 +134,11 @@ const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
+/** get_ticket include_transcript: at most this many entries, each clipped to this many characters */
+export const BOARD_TRANSCRIPT_MAX = 50;
+export const BOARD_TRANSCRIPT_CHARS = 2000;
+/** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
+export const BOARD_SEARCH_LIMIT = 20;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -1118,6 +1124,97 @@ export class Orchestrator {
     }
   }
 
+  // --- board (read): every run kind; never changes state ---
+
+  private boardTicket(t: Ticket): BoardTicket {
+    return { ...t, projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
+  }
+
+  private boardProject(key: string): Project {
+    const project = this.store.projects.getByKey(key.trim());
+    if (!project) throw new Error(`Unknown project: ${key}. Use list_projects for the valid keys.`);
+    return project;
+  }
+
+  async listTickets_(ctx: ToolContext, filter: BoardListFilter = {}): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }> {
+    const own = ctx.ticket ? this.ctxTicket(ctx) : null;
+    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own?.kind === "conductor" ? "children" : own ? "project" : "all");
+    const statuses = filter.statuses?.length ? filter.statuses : undefined;
+    const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
+    if (bad) throw new Error(`Unknown status: ${bad}`);
+    let tickets: Ticket[];
+    if (scope === "children") {
+      if (!own) throw new Error('scope "children" needs a ticket run; use "project" with project_key, or "all"');
+      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : undefined;
+      tickets = this.store.tickets.list({ parentId: own.id, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+    } else if (scope === "project") {
+      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : own?.projectId;
+      if (!projectId) throw new Error('project_key is required for scope "project" in a run without a ticket');
+      tickets = this.store.tickets.list({ projectId, ...(statuses ? { statuses } : {}) });
+    } else if (scope === "all") {
+      if (filter.projectKey) throw new Error('scope "all" spans every project; drop project_key or use scope "project"');
+      tickets = this.store.tickets.list(statuses ? { statuses } : {});
+    } else {
+      throw new Error(`Unknown scope: ${scope}`);
+    }
+    // Board order: columns left to right; done newest-completed first so a long Done column's
+    // oldest tickets are the ones the cap drops.
+    const col = (t: Ticket) => TICKET_STATUSES.indexOf(t.status);
+    const sorted = tickets
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => col(a.t) - col(b.t) || (a.t.status === "done" ? (b.t.completedAt ?? b.t.updatedAt) - (a.t.completedAt ?? a.t.updatedAt) : 0) || a.i - b.i)
+      .map(({ t }) => t);
+    const limit = clampLimit(filter.limit, DEFAULT_PAGE_LIMIT);
+    return { tickets: sorted.slice(0, limit).map((t) => this.boardTicket(t)), total: sorted.length, scope };
+  }
+
+  async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number } = {}): Promise<BoardTicketDetail> {
+    const found = this.store.tickets.lookup(key);
+    if (!found) throw new Error(`Unknown ticket: ${key}`);
+    const t = found.ticket;
+    const detail: BoardTicketDetail = {
+      ticket: this.boardTicket(t),
+      resolvedFrom: found.alias,
+      parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
+      children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
+      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
+    };
+    const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
+    if (n > 0) {
+      detail.transcript = this.store.transcript.tail(t.sessionId, n, ["text", "status", "error"]).map((e) => ({
+        role: e.role,
+        type: e.content.type as "text" | "status" | "error",
+        text: truncateMiddle("text" in e.content ? e.content.text : "", BOARD_TRANSCRIPT_CHARS),
+        createdAt: e.createdAt,
+      }));
+    }
+    return detail;
+  }
+
+  async searchTickets_(_ctx: ToolContext, input: Parameters<HarnessOps["searchTickets"]>[1]) {
+    const projectId = input.projectKey ? this.boardProject(input.projectKey).id : undefined;
+    let page: TicketPage;
+    try {
+      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null });
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+    return {
+      hits: page.tickets.map((t) => {
+        const latest = this.store.summaries.listBySession(t.sessionId).at(-1)?.body;
+        return { ticket: this.boardTicket(t), snippet: searchSnippet([t.title, t.description, latest], input.query) };
+      }),
+      nextCursor: page.nextCursor,
+      total: page.total,
+    };
+  }
+
+  async listProjects_(_ctx: ToolContext) {
+    return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
+  }
+
+  // --- conductor ---
+
   private conductorOf(ctx: ToolContext): Ticket {
     const c = this.ctxTicket(ctx);
     if (c.kind !== "conductor") throw new Error("Only conductor tickets can manage other tickets");
@@ -1148,21 +1245,6 @@ export class Orchestrator {
     });
   }
 
-  async listTickets_(ctx: ToolContext, scope: "children" | "project"): Promise<Ticket[]> {
-    const c = this.ctxTicket(ctx);
-    return scope === "project" ? this.store.tickets.list({ projectId: c.projectId }) : this.store.tickets.list({ parentId: c.id });
-  }
-
-  async getTicket_(ctx: ToolContext, key: string) {
-    this.ctxTicket(ctx);
-    const t = this.store.tickets.getByKey(key);
-    if (!t) throw new Error(`Unknown ticket: ${key}`);
-    return {
-      ticket: t,
-      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
-    };
-  }
-
   async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
     const child = this.childOf(this.conductorOf(ctx), key);
     return this.startTicket(child.key);
@@ -1188,10 +1270,6 @@ export class Orchestrator {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
     return this.completeTicket(child.key, { instructions });
-  }
-
-  async listProjects_(_ctx: ToolContext) {
-    return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
   }
 
   private triageMeta(ctx: ToolContext): { session: Session; meta: TriageMeta } {
@@ -1846,13 +1924,17 @@ export class Orchestrator {
       submitForReview: (c, s) => this.submitForReview(c, s),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       createTicket: (c, i) => this.createTicket_(c, i),
-      listTickets: (c, s) => this.listTickets_(c, s),
-      getTicket: (c, k) => this.getTicket_(c, k),
+      // --- board (read) ---
+      listTickets: (c, f) => this.listTickets_(c, f),
+      getTicket: (c, k, o) => this.getTicket_(c, k, o),
+      searchTickets: (c, i) => this.searchTickets_(c, i),
+      listProjects: (c) => this.listProjects_(c),
+      // --- conductor ---
       startTicket: (c, k) => this.startTicket_(c, k),
       messageTicket: (c, k, t) => this.messageTicket_(c, k, t),
       reviewTicket: (c, k, d, n) => this.reviewTicket_(c, k, d, n),
       completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
-      listProjects: (c) => this.listProjects_(c),
+      // --- triage ---
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
       declineWork: (c, r) => this.declineWork(c, r),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),

@@ -77,3 +77,27 @@ export function keyCandidate(q: string): string | null {
   const k = q.trim().toUpperCase();
   return k && !/\s/.test(k) ? k : null;
 }
+
+/**
+ * A short one-line excerpt for a search hit: a window of about `width` characters around the
+ * first search term found in the first source that contains one (case-insensitive), or the start
+ * of the first non-empty source when no term appears (a key-only match). "…" marks cut ends.
+ */
+export function searchSnippet(sources: (string | null | undefined)[], q: string, width = 160): string {
+  const texts = sources.map((s) => (s ?? "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!texts.length) return "";
+  const terms = searchTerms(q).map((t) => t.toLowerCase());
+  for (const text of texts) {
+    const lower = text.toLowerCase();
+    const at = terms.map((t) => lower.indexOf(t)).filter((i) => i >= 0);
+    if (!at.length) continue;
+    const start = Math.max(0, Math.min(...at) - Math.floor(width / 3));
+    return clip(text, start, width);
+  }
+  return clip(texts[0]!, 0, width);
+}
+
+function clip(text: string, start: number, width: number): string {
+  const end = Math.min(text.length, start + width);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}
