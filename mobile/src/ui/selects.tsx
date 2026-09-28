@@ -1,11 +1,12 @@
 // The desktop's <select>s as native iOS pull-down menus: a SwiftUI Menu whose label shows the
-// current value with the ⌃⌄ select glyph, holding an inline Picker (checkmark on the selection) and
-// an optional section of actions. Option lists come from the shared helpers.
+// current value with the ⌃⌄ select glyph. Each option is a Toggle, which a menu draws as a
+// checkmark item; `isOn` comes from `value` alone, so the menu never shows a choice the parent
+// refused (a disabled driver, a failed save). Actions sit in their own section. Option lists come
+// from the shared helpers.
 
-import { useState } from "react";
 import { View } from "react-native";
-import { Button as SButton, Host, HStack, Image, Menu, Picker, ProgressView, Section, Text as SText, VStack } from "@expo/ui/swift-ui";
-import { accessibilityLabel, controlSize, disabled as disabledMod, font, foregroundStyle, lineLimit, pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
+import { Button as SButton, Host, HStack, Image, Menu, ProgressView, Section, Text as SText, Toggle } from "@expo/ui/swift-ui";
+import { accessibilityLabel, controlSize, disabled as disabledMod, font, foregroundStyle, lineLimit } from "@expo/ui/swift-ui/modifiers";
 import { PERMISSION_MODE_LABELS, PERMISSION_MODES, type PermissionMode } from "@harness/shared";
 import { modelName, modelOptions, permissionModeLabel } from "@harness/shared/state";
 import { selectedLabel, type SelectOption } from "../lib/selectOptions";
@@ -54,9 +55,6 @@ export function Select<V extends string>({
   accessibilityName?: string;
 }) {
   const { c, resolved } = useTheme();
-  // The Picker keeps its own selection. Remount it after every pick so it always shows `value`,
-  // including when the parent refuses a choice (a disabled driver, a failed save).
-  const [nonce, setNonce] = useState(0);
   const text = label ?? selectedLabel(options, value, placeholder);
   const tint = disabled ? c.text3 : c.accent;
   const hasOptions = options.length > 0;
@@ -80,32 +78,21 @@ export function Select<V extends string>({
         >
           {hasOptions && (
             <Section title={title}>
-              <Picker
-                key={nonce}
-                label={title ?? ""}
-                selection={value}
-                modifiers={[pickerStyle("inline")]}
-                onSelectionChange={(v) => {
-                  setNonce((n) => n + 1);
-                  const opt = options.find((o) => o.value === v);
-                  if (!opt || opt.disabled || v === value) return;
-                  haptic("select");
-                  onChange(v as V);
-                }}
-              >
-                {options.map((o) =>
-                  o.subtitle ? (
-                    <VStack key={o.value} modifiers={[tag(o.value), disabledMod(!!o.disabled)]}>
-                      <SText>{o.label}</SText>
-                      <SText>{o.subtitle}</SText>
-                    </VStack>
-                  ) : (
-                    <SText key={o.value} modifiers={[tag(o.value), disabledMod(!!o.disabled)]}>
-                      {o.label}
-                    </SText>
-                  ),
-                )}
-              </Picker>
+              {options.map((o) => (
+                <Toggle
+                  key={o.value}
+                  isOn={o.value === value}
+                  label={o.subtitle ? undefined : o.label}
+                  modifiers={[disabledMod(!!o.disabled)]}
+                  onIsOnChange={(on) => {
+                    if (!on || o.disabled || o.value === value) return;
+                    haptic("select");
+                    onChange(o.value);
+                  }}
+                >
+                  {o.subtitle ? [<SText key="t">{o.label}</SText>, <SText key="s">{o.subtitle}</SText>] : undefined}
+                </Toggle>
+              ))}
             </Section>
           )}
           {!!(problem || actions?.length) && (
