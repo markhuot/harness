@@ -15,7 +15,6 @@ import type {
   HarnessEvent,
   ListenMode,
   ListenSetting,
-  Mapping,
   NetworkStatus,
   Project,
   PublicSettings,
@@ -53,7 +52,6 @@ const runs = new Map<string, Run>();
 const summaries: Summary[] = [];
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
-const mappings = new Map<string, Mapping>();
 const browserStates = new Map<string, BrowserState>();
 let triageSeq = 0;
 let idSeq = 0;
@@ -668,14 +666,14 @@ function seed() {
   child({
     key: "HARNESS-10",
     title: "Settings screen for drivers and watchers",
-    description: "Driver login state, watcher CRUD, key mappings.",
+    description: "Driver login state and watcher CRUD.",
     status: "review",
     driver: "claude-code",
     dependsOn: ["HARNESS-5"],
     agentReview: "approved",
     humanReview: "pending",
     ageMin: 80,
-    summaries: [["agent", "Settings has Drivers, Watchers and Mappings sections; each saves on blur."]],
+    summaries: [["agent", "Settings has Drivers and Watchers sections; each saves on blur."]],
   });
   hx.nextSeq = 11;
 
@@ -766,8 +764,6 @@ function seed() {
     lastRunAt: now() - 4 * 60_000,
   };
   watchers.set(status.id, status);
-  const m: Mapping = { id: newId("map"), pattern: "FOO", projectId: ny.id, notes: "Client Jira project → nytimes repo", createdAt: now() - 86400_000 };
-  mappings.set(m.id, m);
 }
 seed();
 
@@ -1276,24 +1272,6 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "DELETE") {
       watchers.delete(w.id);
       broadcast({ kind: "watcher.deleted", id: w.id });
-      return ok({ ok: true });
-    }
-  }
-
-  // Mappings
-  if (a === "mappings") {
-    if (!b && method === "GET") return ok([...mappings.values()]);
-    if (!b && method === "POST") {
-      const body = await readBody(req);
-      if (!body.pattern || !body.projectId) throw new HttpError(400, "pattern and projectId are required");
-      const m: Mapping = { id: newId("map"), pattern: body.pattern, projectId: body.projectId, notes: body.notes ?? "", createdAt: now() };
-      mappings.set(m.id, m);
-      broadcast({ kind: "mapping.upserted", mapping: m });
-      return ok(m, 201);
-    }
-    if (b && method === "DELETE") {
-      if (!mappings.delete(b)) throw new HttpError(404, "Mapping not found");
-      broadcast({ kind: "mapping.deleted", id: b });
       return ok({ ok: true });
     }
   }

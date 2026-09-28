@@ -1,4 +1,4 @@
-// Settings: appearance, drivers, general run settings, watchers, mappings, and the project list
+// Settings: appearance, drivers, general run settings, watchers, and the project list
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -22,7 +22,6 @@ const SECTIONS = [
   ["permissions", "Permissions"],
   ["network", "Network"],
   ["watchers", "Watchers"],
-  ["mappings", "Mappings"],
   ["projects", "Projects"],
 ] as const;
 
@@ -70,7 +69,6 @@ export function SettingsView() {
           {state.settings && <PermissionsSection settings={state.settings} />}
           {state.settings && <NetworkSection settings={state.settings} />}
           <WatchersSection />
-          <MappingsSection />
           <ProjectsSection />
         </div>
       </div>
@@ -381,10 +379,10 @@ function WatcherForm({ initial, drivers, onCancel, onSubmit, submitLabel }: { in
             className="textarea"
             rows={2}
             value={d.prompt}
-            placeholder="If this event is assigned to me and has actionable next steps, dispatch it to an agent."
+            placeholder="If this event is assigned to me and has actionable next steps, dispatch it to the NYTIMES project."
             onChange={(e) => set("prompt", e.target.value)}
           />
-          <div className="field-hint">Optional. Tells triage what to do with this watcher's output.</div>
+          <div className="field-hint">Optional. Tells triage what to do with this watcher's output, including which project to dispatch it to.</div>
         </div>
         <div className="field">
           <label>Working directory</label>
@@ -452,7 +450,7 @@ function WatchersSection() {
     <Section
       id="watchers"
       title="Watchers"
-      desc="Any command that prints text, plus a prompt. Whatever it prints opens a triage session in the Inbox with that prompt."
+      desc="Any command that prints text, plus a prompt. Whatever it prints opens a triage session in the Inbox with that prompt. The prompt names the project to dispatch to."
       actions={
         editing !== "new" && (
           <button className="btn btn-sm" onClick={() => setEditing("new")}>
@@ -531,97 +529,6 @@ function WatchersSection() {
             </div>
           ),
         )}
-      </div>
-    </Section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Mappings
-// ---------------------------------------------------------------------------
-
-function MappingsSection() {
-  const { state, client } = useStore();
-  const act = useAction();
-  const projects = sortedProjects(state);
-  const [pattern, setPattern] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [notes, setNotes] = useState("");
-  const mappings = Object.values(state.mappings).sort((a, b) => a.pattern.localeCompare(b.pattern));
-  const pid = projectId || projects[0]?.id || "";
-
-  const add = async () => {
-    if (!pattern.trim() || !pid) return;
-    const ok = await act(() => client.createMapping({ pattern: pattern.trim(), projectId: pid, notes: notes.trim() }));
-    if (ok) {
-      setPattern("");
-      setNotes("");
-    }
-  };
-
-  return (
-    <Section id="mappings" title="Mappings" desc="Routing hints for triage. Keys in watcher output that match a mapping are pointed out to triage with their project. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
-      <div className="card-surface settings-card">
-        {mappings.length > 0 && (
-          <table className="settings-table">
-            <thead>
-              <tr>
-                <th>Pattern</th>
-                <th>Project</th>
-                <th>Notes</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((m) => {
-                const p = state.projects[m.projectId];
-                return (
-                  <tr key={m.id}>
-                    <td className="pattern">{m.pattern}</td>
-                    <td>
-                      {p ? (
-                        <span className="row" style={{ gap: 6 }}>
-                          <span className="badge mono">{p.key}</span>
-                          {p.name}
-                        </span>
-                      ) : (
-                        <span className="muted">Unknown project</span>
-                      )}
-                    </td>
-                    <td className="dim">{m.notes || <span className="muted">—</span>}</td>
-                    <td className="actions">
-                      <button className="btn btn-sm btn-ghost btn-icon btn-danger" title="Delete mapping" onClick={() => void act(() => client.deleteMapping(m.id))}>
-                        <Icon name="trash" size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {mappings.length === 0 && <div className="empty">No mappings. Triage will pick a project on its own.</div>}
-        <form
-          className="settings-add-row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void add();
-          }}
-        >
-          <input className="input mono" style={{ width: 150 }} placeholder="FOO or /^FOO-\d+/" value={pattern} onChange={(e) => setPattern(e.target.value)} />
-          <select className="select" style={{ width: 190 }} value={pid} onChange={(e) => setProjectId(e.target.value)} disabled={!projects.length}>
-            {projects.length === 0 && <option value="">No projects</option>}
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.key} · {p.name}
-              </option>
-            ))}
-          </select>
-          <input className="input grow" placeholder="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          <button className="btn btn-primary" type="submit" disabled={!pattern.trim() || !pid}>
-            Add
-          </button>
-        </form>
       </div>
     </Section>
   );

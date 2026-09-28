@@ -112,48 +112,6 @@
   margin-top: 2px;
 }
 
-.settings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.settings-table th {
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.settings-table td {
-  padding: 9px 14px;
-  border-top: 1px solid var(--border);
-  vertical-align: middle;
-}
-.settings-table tr:first-child td {
-  border-top: 0;
-}
-.settings-table td.actions {
-  width: 1%;
-  white-space: nowrap;
-  text-align: right;
-}
-.settings-table .pattern {
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.settings-add-row {
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-sunken);
-}
-.settings-add-row .input,
-.settings-add-row .select {
-  height: 28px;
-  min-height: 28px;
-}
-
 .settings-nav {
   display: flex;
   gap: 2px;

@@ -83,7 +83,7 @@ export function useRoute() {
  * paging (404 on /tickets/page) gets the old full list and no paging state.
  */
 async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snapshot> {
-  const [projects, board, sessions, watchers, mappings, settings, drivers] = await Promise.all([
+  const [projects, board, sessions, watchers, settings, drivers] = await Promise.all([
     client.listProjects(),
     Promise.all([
       client.listTickets(undefined, { status: LIVE_STATUSES }),
@@ -94,11 +94,10 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
     ),
     client.listSessions(),
     client.listWatchers().catch(() => []),
-    client.listMappings().catch(() => []),
     client.getSettings().catch(() => null),
     client.listDrivers().catch(() => []),
   ]);
-  return { projects, ...board, sessions, watchers, mappings, settings, drivers };
+  return { projects, ...board, sessions, watchers, settings, drivers };
 }
 
 /** The board's project filter, once it names a project that exists (else all projects). */
