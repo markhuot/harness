@@ -1652,7 +1652,7 @@ export class Orchestrator {
           runId: run.id,
           kind: run.kind,
           prompt: run.prompt,
-          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children }),
+          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
           cwd,
           model,
           permissionMode: this.permissionModeFor(ticket, project),

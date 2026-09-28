@@ -18,6 +18,8 @@ export interface PromptInfo {
   session: Session;
   parent?: Ticket | null;
   children?: Ticket[];
+  /** The driver brings its own file tools (claude-code's Read/Edit/Write); false → harness native tools. Default true. */
+  builtinTools?: boolean;
 }
 
 const RAW_ITEM_LIMIT = 4000;
@@ -86,6 +88,25 @@ const BROWSER = section(
   "Browser",
   `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\`. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
 );
+
+/**
+ * File tools over the shell. Claude Code's auto mode tells the model shell edits (sed, heredocs)
+ * are fine; in ask mode those need a human's approval where Edit/Write in the workdir don't, and
+ * they read worse on the board. Read-only runs (plan, review, conductor) get the read half.
+ */
+function filesSection(kind: RunKind, builtinTools: boolean): string {
+  const t = builtinTools
+    ? { read: "`Read`", search: "`Grep` and `Glob`", edit: "`Edit`", write: "`Write`", shell: "Bash" }
+    : { read: "`read_file`", search: "`list_files`", edit: "`edit_file`", write: "`write_file`", shell: "bash" };
+  const read = `Read files with ${t.read} and find them with ${t.search}, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through ${t.shell}.`;
+  if (kind !== "work" && kind !== "complete") return section("Files", read);
+  return section(
+    "Files",
+    `${read}
+Change files with ${t.edit} (part of a file) and ${t.write} (a new file or a full rewrite), never through ${t.shell}: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\` or throwaway scripts that write files. File tool edits inside the working directory usually run without a human's approval, where the same change through ${t.shell} may stop for one, and the human can follow them on the board. This holds even if other instructions say shell edits are fine.
+Keep ${t.shell} for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).`,
+  );
+}
 
 function contextSection(info: PromptInfo): string {
   const { ticket, project, session, parent } = info;
@@ -258,6 +279,7 @@ export function systemPrompt(info: PromptInfo): string {
     contextSection(info),
     ticketRun && LIFECYCLE,
     instructions,
+    ticketRun && filesSection(kind, info.builtinTools ?? true),
     ticketRun && SUMMARIES,
     (kind === "work" || kind === "complete" || kind === "conductor") && approvals(kind),
     browser && BROWSER,

@@ -25,6 +25,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   reason a ticket is blocked still shows up there.
 - Board cards only show the agent (Claude Code, Codex) when a ticket runs on something other
   than the project's default, the same as the ticket's detail view already did.
+- Agents now read and edit files with their file tools instead of shell commands like `sed -i`,
+  `cat`, or heredocs. In Ask mode that means fewer approval requests for ordinary edits inside
+  the ticket's worktree, and a ticket's activity shows which file each step read or changed.
 
 ## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
 
