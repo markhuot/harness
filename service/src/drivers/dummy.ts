@@ -11,6 +11,8 @@ export interface DummyState {
   children?: string[];
   /** Model of the latest run (as resolved by the orchestrator) */
   model?: string;
+  /** `/tools` calls not yet done: the first one failed (e.g. awaiting approval); retried on "Retry it now" */
+  pendingCalls?: { name: string; input: Record<string, unknown> }[];
 }
 
 /**
@@ -57,7 +59,7 @@ function firstLine(text: string): string {
   return text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 }
 
-const DIRECTIVE = /(?:^|\s)\/(block|fail|browse|bash|approve)\b[ \t]*([^\n]*)/;
+const DIRECTIVE = /(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
 
 interface ChildView {
   key: string;
@@ -147,6 +149,22 @@ export class DummyDriver implements Driver {
     }
 
     const hasTool = (name: string) => req.tools.some((t) => t.name === name);
+
+    // `/tools [{"name":…,"input":{…}},…]`: call harness tools in order. The first error stops
+    // the run with the rest kept in state; a later "Retry it now" prompt (an answered approval)
+    // repeats the failed call with the same input, like an agent told to retry.
+    async function* runCalls(calls: { name: string; input: Record<string, unknown> }[]): AsyncGenerator<DriverEvent> {
+      for (let i = 0; i < calls.length; i++) {
+        const out: { result?: ToolResult } = {};
+        yield* call(calls[i]!.name, calls[i]!.input ?? {}, out);
+        if (!out.result || out.result.isError) {
+          state.pendingCalls = calls.slice(i);
+          return;
+        }
+      }
+      yield* say(`Ran ${calls.map((c) => c.name).join(", ")}.`);
+      yield* call("submit_for_review", { summary: `Ran ${calls.length} tool call${calls.length === 1 ? "" : "s"}.` });
+    }
     const prompt = req.prompt;
 
     switch (req.kind) {
@@ -196,6 +214,16 @@ export class DummyDriver implements Driver {
             yield* call("submit_for_review", { summary: `Ran ${tool} after approval.` });
           }
           // Denied (or no answer): stop here, like a real agent told to wait for the human.
+        } else if (directive === "tools") {
+          let calls: { name: string; input: Record<string, unknown> }[] = [];
+          try {
+            const parsed = JSON.parse(arg);
+            if (Array.isArray(parsed)) calls = parsed.filter((c) => c && typeof c.name === "string");
+          } catch {}
+          if (calls.length) yield* runCalls(calls);
+          else yield* say("The /tools directive needs a JSON array of {name, input}.");
+        } else if (!directive && prev.pendingCalls?.length && prompt.includes("Retry it now")) {
+          yield* runCalls(prev.pendingCalls);
         } else if (directive === "fail") {
           const message = arg || "Dummy failure";
           yield { type: "error", message };
