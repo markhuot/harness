@@ -29,6 +29,7 @@ import { DriverBadge, KindBadge, MOD, ReviewMark, STATUS_LABEL, StatusDot } from
 import { ModelBadge } from "../components/ModelSelect";
 import { TicketDetail } from "./TicketDetail";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
+import { ProjectKey } from "../components/ProjectKey";
 import "./board.css";
 
 const DRAG_MIME = "application/x-harness-ticket";
@@ -100,7 +101,7 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
           <div className="view-title">
             {project ? (
               <>
-                <span className="project-key lg">{project.key.slice(0, 3)}</span>
+                <ProjectKey project={project} size="lg" />
                 {project.name}
               </>
             ) : (
@@ -383,7 +384,7 @@ const TicketCard = memo(function TicketCard({
       )}
 
       <div className="card-foot">
-        {showProject && project && <span className="project-key sm">{project.key.slice(0, 3)}</span>}
+        {showProject && project && <ProjectKey project={project} size="sm" />}
         {hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
         <ModelBadge model={t.model} driver={t.driver} />
         <KindBadge ticket={t} />

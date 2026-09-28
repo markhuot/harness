@@ -1,5 +1,5 @@
 // Project settings (#/project/<id>/settings): everything that belongs to one project — name,
-// identifier (ticket key prefix), folder, default driver, worktrees, human review, delete.
+// identifier (ticket key prefix), color, folder, default driver, worktrees, human review, delete.
 
 import { useEffect, useMemo, useState } from "react";
 import type { DriverInfo, Project } from "@harness/shared";
@@ -7,6 +7,7 @@ import { useAction, useStore } from "../state/store";
 import { previewProjectKey, tildify } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
+import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRows } from "./settings/ModelSettings";
@@ -52,6 +53,8 @@ function ProjectSettings({ project }: { project: Project }) {
     };
   }, [client, dispatch, project.id, epoch]);
   const tickets = Object.values(state.tickets).filter((t) => t.projectId === project.id);
+  // A custom color being dragged in the color panel, shown on the header badge before it's saved.
+  const [previewColor, setPreviewColor] = useState<string | undefined>();
   const openBoard = () => navigate({ view: "board", projectId: project.id, ticketKey: null, tab: "summaries" });
 
   const changePath = async () => {
@@ -75,7 +78,7 @@ function ProjectSettings({ project }: { project: Project }) {
           Board
         </button>
         <div className="view-title">
-          <span className="project-key lg">{project.key.slice(0, 3)}</span>
+          <ProjectKey project={project} size="lg" color={previewColor} />
           {project.name}
           <span className="muted" style={{ fontWeight: 400 }}>
             Project settings
@@ -90,6 +93,9 @@ function ProjectSettings({ project }: { project: Project }) {
                 <DraftInput value={project.name} onCommit={(v) => v.trim() && void save({ name: v.trim() })} />
               </Row>
               <KeyRow project={project} />
+              <Row title="Color" sub="Tints the project's key badge in the sidebar, on cards and on tickets.">
+                <ProjectColorPicker value={project.color} onChange={(color) => void save({ color })} onPreview={setPreviewColor} />
+              </Row>
               <div className="settings-row">
                 <div className="settings-row-main">
                   <div className="settings-row-title">Folder</div>

@@ -12,7 +12,7 @@ import { childrenOf, hasCustomDriver, ticketByKey, COMPOSER_PLACEHOLDER, compose
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
-import { Badge, Button, DriverBadge, Empty, KindBadge, ReviewMark, Spinner, StatusPill } from "../ui/kit";
+import { Badge, Button, DriverBadge, Empty, KindBadge, ProjectKey, ReviewMark, Spinner, StatusPill } from "../ui/kit";
 import { KeyboardAvoider, useKeyboardShown } from "../ui/KeyboardAvoider";
 import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
@@ -147,6 +147,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
+  const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
   const k = ticket.key;
 
@@ -161,6 +162,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
       </Pressable>
       {!compact && (<>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        {project && <ProjectKey k={project.key} color={project.color} />}
         <StatusPill status={ticket.status} />
         {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
         <ModelBadge model={ticket.model} driver={ticket.driver} />

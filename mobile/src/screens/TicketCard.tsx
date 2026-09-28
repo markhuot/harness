@@ -101,7 +101,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       )}
 
       <View style={styles.wrap}>
-        {showProject && project && <ProjectKey k={project.key} size="sm" />}
+        {showProject && project && <ProjectKey k={project.key} color={project.color} size="sm" />}
         {!dim && hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
         <ModelBadge model={t.model} driver={t.driver} />
         <KindBadge ticket={t} />

@@ -7,6 +7,7 @@ import { Icon } from "../components/Icon";
 import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
+import { ProjectKey } from "../components/ProjectKey";
 
 const LAST_PROJECT = "harness.lastProject";
 
@@ -72,7 +73,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
     <Modal onClose={onClose} width={680}>
       <div className="modal-head new-session-head">
         <div className="project-picker">
-          {project && <span className="project-key">{project.key.slice(0, 3)}</span>}
+          {project && <ProjectKey project={project} />}
           <select className="select bare" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
             {projects.length === 0 && <option value="">No projects</option>}
             {projects.map((p) => (

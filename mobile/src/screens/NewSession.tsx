@@ -86,7 +86,7 @@ export function NewSessionScreen() {
       />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {project && <ProjectKey k={project.key} />}
+          {project && <ProjectKey k={project.key} color={project.color} />}
           <PickerButton label={project ? `${project.name} (${project.key})` : projects.length ? "Choose a project" : "Add a project"} onPress={() => (projects.length ? void chooseProject() : addProject())} icon="folder" />
         </View>
         <TextInput

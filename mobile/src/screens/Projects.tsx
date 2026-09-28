@@ -56,7 +56,7 @@ export function ProjectsScreen() {
           {projects.map((p, i) => (
             <View key={p.id} style={[styles.row, { borderBottomColor: c.border, borderBottomWidth: i === projects.length - 1 ? 0 : StyleSheet.hairlineWidth, backgroundColor: prefs.boardProject === p.id ? c.accentSoft : "transparent" }]}>
               <Pressable style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }} onPress={() => choose(p.id)} accessibilityRole="button" accessibilityLabel={p.name}>
-                <ProjectKey k={p.key} />
+                <ProjectKey k={p.key} color={p.color} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: c.text, fontSize: 16 }} numberOfLines={1}>
                     {p.name}

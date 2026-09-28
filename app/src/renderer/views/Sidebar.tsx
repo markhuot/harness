@@ -4,6 +4,7 @@ import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MOD } from "../components/bits";
+import { ProjectKey } from "../components/ProjectKey";
 
 export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession: (projectId?: string) => void; collapsed?: boolean; ref?: Ref<HTMLElement> }) {
   const { state, route, navigate, client } = useStore();
@@ -112,7 +113,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
                 <NavItem
                   label={p.name}
                   title={p.path}
-                  prefix={<span className="project-key">{p.key.slice(0, 3)}</span>}
+                  prefix={<ProjectKey project={p} />}
                   active={(onBoard && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id)}
                   onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" })}
                   count={openCounts[p.id]}
