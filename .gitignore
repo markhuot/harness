@@ -1,5 +1,7 @@
 node_modules
 dist
+# Temporary per-process build outdirs (plugins/git/build.ts) left by an interrupted build
+.dist-*
 out
 *.log
 .DS_Store

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PermissionMode, TicketKind } from "@harness/shared";
 import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
@@ -7,6 +7,7 @@ import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { ProjectKey } from "../components/ProjectKey";
+import { MentionTextarea } from "../components/MentionTextarea";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -41,12 +42,22 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback((q: string) => (projectId ? client.projectFiles(projectId, q) : Promise.resolve([])), [client, projectId]);
 
   // Driver follows the project default until the user picks one explicitly.
   const touchedDriver = useRef(false);
   useEffect(() => {
     if (!touchedDriver.current) setDriver(defaultDriver);
   }, [defaultDriver]);
+
+  // Same for the worktree switch, which only shows for git projects (elsewhere there's no worktree to make).
+  const projectWorktrees = project?.useWorktrees ?? true;
+  const [worktree, setWorktree] = useState(projectWorktrees);
+  const touchedWorktree = useRef(false);
+  useEffect(() => {
+    if (!touchedWorktree.current) setWorktree(projectWorktrees);
+  }, [projectWorktrees]);
+  const canWorktree = project?.isGit !== false;
 
   const addProject = async () => {
     const path = await window.harness?.pickDirectory();
@@ -59,7 +70,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const submit = async () => {
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode }));
+    const useWorktree = canWorktree ? worktree : null;
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode, useWorktree }));
     setBusy(false);
     if (!t) return;
     try {
@@ -94,13 +106,14 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
         </div>
       </div>
       <div className="modal-body">
-        <textarea
+        <MentionTextarea
           ref={ref}
           autoFocus
           className="new-session-prompt"
           placeholder={newSessionPlaceholder(kind, start)}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onValueChange={setPrompt}
+          search={searchFiles}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
@@ -137,7 +150,20 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
         <ModelSelect compact driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />
         <PermissionModeSelect compact value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />
         <div className="new-session-actions">
-          <Switch checked={start} onChange={setStart} label="Start immediately" />
+          <div className="new-session-options">
+            <Switch checked={start} onChange={setStart} label="Start immediately" />
+            {canWorktree && (
+              <Switch
+                checked={worktree}
+                onChange={(v) => {
+                  touchedWorktree.current = true;
+                  setWorktree(v);
+                }}
+                label="Use worktree"
+                title="Off: the agent works directly in the project directory"
+              />
+            )}
+          </div>
           <button className="btn btn-primary" disabled={!prompt.trim() || !projectId || busy} onClick={submit}>
             {busy ? <span className="spinner" /> : null}
             {start ? "Start session" : "Plan first"}

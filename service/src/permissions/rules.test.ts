@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AutoModeRulesProvider, BUILTIN_RULES, parseAutoModeConfig } from "./rules";
+import { tempDir } from "@harness/shared/testing";
 
 const cfg = (tag: string) => JSON.stringify({ environment: [`env ${tag}`], allow: [`allow ${tag}`], soft_deny: [`soft ${tag}`], hard_deny: [`hard ${tag}`] });
 
 function setup(opts: { outputs?: (string | Error)[]; bin?: string | null } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "rules-"));
+  const dir = tempDir("rules-");
   const settingsPath = join(dir, "settings.json");
   const cachePath = join(dir, "cache.json");
   let t = 1_000_000;

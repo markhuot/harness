@@ -1,9 +1,40 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Ticket, TicketStatus } from "@harness/shared";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { isConductor, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, depChipTitle, dependencyStates, hasCustomDriver, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, ticketByKey, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import {
+  CHAT_PLACEHOLDER,
+  chatHint,
+  chatModes,
+  childrenOf,
+  closeChatMode,
+  COMPOSER_PLACEHOLDER,
+  composerHint,
+  depChipTitle,
+  dependencyStates,
+  effectiveTab,
+  hasCustomDriver,
+  isChatMode,
+  isReady,
+  moveSwitchLabel,
+  nextTab,
+  openChatMode,
+  parsePluginTab,
+  parseSubagentTab,
+  pluginTabRoute,
+  setChatMode,
+  showsAgentsTab,
+  subagentsOf,
+  subagentTabRoute,
+  TAB_LABEL,
+  tabStripTab,
+  ticketByKey,
+  TICKET_TABS,
+  visibleTabs,
+  type TicketTab,
+} from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
 import { Transcript } from "./Transcript";
@@ -12,42 +43,47 @@ import { TicketDetails } from "./TicketDetails";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
+import { AgentsTab, SubagentView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
-import { ResizeHandle } from "../components/ResizeHandle";
 import { ProjectKey } from "../components/ProjectKey";
+import { MentionTextarea } from "../components/MentionTextarea";
 import { useStickToBottom } from "../components/stickToBottom";
-import { detailBounds, updateLayout, useLayout } from "../state/layout";
+import { useOpenTicket, usePaneScope } from "../components/paneContext";
+import { MovePaneItems, PaneGrip } from "../components/paneHeader";
+import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
+import { keysArea, useCommands } from "../components/commands";
+import { commandKeys } from "../state/keys";
 
+/** What a command's tooltip adds: " (⇧⌘])", or nothing for a command without keys. */
+const keyHint = (id: string) => {
+  const keys = commandKeys(id);
+  return keys.length ? ` (${keys.join(" / ")})` : "";
+};
 
-
-const WIDE_KEY = "harness.detailWide";
-function readWide() {
-  try {
-    return localStorage.getItem(WIDE_KEY) === "1";
-  } catch {
-    return false;
+/**
+ * The tab body's scroller: the first element inside `root` that scrolls vertically (each tab has
+ * its own, e.g. the transcript's or the summaries' list). Null for tabs that don't scroll here,
+ * like the browser canvas or a plugin iframe.
+ */
+function scrollerIn(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null;
+  const queue: HTMLElement[] = [root];
+  while (queue.length) {
+    const el = queue.shift()!;
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+    queue.push(...(Array.from(el.children) as HTMLElement[]));
   }
+  return null;
 }
 
-export function TicketDetail({ ticketKey }: { ticketKey: string }) {
-  const { state, client, dispatch, epoch, route, navigate } = useStore();
+const LINE = 48;
+
+/** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
+export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
+  const { state, client, dispatch, epoch } = useStore();
+  const scope = usePaneScope();
   const [missing, setMissing] = useState(false);
-  const [wide, setWide] = useState(readWide);
-  // Expand = the full width; restoring goes back to the dragged width (layout.detailWidth).
-  const { detailWidth } = useLayout();
-  const panel = useRef<HTMLElement>(null);
-  const setWidthVar = (w: number | null) => {
-    if (w === null) panel.current?.style.removeProperty("--detail-width");
-    else panel.current?.style.setProperty("--detail-width", `${w}px`);
-  };
-  const toggleWide = () => {
-    setWide((w) => {
-      try {
-        localStorage.setItem(WIDE_KEY, w ? "0" : "1");
-      } catch {}
-      return !w;
-    });
-  };
   // By key, or by an old key the service already resolved (the effect below redirects to the new one).
   const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]);
   const pluginTabs = usePluginTabs(ticket);
@@ -60,8 +96,9 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
       .then((detail) => {
         if (cancelled) return;
         dispatch({ type: "detail", detail, requestedKey: ticketKey });
-        // An old key (from before a project rename) resolves to the ticket's current key; follow it.
-        if (detail.ticket.key !== ticketKey && route.view === "board") navigate({ ...route, ticketKey: detail.ticket.key });
+        // An old key (from before a project rename) resolves to the ticket's current key; follow it
+        // on every board (another board's panes may have it open under the old key too).
+        if (detail.ticket.key !== ticketKey) updateAllPanes((s) => renameTicketKey(s, ticketKey, detail.ticket.key));
       })
       .catch(() => !cancelled && setMissing(true));
     return () => {
@@ -69,22 +106,65 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     };
   }, [client, dispatch, ticketKey, epoch]);
 
-  const close = () => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: null, tab: "summaries" });
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement;
-      if (e.key === "Escape" && !el.closest("input, textarea, .modal, canvas")) close();
-    };
-    addEventListener("keydown", on);
-    return () => removeEventListener("keydown", on);
+  // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
+  const close = () => updatePanes(scope, (s) => closePane(s, paneId));
+  const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
+
+  // Keyboard: this pane is a "ticket" command area (state/keys.ts). The tabs are the strip's, in
+  // order; the scroll keys move whichever scroller the current tab has.
+  const owner = `ticket:${paneId}`;
+  const asideRef = useRef<HTMLElement>(null);
+  const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
+  const tabs = ticket ? visibleTabs({ conductor: isConductor(ticket), subagents, pluginTabs }) : [];
+  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
+  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
+  const tab = ticket ? effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents }) : paneTab;
+  // A tab change from the keyboard keeps the focus on the strip when it was there.
+  const refocusTab = useRef(false);
+  const goTab = (t: TicketTab | null) => {
+    if (!t) return;
+    const a = document.activeElement;
+    refocusTab.current = !!a?.closest("[role=tablist]") && !!asideRef.current?.contains(a);
+    updatePanes(scope, (s) => setPaneTab(s, paneId, t));
+  };
+  useLayoutEffect(() => {
+    if (!refocusTab.current) return;
+    refocusTab.current = false;
+    asideRef.current?.querySelector<HTMLElement>(".tabs [aria-selected=true]")?.focus();
+  }, [tab]);
+  const scroll = (fn: (el: HTMLElement) => void) => () => {
+    const el = scrollerIn(asideRef.current?.querySelector(".detail-body") ?? null);
+    if (el) fn(el);
+  };
+  useCommands(owner, {
+    "tab.next": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, 1))),
+    "tab.prev": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, -1))),
+    ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab.${i + 1}`, !!tabs[i] && (() => goTab(tabs[i]!))])),
+    "ticket.compose": !!ticket && ticket.status !== "done" && (() => asideRef.current?.querySelector<HTMLElement>(".composer-input")?.focus()),
+    "ticket.scrollDown": scroll((el) => el.scrollBy({ top: LINE })),
+    "ticket.scrollUp": scroll((el) => el.scrollBy({ top: -LINE })),
+    "ticket.pageDown": scroll((el) => el.scrollBy({ top: el.clientHeight * 0.9 })),
+    "ticket.pageUp": scroll((el) => el.scrollBy({ top: -el.clientHeight * 0.9 })),
+    "ticket.top": scroll((el) => el.scrollTo({ top: 0 })),
+    "ticket.bottom": scroll((el) => el.scrollTo({ top: el.scrollHeight })),
   });
+  /** ←/→ (and Home/End) on a focused tab move along the strip, as in any tablist. */
+  const tabKeys = (e: KeyboardEvent) => {
+    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    const to = delta ? nextTab(tabs, tab, delta) : e.key === "Home" ? tabs[0] : e.key === "End" ? tabs.at(-1) : null;
+    if (!to || e.metaKey || e.ctrlKey || e.altKey) return;
+    e.preventDefault();
+    goTab(to);
+  };
 
   if (!ticket) {
     return (
-      <aside className="detail">
-        <div className="view-header">
+      <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
+        <div className="view-header detail-titlebar">
+          <PaneGrip paneId={paneId} chip={ticketKey} title="" />
+          <span className="detail-key">{ticketKey}</span>
           <div className="grow" />
-          <button className="btn btn-ghost btn-icon" onClick={close}>
+          <button className="btn btn-ghost btn-icon" onClick={close} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane" data-pane-autofocus>
             <Icon name="x" />
           </button>
         </div>
@@ -103,51 +183,42 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
     );
   }
 
-  const routeTab = route.view === "board" ? route.tab : "summaries";
-  const wantPlugin = parsePluginTab(routeTab);
+  const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
-  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
-  // Likewise the conductor-only Tickets tab on a plain ticket.
-  const tab: TicketTab = (wantPlugin && !activePlugin && pluginTabs) || (routeTab === "children" && ticket.kind !== "conductor") ? "summaries" : routeTab;
-  const setTab = (t: TicketTab) => route.view === "board" && navigate({ ...route, tab: t });
-  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const openAgent = parseSubagentTab(tab);
+  const stripTab = tabStripTab(tab);
+  const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
+  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
+  const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
+  const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
+
+  // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→.
+  const tabProps = (on: boolean, t: TicketTab) => ({
+    role: "tab",
+    "aria-selected": on,
+    tabIndex: on ? 0 : -1,
+    "data-pane-autofocus": on || undefined,
+    title: tabs.indexOf(t) >= 0 && tabs.indexOf(t) < 9 ? `Press ${tabs.indexOf(t) + 1}, or ⇧⌘[ / ⇧⌘] to go through the tabs` : undefined,
+  });
 
   return (
-    <aside
-      ref={panel}
-      className={`detail ${wide ? "wide" : ""}`}
-      style={detailWidth ? ({ "--detail-width": `${detailWidth}px` } as React.CSSProperties) : undefined}
-    >
-      {!wide && (
-        <ResizeHandle
-          className="detail-resizer"
-          testId="detail-resizer"
-          edge="left"
-          label="Resize ticket panel"
-          target={panel}
-          bounds={() => detailBounds(window.innerWidth, panel.current?.parentElement?.clientWidth ?? window.innerWidth)}
-          onPreview={setWidthVar}
-          onCommit={(w) => updateLayout({ detailWidth: w })}
-          onReset={() => {
-            setWidthVar(null);
-            updateLayout({ detailWidth: null });
-          }}
-        />
-      )}
-      <DetailHeader ticket={ticket} onClose={close} wide={wide} onToggleWide={toggleWide} />
-      <nav className="tabs">
-        {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
-          <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
+    <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
+      <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
+      <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
+        {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
+          <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
+            {t === "agents" && (subagents?.length ?? 0) > 0 && <span className="count">{subagents!.length}</span>}
+            {t === "agents" && agentsRunning && <span className="live-dot" title="A sub-agent is running" />}
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
         {pluginTabs?.map((p) => {
           const t = pluginTabRoute(p.pluginId, p.id);
           return (
-            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} title={`${p.title} (plugin: ${p.pluginId})`} data-plugin-tab={t}>
+            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-plugin-tab={t} {...tabProps(tab === t, t)} title={`${p.title} (plugin: ${p.pluginId})`}>
               {p.icon && isIconName(p.icon) && <Icon name={p.icon} size={12} />}
               {p.title}
             </button>
@@ -157,7 +228,9 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
       <div className="detail-body">
         {tab === "summaries" && <Summaries ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
-        {tab === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
+        {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+        {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
         {tab === "details" && <TicketDetails ticket={ticket} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
@@ -172,13 +245,29 @@ export function TicketDetail({ ticketKey }: { ticketKey: string }) {
   );
 }
 
-function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket; onClose: () => void; wide: boolean; onToggleWide: () => void }) {
-  const { state, client, navigate, route } = useStore();
+function DetailHeader({
+  paneId,
+  owner,
+  ticket,
+  onClose,
+  zoomed,
+  onToggleZoom,
+}: {
+  paneId: string;
+  /** The pane's command area: the actions below are also palette commands (never bare keys). */
+  owner: string;
+  ticket: Ticket;
+  onClose: () => void;
+  zoomed: boolean;
+  onToggleZoom: () => void;
+}) {
+  const { state, client } = useStore();
+  const openTicket = useOpenTicket();
   const act = useAction();
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
+  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
@@ -187,12 +276,37 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const remove = async () => {
     if (!confirm(`Delete ${k}? Its transcript and summaries are removed too.`)) return;
     const ok = await act(() => client.deleteTicket(k), `${k} deleted`);
-    if (ok) navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: null, tab: "summaries" });
+    if (ok) onClose();
   };
+  // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
+  // ⌘K palette (these are its "Actions" commands) run the same functions.
+  const start = () => act(() => client.startTicket(k));
+  const approve = () => act(() => client.humanReview(k, { decision: "approve" }), "Approved");
+  const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
+  const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
+  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`);
+  const copyKey = () => void navigator.clipboard.writeText(k);
+  const external = ticket.externalRef?.url;
+  const reviewing = ticket.status === "review";
+  const canApprove = reviewing && ticket.humanReview !== "approved";
+  useCommands(owner, {
+    "ticket.start": ticket.status === "planning" && start,
+    "ticket.approve": canApprove && approve,
+    "ticket.requestChanges": canApprove && (() => setChanges(true)),
+    "ticket.complete": reviewing && ready && !ticket.busy && (() => setCompleting(true)),
+    "ticket.rerunReview": reviewing && !ticket.busy && rerunReview,
+    "ticket.cancelRun": ticket.busy && cancelRun,
+    "ticket.markDone": ticket.status !== "done" && markDone,
+    "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),
+    "ticket.copyKey": copyKey,
+    "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
+    "ticket.delete": () => void remove(),
+  });
 
   return (
     <div className="detail-head">
       <div className="view-header detail-titlebar">
+        <PaneGrip paneId={paneId} chip={k} title={ticket.title} />
         <span className="detail-key selectable">{k}</span>
         <StatusPill status={ticket.status} />
         <ModelBadge model={ticket.model} driver={ticket.driver} />
@@ -206,7 +320,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
         >
           {(close) => (
             <>
-              <button onClick={() => (close(), void navigator.clipboard.writeText(k))}>
+              <button onClick={() => (close(), copyKey())}>
                 <Icon name="hash" /> Copy key
               </button>
               {ticket.externalRef?.url && (
@@ -215,27 +329,35 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
                 </button>
               )}
               {ticket.status !== "done" && (
-                <button onClick={() => (close(), void act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`))}>
+                <button onClick={() => (close(), void markDone())}>
                   <Icon name="check" /> Mark done
                 </button>
               )}
               <hr />
+              <MovePaneItems paneId={paneId} onDone={close} />
               <button className="danger" onClick={() => (close(), void remove())}>
                 <Icon name="trash" /> Delete ticket
               </button>
             </>
           )}
         </MenuButton>
-        <button className="btn btn-ghost btn-icon" onClick={onToggleWide} title={wide ? "Show the board" : "Expand to full width"}>
-          <Icon name={wide ? "sidebar" : "expand"} />
+        <button
+          className="btn btn-ghost btn-icon"
+          data-testid="pane-zoom"
+          aria-pressed={zoomed}
+          onClick={onToggleZoom}
+          title={zoomed ? `Restore pane (Esc / ${commandKeys("pane.zoom")[0]})` : `Maximize pane${keyHint("pane.zoom")}`}
+          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+        >
+          <Icon name={zoomed ? "shrink" : "expand"} />
         </button>
-        <button className="btn btn-ghost btn-icon" onClick={onClose} title="Close (Esc)">
+        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={onClose} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane">
           <Icon name="x" />
         </button>
       </div>
 
       <div className="detail-hero">
-        {parent && <ParentCrumb parent={parent} onOpen={(key) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "children" })} />}
+        {parent && <ParentCrumb parent={parent} onOpen={(key) => openTicket(key, "children")} />}
         <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
           {project && <ProjectKey project={project} />}
@@ -259,13 +381,13 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
 
         <div className="actions">
           {ticket.status === "planning" && (
-            <button className="btn btn-primary" onClick={() => act(() => client.startTicket(k))}>
+            <button className="btn btn-primary" onClick={start}>
               <Icon name="play" /> Start work
             </button>
           )}
           {ticket.status === "review" && ticket.humanReview !== "approved" && (
             <>
-              <button className="btn btn-primary" onClick={() => act(() => client.humanReview(k, { decision: "approve" }), "Approved")}>
+              <button className="btn btn-primary" onClick={approve}>
                 <Icon name="check" strokeWidth={2.25} /> Approve
               </button>
               <button className="btn" onClick={() => setChanges(true)}>
@@ -283,7 +405,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
               >
                 <Icon name="checkCircle" /> Complete
               </button>
-              <button className="btn btn-ghost" disabled={ticket.busy} onClick={() => act(() => client.rerunAgentReview(k), "Agent review queued")}>
+              <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
                 <Icon name="refresh" /> Re-run agent review
               </button>
             </>
@@ -294,7 +416,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
             </button>
           )}
           {ticket.busy && (
-            <button className="btn btn-ghost btn-danger" onClick={() => act(() => client.cancelTicket(k), "Run cancelled")}>
+            <button className="btn btn-ghost btn-danger" onClick={cancelRun}>
               <Icon name="stop" /> Cancel run
             </button>
           )}
@@ -453,6 +575,8 @@ function Summaries({ ticket }: { ticket: Ticket }) {
                   </span>
                 </div>
                 <Markdown text={s.body} />
+                {/* An older service sends summaries without attachments. */}
+                <Attachments list={s.attachments ?? []} />
               </div>
             </li>
           ))}
@@ -468,6 +592,19 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
+  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
+  // Closing the ticket starts the chat mode's TTL; re-opening within it picks the chat back up.
+  useEffect(() => {
+    openChatMode(chatModes, ticket.key, Date.now());
+    return () => closeChatMode(chatModes, ticket.key, Date.now());
+  }, [ticket.key]);
+  const switchLabel = moveSwitchLabel(ticket);
+  const chat = !!switchLabel && chatMode;
+  const toggleMove = (move: boolean) => {
+    setChatMode(chatModes, ticket.key, !move);
+    setChat(!move);
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -485,29 +622,36 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
     setSending(false);
     if (ok) setText("");
   };
 
   return (
-    <div className={`composer ${ticket.status === "blocked" ? "attention" : ""}`}>
-      <textarea
+    <div className={`composer ${ticket.status === "blocked" && !chat ? "attention" : ""}`}>
+      <MentionTextarea
         ref={ref}
         rows={1}
         className="composer-input"
-        placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+        placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onValueChange={setText}
+        search={searchFiles}
+        placement="above"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             void send();
+          } else if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            // Back to the pane (its current tab); a second Escape then closes the pane as usual.
+            e.preventDefault();
+            ref.current?.closest(".detail")?.querySelector<HTMLElement>("[data-pane-autofocus]")?.focus();
           }
         }}
       />
       <div className="composer-bar">
-        <span className="muted">{composerHint(ticket)}</span>
+        {switchLabel && <Switch checked={!chat} onChange={toggleMove} label={switchLabel} />}
+        <span className="muted">{chat ? chatHint(ticket) : composerHint(ticket)}</span>
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
 import { allTools } from "./index";
 import type { ToolResult } from "./types";
@@ -26,7 +29,7 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
     expect(props("update_ticket")).toEqual(["depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
@@ -51,6 +54,20 @@ describe("ticket tools → HarnessOps", () => {
     const r = await tool("post_summary").execute({ summary: "did X" }, fakeContext({ ops }));
     expect(r.isError).toBeUndefined();
     expect(ops.calls).toEqual([{ method: "postSummary", args: ["did X"] }]);
+  });
+
+  test("post_summary and submit_for_review pass attachments through and reject a non-list", async () => {
+    const ops = fakeOps();
+    const posted = await tool("post_summary").execute({ summary: "shots", attachments: ["a.png", "b.mp4"] }, fakeContext({ ops }));
+    expect(text(posted)).toBe("Summary posted with 2 attachments.");
+    await tool("submit_for_review").execute({ summary: "done", attachments: ["c.png"] }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([
+      { method: "postSummary", args: ["shots", ["a.png", "b.mp4"]] },
+      { method: "submitForReview", args: ["done", ["c.png"]] },
+    ]);
+    const bad = await tool("post_summary").execute({ summary: "x", attachments: "a.png" } as any, fakeContext({ ops }));
+    expect(bad.isError).toBe(true);
+    expect(ops.calls).toHaveLength(2);
   });
 
   test("update_plan passes the optional title through", async () => {
@@ -350,6 +367,72 @@ describe("browser tools → BrowserService", () => {
       { method: "evaluate", args: ["s_1", "6*7"] },
       { method: "screenshot", args: ["s_1"] },
     ]);
+  });
+
+  describe("browser_screenshot save_to", () => {
+    const SHOT = Buffer.from("iVBORw0KGgo=", "base64"); // the fake browser's PNG signature bytes
+    function setup(readOnly = false) {
+      // realpath: macOS temp dirs live behind the /var → /private/var symlink
+      const cwd = realpathSync(tempDir("harness-shot-"));
+      const scratchDir = join(realpathSync(tempDir("harness-scratch-")), "s_1");
+      const browser = fakeBrowser();
+      const ctx = fakeContext({ browser, cwd, ops: fakeOps({ fileOutputScope: () => ({ scratchDir, readOnly }) }) });
+      const shoot = (save_to: string) => tool("browser_screenshot").execute({ save_to }, ctx);
+      return { cwd, scratchDir, browser, shoot };
+    }
+
+    test("a relative path writes under the working directory, creating folders, and says where", async () => {
+      const { cwd, shoot } = setup();
+      const r = await shoot("shots/deep/after.png");
+      const saved = join(cwd, "shots/deep/after.png");
+      expect(readFileSync(saved)).toEqual(SHOT);
+      expect(r.content).toEqual([
+        { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+        { type: "text", text: `Saved the screenshot to ${saved}` }, // no scratch-folder note in the cwd
+      ]);
+      // an existing PNG is replaced
+      expect(text(await shoot("shots/deep/after.png"))).toContain(`Saved the screenshot to ${saved}`);
+    });
+
+    test("an absolute path in the scratch folder works; one outside both roots is refused before the shot", async () => {
+      const { scratchDir, browser, shoot } = setup();
+      expect(text(await shoot(join(scratchDir, "a.png")))).toContain(`Saved the screenshot to ${join(scratchDir, "a.png")}`);
+      const outside = join(tempDir("harness-elsewhere-"), "x.png");
+      await expect(shoot(outside)).rejects.toThrow("save_to must be inside your working directory");
+      await expect(shoot("../escape.png")).rejects.toThrow("save_to must be inside your working directory");
+      expect(existsSync(outside)).toBe(false);
+      expect(browser.calls.filter((c) => c.method === "screenshot")).toHaveLength(1);
+    });
+
+    test("a symlink inside the working directory can't lead out of it", async () => {
+      const { cwd, shoot } = setup();
+      const outside = tempDir("harness-elsewhere-");
+      symlinkSync(outside, join(cwd, "link"));
+      await expect(shoot("link/x.png")).rejects.toThrow("save_to must be inside your working directory");
+      expect(existsSync(join(outside, "x.png"))).toBe(false);
+      symlinkSync(join(outside, "nothing-here.png"), join(cwd, "dangling.png"));
+      await expect(shoot("dangling.png")).rejects.toThrow("is a symlink that points nowhere");
+      expect(existsSync(join(outside, "nothing-here.png"))).toBe(false);
+    });
+
+    test("an existing file that isn't a PNG is never overwritten", async () => {
+      const { cwd, shoot } = setup();
+      writeFileSync(join(cwd, "notes.png"), "my notes");
+      await expect(shoot("notes.png")).rejects.toThrow("a file that isn't a PNG is already there");
+      expect(readFileSync(join(cwd, "notes.png"), "utf8")).toBe("my notes");
+      mkdirSync(join(cwd, "folder.png"));
+      await expect(shoot("folder.png")).rejects.toThrow("it is a folder");
+    });
+
+    test("read-only: a relative path lands in the scratch folder, and the working directory is refused", async () => {
+      const { cwd, scratchDir, shoot } = setup(true);
+      const r = await shoot("shot.png");
+      expect(text(r)).toContain(`Saved the screenshot to ${join(scratchDir, "shot.png")} (this run's scratch folder)`);
+      expect(readFileSync(join(scratchDir, "shot.png"))).toEqual(SHOT);
+      expect(existsSync(join(cwd, "shot.png"))).toBe(false);
+      await expect(shoot(join(cwd, "shot.png"))).rejects.toThrow("this run is read-only, so screenshots go in its scratch folder");
+      expect(existsSync(join(cwd, "shot.png"))).toBe(false);
+    });
   });
 
   test("browser_content validates format and max_chars", async () => {

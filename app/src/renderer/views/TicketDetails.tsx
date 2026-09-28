@@ -8,9 +8,11 @@ import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { resolvePermissionMode } from "@harness/shared";
+import { useOpenTicket } from "../components/paneContext";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
-  const { state, client, navigate, route } = useStore();
+  const { state, client } = useStore();
+  const openTicket = useOpenTicket();
   const act = useAction();
   const now = useNow();
   const [title, setTitle] = useState(ticket.title);
@@ -37,7 +39,7 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   );
   const editable = ticket.status !== "done";
 
-  const open = (key: string) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "summaries" });
+  const open = (key: string) => openTicket(key);
 
   const saveTitle = () => {
     if (title.trim() && title !== ticket.title) void act(() => client.updateTicket(ticket.key, { title: title.trim() }));

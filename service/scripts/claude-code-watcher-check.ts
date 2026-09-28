@@ -13,10 +13,10 @@
 // Prints the transcript highlights. Exit code 0 only when every check passed; 2 (before
 // booting anything) when `claude` isn't installed or logged in.
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project, Session, Settings, Ticket, TicketDetail, TranscriptEntry, Watcher } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { ClaudeCodeDriver } from "../src/drivers/claude-code";
 
 const serviceDir = resolve(import.meta.dir, "..");
@@ -32,8 +32,8 @@ if (!claude.available || !claude.authenticated) {
 }
 console.log(`claude: ${claude.detail}`);
 
-const home = mkdtempSync(join(tmpdir(), "harness-watcher-check-home-"));
-const projectDir = mkdtempSync(join(tmpdir(), "harness-watcher-check-shop-"));
+const home = tempDir("harness-watcher-check-home-");
+const projectDir = tempDir("harness-watcher-check-shop-");
 const state = join(home, "events-state");
 const port = 7900 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;

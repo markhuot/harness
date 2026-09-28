@@ -1,19 +1,20 @@
 // Preload bridge: the renderer's only access to Electron. Exposed as window.harness.
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { HarnessBridge, MenuCommand, ThemeState } from "./types";
+import type { HarnessBridge, MenuCommand, TerminalExit, ThemeState } from "./types";
 import { stampTheme } from "./theme";
 
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
   retryService: () => ipcRenderer.invoke("harness:retryService"),
   reloadToken: (rotated) => ipcRenderer.invoke("harness:reloadToken", rotated),
+  restartService: () => ipcRenderer.invoke("harness:restartService"),
   pickDirectory: (opts) => ipcRenderer.invoke("harness:pickDirectory", opts),
   openExternal: (url) => ipcRenderer.invoke("harness:openExternal", url),
   revealInFinder: (path) => ipcRenderer.invoke("harness:revealInFinder", path),
   showContextMenu: (items) => ipcRenderer.invoke("harness:contextMenu", items),
   onMenu: (cb) => {
-    const listener = (_e: IpcRendererEvent, cmd: MenuCommand) => cb(cmd);
+    const listener = (_e: IpcRendererEvent, cmd: MenuCommand, viaKey?: boolean) => cb(cmd, !!viaKey);
     ipcRenderer.on("menu", listener);
     return () => ipcRenderer.removeListener("menu", listener);
   },
@@ -25,6 +26,23 @@ const bridge: HarnessBridge = {
     return () => ipcRenderer.removeListener("theme", listener);
   },
   setSidebarVisible: (visible) => ipcRenderer.send("harness:sidebarVisible", visible),
+  terminal: {
+    ensure: (id, opts) => ipcRenderer.invoke("harness:terminal:ensure", id, opts),
+    write: (id, data) => ipcRenderer.invoke("harness:terminal:write", id, data),
+    resize: (id, cols, rows) => ipcRenderer.invoke("harness:terminal:resize", id, cols, rows),
+    kill: (id) => ipcRenderer.invoke("harness:terminal:kill", id),
+    list: () => ipcRenderer.invoke("harness:terminal:list"),
+    onData: (cb) => {
+      const listener = (_e: IpcRendererEvent, id: string, data: string, end: number) => cb(id, data, end);
+      ipcRenderer.on("terminal:data", listener);
+      return () => ipcRenderer.removeListener("terminal:data", listener);
+    },
+    onExit: (cb) => {
+      const listener = (_e: IpcRendererEvent, id: string, exit: TerminalExit) => cb(id, exit);
+      ipcRenderer.on("terminal:exit", listener);
+      return () => ipcRenderer.removeListener("terminal:exit", listener);
+    },
+  },
   platform: process.platform,
 };
 

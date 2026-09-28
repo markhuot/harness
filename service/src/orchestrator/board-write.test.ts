@@ -7,6 +7,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, Ticket, TicketStatus } from "@harness/shared";
 import { executeTool } from "../drivers/types";
+import { createTicket as createTicketTool } from "../tools/board-write";
 import { makeOrchestrator } from "../testing/fakes";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { toolsForRun } from "../tools";
@@ -68,6 +69,28 @@ describe("create_ticket", () => {
     expect(auto.autoStart).toBe(true);
   });
 
+  test("use_worktree: a conductor's children follow the project unless the conductor opts out", async () => {
+    const h = await setup();
+    const repo = join(h.home, "proj", "repo");
+    mkdirSync(repo, { recursive: true });
+    const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+    Bun.spawnSync(["git", "init", "-q", "-b", "main"], { cwd: repo, env });
+    Bun.spawnSync(["git", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo, env });
+    const proj = h.orch.createProject({ path: repo, key: "REPO" });
+    const c = await h.make("conduct", { kind: "conductor", status: "in_progress", projectId: proj.id });
+    // Through the tool itself, so the snake_case input is what's checked.
+    const create = async (input: Record<string, unknown>) => {
+      const r = await executeTool([createTicketTool], "create_ticket", { description: "do a part", ...input }, h.ctx("conductor", h.get(c)));
+      expect(r.isError).toBeFalsy();
+      return h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
+    };
+    const inRoot = await create({ title: "in the root", use_worktree: false });
+    const followsProject = await create({ title: "follows the project" });
+    await h.orch.idle();
+    expect([h.get(inRoot).workdir, h.get(inRoot).branch]).toEqual([repo, null]);
+    expect(h.get(followsProject).branch).toBe(`harness/${followsProject.key.toLowerCase()}`);
+  });
+
   test("validation errors from the shared create path reach the model", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
@@ -106,15 +129,19 @@ describe("guard rails", () => {
     expect([h.get(me).status, h.get(me).title]).toEqual(["in_progress", "me"]);
   });
 
-  test("a conductor can't target itself either, and review/complete stay conductor-only", async () => {
+  test("a conductor can't target itself either, and review/complete only reach the caller's own children", async () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     const plain = await h.make("plain", { status: "review" });
     await expect(h.orch.ops.moveTicket(h.ctx("conductor", c), c.key, "planning")).rejects.toThrow("use submit_for_review to change your own");
     const me = await h.make("me", { status: "in_progress" });
-    await expect(h.orch.ops.reviewTicket(h.ctx("work", me), plain.key, "approve", "")).rejects.toThrow("Only conductor tickets");
-    await expect(h.orch.ops.completeTicket(h.ctx("work", me), plain.key)).rejects.toThrow("Only conductor tickets");
+    await expect(h.orch.ops.reviewTicket(h.ctx("work", me), plain.key, "approve", "")).rejects.toThrow(`${plain.key} is not a child of ${me.key}`);
+    await expect(h.orch.ops.completeTicket(h.ctx("work", me), plain.key)).rejects.toThrow(`${plain.key} is not a child of ${me.key}`);
+    // A review run can't stand in for the parent even on its own child.
+    const kid = await h.make("kid", { parentId: me.id, status: "review" });
+    await expect(h.orch.ops.reviewTicket(h.ctx("review", me), kid.key, "approve", "")).rejects.toThrow("only available in work and conductor runs");
     expect(h.get(plain).humanReview).toBe("pending");
+    expect(h.get(kid).humanReview).toBe("pending");
   });
 
   test("done is only reachable from planning; review can't be entered or left by a move", async () => {

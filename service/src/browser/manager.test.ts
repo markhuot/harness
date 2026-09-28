@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Server } from "bun";
 import type { BrowserState } from "@harness/shared";
@@ -8,6 +7,7 @@ import { codeSignCloneRoot, findChrome } from "./chrome.ts";
 import { BrowserManager, normalizeUrl } from "./manager.ts";
 import { createBrowserService } from "./index.ts";
 import type { BrowserFrame } from "./types.ts";
+import { tempDir } from "@harness/shared/testing";
 
 const chromePath = findChrome();
 if (!chromePath) {
@@ -16,10 +16,7 @@ if (!chromePath) {
 const withChrome = chromePath ? describe : describe.skip;
 
 // One Chrome profile for the whole file (Chrome instances here run one at a time).
-const profileDir = chromePath ? mkdtempSync(join(tmpdir(), "harness-browser-test-")) : "";
-afterAll(() => {
-  if (profileDir) rmSync(profileDir, { recursive: true, force: true });
-});
+const profileDir = chromePath ? tempDir("harness-browser-test-") : "";
 
 const html = (body: string, title = "Fixture") =>
   new Response(`<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`, {

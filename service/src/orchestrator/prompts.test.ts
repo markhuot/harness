@@ -16,7 +16,7 @@ import { nativeTools, readOnlyNativeTools } from "../tools";
 const BROWSER = ["browser_open", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
-const CONDUCTOR_ONLY = ["review_ticket", "complete_ticket"];
+const CHILD_TOOLS = ["review_ticket", "complete_ticket"];
 const CONFIG_READ = ["list_watchers", "get_settings", "list_drivers"];
 const CONFIG_WRITE = [
   "create_watcher",
@@ -31,11 +31,12 @@ const CONFIG_WRITE = [
 ];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_summary", ...BOARD, ...CONFIG_READ],
-  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR_ONLY, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
+  chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];
 
@@ -119,7 +120,7 @@ function sys(kind: RunKind, t: Ticket | null = ticket(), extra: Partial<Paramete
 }
 
 describe("systemPrompt tool references", () => {
-  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage"];
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
   for (const kind of kinds) {
     test(`${kind} mentions only tools its run can call`, () => {
       const t = kind === "conductor" ? ticket({ kind: "conductor" }) : kind === "triage" ? null : ticket(worktree);
@@ -130,9 +131,26 @@ describe("systemPrompt tool references", () => {
     });
   }
 
-  test("work runs never mention conductor or triage tools", () => {
+  test("the Summaries section offers attachments in every ticket run, with capture tools the run has", () => {
+    const summariesOf = (text: string) => /## Summaries\n([\s\S]*?)(?=\n## |$)/.exec(text)?.[1] ?? null;
+    for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as RunKind[]) {
+      const s = summariesOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
+      expect(s).not.toBeNull();
+      expect(s).toContain("`attachments`");
+      // submit_for_review is named (and preferred) only where the run can call it
+      expect(s!.includes("`submit_for_review`")).toBe(kind === "work" || kind === "conductor");
+      expect(s!.includes("submit summary")).toBe(kind === "work" || kind === "conductor");
+      // complete runs have no browser, so no save_to hint
+      expect(s!.includes("`save_to`")).toBe(kind !== "complete");
+      // read-only run kinds are told their save_to goes to the scratch folder
+      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan" || kind === "review" || kind === "chat");
+    }
+    expect(summariesOf(sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } }))).toBeNull();
+  });
+
+  test("work runs never mention triage, review or plan tools", () => {
     const text = sys("work");
-    for (const name of [...CONDUCTOR_ONLY, "dispatch_ticket", "review_decision", "update_plan"]) {
+    for (const name of ["dispatch_ticket", "review_decision", "update_plan"]) {
       expect(text).not.toContain(`\`${name}\``);
     }
   });
@@ -170,6 +188,20 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(sys("work")).toMatch(/exactly one[\s\S]*never both/);
   });
 
+  test("a chat about a planning ticket points plan changes at the Revise the plan switch", () => {
+    const text = sys("chat", ticket({ status: "planning" }));
+    expect(text).toContain('"Revise the plan" switch');
+    expect(text).not.toContain("moves the ticket to in progress");
+  });
+
+  test("a chat about a blocked or review ticket points changes at the Move to in progress switch", () => {
+    for (const status of ["blocked", "review"] as const) {
+      const text = sys("chat", ticket({ status }));
+      expect(text).toContain('"Move to in progress" switch');
+      expect(text).not.toContain("Revise the plan");
+    }
+  });
+
   test("plan runs are read-only", () => {
     expect(sys("plan")).toContain("Do not create, modify or delete files");
   });
@@ -204,6 +236,17 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).toContain('NYT-5 "API": blocked, depends on NYT-4, asks: "Which auth?"');
     expect(text).toContain("keys returned by your earlier `create_ticket` calls");
     expect(sys("conductor", ticket({ kind: "conductor" }))).toContain("no children yet");
+  });
+
+  test("a task ticket with children steers them in its work runs; without children it gets no such section", () => {
+    const children = [ticket({ key: "NYT-4", title: "Rebase PR", status: "review", agentReview: "approved" })];
+    const text = sys("work", ticket(worktree), { children });
+    expect(text).toContain("## Your child tickets");
+    expect(text).toContain('NYT-4 "Rebase PR": review, agent review approved');
+    expect(text).toContain("`submit_for_review` is refused until every child is done");
+    expect(text).toContain("## This run: work"); // still the work prompt, not the conductor's
+    expect(sys("work", ticket(worktree), { children: [] })).not.toContain("Your child tickets");
+    expect(sys("conductor", ticket({ kind: "conductor" }), { children })).not.toContain("Your child tickets");
   });
 
   test("child tickets name their parent conductor", () => {
@@ -317,15 +360,39 @@ describe("run prompts", () => {
 
   test("reviewPrompt includes the brief and summaries oldest first with authors", () => {
     const summaries: Summary[] = [
-      { id: "b", sessionId: "s1", ticketId: "t1", author: "agent", body: "Second: tests pass", createdAt: 2000 },
-      { id: "a", sessionId: "s1", ticketId: "t1", author: "human", body: "First: use CSS vars", createdAt: 1000 },
+      { id: "b", sessionId: "s1", ticketId: "t1", author: "agent", body: "Second: tests pass", createdAt: 2000, attachments: [] },
+      { id: "a", sessionId: "s1", ticketId: "t1", author: "human", body: "First: use CSS vars", createdAt: 1000, attachments: [] },
     ];
     const text = reviewPrompt(ticket(), summaries);
     expect(text).toContain("Add a dark theme toggle to the header.");
     expect(text.indexOf("First: use CSS vars")).toBeLessThan(text.indexOf("Second: tests pass"));
     expect(text).toContain("[human, 1970-01-01T00:00:01.000Z]");
     expect(text).toContain("`review_decision` exactly once");
+    expect(text).not.toContain("Attachments:");
     expect(reviewPrompt(ticket(), [])).toContain("no summaries were posted");
+  });
+
+  test("reviewPrompt lists each summary's attachments under it with the stored path", () => {
+    const summaries: Summary[] = [
+      { id: "a", sessionId: "s1", ticketId: "t1", author: "agent", body: "Built the toggle", createdAt: 1000, attachments: [] },
+      {
+        id: "b",
+        sessionId: "s1",
+        ticketId: "t1",
+        author: "agent",
+        body: "Done",
+        createdAt: 2000,
+        attachments: [
+          { id: "att1", kind: "image", mimeType: "image/png", name: "after.png", size: 10 },
+          { id: "att2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 20 },
+        ],
+      },
+    ];
+    const text = reviewPrompt(ticket(), summaries, (a) => `/home/attachments/${a.id}.bin`);
+    const [first, second] = text.split("2. [agent");
+    expect(first).not.toContain("Attachments:");
+    expect(second).toContain("Done\nAttachments:\n* after.png (image): /home/attachments/att1.bin\n* flow.mp4 (video): /home/attachments/att2.bin");
+    expect(text).not.toMatch(/^- /m);
   });
 
   test("completePrompt is branch-dependent and includes instructions", () => {
@@ -348,7 +415,8 @@ describe("run prompts", () => {
     expect(text).toContain("Summary: Added tables\n   Migrations run");
     expect(text).toContain('NYT-5 "API": in_progress → blocked');
     expect(text).not.toMatch(/^- /m);
-    expect(toolsMentioned(text).every((n) => TOOLS.conductor.includes(n))).toBe(true);
+    // A task ticket with children gets the same update prompt in a work run.
+    expect(toolsMentioned(text).every((n) => TOOLS.conductor.includes(n) && TOOLS.work.includes(n))).toBe(true);
     expect(conductorUpdatePrompt([])).toContain("`list_tickets`");
   });
 

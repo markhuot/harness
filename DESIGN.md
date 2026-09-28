@@ -78,7 +78,9 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
 ## Runtime paths
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
-  `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`).
+  `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`),
+  `attachments/<id>.<ext>` (summary attachments, see "Summary attachments"), `tmp/<sessionId>/`
+  (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
   runs `bun <repo>/service/src/daemon.ts`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
@@ -93,21 +95,22 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
 | Human message in planning | enqueue plan run with the message |
-| `POST /start` (or drag to in_progress) | status `in_progress`; prepare workdir (worktree if enabled); enqueue work run: "The plan is approved. Begin work." + plan |
+| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
+| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
-| Work run fails | status `blocked`, `blockedReason` = error |
+| Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a Claude Code classifier denial | status `blocked` with a classifier `pendingApproval` (see "Permissions"), even if the agent submitted |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
 | Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
-| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
-| Drag to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a drag back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
+| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately. While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
+| Move to done | `done` without an agent run |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -119,17 +122,25 @@ Runs are serialized per session and limited globally by `settings.maxConcurrentR
 
 ### Conductor
 
-A ticket of `kind: "conductor"`. Created with `start: true` it runs **conductor** runs whose
-tools create and steer child tickets (`parentId` = conductor). Children created by a
-conductor default to `autoStart: true`: they start as soon as all `dependsOn` are done
+Any ticket with children acts as a conductor (`isConductor`: `kind: "conductor"` or
+`childCount > 0`). `kind` only decides the ticket's prompts and run kind: a `"conductor"` ticket
+runs **conductor** runs whose instructions say to split the goal into children, a `"task"` runs
+work runs. A task becomes a parent when its agent calls `create_ticket` with `child: true` (a
+conductor's default), for example because the human asked for child tickets; its work runs then
+get a "Your child tickets" section listing them. Everything below applies to both. Tickets carry
+`childCount` (a subquery in the ticket repo), and creating or deleting a child re-sends the
+parent's `ticket.upserted`, so the apps show the rollup, badge and Tickets tab as soon as a task
+takes its first child. Children default to `autoStart: true`: they start as soon as all `dependsOn` are done
 (immediately if none). Whenever a child changes status the orchestrator enqueues one
-(coalesced) conductor run describing the changes. The conductor acts as the human reviewer
+(coalesced) run of the parent's own kind (conductor or work) with `conductorUpdatePrompt`. The conductor acts as the human reviewer
 for its children (`review_ticket`) and completes them (`complete_ticket`). So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
 with the human review pending is the conductor's to act on (it stays dimmed on the board and
 isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
-are done and the conductor run ends without submitting, the orchestrator submits the
-conductor for review automatically.
+are done and the parent's run ends without submitting, the orchestrator submits it for review
+automatically; while any child isn't done, a run that ends without submitting leaves the parent in
+progress, and `submit_for_review` is refused (a parent in review or done would strand children
+whose reviews and merges are its job).
 
 ### Watchers and triage
 
@@ -198,16 +209,16 @@ Harness tools (always exposed, via MCP for claude-code):
 
 | Tool | Run kinds | Input |
 | --- | --- | --- |
-| `post_summary` | all ticket kinds | `{ summary }` |
+| `post_summary` | all ticket kinds | `{ summary, attachments?: string[] }` (image/video paths, see "Summary attachments") |
 | `update_plan` | plan | `{ plan, title? }` |
 | `block` | work | `{ question }` |
-| `submit_for_review` | work, conductor | `{ summary }` |
+| `submit_for_review` | work, conductor | `{ summary, attachments?: string[] }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree? }`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
-| `move_ticket` | work, conductor | `{ key, status, position? }`: a drag on the board (`updateTicket` with status/position). `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the app; the same status with a position reorders |
-| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
+| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -215,8 +226,8 @@ Harness tools (always exposed, via MCP for claude-code):
 | `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
-| `review_ticket` | conductor | `{ key, decision, notes }` |
-| `complete_ticket` | conductor | `{ key, instructions? }` |
+| `review_ticket` | work, conductor | `{ key, decision, notes }`: only the caller's own children |
+| `complete_ticket` | work, conductor | `{ key, instructions? }`: only the caller's own children |
 | `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
@@ -230,12 +241,12 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor | `{ url }` |
+| `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
 | `browser_click` | ″ | `{ selector }` |
 | `browser_type` | ″ | `{ selector, text, submit? }` |
 | `browser_eval` | ″ | `{ expression }` |
-| `browser_screenshot` | ″ | `{}` → image |
+| `browser_screenshot` | ″ | `{ save_to? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -250,7 +261,7 @@ and say that every config call waits for a human and is then repeated exactly.
 The write tools (`service/src/tools/board-write.ts`, the `// --- board (write) ---` section of
 `HarnessOps`) let work and conductor runs do to other cards what a person does on the board.
 They call the same `Orchestrator` methods as the HTTP API, so validation and side effects
-(moving to in_progress starts a work run, a drag back from done re-opens, and so on) are shared.
+(moving to in_progress starts a work run, a move back from done re-opens, and so on) are shared.
 The guard rails live in the orchestrator ops, not in tool text, so a driver calling ops directly
 hits them too:
 
@@ -350,10 +361,11 @@ client state, not service state.
 | Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan) | `create_ticket` | |
 | Board | edit title, brief, dependencies, driver, model, permission mode | `update_ticket` | permission modes only tighten |
-| Board | drag to another column, reorder | `move_ticket` | not into or out of review; done only from planning |
+| Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
+| Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
-| Board | approve a review, request changes, re-run the agent review, complete or mark done | conductors only, for their children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
+| Board | approve a review, request changes, re-run the agent review, complete or mark done | parents only, for their own children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
@@ -365,7 +377,8 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
-| Local | appearance and themes, layout, board project filter, show or hide children, last-used project | none | client preferences, not service state |
+| Board | a ticket's sub-agents and their transcripts (Agents tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
+| Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
 dummy driver: a work run creates a looping `zsh -lc` watcher around
@@ -416,7 +429,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
-`auto`). Null at a level means "inherit". Plan (and triage) runs are always read-only.
+`auto`). Null at a level means "inherit". Plan, triage and chat runs are always read-only
+(claude-code runs chat runs with `--permission-mode dontAsk`).
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -563,6 +577,59 @@ applies from its next run; claude-code resumes the same conversation with the ne
 and `project.defaultModels` PATCH-merge per driver (`null` clears one). Migration 3 moved the old
 `claudeModel` / `anthropicModel` settings into `defaultModels`.
 
+### Sub-agents
+
+A sub-agent is an agent a run's agent starts inside its own session (Claude Code's `Agent` tool,
+`Task` on older CLIs), not a ticket. It shares the session and the run, and it reports back to
+the agent that started it. The apps show them on the ticket's **Agents** tab.
+
+**Driver contract** (`service/src/drivers/types.ts`, driver-agnostic). A driver that runs
+sub-agents reports each one with `{ type: "subagent", subagent: SubagentReport }`: an id unique
+within the session (the id of the tool call that started it), and whatever it knows of
+`parentId` (nested agents), `description`, `agentType`, `prompt`, `status` (`running`,
+`succeeded`, `failed`, `stopped`) and `result`. The first report creates the sub-agent, running
+unless it says otherwise, and later reports fill in the fields they carry. Once it has finished,
+later reports can add a missing result but never change its status. `text`, `thinking`,
+`tool_call`, `tool_result` and `permission` events carry `subagentId` when a sub-agent produced
+them. Drivers without sub-agents (anthropic-api) never send any of this.
+
+**Orchestrator.** Reports upsert the `subagents` table (migration 11, keyed by session + id) and
+emit `subagent.upserted` when something changed. Tagged entries are stored with
+`transcript.subagent_id`. They share the session's seq, so `after` paging works in either view.
+When a run ends (or a stale run is recovered on boot), its sub-agents that are still running
+become `stopped`. A sub-agent's text never becomes the run's `lastText`, so it isn't the
+auto-submit summary. Its classifier denials are logged in its own transcript but never become the
+ticket's pending approval, because the sub-agent reports the denial to its agent.
+
+**Reading them.** `TicketDetail.subagents` (oldest first), `GET /sessions/:id/subagents`, and
+`GET /sessions/:id/transcript?subagent=<id>` (404 for an unknown id). The plain transcript route
+and the board's `get_ticket` transcript tail leave sub-agent entries out, so older clients see
+the same session transcript as before.
+
+**claude-code** (verified against claude 2.1.283). An `Agent`/`Task` tool call starts a sub-agent
+(`description`, `subagent_type`, `prompt` from its input; `parentId` is the call's own
+`parent_tool_use_id`). Stream messages with `parent_tool_use_id` set are that sub-agent's output.
+Its streaming deltas are dropped because the full blocks follow. Agents run in the background by
+default: the tool result only says `Async agent launched…`, and the outcome arrives later as a
+`system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
+`task_id`, mapped from `task_started`), inside the same `claude -p` process (the CLI takes
+another turn after the notification). A foreground agent's tool result is its outcome.
+`task_started` for other task types (background Bash) is ignored. Only conversation messages
+(`assistant` / `user`) under a `parent_tool_use_id` are a sub-agent's output: anything else is
+the tool's own progress, like the `tool_progress` heartbeat a Bash call sends every 30 s while
+it runs, and is dropped. Output from a sub-agent the parser didn't see start creates one called
+"Sub-agent", unless that id is a known call of another tool. Migration 13 deleted the empty
+"Sub-agent" rows those heartbeats created before this was fixed.
+
+**Apps** (`@harness/shared/state` `subagents.ts`, `tabs.ts`). State keeps `subagents[sessionId]`
+and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).
+The Agents tab exists only once the session has a sub-agent: until then (and on a session
+without any) the tab is hidden, and `agents` or `agent:<id>` fall back to Summaries, while the
+requested tab is kept so a deep link opens when the sub-agents arrive. It lists running sub-agents first, then finished ones newest first. A row opens the tab
+`agent:<id>`: that sub-agent's transcript, with its task above it and a breadcrumb back through
+its parents. An unknown id falls back to the list. In every transcript, a tool row that started a
+sub-agent links to its transcript.
+
 ### Dummy driver script
 
 Streams its text word by word (`HARNESS_DUMMY_DELAY_MS`, default 15ms; tests use 0).
@@ -571,7 +638,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
@@ -580,20 +647,26 @@ Directives are read from the run prompt:
 ## HTTP API
 
 All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health` and
-the static plugin UIs under `/plugins/:id/ui/`. That holds for loopback and remote clients alike;
+the static plugin UIs under `/plugins/:id/ui/`. `GET /attachments/:id` also takes the token as
+`?token=`, because `<img>` and `<video>` can't send headers; no other HTTP route reads it from
+the query. That holds for loopback and remote clients alike;
 `/mcp/:runToken` is additionally refused (403) to anything but loopback.
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
-GET    /health
+GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
+POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
+GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel | /agent-review
-GET    /tickets/:key/summaries
-GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq
+POST   /tickets/:key/start | /messages {text, chat?} | /review | /reopen | /complete | /cancel | /agent-review
+GET    /tickets/:key/summaries   → Summary[] (each with attachments)
+GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
+GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
+GET    /sessions/:id/subagents   → Subagent[]
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
@@ -610,6 +683,63 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+### Summary attachments
+
+Agents show their work by attaching images and videos to `post_summary` and
+`submit_for_review` (`attachments: string[]`, file paths, absolute or relative to the run's
+cwd). The prompts' Summaries section asks for a screenshot or short recording whenever the work
+has a visible result, and `browser_screenshot { save_to }` writes one to a file for that.
+
+- **Where `save_to` may write** (`resolveSaveTo` in `service/src/tools/browser.ts`, scope from
+  `HarnessOps.fileOutputScope`). The permission gate never sees this write, so the tool confines
+  it itself. The target, with its deepest existing ancestor resolved through `realpath` (a
+  dangling symlink is refused), has to be inside the run's scratch folder
+  `$HARNESS_HOME/tmp/<sessionId>/` or its working directory. A read-only run (plan, review or
+  chat, or `read_only` as the effective mode, ticket → project → settings) gets only the scratch
+  folder, and its relative paths resolve there, so `save_to: "shot.png"` still works for a
+  reviewer. Other runs resolve relative paths against the cwd. An existing target is replaced
+  only when it already starts with the PNG signature. A refused path fails the call before the
+  screenshot is taken, and nothing is written. The result says where the file went, noting the
+  scratch folder when it landed there.
+
+- **Validation** (`service/src/attachments.ts`) runs over every path before anything is stored,
+  so a bad list fails the tool call and posts nothing (for `submit_for_review`, the ticket stays
+  in progress). The limits are 10 files per summary and 100 MB per file. Allowed types are png,
+  jpg/jpeg, gif and webp (kind `image`) and mp4, webm and mov (kind `video`). The extension picks
+  the type, and the first bytes have to match it (PNG signature, JPEG SOI, `GIF8`, `RIFF…WEBP`,
+  an ISO-BMFF `ftyp` box, EBML, QuickTime atoms). Width and height come from the PNG, GIF, JPEG
+  or WebP header, when it has them.
+- **Storage.** Each file is copied to `$HARNESS_HOME/attachments/<id>.<ext>` at post time,
+  because worktrees are deleted after the merge. The original path is never referenced again.
+  Metadata lives in `summary_attachments` (migration 14: `summary_id` → `summaries` ON DELETE
+  CASCADE, `ord` for the order given, `kind`, `mime_type`, `name`, `size`, `width`, `height`,
+  `created_at`). `SummaryRepo` loads a session's attachments in one query next to its
+  summaries.
+- **Wire.** `Summary.attachments: SummaryAttachment[]` (`{ id, kind, mimeType, name, size,
+  width?, height? }`, `[]` when there are none) is in `summary.added`,
+  `GET /tickets/:key/summaries` and `TicketDetail.summaries`. `HarnessClient.attachmentUrl(id)`
+  builds `…/attachments/<id>?token=<token>` for `<img>`, `<video>` and AVPlayer.
+- **Serving.** `GET /attachments/:id` streams the file with its `Content-Type`,
+  `Content-Length`, `Cache-Control: private, max-age=31536000, immutable` and
+  `Accept-Ranges: bytes`. A single `Range: bytes=a-b` / `a-` / `-n` gets a 206 with
+  `Content-Range` (416 past the end), so players can seek. Unknown ids, and ids whose file is
+  missing, get a 404.
+- **Agents.** `get_ticket` and the review prompt list each summary's attachments with name, kind
+  and the stored absolute path, so reviewer and conductor agents can open them with a file tool.
+- **Deletion.** Deleting a ticket (so also a project) collects its attachment files, deletes the
+  rows with the session, then removes the files.
+- **Mac app** (`app/src/renderer/components/Attachments.tsx`). The Summaries tab shows a strip
+  of thumbnails under each summary's text, sized from `width`/`height` by `thumbnailBox`
+  (`shared/src/state/attachments.ts`) so nothing shifts when they load: images lazy-load with
+  `object-fit: cover`, videos show a `preload="metadata"` frame with a play badge, and one that
+  fails to load (a 404) shows a placeholder with its name. Clicking one opens a lightbox (a
+  `Modal`, so app key commands pause): the image fit to the window or the video playing with
+  controls, ← → and the side buttons step through the summary's attachments with wraparound
+  (`stepAttachment`), Esc or the backdrop closes it. URLs are built from the current client on
+  each render, so a rotated token swaps them. A conductor's Tickets tab notes a child's latest
+  summary attachments ("2 images, 1 video"). The renderer's CSP allows `img-src`/`media-src` from
+  the local service origins, like `connect-src`.
 
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is
@@ -634,6 +764,75 @@ completed, moved or deleted between fetches never duplicate or skip a row.
   punctuation-only terms are dropped. `ticket_fts` is derived data, created and rebuilt on open
   when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
   ranking.
+
+**File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
+mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path
+with spaces). `shared/src/mentions.ts` holds the pure parts both apps share: `activeMention`
+finds the mention at the caret (an `@` counts only at the start, after whitespace, or after an
+opening bracket or quote, so `mark@example.com` never is), `insertMention` completes it (files get
+a trailing space; folders end in `/` and keep the list open inside them), `parseMentions` pulls
+the paths out of a prompt, and `rankPaths` orders candidates: path prefix, then name prefix, then
+folder-name prefix, then substring, with in-order letters (`fmt` → `format.ts`) only when nothing
+matches outright. A folder the query already names (`src/`) lists its contents, not itself; a
+file typed in full (`.env`) stays in the list, first.
+
+- **Autocomplete.** `/projects/:id/files` searches the project folder (new session);
+  `/tickets/:key/files` searches where the ticket's next run works: its worktree, else the
+  session's cwd, else the project folder. Gitignored files are included, since build output,
+  local specs and `.env` files are often exactly what someone wants to mention.
+  `service/src/orchestrator/files.ts` lists `git ls-files --cached --others --exclude-standard` in
+  a git repo, then `git ls-files --others --ignored --exclude-standard --directory`, which reports
+  each ignored folder once (`dist/`) instead of every file in it, and walks those folders itself.
+  Other folders are walked from the top. Walks are breadth first and stop at 20,000 files (in a
+  git repo, on top of git's own list), so shallow files make the cut in a huge tree. `.git`, `.hg`,
+  `.svn` and `.DS_Store` are left out; `node_modules` is listed as a folder but not walked. A query
+  inside a folder (`node_modules/react/`) also lists that folder straight from disk, so anything the
+  index skipped or cut short can still be reached one level at a time. Browsing resolves
+  symlinks and refuses a folder whose real path is outside the root, never enters or lists
+  `.git`/`.hg`/`.svn`, and drops `.DS_Store`.
+  Every folder that holds a file is added, and the list is cached per folder for 5 seconds so
+  typing doesn't re-run git on each key.
+- **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
+  through `attachMentions` with the run's cwd before the driver sees them; review, complete and
+  triage prompts are left alone (review and complete prompts quote the brief, whose files the
+  earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
+  `<mentioned-files>` block: `<file path="…">` with the contents, or `<directory path="…/">` with
+  a one-level listing. Mentions that aren't paths (`@someone`) are ignored. Paths that resolve
+  outside the cwd, symlinks included, are refused; binary files (a NUL in the first 8 KB) are
+  skipped; a file is cut at 256 KB (the tag says so) and the whole attachment at 1 MB. The
+  transcript keeps the prompt as typed plus a status line, `Attached @README.md, @src/app.ts`,
+  and one `Didn't attach @…: <reason>` line per skipped path. Contents are read when the run
+  starts, so a message queued behind a run gets the files as they are when it runs.
+
+## Service updates
+
+launchd runs the daemon straight from the repo checkout, so a merge into that checkout (a
+ticket's complete run, a `git pull`) changes the code on disk under a service that keeps running
+the old code. Routes the new app calls then 404 until the service restarts.
+
+- At boot the daemon hashes the files it loads (`sourceFingerprint` in `service/src/code-watch.ts`):
+  `service/src`, `shared/src` and `plugins`, skipping tests, `node_modules`, `dist` and dotfiles,
+  plus the package manifests and `bun.lock`. `build` is that hash.
+- Every 20s it hashes again. When the result differs from `build` the service is `stale`:
+  `/health` says so and a `service.status { build, stale }` event goes out (again if the code
+  changes back).
+- A stale service run by launchd (`XPC_SERVICE_NAME` is the label and its parent is launchd, pid 1;
+  agents inherit the variable) restarts by itself once the
+  new code is settled (the same hash two checks in a row, so a checkout still writing files isn't
+  loaded half-done) and nothing is queued, running or starting (`Orchestrator.isIdle`). It exits
+  through the normal shutdown and KeepAlive starts the new code. Run by hand, it only reports stale.
+- `POST /service/restart` restarts right away. Running agents are stopped: their runs end
+  cancelled and their tickets stay in their columns.
+- Tests and embedded services don't track their source: `/health` reports `build: null`,
+  `stale: false`.
+
+The desktop app shows a banner under the main view while the service is stale, and it can't be
+dismissed. A service whose `/health` has no `build` at all predates build tracking. It never
+restarts by itself, and the app counts it as stale too. "Restart now" asks for confirmation when
+agents are running. For the service the app started, the main process runs
+`cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age. Other
+connections call `POST /service/restart`. The banner goes away when the reconnected service
+reports fresh code.
 
 ## Network
 
@@ -871,6 +1070,231 @@ driver is tested against a fake `claude` executable that replays stream-json. Br
 use the local Chrome and skip when it is missing. End-to-end tests boot the service on an
 ephemeral port with a temp `HARNESS_HOME` and drive it through `HarnessClient`.
 
+## Desktop app (`app/`)
+
+Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The left sidebar
+collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows Inbox,
+Settings, project settings, or on the board route the pane workspace.
+
+- **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
+  board has its own, and All projects has one too. `harness.panes` stores
+  `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`: the project id, or
+  `ALL_SCOPE` = `"*"`), and a board with no entry shows a bare board. The operations work on one
+  scope's `PaneState`. The store takes the scope (`usePanes(scope)`, `updatePanes(scope, fn)`),
+  and `updateAllPanes` covers the edits that reach every board: a deleted ticket (`ticket.deleted`
+  runs `pruneTickets`) and a renamed key (`renameTicketKey`). Removing a project, from the sidebar
+  or through `project.deleted`, drops its scope and closes its tickets on All projects
+  (`forgetProject`). A snapshot drops the scopes of projects that no longer exist, apart from the
+  one on screen. The single tree stored before scopes existed migrates into All projects. It was
+  shared by every board, and All projects is the board that can show all of its tickets; project
+  boards start bare. Parsing drops a scope entry it can't read. Pane ids are unique across all
+  scopes, because content is keyed by leaf id: loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
+  that repeats an id gets a new one, and a scope that isn't stored yet gets the fixed board id
+  `b:<scope>`, so re-reading the store (another window wrote it) doesn't remount that board.
+  `paneScopeOf(route)` (`state/route.ts`) is the route's scope. `PaneWorkspace` takes it as a
+  prop and provides it to the panes (`usePaneScope`, `components/paneContext.ts`). Switching
+  scope unmounts the other board's panes rather than keeping every board mounted. Leaves mount
+  again by id when you come back, and a terminal re-attaches to its shell, which lives in the
+  main process. Keeping every board mounted would mean running a board per project, each with its
+  own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
+  `{ kind: "terminal", sessionId, cwd, title? }`), splits lay their children out side by side
+  (`row`) or stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board
+  pane, and a ticket or a terminal session is open in at most one pane of any scope. `PaneWorkspace.tsx`
+  renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
+  boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
+  a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
+  workspace while the others stay mounted underneath, hidden.
+- **Opening tickets.** Clicking a card runs `openTicket`: an open ticket gets focused, otherwise
+  it replaces the ticket pane just right of the board, or the board splits 60/40 with the ticket
+  on the right. Links inside a ticket pane (child rows, the parent crumb, dependency links, a
+  plugin's open-ticket request) replace that pane's content through `useOpenTicket`
+  (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
+  highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
+  drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
+  or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
+  key-and-title chip as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
+  layer over every pane, above plugin iframes and the browser canvas (which would otherwise
+  swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
+  drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
+  four triangles, ties go to left/right, and the centre goes to the right. The preview is the
+  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `applyDrop`
+  (`dropContent` for a ticket, `movePane` for a pane). A ticket that's already open moves with its
+  pane and keeps its tab, and a pane over itself isn't a target. Docking against the board leaves
+  it 60%, the same split a click makes, while any other pane is split in half. Drags that don't
+  carry our types (files, text) are ignored. The layer goes away on drop, on dragend (Escape
+  cancels a native drag with a dragend), or on the first buttonless mouse move if the source
+  left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
+  Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
+  (`splitTarget`), and it skips a pane already showing that ticket. The board's cards take a
+  keyboard cursor (see Keyboard below), and Enter opens the one it's on. A ticket pane's More menu has a Move pane section with a row for each other
+  pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call `movePane`,
+  so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
+- **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
+  straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
+  Home/End, double-click to make the panes equal. While dragging, a full-window overlay
+  (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
+  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, any
+  pane 200 px tall.
+  They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
+  each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
+  never shows a pane below its minimum while there's room. The stored sizes stay as they were
+  until a divider moves, and a drag starts from the sizes on screen.
+- **Focus, close, zoom.** Clicking into a pane, or tabbing into it, focuses it (a faint header
+  tint). Focus that code moves with no key or pointer input in the last 300 ms (an autofocus, a
+  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket or
+  terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
+  focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
+  focused ticket pane (never while a text field, modal, menu, the palette or a terminal has the
+  focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
+  pane, and a renamed key follows the rename.
+- **Keyboard.** Every shortcut is a command in one registry (`state/keys.ts`): an id, a label, a
+  group, a scope and its chords. The rest follows from that list.
+  - *Two tiers.* ⌘ chords work everywhere, text fields and the browser canvas included. Every
+    other key (hjkl, Enter, g/G, `/`, `?`, `i`, 1–9, ⌃hjkl, Escape) only moves you around. Those
+    keys fire only outside text fields, the canvas, terminals and overlays (a modal, a menu, the
+    palette), and they never change a ticket. Actions (Start work, Approve, Request changes,
+    Complete, Re-run review, Cancel run, Mark done, Re-open, Copy key, Delete) have no keys at
+    all. `keys.test.ts` fails if one gets a bare key. They're reached from their buttons and from
+    the ⌘K palette.
+  - *Areas.* An element that owns commands carries `data-keys-scope` (`board`, `ticket`, `list`,
+    `sidebar`, or several) and `data-keys-owner` (a unique id). Components register handlers for
+    their owner with `useCommands` (`components/commands.tsx`). A falsy handler means the command
+    doesn't apply right now (an action that doesn't fit the ticket's status), which also keeps it
+    out of the palette. One window `keydown` listener in the shell walks from the focused element
+    outward through its areas and runs the first matching command with a handler, ending at the
+    global owner. With nothing focused, it starts from the focused pane's area. A list inside a
+    ticket pane (a conductor's Tickets tab) therefore takes j/k before the pane's own scroll keys.
+    Components' own key handling runs first and wins with preventDefault or stopPropagation (a
+    text field's Escape, a menu's arrows, the palette's list).
+  - *The menu bar.* `main.ts` builds its items from the registry (`commandItem`). The label and
+    accelerator come from the command, and choosing the item sends the id back to the renderer,
+    which runs it where the focus is (`runCommand`). The renderer handles the same chords itself,
+    and a ⌘ key the page prevents never reaches the menu. A short de-dupe covers the rest. The
+    menu is what makes ⌘ chords work from a plugin iframe (out of process, so its keys never reach
+    the renderer) and from a terminal (which keeps ⌘ keys from the page). No key forwarding goes
+    through the plugin SDK. Shifted punctuation is written as its character (`Cmd+}` for ⇧⌘]),
+    because macOS matches key equivalents by the character typed. The browser canvas keeps the
+    app's ⌘ chords from its page (`isAppChord`).
+  - *Focus follows the keyboard.* Real DOM focus, with a roving tabindex, marks where the keyboard
+    is. A keyboard command that changes the focused pane (⌥⌘arrows or ⌃hjkl through
+    `paneInDirection`, Enter on a card, ⌘W, Escape) goes through `focusPaneBy`
+    (`components/paneFocus.ts`), and the workspace then moves DOM focus into that pane. It goes to
+    what last had focus there, else the pane's `[data-pane-autofocus]` element (the board's cursor
+    card, a ticket's current tab), else the pane itself. A terminal focuses its own screen. Left
+    from a pane on the workspace's left edge goes to the sidebar, and l or → from the sidebar comes
+    back.
+  - *Board.* The cursor is a ticket key in `BoardPane`'s state, moved with `moveCursor` over the
+    columns as rendered (`state/boardNav.ts`). Empty columns are skipped, and the row index is
+    kept and clamped. A card that moves column or gets filtered out hands the cursor to the card
+    nearest its old spot (`resolveCursor`). The cursor reaches cards as a boolean prop, so a move
+    re-renders two cards.
+  - *Ticket pane.* The tabs are a `role=tablist` over `visibleTabs` (built-in tabs, then plugin
+    tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
+    scroll the current tab's own scroller. `i` focuses the composer, and Escape there hands focus
+    back to the current tab.
+  - *Lists and overlays.* The sidebar, the Inbox and a conductor's Tickets tab are roving lists
+    (`useRovingList`: j/k/↑/↓, g/G/Home/End, one tab stop). Menus focus their first item, move with
+    ↑/↓ and give focus back to their button. Modals trap Tab and restore focus when they close.
+  - *Palette and overlay.* ⌘K (`views/CommandPalette.tsx`) lists the commands that apply where the
+    focus was (`availableCommands`), places to go, and tickets. Loaded tickets match at once, and
+    `searchTickets` adds the rest after 150 ms. `rankCommands` (`state/palette.ts`) ranks
+    subsequence matches, with a label prefix first, then word starts, then runs, then scattered
+    letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`
+    and ⌘/ open the shortcuts overlay, which is rendered from the registry.
+  - *Rings.* `html[data-input]` is `keyboard` after a keyboard command or Tab, and `pointer` after
+    any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
+    (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
+    Elements get `:focus-visible` rings from `--focus`. A click never shows any of them.
+- **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
+  still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
+  opens the ticket the way a card click does. The route the app launches with opens its ticket
+  in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
+  hash alone. After that the hash mirrors the focused ticket
+  pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
+  board. Opening an already focused ticket is a no-op, so the two never fight. All of this is per
+  scope: `#/board/<project>/ticket/<KEY>` opens the ticket in that project's panes, and the mirror
+  reads the route's scope. Leaving for Inbox or Settings, or for another project, and coming back
+  restores that board's panes.
+- **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
+  the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
+  edge drag the window, apart from their controls. The board header sheds extras through a
+  container query when its pane is narrow. A ticket pane's titlebar does the same. It hides the
+  model badge below 460 px and the status pill below 380 px, then the key truncates and the row
+  clips, so its buttons never run into the next pane. The titlebar is the container, not the pane:
+  a container is the containing block for fixed descendants, which would trap modals inside the
+  pane.
+- **Menus.** `MenuButton` (`components/bits.tsx`) renders its menu in a portal with fixed
+  positioning, so a pane's `overflow: hidden` can't clip it. `placeMenu` (`menuPlacement.ts`)
+  keeps it inside the window. It shifts the menu left or right at the sides and flips it above
+  the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
+  and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
+- **Terminal panes.** New ▾ → New terminal in the sidebar (a split button whose main part is
+  still New session ⌘N), File ▸ New Terminal (⌘T) and a project's context menu call the store's
+  `openTerminal(projectId?)`. It picks the board (`terminalScope`: the board on screen, a
+  project's own board from its settings, otherwise the board last shown or All projects) and the
+  folder (`terminalCwd`: the project's `path`, `~` on All projects or for an unknown project).
+  Then it runs `openTerminal` in that scope, which docks the terminal on the right of the focused
+  pane (half of it) or of the board (40%) and focuses it, and goes to that board if it isn't on
+  screen. Each call adds a pane. The content's `sessionId` is `t:<uuid>` (`newTerminalContent`)
+  and names the PTY. It isn't the leaf id: leaf ids come from a per-window counter, so two
+  windows can mint the same one before either sees the other's write, and loading re-ids a
+  duplicate. A shell must never be handed to the wrong pane, and a UUID never collides. Parsing
+  drops a terminal whose session id the main process would reject, and a session stored in two
+  scopes stays in the first. `views/TerminalPane.tsx` renders it with
+  [ghostty-web](https://github.com/coder/ghostty-web), Ghostty's VT core compiled to WASM behind
+  an xterm.js-like API, drawn on a canvas. The package is pinned to a `next` build because the
+  0.4.0 release doesn't report the mouse to programs like vim and htop. It loads on the first
+  terminal, in its own chunk. Its WASM is inlined as a `data:` URL, so it works from `file://` and
+  inside the asar with no asset to find, and the CSP adds `'wasm-unsafe-eval'` to `script-src`
+  (`connect-src` already allowed `data:`). A FitAddon sizes the terminal to its pane and follows
+  resizes. ghostty-web can't change colors after `open()`, so a theme change disposes the
+  terminal and makes a new one that re-attaches (`terminalColors` turns the theme's tokens into
+  the `#rrggbb` its VT core needs, flattening translucent ones). Attaching (`createAttach`,
+  `state/terminal.ts`): data events are held until `ensure` resolves, then the scrollback is
+  written and only output past its `end` offset (below) is, so nothing prints twice or goes
+  missing whichever order the reply and the events arrive in. A re-attached pane resizes the PTY
+  to itself, since `ensure` ignores cols/rows for an existing shell. The shell's title (OSC 0/2)
+  goes into the content (`setTerminalTitle`) for the header, else the folder's name. Keys: ⌘
+  shortcuts other than ⌘C/⌘V never reach the terminal. ghostty-web marks every key it handles
+  with preventDefault, and a prevented ⌘ key never reaches the native menu, so a capture listener
+  stops them before the terminal and they go unhandled, as from a text field. ⌃⌘ keys (the
+  renderer's own ⌃⌘S) pass through. ghostty-web's custom key handler is the reverse of xterm's:
+  returning true means "handled". ⌘C (and Edit ▸ Copy) copies the selection, and a paste goes
+  through the terminal's bracketed paste. An exited shell shows its code with Restart, which is
+  `kill` then `ensure` under the same session id. Lifecycle: `useTerminalLifecycle`
+  (`state/store.tsx`) watches the pane store (`watchPaneStore`, including another window's writes
+  re-read on `storage`) and kills every session that's in no scope any more (`closedSessions`).
+  That covers closing the pane, removing a project and a close in another window, while moving a
+  pane (even to another board) kills nothing. At startup it re-reads the stored panes and kills
+  the pane sessions (`t:` ids) none of them show (`orphanSessions` over `list()`), which are left
+  over from a renderer reload. Sessions with other ids aren't a pane's, so they're left alone. Shells
+  don't outlive the app, so after a relaunch a stored terminal pane starts a new shell in its
+  folder. `scripts/terminal-pane-check.ts [--packaged]` drives all of this in the real app over
+  CDP, with real key events.
+- **Terminals (process side).** `TerminalManager` (`main/terminals.ts`) keeps one PTY per id,
+  and the id is the terminal pane's `sessionId`. Each PTY runs the user's login shell (`$SHELL -l`,
+  else `/bin/zsh`) with `TERM=xterm-256color` and without `ELECTRON_*` or `NODE_OPTIONS`. The
+  preload exposes it as `window.harness.terminal` over `harness:terminal:*` IPC. `ensure(id,
+  { cwd, cols, rows })` is idempotent. It spawns on the first call (`~` expands, and a missing
+  directory falls back to home), and later calls re-attach to the same shell and return its
+  bounded scrollback (1 MiB), so a remounted pane replays what it missed. Output is coalesced
+  for a few ms, then broadcast as `terminal:data` to every window, and the exit code goes out as
+  `terminal:exit`. Each data event carries the offset its output ends at (UTF-16 code units of
+  everything the shell has printed, which keeps counting after the scrollback trims), and
+  `ensure` returns the offset its scrollback ends at (`end`). Data events and the `ensure` reply
+  are separate IPC messages that can arrive in either order, so the offsets are how a
+  re-attaching pane knows which output its scrollback already has. `ensure` doesn't touch unsent
+  output, which still goes to other windows showing that shell. An exited session stays until `kill`, so the pane can show the exit. `list()`
+  lets the renderer kill sessions no pane shows any more. `kill` sends SIGHUP, then SIGKILL after
+  3 s, and every shell is killed on quit. IPC arguments are validated (id pattern, dimensions
+  1–1000, writes up to 1 MiB) because the main process trusts nothing from a renderer. node-pty
+  is an N-API addon, so its prebuilt `pty.node` loads in Electron without a rebuild. The bundle
+  keeps it external, and `package.ts` copies it unpacked beside `app.asar`, where `sign-mac.ts`
+  signs it. Its `spawn-helper` ships without the executable bit, which `package.ts` fixes (and
+  `pty.ts` fixes for dev). `scripts/terminal-check.ts [--packaged]` drives the bridge in a real
+  app over CDP.
+
 ## iPhone app (`mobile/`)
 
 The phone is another client of the same REST + WebSocket API, with no service changes. It uses
@@ -897,6 +1321,20 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   (`mobile/src/lib/browserInput.ts`). A hidden `TextInput` carries the keyboard (diffed into text
   inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
   only on real changes.
+- **Summary attachments.** `AttachmentRow` (`mobile/src/ui/Attachments.tsx`) puts a summary's
+  attachments in a horizontal row under its body, loading each from `client.attachmentUrl(id)`
+  (the query token, since `Image` and AVPlayer fetch on their own). Thumbnails are 120 pt tall
+  and as wide as the stored width/height allows, clamped (`mobile/src/lib/attachments.ts`), so
+  nothing jumps as they load. A video thumbnail is a muted, paused `expo-video` player showing
+  its first frame. A tap opens `AttachmentViewer`, a transparent full-screen `Modal`: a paging
+  `ScrollView` over the summary's attachments, images in a zooming `ScrollView` (pinch, or
+  double-tap for 2.5×) sized to fit without upscaling, and a `VideoView` with native controls
+  for the page that's showing (only that page holds a player, so paging away stops it). Every
+  page is a vertical `ScrollView` that always bounces, so swipe-down is native. The pull is the
+  negative content offset, which fades the chrome, and letting go past a distance or on a flick
+  closes the viewer (`pullOf` / `dismissOnRelease`, never while zoomed). A JS `PanResponder` lost
+  those drags to the zoom scroll view's own pan. A load or decode error shows a placeholder in
+  the thumb and the page.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
   Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.

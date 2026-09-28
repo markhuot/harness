@@ -1,10 +1,10 @@
 // Git plugin end-to-end: a dummy ticket edits files in its worktree via `/bash`, then the app's
 // Changes tab (plugin iframe) must show them, follow the theme, and refresh live.
 // Used by scripts/real-service.ts and scripts/changes.ts.
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { until, type launchApp } from "./drive";
 
 type App = Awaited<ReturnType<typeof launchApp>>;
@@ -17,9 +17,12 @@ async function git(cwd: string, ...args: string[]) {
   if (code !== 0) throw new Error(`git ${args.join(" ")}: ${err}`);
 }
 
-/** A small repo on main with a few files the agent will add to, edit, rename and delete. */
+/**
+ * A small repo on main with a few files the agent will add to, edit, rename and delete. It's a
+ * tempDir(): the caller removes it with cleanupTempDirs() once the daemon using it has stopped.
+ */
 export async function seedRepo(): Promise<string> {
-  const dir = mkdtempSync(join(tmpdir(), "harness-changes-repo-"));
+  const dir = tempDir("harness-changes-repo-");
   const files: Record<string, string> = {
     "README.md": "# Greeter\n\nSays hello.\n\n## Usage\n\n```sh\nbun src/app.ts\n```\n",
     "src/app.ts": [
@@ -71,9 +74,10 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   const { api, app, check, shot } = opts;
   const repo = await seedRepo();
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/bash ${AGENT_SCRIPT}`, driver: "dummy", start: true });
-  // The default permission mode asks a human before the dummy agent's /bash: approve it (for the
-  // tool) the way a person would, then wait for the run to finish.
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/tools ${JSON.stringify([{ name: "bash", input: { command: AGENT_SCRIPT } }])}`, driver: "dummy", start: true });
+  // The default permission mode asks a human before the dummy agent's bash call: approve it (for
+  // the tool) the way a person would, then wait for the run to finish. `/tools` (unlike `/bash`)
+  // repeats the call when the answered approval resumes the run.
   let settled: Ticket | null = null;
   for (let round = 0; round < 3; round++) {
     settled = await until(
@@ -91,7 +95,7 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   settled = settled!;
   if (settled.status === "blocked") throw new Error(`changes ticket blocked: ${settled.blockedReason ?? JSON.stringify(settled.pendingApproval)}`);
   const transcript = await api<TranscriptEntry[]>("GET", `/sessions/${settled.sessionId}/transcript?after=0`);
-  const bash = transcript.find((e) => e.content.type === "tool_result" && e.content.name === "bash")?.content;
+  const bash = transcript.findLast((e) => e.content.type === "tool_result" && e.content.name === "bash")?.content;
   const bashOut = bash?.type === "tool_result" ? bash.output.map((o) => (o.type === "text" ? o.text : "")).join("") : "no bash tool result";
   check("worktree ticket ran the /bash edits", !!settled.branch && !!settled.workdir && bash?.type === "tool_result" && !bash.isError, `${settled.branch} @ ${settled.workdir} ${bashOut.slice(0, 300)}`);
 
@@ -134,13 +138,80 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   await Bun.sleep(900); // syntax highlighting lands asynchronously
   await shot("8-changes");
   check("narrow panel hides the tree behind a toggle", await frame.js<boolean>(`document.getElementById("app").classList.contains("narrow")`));
+  const overlay = () => frame.js<{ open: boolean; expanded: string | null }>(`({ open: document.getElementById("app").classList.contains("files-open"), expanded: document.querySelector(".bar [data-action=files]")?.getAttribute("aria-expanded") ?? null })`);
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  const opened = await overlay();
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  const closed = await overlay();
+  check("narrow files button opens and closes the overlay", opened.open && opened.expanded === "true" && !closed.open && closed.expanded === "false", JSON.stringify({ opened, closed }));
 
-  // Expanded detail panel: the tree sits beside the diffs.
-  await app.js(`document.querySelector('.detail-titlebar button[title^="Expand"]')?.click()`);
+  // Maximized ticket pane: the tree sits beside the diffs.
+  await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
   const wide = await until("plugin goes wide", () => frame.js<boolean>(`!document.getElementById("app").classList.contains("narrow")`), 5000).catch(() => false);
   check("expanded panel shows the file tree beside the diffs", !!wide);
   await Bun.sleep(800);
   await shot("8-changes-wide");
+
+  // Collapse the docked sidebar: the diffs take its width, and the choice survives a reload.
+  const sidebar = () =>
+    frame.js<{ files: number; diffs: number; expanded: string | null; collapsed: boolean }>(`(() => {
+      const app = document.getElementById("app"), btn = document.querySelector(".bar [data-action=files]");
+      return { files: document.querySelector(".files").getBoundingClientRect().width, diffs: document.querySelector(".diffs").getBoundingClientRect().width,
+        expanded: btn?.getAttribute("aria-expanded") ?? null, collapsed: app.classList.contains("files-collapsed") };
+    })()`);
+  const open = await sidebar();
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  await Bun.sleep(400);
+  const shut = await sidebar();
+  check("files button collapses the docked sidebar", open.expanded === "true" && shut.expanded === "false" && shut.files === 0 && shut.collapsed, JSON.stringify({ open, shut }));
+  check("diffs take the collapsed sidebar's width", shut.diffs >= open.diffs + open.files - 2, JSON.stringify({ open, shut }));
+  const diffBox = await frame.js<number>(`Math.round(document.querySelector(".diffs diffs-container")?.getBoundingClientRect().width ?? 0)`);
+  check("CodeView reflows into the wider column", diffBox > open.diffs, `${diffBox} vs ${open.diffs}`);
+  await shot("8-changes-wide-collapsed");
+  await frame.js(`window.__stale = true; location.reload()`);
+  const kept = await until("plugin reloaded with sidebar collapsed", () => frame.js<boolean>(`!window.__stale && !!document.querySelector(".bar .stat") && document.getElementById("app").classList.contains("files-collapsed")`), 20000).catch(() => false);
+  check("collapsed sidebar persists across a reload", !!kept);
+  await frame.js(`document.querySelector(".bar [data-action=files]").click()`);
+  await until("sidebar back", () => frame.js<boolean>(`document.querySelector(".files").getBoundingClientRect().width > 0`), 5000).catch(() => false);
+  check("files button expands the sidebar again", (await sidebar()).expanded === "true");
+  await Bun.sleep(600);
+
+  // Viewed: checking it collapses the file's diff, the arrow peeks without unchecking, and marks survive a reload.
+  const viewed = (path: string) =>
+    frame.js<{ found: boolean; checked: boolean; expanded: string | null; height: number; bar: string; tree: string }>(`(() => {
+      const box = document.querySelector('.viewed[data-path=${JSON.stringify(path)}] input');
+      const arrow = document.querySelector('.disclosure[data-path=${JSON.stringify(path)}]');
+      const host = [...document.querySelectorAll(".files *")].find((e) => e.shadowRoot);
+      const row = [...(host?.shadowRoot?.querySelectorAll("[data-item-path]") ?? [])].find((e) => e.getAttribute("data-item-path") === ${JSON.stringify(path)});
+      return { found: !!box && !!arrow, checked: !!box?.checked, expanded: arrow?.getAttribute("aria-expanded") ?? null,
+        height: Math.round(box?.closest("diffs-container")?.getBoundingClientRect().height ?? 0),
+        bar: document.querySelector(".bar .viewed-count")?.textContent ?? "", tree: row?.textContent ?? "" };
+    })()`);
+  const headers = await frame.js<{ boxes: number; arrows: number; items: number }>(`({ boxes: document.querySelectorAll(".diffs .viewed input[type=checkbox]").length, arrows: document.querySelectorAll(".diffs .disclosure[aria-expanded]").length, items: document.querySelectorAll(".diffs diffs-container").length })`);
+  check("every rendered diff header has a Viewed checkbox and a disclosure arrow", headers.items > 0 && headers.boxes === headers.items && headers.arrows === headers.items, JSON.stringify(headers));
+  const before = await viewed("src/app.ts");
+  check("files start unviewed and expanded", before.found && !before.checked && before.expanded === "true" && before.bar === "0 / 6 viewed", JSON.stringify(before));
+  await frame.js(`document.querySelector('.viewed[data-path="src/app.ts"] input').click()`);
+  await Bun.sleep(400);
+  const marked = await viewed("src/app.ts");
+  check("checking Viewed collapses the diff", marked.checked && marked.expanded === "false" && marked.height < before.height / 2, JSON.stringify({ before, marked }));
+  check("viewed count and tree check follow", marked.bar === "1 / 6 viewed" && marked.tree.includes("✓"), JSON.stringify(marked));
+  await shot("8-changes-viewed");
+  await frame.js(`document.querySelector('.disclosure[data-path="src/app.ts"]').click()`);
+  await Bun.sleep(400);
+  const peek = await viewed("src/app.ts");
+  check("the disclosure arrow expands a viewed file without unchecking it", peek.checked && peek.expanded === "true" && peek.height > marked.height * 2, JSON.stringify(peek));
+  await frame.js(`document.querySelector('.viewed[data-path="CHANGELOG.md"] input').click(); document.querySelector('.viewed[data-path="config.json"] input').click()`);
+  await Bun.sleep(300);
+  await frame.js(`window.__stale = true; location.reload()`);
+  await until("plugin reloaded with marks", () => frame.js<boolean>(`!window.__stale && !!document.querySelector('.viewed[data-path="src/app.ts"]')`), 20000).catch(() => false);
+  await Bun.sleep(400);
+  const reloaded = await viewed("src/app.ts");
+  check("viewed marks persist across a reload (collapsed again; the peek isn't kept)", reloaded.checked && reloaded.expanded === "false" && reloaded.bar === "3 / 6 viewed", JSON.stringify(reloaded));
+  await frame.js(`document.querySelector('.viewed[data-path="src/app.ts"] input').click()`);
+  await Bun.sleep(400);
+  const unmarked = await viewed("src/app.ts");
+  check("unchecking Viewed expands the file", !unmarked.checked && unmarked.expanded === "true" && unmarked.bar === "2 / 6 viewed", JSON.stringify(unmarked));
 
   if (opts.setTheme) {
     await opts.setTheme("dark");
@@ -165,12 +236,12 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
     await shot("8-changes-wide-mocha");
     await app.js(`window.harness.setTheme({ darkTheme: "harness-dark" })`);
     await until("plugin back to Harness Dark", () => frame.js<boolean>(`document.documentElement.dataset.themeId === "harness-dark"`), 5000).catch(() => false);
-    await app.js(`document.querySelector('.detail-titlebar button[title="Show the board"]')?.click()`);
+    await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
     await Bun.sleep(700);
     await shot("8-changes-dark");
     await opts.setTheme("light");
   } else {
-    await app.js(`document.querySelector('.detail-titlebar button[title="Show the board"]')?.click()`);
+    await app.js(`document.querySelector('.detail-titlebar [data-testid=pane-zoom]')?.click()`);
     const t = await frame.js<string>(`document.documentElement.dataset.theme`);
     const host = await app.js<string>(`document.documentElement.dataset.theme`);
     check("plugin iframe uses the app's resolved theme", t === host, `${t} vs ${host}`);
@@ -184,9 +255,15 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   await shot("9-changes-split");
 
   // Live refresh: a follow-up run writes another file; the ticket.upserted events reach the plugin.
-  await api("POST", `/tickets/${ticket.key}/messages`, { text: "/bash printf 'late\\n' > LATE.md" });
+  // It also edits CHANGELOG.md, which was marked viewed: that file's mark resets, config.json's stays.
+  await api("POST", `/tickets/${ticket.key}/messages`, { text: "/bash printf 'late\\n' > LATE.md && printf -- '- Later entry\\n' >> CHANGELOG.md" });
   const late = await until("live refresh shows LATE.md", () => frame.js<boolean>(`document.querySelector(".bar .stat")?.textContent.includes("across 7 files")`), 30000).catch(() => false);
   check("plugin refreshes live as the agent works", !!late);
+  await Bun.sleep(400);
+  const [changelog, config] = [await viewed("CHANGELOG.md"), await viewed("config.json")];
+  const changelogText = await frame.js<string>(`document.querySelector('.viewed[data-path="CHANGELOG.md"]')?.closest("diffs-container")?.shadowRoot?.textContent ?? ""`);
+  check("a viewed file the agent changes again goes back to unviewed and expanded", !changelog.checked && changelog.expanded === "true" && config.checked && config.expanded === "false" && config.bar === "1 / 7 viewed", JSON.stringify({ changelog, config }));
+  check("the re-edited file's diff shows the new lines", changelogText.includes("Later entry"), changelogText.slice(0, 300));
   frame.close();
   return { project, ticket: settled, repo };
 }

@@ -1,15 +1,43 @@
-import { useMemo, type Ref } from "react";
+import { useCallback, useMemo, useRef, type Ref } from "react";
 import type { Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { MOD } from "../components/bits";
+import { MenuButton, MOD } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
+import { forgetProjectPanes } from "../state/panes";
+import { keysArea, runCommand, useCommands } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
 
-export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession: (projectId?: string) => void; collapsed?: boolean; ref?: Ref<HTMLElement> }) {
+export function Sidebar({
+  onNewSession,
+  onNewTerminal,
+  collapsed = false,
+  ref,
+}: {
+  onNewSession: (projectId?: string) => void;
+  /** A terminal on the board on screen (omitted), or on `projectId`'s board. */
+  onNewTerminal: (projectId?: string) => void;
+  collapsed?: boolean;
+  ref?: Ref<HTMLElement>;
+}) {
   const { state, route, navigate, client } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
+
+  // One roving list: New session, the nav items, each project and Settings are j/k stops; the
+  // chevron, Add project and the project gears stay on Tab after the list's stop.
+  const local = useRef<HTMLElement | null>(null);
+  const setRef = useCallback(
+    (el: HTMLElement | null) => {
+      local.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+  useRovingList(local, { owner: "sidebar" });
+  useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
   const openCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -40,6 +68,9 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
     if (!confirm(`Remove ${p.name} (${p.key}) from Harness?\n\nThis deletes ${what}. Files on disk, branches and worktrees are left alone.`)) return;
     const ok = await act(() => client.deleteProject(p.id), "Project removed");
+    // Its board's panes go, and its tickets close on All projects (project.deleted does the same
+    // when another client removes it).
+    if (ok) forgetProjectPanes(p.id, p.key);
     if (ok && ((route.view === "board" && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id))) {
       navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
     }
@@ -53,6 +84,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     const choice = await bridge.showContextMenu([
       { id: "settings", label: "Project settings…" },
       { id: "new", label: `New session in ${p.name}` },
+      { id: "terminal", label: `New terminal in ${p.name}` },
       { type: "separator" },
       { id: "reveal", label: "Reveal in Finder" },
       { type: "separator" },
@@ -60,6 +92,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     ]);
     if (choice === "settings") openSettings(p);
     else if (choice === "new") onNewSession(p.id);
+    else if (choice === "terminal") onNewTerminal(p.id);
     else if (choice === "reveal") void bridge.revealInFinder(p.path);
     else if (choice === "remove") void removeProject(p);
   };
@@ -67,17 +100,40 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
 
   return (
     // Collapsed: kept mounted (so it animates back) but inert: out of the tab order and a11y tree.
-    <aside className="sidebar" id="app-sidebar" ref={ref} inert={collapsed}>
+    <aside className="sidebar" id="app-sidebar" ref={setRef} inert={collapsed} {...keysArea("list sidebar", "sidebar")}>
       <div className="sidebar-inner">
         <div className="sidebar-top" />
         <div className="sidebar-scroll">
-          <button className="btn new-session-btn" onClick={() => onNewSession()}>
-            <Icon name="plus" strokeWidth={2.25} />
-            <span className="grow" style={{ textAlign: "left" }}>
-              New session
-            </span>
-            <span className="kbd">{MOD}N</span>
-          </button>
+          {/* A split button: the main part is New session (⌘N), the chevron offers a terminal too. */}
+          <div className="new-session-split" role="group" aria-label="New">
+            <button className="btn new-session-btn" data-testid="new-session" data-roving-item onClick={() => onNewSession()}>
+              <Icon name="plus" strokeWidth={2.25} />
+              <span className="grow" style={{ textAlign: "left" }}>
+                New session
+              </span>
+              <span className="kbd">{MOD}N</span>
+            </button>
+            <MenuButton
+              className="new-session-more"
+              align="right"
+              trigger={(toggle, open) => (
+                <button className="btn new-session-chevron" data-testid="new-menu" aria-haspopup="menu" aria-expanded={open} aria-label="More ways to start" title="New session or terminal" onClick={toggle}>
+                  <Icon name="chevron" strokeWidth={2.25} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <button role="menuitem" onClick={() => (close(), onNewSession())}>
+                    <Icon name="plus" /> <span className="grow">New session</span> <span className="kbd">{MOD}N</span>
+                  </button>
+                  <button role="menuitem" data-testid="new-terminal" onClick={() => (close(), onNewTerminal())}>
+                    <Icon name="terminal" /> <span className="grow">New terminal</span> <span className="kbd">{MOD}T</span>
+                  </button>
+                </>
+              )}
+            </MenuButton>
+          </div>
 
           <nav className="nav">
             <NavItem
@@ -124,7 +180,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
               </div>
             ))}
             {projects.length === 0 && (
-              <button className="nav-item nav-add" onClick={addProject}>
+              <button className="nav-item nav-add" data-roving-item onClick={addProject}>
                 <Icon name="folder" />
                 Add a project folder…
               </button>
@@ -156,7 +212,7 @@ function NavItem(props: {
   badge?: React.ReactNode;
 }) {
   return (
-    <button className={`nav-item ${props.active ? "active" : ""}`} onClick={props.onClick} title={props.title}>
+    <button className={`nav-item ${props.active ? "active" : ""}`} data-roving-item aria-current={props.active ? "page" : undefined} onClick={props.onClick} title={props.title}>
       {props.icon && <Icon name={props.icon} />}
       {props.prefix}
       <span className="grow truncate">{props.label}</span>

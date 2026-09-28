@@ -21,7 +21,8 @@ export interface ConnectionError {
 
 export type ConnectionResult = Connection | ConnectionError;
 
-export type MenuCommand = "new-session" | "settings" | "inbox" | "board" | "toggle-sidebar";
+/** A keyboard command id (renderer/state/keys.ts) the native menu sends back to the renderer. */
+export type MenuCommand = string;
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =
@@ -34,18 +35,72 @@ export interface PickDirectoryOptions {
   defaultPath?: string;
 }
 
+/** How a terminal's shell ended. `signal` is set when a signal killed it. */
+export interface TerminalExit {
+  exitCode: number;
+  signal: number | null;
+}
+
+/** A terminal session as ensure() returns it. */
+export interface TerminalSession {
+  id: string;
+  pid: number;
+  shell: string;
+  cwd: string;
+  cols: number;
+  rows: number;
+  /** True when this call spawned the shell; false when it re-attached to an existing session */
+  created: boolean;
+  /** Output so far (bounded), for a remounted pane to replay before appending onData */
+  scrollback: string;
+  /**
+   * The output offset the scrollback ends at (UTF-16 code units of all output so far). Each onData
+   * chunk carries the offset it ends at, so a pane writes only the part of a chunk past this: data
+   * events and ensure()'s reply travel separately and can arrive in either order.
+   */
+  end: number;
+  /** Set once the shell has exited; the session stays until kill() */
+  exit: TerminalExit | null;
+}
+
+export interface TerminalEnsureOptions {
+  /** Starting directory; `~` expands, and a missing directory falls back to home */
+  cwd?: string;
+  cols: number;
+  rows: number;
+}
+
+/** Built-in terminals (PTYs in the main process), keyed by the renderer's pane leaf id. */
+export interface TerminalBridge {
+  /** Attach to `id`, spawning a login shell if it doesn't exist. Hold `id`'s onData until this resolves, then keep what ends past `end`. */
+  ensure(id: string, opts: TerminalEnsureOptions): Promise<TerminalSession>;
+  /** Send input; false when there's no running session */
+  write(id: string, data: string): Promise<boolean>;
+  resize(id: string, cols: number, rows: number): Promise<boolean>;
+  /** End the shell and forget the session; false when there was none */
+  kill(id: string): Promise<boolean>;
+  /** Every session id (running or exited), to kill the ones no pane shows any more */
+  list(): Promise<string[]>;
+  /** `end` is the output offset just past `data` (see TerminalSession.end). */
+  onData(cb: (id: string, data: string, end: number) => void): () => void;
+  onExit(cb: (id: string, exit: TerminalExit) => void): () => void;
+}
+
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   retryService(): Promise<ConnectionResult>;
   /** Re-read the token file after POST /token/rotate (env connections take `rotated`). */
   reloadToken(rotated?: string): Promise<ConnectionResult>;
+  /** Restart the service now (launchd for the service the app started); running agents are stopped. */
+  restartService(): Promise<{ ok: true } | ConnectionError>;
   pickDirectory(opts?: PickDirectoryOptions): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   /** Reveal a file or folder in Finder */
   revealInFinder(path: string): Promise<void>;
   /** Pop up a native menu at the cursor; resolves with the chosen item id, or null when dismissed */
   showContextMenu(items: ContextMenuItem[]): Promise<string | null>;
-  onMenu(cb: (cmd: MenuCommand) => void): () => void;
+  /** `viaKey`: the item's shortcut was pressed rather than the item clicked. */
+  onMenu(cb: (cmd: MenuCommand, viaKey: boolean) => void): () => void;
   /** App appearance. getTheme is synchronous so the renderer can apply it before first paint. */
   getTheme(): ThemeState;
   /** Change the appearance and/or the light / dark theme picks (a bare preference still works) */
@@ -53,5 +108,6 @@ export interface HarnessBridge {
   onThemeChange(cb: (state: ThemeState) => void): () => void;
   /** Keep View → Show Sidebar's checkmark in step with the renderer's sidebar */
   setSidebarVisible(visible: boolean): void;
+  terminal: TerminalBridge;
   platform: string;
 }

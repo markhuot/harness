@@ -8,7 +8,7 @@ import { defineTool, json, schema, ticketView } from "./util";
 
 const keyProp = { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket." };
 const depsProp = { type: "array", items: { type: "string" }, description: "Keys of tickets that must be done before this one starts." };
-const driverProp = { type: "string", minLength: 1, description: "Driver id, e.g. \"claude-code\". Defaults to the project's (a conductor's children: the conductor's)." };
+const driverProp = { type: "string", minLength: 1, description: "Driver id, e.g. \"claude-code\". Defaults to the project's (a child: its parent's)." };
 const modelProp = { type: "string", description: "Model id for that driver. An empty string uses the driver's default." };
 
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
@@ -21,12 +21,14 @@ export const createTicket = defineTool<{
   start?: boolean;
   auto_start?: boolean;
   conductor?: boolean;
+  child?: boolean;
   driver?: string;
   model?: string;
+  use_worktree?: boolean;
 }>({
   name: "create_ticket",
   description:
-    "Create a ticket. In a conductor run it is a child of this conductor (it starts on its own once its depends_on are done unless auto_start is false). In a work run it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's key; pass keys from earlier create_ticket calls in depends_on to order work.",
+    "Create a ticket. With child true (the default for a conductor ticket) it is a child of this ticket: it starts on its own once its depends_on are done unless auto_start is false, and this ticket becomes its conductor, reviewing it with review_ticket and finalizing it with complete_ticket. Otherwise it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's key; pass keys from earlier create_ticket calls in depends_on to order work.",
   inputSchema: schema(
     {
       title: { type: "string", minLength: 1, description: "Short ticket title." },
@@ -34,10 +36,19 @@ export const createTicket = defineTool<{
       project_key: { type: "string", minLength: 1, description: "Project key (see list_projects). Defaults to this ticket's project." },
       depends_on: depsProp,
       start: { type: "boolean", description: "Start work now (or as soon as depends_on are done) instead of planning. Default false." },
-      auto_start: { type: "boolean", description: "Start automatically once dependencies are done. Default true for a conductor's children, false otherwise." },
+      auto_start: { type: "boolean", description: "Start automatically once dependencies are done. Default true for a child, false otherwise." },
       conductor: { type: "boolean", description: "Make it a conductor ticket that splits its goal into children. Default false." },
+      child: {
+        type: "boolean",
+        description: "Make it a child of this ticket, which then reviews and completes it like a conductor. Use it when the human asks for child tickets. Default true for a conductor ticket, false otherwise.",
+      },
       driver: driverProp,
       model: modelProp,
+      use_worktree: {
+        type: "boolean",
+        description:
+          "Give the ticket its own git worktree and branch (true) or run it in the project directory (false). Omit to follow the project's setting, which is right almost always, a conductor's children included.",
+      },
     },
     ["title", "description"],
   ),
@@ -50,8 +61,10 @@ export const createTicket = defineTool<{
       start: input.start,
       autoStart: input.auto_start,
       conductor: input.conductor,
+      child: input.child,
       driver: input.driver,
       model: modelInput(input.model),
+      useWorktree: input.use_worktree,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },

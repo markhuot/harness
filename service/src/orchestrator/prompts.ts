@@ -8,7 +8,7 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
+import type { Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 
 export interface PromptInfo {
@@ -67,11 +67,28 @@ const LIFECYCLE = section(
 * done: an approved ticket gets one final completion run that merges and cleans up.`,
 );
 
-const SUMMARIES = section(
-  "Summaries",
-  `Humans read summaries instead of the transcript. Write each one so a human can skip the transcript entirely: what you did, what you found, what is next or what you need. Keep it to a few sentences or short markdown lines, and name files, commands and results concretely ("Added retry to src/sync.ts; \`bun test\` passes, 42 tests").
-Call \`post_summary\` at meaningful milestones, not after every step.`,
-);
+/**
+ * Summaries, with attachments for showing the work. Only work and conductor runs have
+ * submit_for_review; complete runs have no browser.
+ */
+function summariesSection(kind: RunKind, browser: boolean): string {
+  const submits = kind === "work" || kind === "conductor";
+  const tools = submits ? "`post_summary` and `submit_for_review` take" : "`post_summary` takes";
+  // Mirrors fileOutputScope: these run kinds may only save into their scratch folder.
+  const readOnly = kind === "plan" || kind === "review" || kind === "chat";
+  const where = readOnly
+    ? "a relative path goes to this run's scratch folder, and the result gives the full path to attach"
+    : "inside your working directory, or this run's scratch folder when the ticket is read-only; the result gives the full path";
+  const capture = browser
+    ? `\`browser_screenshot\` with \`save_to\` writes the page to a file (${where}), and a simulator or app screenshot or a short screen recording works too.`
+    : "a simulator or app screenshot or a short screen recording works well.";
+  return section(
+    "Summaries",
+    `Humans read summaries instead of the transcript. Write each one so a human can skip the transcript entirely: what you did, what you found, what is next or what you need. Keep it to a few sentences or short markdown lines, and name files, commands and results concretely ("Added retry to src/sync.ts; \`bun test\` passes, 42 tests").
+Call \`post_summary\` at meaningful milestones, not after every step.
+Show your work. ${tools} \`attachments\`: paths to image or video files (png, jpg, gif, webp, mp4, webm, mov), absolute or relative to your working directory. When the work has a visible result, such as a UI change, rendered output or a browser flow, capture it and attach it${submits ? ", above all to the submit summary" : ""}: ${capture}`,
+  );
+}
 
 const APPROVALS_BODY = `Some tool calls need a human's approval first. If a tool call is denied pending human approval, stop immediately: don't retry it, don't work around it with another tool, and don't call any other tool. The ticket is blocked until the human decides, and you will be resumed in this conversation with their answer.`;
 const CLASSIFIER_DENIALS = (next: string) =>
@@ -85,7 +102,7 @@ const approvals = (kind: RunKind) =>
 
 const BROWSER = section(
   "Browser",
-  `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\`. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
+  `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\` { save_to? }. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
 );
 
 /** Read-only board tools, given to every run kind (tools/board.ts). */
@@ -101,9 +118,9 @@ const boardChanges = (kind: RunKind) =>
     `You can change other tickets the way a person does on the board. ${
       kind === "conductor"
         ? "Beyond creating, starting and messaging your children (above), you"
-        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
+        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, child?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. When the human asks for child tickets of this one, pass child true: the child starts on its own once its depends_on are done, and this ticket becomes its conductor, so you review it with `review_ticket` and finalize it with `complete_ticket` once its agent review is approved. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
     } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on? }, move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
-Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide${kind === "conductor" ? " (for your children, that's you with review_ticket and complete_ticket)" : ""}. Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
+Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide (for your children, that's you with review_ticket and complete_ticket). Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
   );
 
 /**
@@ -212,6 +229,32 @@ Style preferences alone are not grounds for request_changes.`,
   );
 }
 
+/** How the human gets a requested change acted on, from a chat about a ticket in this status. */
+function chatActOn(status: TicketStatus | undefined): string {
+  switch (status) {
+    case "planning":
+      return `they can turn on the composer's "Revise the plan" switch and send it again, which starts a planning run that rewrites the plan (or press Start to approve the plan and run the work)`;
+    case "blocked":
+    case "review":
+      return `they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress`;
+    case "done":
+      return "they can re-open the ticket with it";
+    default:
+      return "they can send it as a regular message";
+  }
+}
+
+function chatInstructions(ticket: Ticket | null): string {
+  const status = ticket ? ` The ticket stays in ${ticket.status} whatever you say or do.` : "";
+  return section(
+    "This run: chat",
+    `The human sent this message as a chat: they want to talk about the ticket in its current state, not to move it along.${status} Answer their message in text: explain what was done or planned, answer questions, discuss options and tradeoffs.
+Your last message is posted on the ticket as your answer, next to their question, so make it complete on its own.
+Investigate read-only when it helps: read files, search, run non-destructive commands such as git log, git diff or the tests. Commands that change anything are denied in this run, whatever the ticket's permission mode; that is expected, not a setting to change. Do not create, modify or delete files, commit, or change the plan. There are no lifecycle tools in this run, so there is nothing to submit and nothing to block on: a question for the human can go at the end of your answer.
+If they ask for a change or approve something (revise the plan, do the work, go ahead), you can't act on it from a chat. Say what you would do and tell them how to get it done: ${chatActOn(ticket?.status)}.`,
+  );
+}
+
 function completeInstructions(project: Project | null, ticket: Ticket | null): string {
   const main = project?.path ?? "the main project checkout";
   const body = ticket?.branch
@@ -250,11 +293,27 @@ Planning the breakdown (first run, no children yet):
 4. Call \`post_summary\` with the breakdown, then end the run.
 Steering (later runs): you are re-invoked with a message whenever children change status. Handle every change, then end the run; do not wait or poll.
 * Child in review: a reviewer agent checks it first. Once its agent review is approved, you are its human reviewer: inspect it (\`get_ticket\`, the code) and call \`review_ticket\` { key, decision: "approve" | "request_changes", notes } with concrete notes.
-* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. Put everything the merge needs (such as a target branch other than main) in \`instructions\` up front: the complete run merges and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
 * Child blocked: answer its question with \`message_ticket\` { key, text } when you can. When only the human can answer, say so in \`post_summary\`.
 * Use \`list_tickets\` and \`get_ticket\` to check state, and \`create_ticket\` for follow-up work you discover.
 When every child is done and the goal is met, call \`submit_for_review\` { summary } with the overall result. Never call it earlier.
 ${current}`,
+  );
+}
+
+/**
+ * A task ticket that has taken children conducts them too (conductor runs list theirs in their
+ * instructions). Only the steering half of the conductor instructions applies.
+ */
+function childrenSection(children: Ticket[]): string {
+  return section(
+    "Your child tickets",
+    `This ticket conducts child tickets. You are re-invoked with a message whenever one changes status: handle every change, then end the run; do not wait or poll.
+* Child in review: once its agent review is approved, you are its human reviewer. Inspect it and call \`review_ticket\` { key, decision, notes }.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it.
+* Child blocked: answer it with \`message_ticket\` { key, text } when you can.
+\`submit_for_review\` is refused until every child is done.
+${children.map(childLine).join("\n")}`,
   );
 }
 
@@ -284,7 +343,7 @@ Then call one of these and stop. When the output holds several separate items (f
 export function systemPrompt(info: PromptInfo): string {
   const { kind } = info;
   const ticketRun = kind !== "triage";
-  const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor";
+  const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
   let instructions: string;
   switch (kind) {
     case "plan":
@@ -305,14 +364,18 @@ export function systemPrompt(info: PromptInfo): string {
     case "triage":
       instructions = triageInstructions();
       break;
+    case "chat":
+      instructions = chatInstructions(info.ticket);
+      break;
   }
   return join(
     INTRO,
     contextSection(info),
     ticketRun && LIFECYCLE,
     instructions,
+    kind === "work" && !!info.children?.length && childrenSection(info.children),
     ticketRun && filesSection(kind, info.builtinTools ?? true),
-    ticketRun && SUMMARIES,
+    ticketRun && summariesSection(kind, browser),
     BOARD,
     (kind === "work" || kind === "conductor") && boardChanges(kind),
     configSection(kind),
@@ -338,11 +401,17 @@ export function workStartPrompt(ticket: Ticket): string {
 
 const AUTHOR_LABEL: Record<Summary["author"], string> = { agent: "agent", human: "human", system: "system" };
 
-export function reviewPrompt(ticket: Ticket, summaries: Summary[]): string {
+/** A summary's attachments as lines naming the stored copy, for agents to open with a file tool. */
+function attachmentLines(s: Summary, pathOf: (a: SummaryAttachment) => string): string {
+  if (!s.attachments?.length) return "";
+  return `\nAttachments:\n${s.attachments.map((a) => `* ${a.name} (${a.kind}): ${pathOf(a)}`).join("\n")}`;
+}
+
+export function reviewPrompt(ticket: Ticket, summaries: Summary[], attachmentPath: (a: SummaryAttachment) => string = (a) => a.id): string {
   const ordered = [...summaries].sort((a, b) => a.createdAt - b.createdAt);
   const log = ordered.length
     ? ordered
-        .map((s, i) => `${i + 1}. [${AUTHOR_LABEL[s.author]}, ${new Date(s.createdAt).toISOString()}]\n${s.body.trim()}`)
+        .map((s, i) => `${i + 1}. [${AUTHOR_LABEL[s.author]}, ${new Date(s.createdAt).toISOString()}]\n${s.body.trim()}${attachmentLines(s, attachmentPath)}`)
         .join("\n\n")
     : "(no summaries were posted)";
   return join(

@@ -1,15 +1,30 @@
-// A draggable pane edge (role=separator): pointer drag, arrow keys, double-click to reset.
-// While dragging, a full-window overlay sits above everything so plugin iframes and the browser
-// canvas can't swallow the pointer, and the width is previewed imperatively (no React render
-// per pointermove); the final width is committed once on release.
+// A draggable right edge for the sidebar (role=separator): pointer drag, arrow keys, double-click
+// to reset. While dragging, a full-window overlay (useDragOverlay, shared with the pane dividers)
+// sits above everything so plugin iframes and the browser canvas can't swallow the pointer, and the
+// width is previewed imperatively (no React render per pointermove); the final width is committed
+// once on release.
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { dragWidth, keyWidth, type Bounds } from "../state/layout";
 import "./panes.css";
 
+/**
+ * While `axis` is set (a drag is in progress): the resize cursor everywhere, no text selection, and
+ * the returned portal covers the window so iframes and canvases can't take the pointer.
+ */
+export function useDragOverlay(axis: "x" | "y" | null): ReactNode {
+  useEffect(() => {
+    if (!axis) return;
+    const root = document.documentElement.classList;
+    const cls = axis === "x" ? "is-resizing" : "is-resizing-y";
+    root.add(cls);
+    return () => root.remove(cls);
+  }, [axis]);
+  return axis ? createPortal(<div className={`resize-overlay ${axis === "y" ? "resize-overlay-y" : ""}`} data-testid="resize-overlay" />, document.body) : null;
+}
+
 export function ResizeHandle({
-  edge,
   target,
   bounds,
   onPreview,
@@ -19,8 +34,6 @@ export function ResizeHandle({
   className = "",
   testId,
 }: {
-  /** Which edge of the pane the handle sits on */
-  edge: "left" | "right";
   /** The pane being resized (its rendered width is the starting point and aria-valuenow) */
   target: RefObject<HTMLElement | null>;
   bounds: () => Bounds;
@@ -48,11 +61,7 @@ export function ResizeHandle({
     // bounds() reads live DOM sizes, so its identity changing doesn't need a new observer.
   }, [target]);
 
-  useEffect(() => {
-    if (!dragging) return;
-    document.documentElement.classList.add("is-resizing");
-    return () => document.documentElement.classList.remove("is-resizing");
-  }, [dragging]);
+  const overlay = useDragOverlay(dragging ? "x" : null);
 
   const measured = () => Math.round(target.current?.getBoundingClientRect().width ?? width);
 
@@ -65,7 +74,7 @@ export function ResizeHandle({
 
   return (
     <div
-      className={`resize-handle resize-${edge} ${dragging ? "dragging" : ""} ${className}`}
+      className={`resize-handle ${dragging ? "dragging" : ""} ${className}`}
       role="separator"
       aria-orientation="vertical"
       aria-label={label}
@@ -87,7 +96,7 @@ export function ResizeHandle({
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        const w = dragWidth(d.startWidth, d.startX, e.clientX, edge, d.bounds);
+        const w = dragWidth(d.startWidth, d.startX, e.clientX, d.bounds);
         if (w === d.last) return;
         d.last = w;
         onPreview(w);
@@ -98,7 +107,7 @@ export function ResizeHandle({
       onDoubleClick={onReset}
       onKeyDown={(e) => {
         const b = bounds();
-        const w = keyWidth(e.key, e.shiftKey, measured(), edge, b);
+        const w = keyWidth(e.key, e.shiftKey, measured(), b);
         if (w === null) return;
         e.preventDefault();
         setRange(b);
@@ -106,7 +115,7 @@ export function ResizeHandle({
         onCommit(w);
       }}
     >
-      {dragging && createPortal(<div className="resize-overlay" data-testid="resize-overlay" />, document.body)}
+      {overlay}
     </div>
   );
 }

@@ -37,19 +37,41 @@ const projects = (await (await fetch(base + "/projects", { headers: { authorizat
 const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
 const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
 
-// Child tickets are hidden by default; this flips the toolbar switch to show them.
-const showChildren = `document.querySelector("[data-testid=show-children]")?.click()`;
+// Child tickets are hidden by default; this opens the search options and flips the switch.
+const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
 const search = (q: string) =>
   `(() => { const el = document.querySelector("[data-testid=board-search]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(q)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
+// Picks a project in the composer by key (the select is controlled, so set it the way React sees).
+const pickProject = (key: string) =>
+  `(() => { const el = document.querySelector(".project-picker select"); const opt = [...el.options].find((o) => o.textContent?.includes("(${key})")); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, opt.value); el.dispatchEvent(new Event("change", { bubbles: true })); })()`;
 const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
   `localStorage.setItem("harness.layout", ${JSON.stringify(JSON.stringify(l))}); dispatchEvent(new StorageEvent("storage", { key: "harness.layout" }))`;
+// The pane store follows storage events too. Board | tickets, each ticket in its own pane, on the
+// All projects board ("*": every board has its own panes).
+const board = { type: "leaf", id: "b", content: { kind: "board" } };
+const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
+const panes = (children: object[], sizes: number[], focusedId: string) =>
+  `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": { root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null } } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
+// Starts dragging a card and holds it over a pane (fx/fy of the way across it) so the drop preview
+// shows. executeJavaScript waits for the returned promise.
+const holdDrag = (cardKey: string, paneId: string, fx: number, fy: number) => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  await wait(300);
+  const dt = new DataTransfer();
+  document.querySelector('.card[data-key="${cardKey}"]')?.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  await wait(100);
+  const r = document.querySelector('[data-pane-id="${paneId}"]')?.getBoundingClientRect();
+  if (r) document.querySelector("[data-testid=pane-drop-layer]")?.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + r.width * ${fx}, clientY: r.top + r.height * ${fy} }));
+  await wait(300);
+})()`;
 // Opens the first watcher's edit form and keeps the Watchers section in view.
 const editWatcher = `document.querySelector("#settings-watchers .settings-row button[title=Edit]")?.click(); setTimeout(() => document.getElementById("settings-watchers")?.scrollIntoView({ block: "start" }), 50)`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
+  { name: "plan", route: "#/board/all/ticket/NYTIMES-2" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
   { name: "blocked", route: "#/board/all/ticket/NYTIMES-3" },
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },
@@ -57,6 +79,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
+  { name: "inbox-watcher-error", route: "#/inbox", setup: `document.querySelector(".watcher-error")?.click()` },
   { name: "settings", route: "#/settings" },
   { name: "appearance", route: "#/settings/appearance" },
   { name: "watchers", route: "#/settings/watchers" },
@@ -65,6 +88,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
   { name: "compose", route: "#/compose" },
+  { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
   { name: "permissions", route: "#/settings/permissions" },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },
@@ -73,10 +97,27 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
   { name: "board-conductor", route: `#/board/${harness}`, setup: showChildren },
   { name: "board-hidden", route: `#/board/${harness}` },
+  { name: "board-options", route: `#/board/${harness}`, setup: `document.querySelector("[data-testid=search-options]")?.click()` },
   { name: "board-search", route: "#/board/all", setup: search("the") },
   { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
   { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
-  { name: "panel-resized", route: "#/board/all/ticket/HARNESS-1/children", setup: layout({ sidebarCollapsed: false, sidebarWidth: 280, detailWidth: 860 }) },
+  {
+    name: "panel-resized",
+    route: "#/board/all/ticket/HARNESS-1/children",
+    setup: `${layout({ sidebarCollapsed: false, sidebarWidth: 280 })}; ${panes([board, ticketPane("t", "HARNESS-1", "children")], [0.3, 0.7], "t")}`,
+  },
+  {
+    name: "split",
+    route: "#/board/all/ticket/NYTIMES-3",
+    delay: 3000,
+    setup: panes([board, ticketPane("t1", "NYTIMES-4"), ticketPane("t2", "NYTIMES-3", "details")], [0.4, 0.3, 0.3], "t2"),
+  },
+  {
+    // Mid-drag: a card held over the lower half of an open ticket, previewing a stacked split.
+    name: "split-drop",
+    route: "#/board/all/ticket/NYTIMES-4",
+    setup: `${panes([board, ticketPane("t1", "NYTIMES-4")], [0.6, 0.4], "t1")}; ${holdDrag("NYTIMES-3", "t1", 0.5, 0.85)}`,
+  },
 ];
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");

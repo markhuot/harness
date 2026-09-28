@@ -1,9 +1,12 @@
-import type { Session } from "@harness/shared";
-import { useStore } from "../state/store";
-import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions } from "@harness/shared/state";
+import { useRef, useState } from "react";
+import type { Session, Watcher } from "@harness/shared";
+import { useAction, useStore } from "../state/store";
+import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions, watcherStatus } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { relativeTime, useNow } from "../components/bits";
+import { keysArea } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
 import { Transcript } from "./Transcript";
 
 const TONE_CLASS = { amber: "badge-amber", green: "badge-green", neutral: "", red: "badge-red" } as const;
@@ -25,6 +28,9 @@ export function InboxView() {
   const sessions = triageSessions(state);
   const selectedId = route.view === "inbox" ? (route.sessionId ?? sessions[0]?.id ?? null) : null;
   const selected = selectedId ? state.sessions[selectedId] : undefined;
+  // The sessions are one Tab stop; j/k (↑/↓) move between them, Enter opens one.
+  const listRef = useRef<HTMLDivElement>(null);
+  useRovingList(listRef, { owner: "inbox" });
 
   return (
     <div className="inbox">
@@ -35,7 +41,8 @@ export function InboxView() {
           </div>
           <span className="muted">{sessions.length}</span>
         </header>
-        <div className="view-body">
+        <div className="view-body" ref={listRef} {...keysArea("list", "inbox")}>
+          <WatcherStrip />
           {sessions.length === 0 && (
             <div className="empty">
               <Icon name="inbox" />
@@ -44,7 +51,12 @@ export function InboxView() {
             </div>
           )}
           {sessions.map((s) => (
-            <button key={s.id} className={`inbox-item ${s.id === selectedId ? "active" : ""}`} onClick={() => navigate({ view: "inbox", sessionId: s.id })}>
+            <button
+              key={s.id}
+              className={`inbox-item ${s.id === selectedId ? "active" : ""}`}
+              data-roving-item
+              aria-current={s.id === selectedId || undefined}
+              onClick={() => navigate({ view: "inbox", sessionId: s.id })}>
               <div className="row">
                 <span className="mono muted" style={{ fontSize: 11 }}>
                   {s.key}
@@ -75,6 +87,55 @@ export function InboxView() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Every watcher and what its process is doing now; paused ones are muted, as in Settings. */
+function WatcherStrip() {
+  const { state } = useStore();
+  const now = useNow(1000);
+  const watchers = Object.values(state.watchers).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
+  if (watchers.length === 0) return null;
+  return (
+    <section className="watcher-strip" aria-label="Watchers">
+      {watchers.map((w) => (
+        <WatcherRow key={w.id} watcher={w} now={now} />
+      ))}
+    </section>
+  );
+}
+
+function WatcherRow({ watcher: w, now }: { watcher: Watcher; now: number }) {
+  const { client, navigate } = useStore();
+  const act = useAction();
+  const [expanded, setExpanded] = useState(false);
+  const s = watcherStatus(w, now);
+  return (
+    <div className={`watcher-row ${w.enabled ? "" : "muted-row"}`} data-tone={s.tone}>
+      <div className="row">
+        <span className="watcher-dot" data-tone={s.tone} data-state={w.live?.state ?? "unknown"} />
+        <button className="watcher-name truncate" title="Watcher settings" onClick={() => navigate({ view: "settings", section: "watchers" })}>
+          {w.name}
+        </button>
+        <span className="badge">{w.mode === "loop" ? "Loop" : `Every ${w.intervalSec}s`}</span>
+        <div className="grow" />
+        <span className={`badge ${TONE_CLASS[s.tone]}`}>{s.label}</span>
+      </div>
+      <div className="row watcher-sub">
+        <span className="muted truncate">{s.detail}</span>
+        <div className="grow" />
+        {s.error && w.live?.state !== "running" && (
+          <button className="btn btn-sm btn-ghost" onClick={() => void act(() => client.runWatcher(w.id), `Restarting ${w.name}`)}>
+            <Icon name="play" size={10} /> Retry now
+          </button>
+        )}
+      </div>
+      {s.error && (
+        <button className={`watcher-error mono ${expanded ? "expanded" : ""}`} title={expanded ? "Show less" : s.error} onClick={() => setExpanded((v) => !v)}>
+          {s.error}
+        </button>
+      )}
     </div>
   );
 }

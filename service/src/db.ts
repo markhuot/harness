@@ -300,6 +300,63 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN color TEXT;
   `,
+  // 11: sub-agents (DESIGN.md "Sub-agents"): agents an agent starts inside its own session.
+  //     transcript.subagent_id marks the entries a sub-agent produced (NULL: the session's own
+  //     agent); existing entries all belong to the session's agent.
+  `
+  ALTER TABLE transcript ADD COLUMN subagent_id TEXT;
+  CREATE INDEX transcript_subagent ON transcript(session_id, subagent_id, seq);
+
+  CREATE TABLE subagents (
+    session_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    run_id TEXT,
+    parent_id TEXT,
+    description TEXT NOT NULL DEFAULT '',
+    agent_type TEXT,
+    prompt TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    result TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (session_id, id)
+  );
+  CREATE INDEX subagents_run ON subagents(run_id, status);
+  `,
+  // 12: tickets.use_worktree: the per-ticket worktree choice from the composer or create_ticket
+  //     (1: own worktree, 0: the project checkout). NULL (every existing ticket) follows the
+  //     project's use_worktrees when work starts.
+  `
+  ALTER TABLE tickets ADD COLUMN use_worktree INTEGER;
+  `,
+  // 13: drop the sub-agents claude-code's parser made up from the tool_progress heartbeat a Bash
+  //     call running over 30s sends (it names the call as parent_tool_use_id). They are the
+  //     fallback "Sub-agent" rows with no type, prompt or transcript entries of their own. A real
+  //     sub-agent always has an agent type, a prompt, or the output that created it.
+  `
+  DELETE FROM subagents
+  WHERE description = 'Sub-agent' AND agent_type IS NULL AND prompt = ''
+    AND NOT EXISTS (SELECT 1 FROM transcript t WHERE t.session_id = subagents.session_id AND t.subagent_id = subagents.id);
+  `,
+  // 14: summary attachments (DESIGN.md "Summary attachments"): images and videos an agent attached
+  //     to a summary, in the order it listed them (ord). The files live in
+  //     $HARNESS_HOME/attachments/<id>.<ext>; deleting the summary deletes its rows.
+  `
+  CREATE TABLE summary_attachments (
+    id TEXT PRIMARY KEY,
+    summary_id TEXT NOT NULL REFERENCES summaries(id) ON DELETE CASCADE,
+    ord INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX summary_attachments_summary ON summary_attachments(summary_id, ord);
+  `,
 ];
 
 /**

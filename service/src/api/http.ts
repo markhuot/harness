@@ -11,7 +11,7 @@ import { createWsHandlers, type WsData } from "./ws";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
-import { TICKET_STATUSES, type TicketStatus } from "@harness/shared";
+import { TICKET_STATUSES, type ServiceStatus, type TicketStatus } from "@harness/shared";
 
 /** The bearer token, rotatable at runtime (POST /token/rotate). */
 export interface TokenStore {
@@ -31,6 +31,10 @@ export interface HttpServerOptions {
   plugins?: PluginHost;
   /** Listen addresses; enables /network, /pairing and live rebinds on PATCH /settings { listen }. */
   network?: NetworkManager;
+  /** Build tracking for /health; absent → { build: null, stale: false }. */
+  serviceStatus?: () => ServiceStatus;
+  /** Enables POST /service/restart: exit so launchd starts the service again. */
+  restart?: () => void;
 }
 
 export interface HttpHandler {
@@ -103,6 +107,48 @@ export function tokenMatches(given: string | null | undefined, token: string): b
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * The byte range a `Range: bytes=…` header asks for within `size` bytes, "unsatisfiable" when it
+ * falls outside, or null to send the whole file (no header, or one we don't handle, such as
+ * several ranges).
+ */
+export function parseRange(header: string | null, size: number): { start: number; end: number } | "unsatisfiable" | null {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  let start: number;
+  let end: number;
+  if (m[1] === "") {
+    // suffix range: the last N bytes
+    const n = Number(m[2]);
+    if (n === 0) return "unsatisfiable";
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  }
+  if (start >= size || start > end) return "unsatisfiable";
+  return { start, end };
+}
+
+const ATTACHMENT_CACHE = "private, max-age=31536000, immutable";
+
+function serveFile(req: Request, path: string, mimeType: string): Response {
+  const file = Bun.file(path);
+  const size = file.size;
+  const headers: Record<string, string> = { "content-type": mimeType, "cache-control": ATTACHMENT_CACHE, "accept-ranges": "bytes" };
+  const range = parseRange(req.headers.get("range"), size);
+  if (range === "unsatisfiable") return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
+  const head = req.method === "HEAD";
+  if (!range) return new Response(head ? null : file, { status: 200, headers: { ...headers, "content-length": String(size) } });
+  const length = range.end - range.start + 1;
+  return new Response(head ? null : file.slice(range.start, range.end + 1), {
+    status: 206,
+    headers: { ...headers, "content-length": String(length), "content-range": `bytes ${range.start}-${range.end}/${size}` },
+  });
+}
+
 function bearer(req: Request): string | null {
   const h = req.headers.get("authorization");
   const m = h ? /^Bearer\s+(.+)$/i.exec(h) : null;
@@ -115,6 +161,7 @@ export interface RouteExtras {
   tokens?: TokenStore;
   /** Called after the token rotates (closes sockets authenticated with the old one). */
   onRotate?: () => void;
+  restart?: () => void;
 }
 
 /** `?status=planning,review` → validated statuses; absent/empty → undefined (no filter). */
@@ -137,6 +184,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/projects", async ({ body }) => o.createProject(await body()));
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
+  add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Tickets
   add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));
@@ -162,7 +210,10 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/tickets/:key", async ({ params, body }) => o.updateTicket(params.key!, await body()));
   add("DELETE", "/tickets/:key", async ({ params }) => (await o.deleteTicket(params.key!), ok));
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
-  add("POST", "/tickets/:key/messages", async ({ params, body }) => o.sendMessage(params.key!, (await body())?.text));
+  add("POST", "/tickets/:key/messages", async ({ params, body }) => {
+    const b = await body();
+    return o.sendMessage(params.key!, b?.text, { chat: b?.chat === true });
+  });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
     if (b?.decision !== "approve" && b?.decision !== "request_changes") throw new HarnessError(400, "decision must be approve or request_changes");
@@ -174,6 +225,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/agent-review", ({ params }) => o.rerunAgentReview(params.key!));
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
   add("GET", "/tickets/:key/summaries", ({ params }) => o.summaries(params.key!));
+  add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {
@@ -184,8 +236,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/sessions/:id", ({ params }) => o.getSession(params.id!));
   add("GET", "/sessions/:id/transcript", ({ params, url }) => {
     const after = Number(url.searchParams.get("after") ?? 0);
-    return o.transcript(params.id!, Number.isFinite(after) ? after : 0);
+    return o.transcript(params.id!, Number.isFinite(after) ? after : 0, url.searchParams.get("subagent") || null);
   });
+  add("GET", "/sessions/:id/subagents", ({ params }) => o.subagents(params.id!));
 
   // Watchers (inject before :id so it isn't captured as an id)
   add("GET", "/watchers", () => o.listWatchers());
@@ -224,6 +277,13 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/pairing", async () => {
     if (!network || !tokens) throw new HarnessError(404, "Pairing isn't available");
     return network.pairing(tokens.get());
+  });
+  add("POST", "/service/restart", () => {
+    const restart = extras.restart;
+    if (!restart) throw new HarnessError(409, "This service isn't run by launchd, so it can't restart itself; restart it by hand");
+    // After the response is on its way: the restart stops the HTTP server.
+    setTimeout(restart, 50);
+    return ok;
   });
   add("POST", "/token/rotate", () => {
     if (!tokens) throw new HarnessError(404, "Token rotation isn't available");
@@ -265,6 +325,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
     network: opts.network,
     tokens: opts.tokens,
     onRotate: () => ws.closeAll(),
+    restart: opts.restart,
   });
 
   return {
@@ -294,7 +355,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return opts.plugins.serveUi(decodeURIComponent(ui[1]!), ui[2]);
       }
 
-      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid } });
+      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid, ...(opts.serviceStatus?.() ?? { build: null, stale: false }) } });
 
       // MCP: authenticated by the run-scoped token in the path. Only agents on this machine use it,
       // so it isn't offered to other hosts even when the service listens beyond loopback.
@@ -312,6 +373,17 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         if (!tokenMatches(url.searchParams.get("token"), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
         if (server.upgrade(req, { data: ws.newData() })) return undefined;
         return json({ error: "WebSocket upgrade required" }, 400);
+      }
+
+      // Summary attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
+      // No other route takes the token from the query.
+      const attachment = /^\/attachments\/([^/]+)$/.exec(path);
+      if (attachment && (req.method === "GET" || req.method === "HEAD")) {
+        const token = opts.tokens.get();
+        if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
+        const found = opts.orchestrator.attachmentFile(decodeURIComponent(attachment[1]!));
+        if (!found) return json({ error: "Not found" }, 404);
+        return serveFile(req, found.path, found.attachment.mimeType);
       }
 
       // Every other route needs the bearer token, from loopback and remote hosts alike.

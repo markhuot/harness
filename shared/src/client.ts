@@ -9,10 +9,13 @@ import type {
   DriverInfo,
   DriverModels,
   HarnessEvent,
+  Health,
   HumanReviewBody,
+  MessageBody,
   ReopenBody,
   ApprovalBody,
   Project,
+  Subagent,
   PublicSettings,
   ServerMessage,
   Session,
@@ -31,6 +34,7 @@ import type {
   NetworkStatus,
   PairingInfo,
 } from "./protocol";
+import type { FileMatch } from "./mentions";
 
 export class HarnessApiError extends Error {
   constructor(
@@ -82,7 +86,11 @@ export class HarnessClient {
   }
 
   health() {
-    return this.request<{ ok: true; version: string; pid: number }>("GET", "/health");
+    return this.request<Health>("GET", "/health");
+  }
+  /** Restart the service now (it exits and launchd starts it again). Running agents are stopped. */
+  restartService() {
+    return this.request<{ ok: true }>("POST", "/service/restart");
   }
 
   // Projects
@@ -97,6 +105,10 @@ export class HarnessClient {
   }
   deleteProject(id: string) {
     return this.request<{ ok: true }>("DELETE", `/projects/${id}`);
+  }
+  /** Files and folders in the project folder matching `q`, for @-mentions in a new session. */
+  projectFiles(id: string, q: string, limit?: number) {
+    return this.request<FileMatch[]>("GET", `/projects/${id}/files${query({ q, limit })}`);
   }
 
   // Tickets
@@ -137,8 +149,9 @@ export class HarnessClient {
   startTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/start`);
   }
-  sendMessage(key: string, text: string) {
-    return this.request<Ticket>("POST", `/tickets/${key}/messages`, { text });
+  sendMessage(key: string, text: string, opts: { chat?: boolean } = {}) {
+    const body: MessageBody = opts.chat ? { text, chat: true } : { text };
+    return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);
@@ -158,8 +171,16 @@ export class HarnessClient {
   cancelTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/cancel`);
   }
+  /** Files and folders where the ticket's agent works matching `q`, for @-mentions in a message. */
+  ticketFiles(key: string, q: string, limit?: number) {
+    return this.request<FileMatch[]>("GET", `/tickets/${key}/files${query({ q, limit })}`);
+  }
   listSummaries(key: string) {
     return this.request<Summary[]>("GET", `/tickets/${key}/summaries`);
+  }
+  /** Absolute URL of a summary attachment, token in the query so <img>/<video> can load it. */
+  attachmentUrl(id: string): string {
+    return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
   }
 
   // Sessions (ticket + triage) and transcripts
@@ -169,8 +190,13 @@ export class HarnessClient {
   getSession(id: string) {
     return this.request<Session>("GET", `/sessions/${id}`);
   }
-  transcript(sessionId: string, afterSeq = 0) {
-    return this.request<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=${afterSeq}`);
+  /** The session agent's transcript, or one sub-agent's with `subagentId` */
+  transcript(sessionId: string, afterSeq = 0, subagentId?: string | null) {
+    const sub = subagentId ? `&subagent=${encodeURIComponent(subagentId)}` : "";
+    return this.request<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=${afterSeq}${sub}`);
+  }
+  subagents(sessionId: string) {
+    return this.request<Subagent[]>("GET", `/sessions/${sessionId}/subagents`);
   }
 
   // Watchers

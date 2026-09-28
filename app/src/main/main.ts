@@ -4,8 +4,11 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { ensureService, reloadToken } from "./service";
+import { nodePtySpawn } from "./pty";
+import { ensureService, reloadToken, restartService } from "./service";
+import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
+import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
 import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
 
 // The app root holds package.json, resources/ and dist/ — in dev and inside the packaged .app.
@@ -18,7 +21,7 @@ app.setName("Harness");
 // Debug / screenshot hooks (used by scripts/shoot.ts, scripts/smoke.ts):
 //   HARNESS_THEME=dark|light   force the theme (overrides Settings → Appearance)
 //   HARNESS_THEME_ID=<id>      force one color theme, e.g. catppuccin-mocha (and its appearance)
-//   HARNESS_MENU_AUTOPICK=id   context menus pick this item instead of popping up (smoke tests)
+//   HARNESS_MENU_AUTOPICK=id,… context menus pick the first of these items instead of popping up (smoke tests)
 //   HARNESS_ROUTE=#/ticket/X   open the renderer at a route
 //   HARNESS_CAPTURE=/path.png  capture the window after HARNESS_CAPTURE_DELAY ms, then quit
 //   HARNESS_CAPTURE_SETUP=js   run this in the renderer just before the capture (e.g. click a
@@ -234,14 +237,30 @@ function createWindow() {
   return win;
 }
 
-function sendMenu(cmd: MenuCommand) {
+/** `viaKey`: the item's shortcut was pressed (Electron's triggeredByAccelerator), not the item clicked. */
+function sendMenu(cmd: MenuCommand, viaKey = false) {
   const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!win) {
-    createWindow();
+    // With no window there's no pane to close; anything else opens one.
+    if (cmd !== "pane.close") createWindow();
     return;
   }
-  win.webContents.send("menu", cmd);
+  win.webContents.send("menu", cmd, viaKey);
   win.show();
+}
+
+/**
+ * A menu item for a keyboard command (renderer/state/keys.ts): its label and ⌘ chord come from the
+ * registry, and choosing it sends the command's id to the renderer, which runs it where the focus
+ * is. The renderer handles the same keys itself; the menu is what reaches them from a plugin
+ * iframe or a terminal, which keep keys from the page.
+ */
+function commandItem(id: string, label?: string): MenuItemConstructorOptions {
+  return {
+    label: label ?? COMMAND_BY_ID.get(id)?.label ?? id,
+    accelerator: commandAccelerator(id),
+    click: (_item, _win, event) => sendMenu(id, !!event.triggeredByAccelerator),
+  };
 }
 
 function buildMenu() {
@@ -251,7 +270,7 @@ function buildMenu() {
       submenu: [
         { role: "about" },
         { type: "separator" },
-        { label: "Settings…", accelerator: "CmdOrCtrl+,", click: () => sendMenu("settings") },
+        commandItem("settings", "Settings…"),
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -265,12 +284,14 @@ function buildMenu() {
     {
       label: "File",
       submenu: [
-        { label: "New Session", accelerator: "CmdOrCtrl+N", click: () => sendMenu("new-session") },
+        commandItem("new-session", "New Session"),
+        commandItem("new-terminal"),
         { type: "separator" },
-        { label: "Board", accelerator: "CmdOrCtrl+1", click: () => sendMenu("board") },
-        { label: "Inbox", accelerator: "CmdOrCtrl+2", click: () => sendMenu("inbox") },
+        commandItem("board", "Board"),
+        commandItem("inbox", "Inbox"),
         { type: "separator" },
-        { role: "close" },
+        // ⌘W closes the focused pane, or the window when the board (or no pane) has focus.
+        commandItem("pane.close"),
       ],
     },
     { role: "editMenu" },
@@ -279,7 +300,17 @@ function buildMenu() {
       submenu: [
         // ⌃⌘S is the macOS standard (Finder, Mail, Notes' HIG entry); ⌘0 is already Actual Size.
         // The renderer handles the key itself and reports the state back for the checkmark.
-        { id: "toggle-sidebar", label: "Show Sidebar", type: "checkbox", checked: true, accelerator: "Ctrl+Cmd+S", click: () => sendMenu("toggle-sidebar") },
+        { id: "toggle-sidebar", label: "Show Sidebar", type: "checkbox", checked: true, accelerator: commandAccelerator("toggle-sidebar"), click: (_i, _w, e) => sendMenu("toggle-sidebar", !!e.triggeredByAccelerator) },
+        commandItem("palette"),
+        { type: "separator" },
+        commandItem("tab.next"),
+        commandItem("tab.prev"),
+        { type: "separator" },
+        commandItem("pane.left"),
+        commandItem("pane.right"),
+        commandItem("pane.up"),
+        commandItem("pane.down"),
+        commandItem("pane.zoom", "Maximize Pane"),
         { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
@@ -295,7 +326,7 @@ function buildMenu() {
     { role: "windowMenu" },
     {
       role: "help",
-      submenu: [{ label: "Harness on GitHub", click: () => void shell.openExternal("https://github.com/markhuot") }],
+      submenu: [commandItem("shortcuts"), { type: "separator" }, { label: "Harness on GitHub", click: () => void shell.openExternal("https://github.com/markhuot") }],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -307,6 +338,7 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
+ipcMain.handle("harness:restartService", async () => restartService(appRoot, await getConnection()));
 ipcMain.handle("harness:reloadToken", async (_e, rotated: unknown) => {
   const next = reloadToken(await getConnection(), typeof rotated === "string" ? rotated : undefined);
   // Keep the refreshed token for later getConnection() calls (reloads, new windows).
@@ -330,9 +362,9 @@ ipcMain.handle("harness:revealInFinder", (_e, path: unknown) => {
 });
 ipcMain.handle("harness:contextMenu", (e, raw: unknown) => {
   const items = Array.isArray(raw) ? (raw as ContextMenuItem[]) : [];
-  const autopick = process.env.HARNESS_MENU_AUTOPICK;
+  const autopick = process.env.HARNESS_MENU_AUTOPICK?.split(",");
   if (autopick) {
-    const hit = items.find((i) => i.type !== "separator" && i.id === autopick && i.enabled !== false);
+    const hit = items.find((i) => i.type !== "separator" && autopick.includes(i.id) && i.enabled !== false);
     return hit && hit.type !== "separator" ? hit.id : null;
   }
   return new Promise<string | null>((resolve) => {
@@ -360,6 +392,23 @@ ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
   if (typeof url === "string" && /^(https?|mailto):/.test(url)) await shell.openExternal(url);
 });
 
+// Terminals: PTYs live here, keyed by the renderer's pane leaf id, and outlive pane remounts.
+// Output and exits go to every window; the renderer picks its ids. node-pty loads on first use.
+const broadcast = (channel: string, ...args: unknown[]) => {
+  for (const w of BrowserWindow.getAllWindows()) if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
+};
+let terminalManager: TerminalManager | null = null;
+const terminals = () =>
+  (terminalManager ??= new TerminalManager({
+    spawn: nodePtySpawn(),
+    events: { data: (id, data, end) => broadcast("terminal:data", id, data, end), exit: (id, exit) => broadcast("terminal:exit", id, exit) },
+  }));
+ipcMain.handle("harness:terminal:ensure", (_e, id: unknown, opts: unknown) => terminals().ensure(id, opts));
+ipcMain.handle("harness:terminal:write", (_e, id: unknown, data: unknown) => terminals().write(id, data));
+ipcMain.handle("harness:terminal:resize", (_e, id: unknown, cols: unknown, rows: unknown) => terminals().resize(id, cols, rows));
+ipcMain.handle("harness:terminal:kill", (_e, id: unknown) => terminalManager?.kill(id) ?? false);
+ipcMain.handle("harness:terminal:list", () => terminalManager?.list() ?? []);
+
 // ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
@@ -380,6 +429,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// Never leave shells behind: SIGHUP every PTY on the way out (closing the PTYs hangs up the rest).
+app.on("will-quit", () => terminalManager?.killAll());
+process.on("exit", () => terminalManager?.killAll());
 
 app.on("window-all-closed", () => {
   // macOS convention: keep the app alive without windows. Agents live in the service anyway.

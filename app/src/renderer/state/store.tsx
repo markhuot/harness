@@ -11,6 +11,7 @@ import {
   LIVE_STATUSES,
   needsFirstDonePage,
   reducer,
+  ALL_SCOPE,
   scopeOf,
   scopeProject,
   SEARCH_DEBOUNCE_MS,
@@ -20,8 +21,28 @@ import {
   type Snapshot,
   type State,
 } from "@harness/shared/state";
-import { formatRoute, parseRoute, type Route } from "./route";
+import { formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
+import {
+  closedSessions,
+  focusedTicket,
+  forgetProjectPanes,
+  getPanes,
+  getPaneStore,
+  newTerminalContent,
+  openTerminal as openTerminalPane,
+  orphanSessions,
+  openTicket,
+  pruneTickets,
+  reloadPanes,
+  retainPaneScopes,
+  updateAllPanes,
+  updatePanes,
+  usePanes,
+  watchPaneStore,
+} from "./panes";
+import { terminalCwd, terminalScope } from "./terminal";
 import type { HarnessBridge } from "../../main/types";
+import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
 
 declare global {
   interface Window {
@@ -54,6 +75,18 @@ export interface Store {
   setSearch: (q: string) => void;
   /** Next page of search results */
   loadMoreSearch: () => void;
+  /**
+   * Open a terminal pane on a board, in that board's folder (home on All projects): `projectId`'s
+   * board, All projects for null, or when omitted the board on screen (from elsewhere, the board
+   * last shown). Goes to that board if it isn't the one on screen.
+   */
+  openTerminal: (projectId?: string | null) => void;
+  /** The service's code, from /health and service.status events (null until known) */
+  serviceCode: ServiceCode;
+  /** The service runs older code than this app (see state/service.ts) */
+  serviceStale: boolean;
+  /** Restart the service now; running agents are stopped. Rejects with the reason it didn't. */
+  restartService: () => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -64,13 +97,71 @@ export function useStore(): Store {
   return s;
 }
 
+/**
+ * Keep the shells in the main process in step with the terminal panes: when a change (closing a
+ * pane, removing a project, another window's edit) leaves a session in no scope, its shell is
+ * killed. At startup, pane shells no stored pane shows (left over from before a reload) are killed
+ * too. Only pane session ids (`t:<uuid>`) count: a shell something else made isn't ours to kill.
+ * Every window does this against the same stored panes, so a second kill of a session is a no-op.
+ */
+function useTerminalLifecycle() {
+  useEffect(() => {
+    const terminal = window.harness?.terminal;
+    if (!terminal) return;
+    const kill = (id: string) => void terminal.kill(id).catch(() => {});
+    const unwatch = watchPaneStore((before, after) => closedSessions(before, after).forEach(kill));
+    let live = true;
+    void terminal
+      .list()
+      .then((ids) => {
+        if (!live) return;
+        // Re-read first: another window may have stored a terminal this one hasn't heard about yet.
+        reloadPanes();
+        orphanSessions(ids, getPaneStore()).forEach(kill);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      unwatch();
+    };
+  }, []);
+}
+
+/** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
+function openFromRoute(r: Route) {
+  if (r.view === "board" && r.ticketKey) updatePanes(paneScopeOf(r)!, (s) => openTicket(s, r.ticketKey!, r.tab));
+}
+
 export function useRoute() {
   const [route, setRoute] = useState(() => parseRoute(location.hash));
+  // The route the app launched with opens its ticket once mounted (not during render: that would
+  // update the pane store mid-render). Later hash changes open theirs as they arrive.
+  const initial = useRef(route);
+  useEffect(() => openFromRoute(initial.current), []);
   useEffect(() => {
-    const on = () => setRoute(parseRoute(location.hash));
+    const on = () => {
+      const r = parseRoute(location.hash);
+      openFromRoute(r);
+      setRoute(r);
+    };
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
+  // On the board the hash mirrors the focused ticket pane. replaceState adds no history entry and
+  // fires no hashchange, and opening the focused ticket again is a no-op, so the two never fight.
+  // Each board has its own panes, so this follows the route's scope (leaving for Inbox and coming
+  // back, or switching projects, shows that board's panes again).
+  const scope = paneScopeOf(route);
+  const focused = focusedTicket(usePanes(scope ?? ALL_SCOPE));
+  const mirror = scope ? formatRoute(mirrorRoute(route, focused)) : null;
+  useEffect(() => {
+    if (!mirror || !scope || location.hash === mirror) return;
+    // The panes changed after this render (the initial open above runs in the same commit): the
+    // re-render that's coming mirrors them, so don't drop the ticket from the hash in between.
+    if (formatRoute(mirrorRoute(route, focusedTicket(getPanes(scope)))) !== mirror) return;
+    history.replaceState(history.state, "", mirror);
+    setRoute(parseRoute(mirror));
+  }, [mirror]);
   const navigate = useCallback((r: Route) => {
     const h = formatRoute(r);
     if (location.hash !== h) location.hash = h;
@@ -129,6 +220,7 @@ export function StoreProvider({
 }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [epoch, setEpoch] = useState(0);
+  const [serviceCode, setServiceCode] = useState<ServiceCode>(null);
   const [route, navigate] = useRoute();
   const listeners = useRef(new Set<EventListener>());
   const client = useMemo(() => new HarnessClient({ baseUrl, token }), [baseUrl, token]);
@@ -146,6 +238,11 @@ export function StoreProvider({
     try {
       const snapshot = await loadSnapshot(client, scopeRef.current);
       dispatch({ type: "snapshot", snapshot });
+      // Panes of boards whose project is gone (removed while the app was closed) go, except the
+      // one on screen: a link to a missing project still shows a board.
+      const known = new Set(snapshot.projects.map((p) => p.id));
+      const shown = paneScopeOf(parseRoute(location.hash));
+      retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope));
       // Board cards show the latest summary; backfill for tickets that are still moving
       // (and the most recent done ones). Live summary.added events keep them fresh after.
       const done = snapshot.donePage?.page.tickets.slice(0, 12) ?? snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
@@ -163,7 +260,15 @@ export function StoreProvider({
     let first = true;
     return client.connect({
       onEvent: (e) => {
-        if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
+        // Panes of every board follow deletions (read before the reducer forgets the key).
+        if (e.kind === "ticket.deleted") {
+          const key = stateRef.current.tickets[e.id]?.key;
+          if (key) updateAllPanes((s) => pruneTickets(s, (k) => k !== key));
+        } else if (e.kind === "project.deleted") {
+          forgetProjectPanes(e.id, stateRef.current.projects[e.id]?.key ?? null);
+        }
+        if (e.kind === "service.status") setServiceCode(serviceCodeOf(e.status));
+        else if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
         for (const fn of listeners.current) fn(e);
       },
       onStatus: (connected) => {
@@ -174,6 +279,8 @@ export function StoreProvider({
           // isn't overwritten by the snapshot that follows it.
           const again = !first;
           first = false;
+          // A reconnect may be a restarted service (new code): ask again every time.
+          client.health().then((h) => setServiceCode(serviceCodeOf(h)), () => {});
           void refresh().then(() => again && setEpoch((n) => n + 1));
         }
       },
@@ -294,14 +401,57 @@ export function StoreProvider({
     return () => void listeners.current.delete(fn);
   }, []);
 
+  const restartService = useCallback(async () => {
+    if (window.harness) {
+      const res = await window.harness.restartService();
+      if ("error" in res) throw new Error(res.output ? `${res.error} ${res.output}` : res.error);
+    } else {
+      await client.restartService();
+    }
+  }, [client]);
+  const serviceStale = isServiceStale(serviceCode);
+
   const reconnect = useCallback(async (rotated: string) => {
     if (!onTokenRotated) throw new Error("This window can't switch tokens; reload it.");
     await onTokenRotated(rotated);
   }, [onTokenRotated]);
 
+  // --- Terminals ---------------------------------------------------------------------------
+  useTerminalLifecycle();
+  const openTerminal = useCallback(
+    (projectId?: string | null) => {
+      const r = parseRoute(location.hash);
+      // scopeRef is the board on screen, or the last one shown while elsewhere.
+      const scope = projectId === undefined ? terminalScope(r, scopeRef.current) : scopeOf(projectId);
+      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(terminalCwd(scope, stateRef.current.projects))));
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+    },
+    [navigate],
+  );
+
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch],
+    () => ({
+      state,
+      dispatch,
+      client,
+      socket,
+      onEvent,
+      epoch,
+      route,
+      navigate,
+      refresh,
+      toast,
+      reconnect,
+      boardProjectId,
+      loadMoreDone,
+      setSearch,
+      loadMoreSearch,
+      serviceCode,
+      serviceStale,
+      restartService,
+      openTerminal,
+    }),
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

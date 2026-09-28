@@ -81,6 +81,8 @@ you answer.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
+  Any ticket can become one: ask a ticket's agent for child tickets and it creates them
+  under itself, then reviews and completes them the same way.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in
@@ -92,9 +94,32 @@ you answer.
   project"); triage declines output whose project it can't tell. An update about an existing ticket is sent to
   that ticket as a message.
 
+## Keyboard
+
+You can drive the whole Mac app from the keyboard. Press **?** (or **⌘/**) for the full list,
+and **⌘K** for the command palette, which finds tickets, commands and every action a ticket
+offers. The ones you'll use most:
+
+| Keys | What they do |
+|---|---|
+| h j k l, or the arrows | Move between cards on the board |
+| Enter | Open the card beside the board, with the keyboard in its pane |
+| ⇧⌘[ / ⇧⌘], or 1–9 | Switch tabs in a ticket pane |
+| ⌥⌘ + arrows, or ⌃h ⌃j ⌃k ⌃l | Move to the pane in that direction (left from the board goes to the sidebar) |
+| j k, Space, g G | Scroll a ticket's tab (in the sidebar and lists, j and k move between items) |
+| i | Write to the agent (Escape takes you back to the pane) |
+| / | Search the board |
+| ⌘W | Close the focused pane |
+| ⇧⌘↩ | Maximize or restore the focused pane |
+| Esc | Close a menu or dialog, end a zoom, or close the ticket pane |
+
+Single keys only ever move you around, so a stray keypress can't approve, start or delete
+anything. Those actions are in the palette and on their buttons. While you're using the keyboard,
+the pane (or sidebar) it's acting on has an accent outline, and clicking hides it again.
+
 ## Plugins
 
-Plugins add tabs to the ticket panel, with optional server routes. The built-in **git** plugin
+Plugins add tabs to ticket panes, with optional server routes. The built-in **git** plugin
 adds a **Changes** tab that shows everything a ticket changed: its branch against the base branch,
 including uncommitted and untracked files. Drop your own plugins in `~/.harness/plugins/`. See
 [plugins/README.md](plugins/README.md) for how to write one. `bun run plugins:build` builds the
@@ -105,7 +130,7 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 ```sh
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
-cd app && bun test        # routes, theme resolution, CSS var coverage
+cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
 cd mobile && bun run test # pairing links, connection probe, browser touch → page coordinates, servers, prefs/theme pickers, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos

@@ -1,22 +1,23 @@
 // Integration against the REAL service: boots service/src/daemon.ts with a throwaway
 // HARNESS_HOME (never ~/.harness), launches the built app against it, and walks a dummy-driver
 // ticket through the whole lifecycle in the UI, plus a /browse ticket for the live browser tab and a
-// worktree ticket for the git plugin's Changes tab.
+// worktree ticket for the git plugin's Changes tab and a /agents ticket for the Agents tab.
 //
 //   bun run build && bun scripts/real-service.ts [screenshotDir] [--theme=dark]
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 import { checkChangesTab } from "./lib/changes-check";
+import { checkAgentsTab } from "./lib/agents-check";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "real"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
 mkdirSync(shots, { recursive: true });
 
-const home = mkdtempSync(join(tmpdir(), "harness-real-home-"));
-const projectDir = mkdtempSync(join(tmpdir(), "harness-real-project-"));
+const home = tempDir("harness-real-home-");
+const projectDir = tempDir("harness-real-project-");
 const port = 7800 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
 const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
@@ -28,7 +29,6 @@ const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
-let changesRepo: string | null = null;
 const shot = async (name: string) => {
   await Bun.sleep(350); // let fade-in animations settle
   await app!.screenshot(join(shots, `${name}-${theme}.png`));
@@ -121,7 +121,34 @@ try {
   check("agent's browser tools ran", transcript.some((e) => e.content.type === "tool_call" && e.content.name.includes("browser_open")));
 
   // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
-  changesRepo = (await checkChangesTab({ api, app, check, shot })).repo;
+  await checkChangesTab({ api, app, check, shot });
+
+  // --- 7. Sub-agents: a /agents ticket's Agents tab, a sub-agent's transcript, the transcript links.
+  await checkAgentsTab({ api, app, check, shot, project });
+
+  // --- 8. A plain task ticket asked for a child conducts it: badge, rollup and Tickets tab, live.
+  const parent = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Audit the PRs /child Rebase the PR", driver: "dummy", start: true });
+  await go(`#/board/${project.id}/ticket/${parent.key}`);
+  const kid = await until("child created", async () => (await api<TicketDetail>("GET", `/tickets/${parent.key}`)).children[0], 15000);
+  check("the task ticket's child has it as parent", kid.parentId === parent.id && kid.title === "Rebase the PR", `${kid.key} parent=${kid.parentId}`);
+  const card = await until("parent card shows the conductor rollup", () =>
+    js<boolean>(`!!document.querySelector('.card[data-key=${JSON.stringify(parent.key)}] [data-testid=conductor-rollup]')`),
+  ).catch(() => false);
+  check("board card of a task with a child gets the conductor rollup", card);
+  // Cards dropped the Conductor badge (the rollup marks them); the ticket page keeps it.
+  check(
+    "the task's page shows the Conductor badge",
+    !!(await until("Conductor badge on the ticket page", () => js<boolean>(`[...document.querySelectorAll('.detail .badge-violet')].some(b => b.textContent.includes("Conductor"))`)).catch(() => false)),
+  );
+  await go(`#/board/${project.id}/ticket/${parent.key}/children`);
+  const row = await until("child row in the Tickets tab", () => js<boolean>(`!!document.querySelector('.child-row[data-key=${JSON.stringify(kid.key)}]')`)).catch(() => false);
+  check("task with a child gets the Tickets tab listing it", row && (await exists(".tab[data-tab=children]")));
+  const conducted = await until("parent submitted after the child is done", async () => {
+    const d = await api<TicketDetail>("GET", `/tickets/${parent.key}`);
+    return d.ticket.status === "review" && d.children.every((c) => c.status === "done") && d.ticket.kind === "task";
+  }, 30000).catch(() => false);
+  check("the task ticket reviewed and completed its child, then went to review", conducted);
+  await shot("8-task-conducts-child");
 
   await go(`#/board/${project.id}`);
   await Bun.sleep(600);
@@ -131,12 +158,12 @@ try {
   console.error("✗", (e as Error).message);
   if (app) await shot("failure").catch(() => {});
 } finally {
-  app?.close();
+  await app?.close();
   daemon.kill();
   await daemon.exited;
-  rmSync(home, { recursive: true, force: true });
-  rmSync(projectDir, { recursive: true, force: true });
-  if (changesRepo) rmSync(changesRepo, { recursive: true, force: true });
+  // HARNESS_HOME, the project and the seeded repo, now that nothing writes into them (and
+  // tempDir's exit listener covers a crash).
+  await cleanupTempDirs();
 }
 console.log(c.failures ? `${c.failures} check(s) failed` : "all checks passed");
 process.exit(c.failures ? 1 : 0);

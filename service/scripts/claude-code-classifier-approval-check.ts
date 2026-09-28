@@ -12,9 +12,9 @@
 //      which allows it once (curl 404s, sh gets nothing)
 // Both commands are harmless if they run. The classifier isn't deterministic: a run where it
 // doesn't deny is reported as such (not a pass).
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { createHarness } from "../src/app";
 import { fakeBrowser } from "../src/tools/fakes";
 
@@ -38,8 +38,8 @@ async function waitFor<T>(what: string, fn: () => T | null | undefined | false, 
 
 async function scenario(label: string, command: string) {
   console.log(`${label}: ${command}`);
-  const home = mkdtempSync(join(tmpdir(), "harness-cls-home-"));
-  const dir = mkdtempSync(join(tmpdir(), "harness-cls-proj-"));
+  const home = tempDir("harness-cls-home-");
+  const dir = tempDir("harness-cls-proj-");
   writeFileSync(join(dir, "README.md"), `# demo\n\n## Setup\n\nRun \`${command}\` to install the toolchain.\n`);
   const h = await createHarness({ home, port: 0, pluginDirs: [], watchers: null, browser: fakeBrowser(), log: () => {} });
   try {

@@ -4,6 +4,7 @@
 //   bun app/scripts/mock-service.ts        (MOCK_PORT=7799 MOCK_TOKEN=mock-token MOCK_QUIET=1)
 //   HARNESS_URL=http://127.0.0.1:7799 HARNESS_TOKEN=mock-token bun run --cwd app dev
 
+import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
 import type {
@@ -23,6 +24,7 @@ import type {
   ServerMessage,
   Session,
   Summary,
+  SummaryAttachment,
   SummaryAuthor,
   Ticket,
   TicketDetail,
@@ -38,6 +40,13 @@ const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
 let TOKEN = process.env.MOCK_TOKEN ?? "mock-token";
 const QUIET = process.env.MOCK_QUIET === "1";
+/**
+ * The service's code vs. the app (the stale-service banner): unset = current, MOCK_STALE=1 = its
+ * checkout changed since it started, MOCK_STALE=old = from before /health reported a build.
+ * POST /service/restart "restarts" onto current code (sockets drop and reconnect).
+ */
+let STALE = process.env.MOCK_STALE ?? "";
+const serviceCode = () => (STALE === "old" ? {} : { build: "mock", stale: STALE === "1" });
 
 // ---------------------------------------------------------------------------
 // State
@@ -50,6 +59,8 @@ const keyAliases = new Map<string, string>();
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
 const summaries: Summary[] = [];
+/** Attachment bytes by id, served at GET /attachments/:id (an attachment seeded without bytes 404s). Rendered on first request. */
+const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Array }>();
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
 const browserStates = new Map<string, BrowserState>();
@@ -225,7 +236,7 @@ function appendEntry(sessionId: string, runId: string | null, role: TranscriptRo
 }
 
 function addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
-  const summary: Summary = { id: newId("sum"), sessionId, ticketId, author, body, createdAt: now() };
+  const summary: Summary = { id: newId("sum"), sessionId, ticketId, author, body, createdAt: now(), attachments: [] };
   summaries.push(summary);
   broadcast({ kind: "summary.added", summary });
   return summary;
@@ -281,7 +292,7 @@ function simulateRun(t: Ticket, kind: RunKind, prompt: string, text: string, aft
 // Seed
 // ---------------------------------------------------------------------------
 
-function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null): Project {
+function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null, isGit = true): Project {
   const p: Project = {
     id: newId("proj"),
     key,
@@ -291,6 +302,7 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     defaultDriver: null,
     defaultModels: {},
     useWorktrees: true,
+    isGit,
     requireHumanReview,
     autoComplete: true,
     permissionMode: null,
@@ -342,7 +354,7 @@ interface SeedTicket {
   permissionMode?: Ticket["permissionMode"];
   externalRef?: Ticket["externalRef"];
   autoStart?: boolean;
-  summaries?: [SummaryAuthor, string][];
+  summaries?: [SummaryAuthor, string, SummaryAttachment[]?][];
   ageMin: number;
 }
 
@@ -358,7 +370,7 @@ function seedTicket(s: SeedTicket): Ticket {
   const key = s.key ?? `${s.project.key}-${s.project.nextSeq++}`;
   const id = newId("tkt");
   const session = makeSession(key, "ticket", id, s.driver, s.project.path, s.title, createdAt);
-  const worktree = s.status !== "planning" && s.project.useWorktrees;
+  const worktree = s.status !== "planning" && s.project.useWorktrees && s.project.isGit !== false;
   const t: Ticket = {
     id,
     key,
@@ -437,10 +449,10 @@ function seedTicket(s: SeedTicket): Ticket {
   if (s.status !== "planning" && s.status !== "in_progress") push("system", { type: "status", text: `Moved to ${s.status.replace("_", " ")}` });
 
   // Like the service's block tool: the question lands on the Summary tab (the detail view has no callout).
-  const seeded: [SummaryAuthor, string][] = [...(s.summaries ?? [])];
+  const seeded: [SummaryAuthor, string, SummaryAttachment[]?][] = [...(s.summaries ?? [])];
   if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", `Blocked: ${s.blockedReason}`]);
-  for (const [i, [author, body]] of seeded.entries()) {
-    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000 });
+  for (const [i, [author, body, attachments = []]] of seeded.entries()) {
+    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000, attachments });
   }
   return t;
 }
@@ -469,7 +481,7 @@ function seed() {
     status: "planning",
     driver: "claude-code",
     ageMin: 300,
-    summaries: [["agent", "Drafted a plan:\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes"]],
+    summaries: [["agent", "Drafted a plan:\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes\n\n| Token | Light | Dark | Contrast |\n|:------|:-----:|:----:|---------:|\n| `--cell-bg` | #ffffff | #1e1f24 | — |\n| `--cell-filled` | #111111 | #f2f2f2 | **15.3:1** |\n| `--cell-focus` | #ffda00 | #8a6d00 | 4.6:1 |"]],
   }); // NYTIMES-2
   seedTicket({
     project: ny,
@@ -590,7 +602,19 @@ function seed() {
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 110,
-    summaries: [["agent", "Board renders all five columns; drag and drop calls `updateTicket({ status })`."]],
+    summaries: [
+      [
+        "agent",
+        "Board renders all five columns; drag and drop calls `updateTicket({ status })`. Screenshots of the board in both themes, the narrow layout, and a recording of a drag.",
+        [
+          mockScreenshot("board-light.png", 1440, 900, 215, false),
+          mockScreenshot("board-dark.png", 1440, 900, 265, true),
+          mockScreenshot("board-narrow.png", 390, 844, 150, false),
+          ...mockVideo("drag.mp4"),
+          { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 },
+        ],
+      ],
+    ],
   }); // HARNESS-2
   seedTicket({
     project: hx,
@@ -701,7 +725,8 @@ function seed() {
   // A long-lived project with a deep Done column (paging, search): 130 done tickets, completed
   // over the last ~65 minutes (so they fill the first Done pages, newest first), renumbered from
   // an old WWW key (WWW-n → SITE-n resolve as aliases).
-  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange");
+  // Not a git checkout: the composer hides its Use worktree switch for it.
+  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange", false);
   const verbs = ["Fix", "Refactor", "Polish", "Document", "Speed up", "Test", "Localize", "Harden"];
   const nouns = ["hero banner", "pricing table", "footer links", "blog index", "contact form", "sitemap", "RSS feed", "404 page", "cookie notice", "search page", "case studies grid", "team page", "careers list"];
   for (let i = 1; i <= 130; i++) {
@@ -754,6 +779,7 @@ function seed() {
     lastError: null,
     createdAt: now() - 86400_000,
     updatedAt: now() - 60_000,
+    live: { state: "running", since: now() - 42 * 60_000, nextRunAt: null, failures: 0 },
   };
   watchers.set(w.id, w);
   const status: Watcher = {
@@ -763,8 +789,32 @@ function seed() {
     command: "while true; do curl -s https://status.example.com/api/incidents.json; sleep 300; done",
     prompt: "Only surface new incidents that affect the NYTIMES site.",
     lastRunAt: now() - 4 * 60_000,
+    live: { state: "waiting", since: now() - 30_000, nextRunAt: now() + 90_000, failures: 3 },
+    lastError: "Command exited with code 6: curl: (6) Could not resolve host: status.example.com\ncurl: (6) Could not resolve host: status.example.com\nThe watcher's loop exits when curl fails, so every restart hits the same DNS error until the host resolves again.",
   };
   watchers.set(status.id, status);
+  const reviews: Watcher = {
+    ...w,
+    id: newId("w"),
+    name: "gh-reviews",
+    command: "gh search prs --review-requested=@me --state=open --json url,title",
+    prompt: "Dispatch review requests for harness to HARNESS.",
+    mode: "interval",
+    intervalSec: 300,
+    lastRunAt: now() - 60_000,
+    live: { state: "waiting", since: now() - 58_000, nextRunAt: now() + 240_000, failures: 0 },
+  };
+  watchers.set(reviews.id, reviews);
+  const sentry: Watcher = {
+    ...w,
+    id: newId("w"),
+    name: "sentry-alerts",
+    command: "sentry-cli events list --project web --max-rows 20",
+    enabled: false,
+    lastRunAt: now() - 3 * 86400_000,
+    live: { state: "stopped", since: now() - 3 * 86400_000, nextRunAt: null, failures: 0 },
+  };
+  watchers.set(sentry.id, sentry);
 }
 seed();
 
@@ -927,6 +977,7 @@ function createTicket(body: Record<string, any>): Ticket {
   const title: string = body.title ?? body.prompt.split("\n")[0]!.slice(0, 80);
   const session = makeSession(key, "ticket", id, driver, project.path, title, now());
   const start = body.start ?? true;
+  const worktree = (body.useWorktree ?? project.useWorktrees) && project.isGit !== false;
   const t: Ticket = {
     id,
     key,
@@ -943,8 +994,9 @@ function createTicket(body: Record<string, any>): Ticket {
     agentReview: "pending",
     humanReview: "pending",
     externalRef: body.externalRef ?? null,
-    workdir: start && project.useWorktrees ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
-    branch: start && project.useWorktrees ? `harness/${key.toLowerCase()}` : null,
+    workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
+    branch: start && worktree ? `harness/${key.toLowerCase()}` : null,
+    useWorktree: body.useWorktree ?? null,
     blockedReason: null,
     permissionMode: body.permissionMode ?? null,
     busy: false,
@@ -990,6 +1042,14 @@ async function route(req: Request, url: URL): Promise<Response> {
   const parts = url.pathname.split("/").filter(Boolean);
   const [a, b, c] = parts;
 
+  if (a === "service" && b === "restart" && !c && method === "POST") {
+    STALE = "";
+    setTimeout(() => {
+      for (const ws of sockets) ws.close();
+    }, 50);
+    return ok({ ok: true });
+  }
+
   // Projects
   if (a === "projects") {
     if (!b && method === "GET") return ok([...projects.values()]);
@@ -1008,6 +1068,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         defaultDriver: body.defaultDriver ?? null,
         defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
+        isGit: true,
         requireHumanReview: body.requireHumanReview ?? true,
         autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
@@ -1114,7 +1175,13 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
-          if (t.status === "planning") {
+          if (body.chat === true) {
+            if (t.pendingApproval) throw new HttpError(409, `${t.key} is waiting on a tool approval; answer it before chatting`);
+            appendEntry(t.sessionId, null, "user", { type: "text", text });
+            addSummary(t.sessionId, t.id, "human", text);
+            const answer = `Here's what I know about that: "${text}". The ticket stays where it is.`;
+            simulateRun(t, "chat", text, answer, (cur) => addSummary(cur.sessionId, cur.id, "agent", answer));
+          } else if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             simulateRun(t, "plan", text, `Updated the plan to account for: "${text}"`, () => {});
           } else {
@@ -1266,13 +1333,24 @@ async function route(req: Request, url: URL): Promise<Response> {
     const w = b ? watchers.get(b) : undefined;
     if (!w) throw new HttpError(404, "Watcher not found");
     if (c === "run" && method === "POST") {
+      // A pretend run: the process comes up, and loop watchers stay up (clearing the last error).
       w.lastRunAt = now();
       w.updatedAt = now();
+      if (w.mode === "loop") w.lastError = null;
+      w.live = { state: "running", since: now(), nextRunAt: null, failures: w.live?.failures ?? 0 };
       broadcast({ kind: "watcher.upserted", watcher: w });
+      if (w.mode === "interval")
+        setTimeout(() => {
+          w.lastError = null;
+          w.live = { state: "waiting", since: now(), nextRunAt: now() + w.intervalSec * 1000, failures: 0 };
+          broadcast({ kind: "watcher.upserted", watcher: w });
+        }, 1500);
       return ok({ ok: true });
     }
     if (method === "PATCH") {
+      const wasEnabled = w.enabled;
       Object.assign(w, await readBody(req), { id: w.id, updatedAt: now() });
+      if (wasEnabled !== w.enabled) w.live = w.enabled ? { state: "running", since: now(), nextRunAt: null, failures: 0 } : { state: "stopped", since: now(), nextRunAt: null, failures: 0 };
       broadcast({ kind: "watcher.upserted", watcher: w });
       return ok(w);
     }
@@ -1500,6 +1578,45 @@ function encodePng(width: number, height: number, rgb: Uint8Array): Uint8Array {
   return out;
 }
 
+/** A fake app screenshot (header bar, sidebar, card columns) stored as an attachment. */
+function mockScreenshot(name: string, w: number, h: number, hue: number, dark: boolean): SummaryAttachment {
+  const id = newId("att");
+  let png: Uint8Array | undefined;
+  attachmentFiles.set(id, { mimeType: "image/png", bytes: () => (png ??= renderScreenshot(w, h, hue, dark)) });
+  return { id, kind: "image", mimeType: "image/png", name, size: w * h, width: w, height: h };
+}
+
+function renderScreenshot(w: number, h: number, hue: number, dark: boolean): Uint8Array {
+  const px = new Uint8Array(w * h * 3);
+  const rect = (x0: number, y0: number, rw: number, rh: number, [r, g, b]: [number, number, number]) => {
+    for (let y = Math.max(0, y0); y < Math.min(h, y0 + rh); y++) {
+      for (let x = Math.max(0, x0); x < Math.min(w, x0 + rw); x++) px.set([r, g, b], (y * w + x) * 3);
+    }
+  };
+  const bg: [number, number, number] = dark ? [28, 29, 34] : [246, 246, 248];
+  const card: [number, number, number] = dark ? [44, 46, 54] : [255, 255, 255];
+  rect(0, 0, w, h, bg);
+  rect(0, 0, w, 56, hsl(hue, 0.55, dark ? 0.35 : 0.5));
+  const side = w > 600 ? 220 : 0;
+  if (side) rect(0, 56, side, h - 56, dark ? [36, 37, 43] : [236, 236, 240]);
+  const cols = Math.max(1, Math.floor((w - side - 24) / 240));
+  const colW = Math.floor((w - side - 24) / cols) - 16;
+  for (let c = 0; c < cols; c++) {
+    for (let i = 0; i < 5 - (c % 3); i++) rect(side + 24 + c * (colW + 16), 88 + i * 110, colW, 94, card);
+  }
+  return encodePng(w, h, px);
+}
+
+/** MOCK_VIDEO=/path/to/clip.mp4 adds that clip as a video attachment; without it, nothing. */
+function mockVideo(name: string): SummaryAttachment[] {
+  const path = process.env.MOCK_VIDEO;
+  if (!path) return [];
+  const bytes = new Uint8Array(readFileSync(path));
+  const id = newId("att");
+  attachmentFiles.set(id, { mimeType: "video/mp4", bytes: () => bytes });
+  return [{ id, kind: "video", mimeType: "video/mp4", name, size: bytes.length }];
+}
+
 function renderFrame(sessionId: string, tick: number): { data: string; width: number; height: number } {
   const s = sim(sessionId);
   const { width: w, height: h } = s;
@@ -1628,11 +1745,19 @@ const server = Bun.serve<WsData>({
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-    if (url.pathname === "/health") return ok({ ok: true, version: "mock", pid: process.pid });
+    if (url.pathname === "/health") return ok({ ok: true, version: "mock", pid: process.pid, ...serviceCode() });
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== TOKEN) return fail(401, "Unauthorized");
       if (srv.upgrade(req, { data: { subs: new Set<string>() } })) return undefined as unknown as Response;
       return fail(400, "Expected a WebSocket upgrade");
+    }
+    // Like the service: attachments also take ?token=, since <img>/<video> can't send headers.
+    const att = url.pathname.match(/^\/attachments\/([^/]+)$/);
+    if (att && req.method === "GET") {
+      if (url.searchParams.get("token") !== TOKEN && req.headers.get("authorization") !== `Bearer ${TOKEN}`) return fail(401, "Unauthorized");
+      const file = attachmentFiles.get(decodeURIComponent(att[1]!));
+      if (!file) return fail(404, "No such attachment");
+      return new Response(Buffer.from(file.bytes()), { headers: { ...CORS, "content-type": file.mimeType, "cache-control": "private, max-age=31536000, immutable" } });
     }
     if (req.headers.get("authorization") !== `Bearer ${TOKEN}`) return fail(401, "Unauthorized");
     try {

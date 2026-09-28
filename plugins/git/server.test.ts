@@ -1,9 +1,9 @@
 // Git plugin routes against real temporary git repositories, through the real service.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessClient, type Project, type Ticket } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../../service/src/app";
 import { DummyDriver } from "../../service/src/drivers/dummy";
 import { stubBrowser } from "../../service/src/testing/fakes";
@@ -16,14 +16,13 @@ let client: HarnessClient;
 let root: string;
 
 beforeAll(async () => {
-  root = mkdtempSync(join(tmpdir(), "harness-git-plugin-"));
+  root = tempDir("harness-git-plugin-");
   h = await createHarness({ home: join(root, "home"), port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
   client = new HarnessClient({ baseUrl: h.url, token: h.token });
   await client.updateSettings({ defaultDriver: "dummy" });
 });
 afterAll(async () => {
   await h.stop();
-  rmSync(root, { recursive: true, force: true });
 });
 
 async function git(cwd: string, ...args: string[]) {

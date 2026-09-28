@@ -15,7 +15,8 @@ import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
 import { AppearanceSection } from "./settings/AppearanceSettings";
 
-const SECTIONS = [
+/** The settings page's sections, in order ([id, label]); the ⌘K palette lists them too. */
+export const SETTINGS_SECTIONS = [
   ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
@@ -48,7 +49,7 @@ export function SettingsView() {
       <div className="view-body">
         <div className="settings-col">
           <nav className="settings-nav">
-            {SECTIONS.map(([id, label]) => (
+            {SETTINGS_SECTIONS.map(([id, label]) => (
               <button key={id} onClick={() => scrollTo(id)}>
                 {label}
               </button>

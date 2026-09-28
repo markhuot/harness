@@ -81,15 +81,42 @@
   overflow-y: auto;
   padding: 0 10px 10px;
 }
-.new-session-btn {
-  width: 100%;
-  height: 32px;
+/* New session ⌘N, split with a chevron that opens New session / New terminal. */
+.new-session-split {
+  display: flex;
   margin-bottom: 14px;
+}
+.new-session-btn {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
   justify-content: flex-start;
   font-weight: 500;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .new-session-btn svg {
   color: var(--accent);
+}
+.new-session-more {
+  display: flex;
+}
+.new-session-chevron {
+  width: 26px;
+  height: 32px;
+  padding: 0;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  color: var(--text-3);
+}
+.new-session-chevron:hover:not(:disabled),
+.new-session-chevron[aria-expanded="true"] {
+  color: var(--text);
+  z-index: 1;
+}
+.menu .kbd {
+  margin-left: 12px;
 }
 .nav {
   display: flex;
@@ -205,13 +232,7 @@
 
 /* ------------------------------------------------------------------ board */
 
-.board-layout {
-  display: flex;
-  height: 100%;
-  min-height: 0;
-}
 .board-pane {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -260,12 +281,6 @@
   min-height: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-column);
-  border: 1px solid transparent;
-  transition: background 0.12s, border-color 0.12s;
-}
-.column.drag-over {
-  border-color: var(--accent);
-  background: var(--accent-soft);
 }
 .column-head {
   display: flex;
@@ -307,19 +322,34 @@
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s, outline-color 0.12s;
   animation: fade-in 0.15s ease-out;
+  outline: none;
+  /* Scrolling a card into view (the keyboard cursor) keeps its ring in view too. */
+  scroll-margin: 6px;
 }
 .card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
+/* The keyboard cursor, while it has the focus: a halo outside the card, apart from the border and
+   shadow that .selected / .open / .related use, so it reads alongside any of them. */
+.card:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The cursor parked (the focus is elsewhere) in keyboard mode: where the board's keys will land. */
+html[data-input="keyboard"] .card.cursor:not(:focus) {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+/* Open in the focused pane (selected), or in another pane (open). */
 .card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), var(--shadow);
 }
-.card.dragging {
-  opacity: 0.45;
+.card.open {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 .card-top {
   display: flex;
@@ -397,33 +427,17 @@
 
 /* ------------------------------------------------------------------ ticket detail */
 
+/* A ticket pane (sized by the pane workspace, see panes.css). */
 .detail {
-  /* The dragged width (--detail-width, see panes.css), else a responsive default; always ≥360px,
-     ≤80% of the window, and leaving the board at least 320px. */
-  width: clamp(360px, var(--detail-width, clamp(440px, 40vw, 680px)), min(80vw, 100% - 320px));
-  flex: none;
-  border-left: 1px solid var(--border);
   background: var(--bg-elev);
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
-  animation: slide-in 0.16s ease-out;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.04);
+  animation: pane-in 0.16s ease-out;
 }
-.detail.wide {
-  flex: 1;
-  width: auto;
-}
-.board-layout:has(.detail.wide) .board-pane {
-  display: none;
-}
-.detail.wide {
-  border-left: 0;
-  animation: none;
-}
-@keyframes slide-in {
+@keyframes pane-in {
   from {
-    transform: translateX(16px);
     opacity: 0;
   }
 }
@@ -431,6 +445,10 @@
   gap: 8px;
   padding: 0 12px 0 20px;
   border-bottom: 0;
+}
+.detail-titlebar > :is(.detail-key, .status-pill) {
+  flex: none;
+  white-space: nowrap;
 }
 .detail-key {
   font-family: var(--mono);
@@ -600,6 +618,158 @@
   margin: 2px 0 4px;
 }
 
+/* Summary attachments: thumbnails under the text, and the lightbox they open */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.attachment-thumb {
+  position: relative;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  cursor: zoom-in;
+}
+.attachment-thumb:hover {
+  border-color: var(--border-strong);
+}
+.attachment-thumb img,
+.attachment-thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.attachment-thumb.is-missing {
+  cursor: default;
+}
+.attachment-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding-left: 2px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+.attachment-missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: center;
+}
+.attachment-missing > span:not(.muted) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.overlay.lightbox {
+  align-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.78);
+}
+.overlay.lightbox .modal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.lightbox-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* Room for the prev/next buttons beside the image, not over it. */
+  padding: 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-stage img,
+.lightbox-stage video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-sunken);
+}
+.lightbox-stage .attachment-missing {
+  width: 320px;
+  height: 200px;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  cursor: pointer;
+}
+.lightbox-nav:hover {
+  background: rgb(0 0 0 / 0.7);
+}
+.lightbox-nav.prev {
+  left: 0;
+}
+.lightbox-nav.next {
+  right: 0;
+}
+.lightbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  color: #fff;
+  font-size: 13px;
+}
+.lightbox-bar .muted {
+  color: rgb(255 255 255 / 0.6);
+}
+.lightbox-bar .btn-ghost {
+  color: rgb(255 255 255 / 0.8);
+}
+.lightbox-bar .btn-ghost:hover:not(:disabled) {
+  color: #fff;
+}
+.lightbox-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Composer */
 .composer {
   border-top: 1px solid var(--border);
@@ -633,6 +803,9 @@
   align-items: center;
   gap: 8px;
   margin-top: 7px;
+  font-size: 11.5px;
+}
+.composer-bar .switch {
   font-size: 11.5px;
 }
 
@@ -998,6 +1171,82 @@
 .inbox-outcome {
   font-size: 11.5px;
 }
+/* Watchers and their live process state, above the Inbox items */
+.watcher-strip {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.watcher-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  font-size: 12px;
+}
+.watcher-row + .watcher-row {
+  border-top: 1px solid var(--border);
+}
+.watcher-row.muted-row {
+  opacity: 0.6;
+}
+.watcher-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-3);
+}
+.watcher-dot[data-tone="green"] {
+  background: var(--green);
+}
+.watcher-dot[data-tone="red"] {
+  background: var(--red);
+}
+.watcher-dot[data-state="running"] {
+  animation: watcher-pulse 2s ease-in-out infinite;
+}
+@keyframes watcher-pulse {
+  50% {
+    box-shadow: 0 0 0 3px var(--green-soft);
+  }
+}
+.watcher-name {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 0;
+}
+.watcher-name:hover {
+  text-decoration: underline;
+}
+.watcher-sub {
+  padding-left: 16px;
+  min-height: 22px;
+  font-size: 11.5px;
+}
+.watcher-error {
+  margin-left: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--red-soft);
+  color: var(--red);
+  padding: 4px 6px;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.watcher-error.expanded {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
 .inbox-detail {
   flex: 1;
   min-width: 0;
@@ -1032,11 +1281,18 @@
   flex-wrap: wrap;
   row-gap: 8px;
 }
+/* Own row under the pickers: the switches on the left, the submit button on the right. */
 .new-session-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  flex-basis: 100%;
+}
+.new-session-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-right: auto;
 }
 .new-session-prompt {
   width: 100%;
@@ -1174,30 +1430,24 @@
   font-family: var(--mono);
   font-size: 11.5px;
 }
-.card.drop-before {
-  box-shadow: 0 -5px 0 -2px var(--accent), var(--shadow-sm);
-}
-.column-body.drop-end::after {
-  content: "";
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-  flex: none;
-}
 
 /* ------------------------------------------------------------------ sidebar project rows */
 
 .nav-row {
   position: relative;
 }
-/* The gear replaces the open-ticket count on hover (and stays while its settings are open). */
+/* The gear replaces the open-ticket count on hover (and stays while its settings are open). It's
+   on Tab after the sidebar's list stop, so while hidden it's invisible and click-through rather
+   than display: none (which would take it out of the tab order), and it shows while focused. */
 .nav-gear {
   position: absolute;
   right: 3px;
   top: 3px;
   width: 22px;
   height: 22px;
-  display: none;
+  display: grid;
+  opacity: 0;
+  pointer-events: none;
   place-items: center;
   border: 0;
   border-radius: 4px;
@@ -1208,10 +1458,12 @@
 .nav-row:hover .nav-gear,
 .nav-row.settings-open .nav-gear,
 .nav-gear:focus-visible {
-  display: grid;
+  opacity: 1;
+  pointer-events: auto;
 }
 .nav-row:hover .nav-count,
-.nav-row.settings-open .nav-count {
+.nav-row.settings-open .nav-count,
+.nav-row:has(.nav-gear:focus-visible) .nav-count {
   visibility: hidden;
 }
 .nav-gear:hover {
@@ -1220,4 +1472,45 @@
 }
 .nav-row.settings-open .nav-gear {
   color: var(--accent-text);
+}
+
+/* @-mention autocomplete (components/MentionTextarea.tsx) */
+.mention-menu {
+  position: fixed;
+  z-index: 60;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.mention-menu li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  cursor: default;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.mention-menu li.on {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.mention-name {
+  font-family: var(--mono);
+  color: var(--text);
+}
+.mention-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-size: 11.5px;
 }

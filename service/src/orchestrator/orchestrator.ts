@@ -1,7 +1,7 @@
 // The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
 // notifications and triage. Implements HarnessOps for tools.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import type {
@@ -13,6 +13,7 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
+  FileMatch,
   HumanReviewBody,
   ReopenBody,
   Project,
@@ -22,6 +23,7 @@ import type {
   Session,
   Settings,
   Summary,
+  SummaryAttachment,
   SummaryAuthor,
   Ticket,
   TicketDetail,
@@ -31,8 +33,9 @@ import type {
   TranscriptRole,
   UpdateTicketBody,
   Watcher,
+  WatcherLive,
 } from "@harness/shared";
-import { checkProjectKey, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
+import { checkProjectKey, isConductor, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -62,9 +65,11 @@ import * as prompts from "./prompts";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { ensureWorktree, isGitRepo } from "./worktree";
+import { attachMentions, searchPaths } from "./files";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
 import { resolveRunModel } from "./models";
+import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 import { PermissionGate } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
@@ -85,6 +90,8 @@ export interface WatcherSupervisor {
   sync(watchers: Watcher[]): void;
   runNow(id: string): Promise<void>;
   stopAll(): Promise<void>;
+  /** The watcher's process state, when the supervisor tracks it */
+  live?(id: string): WatcherLive | undefined;
 }
 
 export interface OrchestratorOptions {
@@ -110,6 +117,8 @@ export interface OrchestratorOptions {
   /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
   autoModeRules?: AutoModeRulesProvider;
   classifierTimeoutMs?: number;
+  /** How often start() re-checks for runs no live job owns (default 60s; 0 disables) */
+  reconcileIntervalMs?: number;
 }
 
 interface ActiveRun {
@@ -158,8 +167,12 @@ export interface IngestInput {
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+/** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
+const READ_ONLY_RUNS: RunKind[] = ["plan", "triage", "chat"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
+/** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
+const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -204,6 +217,13 @@ function validPermissionMode(value: unknown): PermissionMode | null {
   if (value === undefined || value === null || value === "") return null;
   if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
   return value as PermissionMode;
+}
+
+/** Validate a ticket's worktree choice from a request body (null / omitted → the project's). */
+function validUseWorktree(value: unknown): boolean | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "boolean") throw badRequest("useWorktree must be true, false or null");
+  return value;
 }
 
 /** Validate a project color from a request body: a preset id or "#rrggbb" (null / "" → none). */
@@ -251,6 +271,8 @@ export class Orchestrator {
   private starting = new Set<string>();
   private watcherRunner: WatcherSupervisor | null;
   private stopping = false;
+  private reconcileIntervalMs: number;
+  private reconcileTimer: ReturnType<typeof setInterval> | null = null;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -284,15 +306,23 @@ export class Orchestrator {
     this.queue = new RunQueue({
       limit: () => this.settings().maxConcurrentRuns,
       execute: (job) => this.execute(job),
-      onError: (job, err) => this.log(`run ${job.runId} crashed: ${errMsg(err)}`),
+      onError: (job, err) => {
+        this.log(`run ${job.runId} crashed: ${errMsg(err)}`);
+        this.failCrashedRun(job.runId, errMsg(err));
+      },
     });
+    this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver });
       },
       onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
         const w = this.store.watchers.update(id, patch);
-        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: w });
+        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
+      },
+      onLive: (id: string) => {
+        const w = this.store.watchers.get(id);
+        if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
     this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner(handlers);
@@ -307,27 +337,65 @@ export class Orchestrator {
     const stale = this.recoverStaleRuns();
     if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
     this.syncWatchers();
+    if (this.reconcileIntervalMs > 0) {
+      this.reconcileTimer = setInterval(() => {
+        try {
+          const n = this.reconcileRuns();
+          if (n) this.log(`marked ${n} orphaned run(s) as failed`);
+        } catch (err) {
+          this.log(`run reconciliation failed: ${errMsg(err)}`);
+        }
+      }, this.reconcileIntervalMs);
+      this.reconcileTimer.unref?.();
+    }
   }
 
   /** Runs left queued/running by a previous process become failed ("service restarted"). */
   recoverStaleRuns(): number {
-    const stale = this.store.runs.listUnfinished();
-    for (const run of stale) {
-      if (this.active.has(run.id)) continue;
-      const r = this.store.runs.finish(run.id, "failed", "service restarted");
-      this.bus.emit({ kind: "run.upserted", run: r });
-      this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): service restarted`);
-      const session = this.store.sessions.get(run.sessionId);
-      if (session?.kind === "triage" && session.triageStatus === "triaging") {
-        this.store.sessions.update(session.id, { triageStatus: "failed", outcome: "Interrupted: service restarted" });
-      }
-      this.touchSession(run.sessionId);
+    return this.failOrphanedRuns("service restarted");
+  }
+
+  /**
+   * Runs the database still has as queued/running that no live job owns become failed. A run
+   * ends up like that when recording its end threw (a full disk fails every SQLite write), so
+   * the record is repaired once writes work again rather than on the next restart.
+   */
+  reconcileRuns(): number {
+    return this.failOrphanedRuns("the run ended without recording a result");
+  }
+
+  private failOrphanedRuns(reason: string): number {
+    const orphans = this.store.runs.listUnfinished().filter((r) => !this.active.has(r.id) && !this.queue.has(r.id));
+    for (const run of orphans) this.interruptRun(run, reason);
+    return orphans.length;
+  }
+
+  /** A run that threw out of execute(): record it failed now, or leave it to reconcileRuns. */
+  private failCrashedRun(runId: string, message: string) {
+    try {
+      const run = this.store.runs.get(runId);
+      if (run && (run.status === "queued" || run.status === "running")) this.interruptRun(run, message);
+    } catch (err) {
+      this.log(`couldn't record crashed run ${runId} as failed (${errMsg(err)}); will retry`);
     }
-    return stale.length;
+  }
+
+  private interruptRun(run: Run, reason: string) {
+    const r = this.store.runs.finish(run.id, "failed", reason);
+    this.bus.emit({ kind: "run.upserted", run: r });
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
+    const session = this.store.sessions.get(run.sessionId);
+    if (session?.kind === "triage" && session.triageStatus === "triaging") {
+      this.store.sessions.update(session.id, { triageStatus: "failed", outcome: `Interrupted: ${reason}` });
+    }
+    this.touchSession(run.sessionId);
   }
 
   async stop() {
     this.stopping = true;
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    this.reconcileTimer = null;
     this.queue.pause();
     await this.watcherRunner?.stopAll().catch(() => {});
     const actives = [...this.active.values()];
@@ -336,6 +404,17 @@ export class Orchestrator {
       a.controller.abort();
     }
     await Promise.race([Promise.all(actives.map((a) => this.queue.whenSessionIdle(a.run.sessionId))), Bun.sleep(5000)]);
+  }
+
+  /** Nothing queued, running or starting: restarting the service now interrupts no agent. */
+  isIdle(): boolean {
+    return (
+      this.queue.pendingCount === 0 &&
+      this.queue.runningCount === 0 &&
+      this.active.size === 0 &&
+      this.starting.size === 0 &&
+      this.background.size === 0
+    );
   }
 
   /** Resolves when no runs are queued or running (tests). */
@@ -589,11 +668,43 @@ export class Orchestrator {
       dependents: this.store.tickets.dependents(ticket.key).map((t) => t.key),
       children: this.store.tickets.list({ parentId: ticket.id }),
       parent: ticket.parentId ? this.store.tickets.get(ticket.parentId) : null,
+      subagents: this.store.subagents.listBySession(ticket.sessionId),
     };
+  }
+
+  /** The @-mention autocomplete for a new session in `projectId`: paths under the project folder. */
+  projectFiles(projectId: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+    const project = this.store.projects.get(projectId);
+    if (!project) throw notFound(`Unknown project: ${projectId}`);
+    return searchPaths(project.path, q, clampLimit(limit, 50));
+  }
+
+  /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
+  ticketFiles(key: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+    const found = this.store.tickets.lookup(key);
+    if (!found) throw notFound(`Unknown ticket: ${key}`);
+    const { ticket } = found;
+    const session = this.store.sessions.get(ticket.sessionId);
+    const project = this.store.projects.get(ticket.projectId);
+    const root = [ticket.workdir, session?.cwd, project?.path].find((d): d is string => !!d && existsSync(d));
+    return root ? searchPaths(root, q, clampLimit(limit, 50)) : Promise.resolve([]);
   }
 
   summaries(key: string): Summary[] {
     return this.store.summaries.listBySession(this.requireTicket(key).sessionId);
+  }
+
+  /** Where an attachment's stored copy lives (agents read it from there). */
+  attachmentFilePath(a: Pick<SummaryAttachment, "id" | "mimeType">): string {
+    return attachmentPath(this.paths.attachmentsDir, a);
+  }
+
+  /** A summary attachment and its stored file for GET /attachments/:id, or null when either is gone. */
+  attachmentFile(id: string): { attachment: SummaryAttachment; path: string } | null {
+    const attachment = this.store.summaries.attachment(id);
+    if (!attachment) return null;
+    const path = this.attachmentFilePath(attachment);
+    return existsSync(path) ? { attachment, path } : null;
   }
 
   async createTicket(body: CreateTicketBody): Promise<Ticket> {
@@ -608,6 +719,7 @@ export class Orchestrator {
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
     const model = validateModelId("model", body.model);
     const permissionMode = validPermissionMode(body.permissionMode);
+    const useWorktree = validUseWorktree(body.useWorktree);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -643,6 +755,7 @@ export class Orchestrator {
         externalRef: body.externalRef ?? null,
         workdir: null,
         model,
+        useWorktree,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -650,6 +763,7 @@ export class Orchestrator {
     const p2 = this.store.projects.get(project.id);
     if (p2) this.bus.emit({ kind: "project.upserted", project: p2 });
     this.touchSession(ticket.sessionId);
+    if (parentId) this.touchTicket(parentId); // its childCount changed
     this.appendStatus(ticket.sessionId, null, "Ticket created");
 
     const depsDone = this.depsDone(ticket);
@@ -737,12 +851,16 @@ export class Orchestrator {
     }
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
+    const files = this.store.summaries.attachmentsBySession(ticket.sessionId).map((a) => attachmentPath(this.paths.attachmentsDir, a));
     this.store.transaction(() => {
       this.store.tickets.delete(ticket.id);
       this.store.sessions.delete(ticket.sessionId);
     });
+    removeAttachmentFiles(files);
+    rmSync(join(this.paths.scratchDir, ticket.sessionId), { recursive: true, force: true });
     this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
     this.bus.emit({ kind: "session.deleted", id: ticket.sessionId });
+    if (ticket.parentId) this.touchTicket(ticket.parentId); // its childCount changed
     this.kickScheduler();
   }
 
@@ -754,10 +872,24 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
-  async sendMessage(key: string, text: string): Promise<Ticket> {
+  /**
+   * A human message to the ticket's agent. By default it acts on the ticket: a blocked or review
+   * ticket goes back to in progress. With chat, the agent answers in a read-only chat run and the
+   * ticket keeps its status and reviews.
+   */
+  async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
+    if (opts.chat) {
+      if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
+      this.notCompleting(ticket, "messaged");
+      // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
+      this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
+      this.enqueueRun(ticket.sessionId, "chat", text);
+      return this.store.tickets.get(ticket.id)!;
+    }
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
+    this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
     switch (ticket.status) {
@@ -874,6 +1006,7 @@ export class Orchestrator {
       return t;
     }
     if (decision !== "request_changes") throw badRequest(`Invalid decision: ${decision}`);
+    this.notCompleting(ticket, "sent back");
     return this.requestChanges(ticket, notes, by);
   }
 
@@ -940,32 +1073,48 @@ export class Orchestrator {
     return s;
   }
 
-  transcript(sessionId: string, after = 0) {
+  /** The session agent's transcript, or with `subagentId` one sub-agent's (404 when unknown). */
+  transcript(sessionId: string, after = 0, subagentId: string | null = null) {
     this.getSession(sessionId);
-    return this.store.transcript.list(sessionId, after);
+    if (subagentId && !this.store.subagents.get(sessionId, subagentId)) throw notFound(`Unknown sub-agent: ${subagentId}`);
+    return this.store.transcript.list(sessionId, after, undefined, subagentId);
+  }
+
+  subagents(sessionId: string) {
+    this.getSession(sessionId);
+    return this.store.subagents.listBySession(sessionId);
   }
 
   // =========================================================================
   // Watchers, triage
   // =========================================================================
 
-  listWatchers() {
-    return this.store.watchers.list();
+  listWatchers(): Watcher[] {
+    return this.store.watchers.list().map((w) => this.withLive(w));
+  }
+
+  /** The stored watcher plus what its process is doing now (see WatcherLive). */
+  private withLive(w: Watcher): Watcher {
+    const live = this.watcherRunner?.live?.(w.id);
+    return live ? { ...w, live } : w;
   }
 
   createWatcher(body: WatcherInput & { name: string; command: string }): Watcher {
     const input = this.validateWatcher(body, true) as WatcherInput & { name: string; command: string };
-    const w = this.store.watchers.create(input);
-    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    const created = this.store.watchers.create(input);
+    // Sync first so the event (and the response) carry the new process state.
     this.syncWatchers();
+    const w = this.withLive(this.store.watchers.get(created.id) ?? created);
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
     return w;
   }
 
   updateWatcher(id: string, body: WatcherInput): Watcher {
     if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
-    const w = this.store.watchers.update(id, this.validateWatcher(body, false))!;
-    this.bus.emit({ kind: "watcher.upserted", watcher: w });
+    this.store.watchers.update(id, this.validateWatcher(body, false));
     this.syncWatchers();
+    const w = this.withLive(this.store.watchers.get(id)!);
+    this.bus.emit({ kind: "watcher.upserted", watcher: w });
     return w;
   }
 
@@ -1102,9 +1251,10 @@ export class Orchestrator {
     return this.active.get(ctx.runId);
   }
 
-  async postSummary(ctx: ToolContext, body: string): Promise<void> {
+  async postSummary(ctx: ToolContext, body: string, attachments?: string[]): Promise<void> {
     if (!body?.trim()) throw new Error("summary is empty");
-    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim());
+    const prepared = prepareAttachments(attachments, ctx.cwd);
+    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim(), storeAttachments(this.paths.attachmentsDir, prepared));
   }
 
   async updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void> {
@@ -1128,10 +1278,18 @@ export class Orchestrator {
     if (a) a.blocked = true;
   }
 
-  async submitForReview(ctx: ToolContext, summary: string): Promise<void> {
+  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
-    this.submit(t, summary?.trim() || "Work submitted for review.", "agent");
+    // A parent in review (or done) would strand its children: their reviews and merges are its job.
+    const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
+    if (open.length) {
+      throw new Error(
+        `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
+      );
+    }
+    const prepared = prepareAttachments(attachments, ctx.cwd);
+    this.submit(t, summary?.trim() || "Work submitted for review.", "agent", storeAttachments(this.paths.attachmentsDir, prepared));
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
@@ -1186,7 +1344,7 @@ export class Orchestrator {
 
   async listTickets_(ctx: ToolContext, filter: BoardListFilter = {}): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }> {
     const own = ctx.ticket ? this.ctxTicket(ctx) : null;
-    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own?.kind === "conductor" ? "children" : own ? "project" : "all");
+    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own && isConductor(own) ? "children" : own ? "project" : "all");
     const statuses = filter.statuses?.length ? filter.statuses : undefined;
     const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
     if (bad) throw new Error(`Unknown status: ${bad}`);
@@ -1225,7 +1383,12 @@ export class Orchestrator {
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
       children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
-      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({ author: s.author, body: s.body, createdAt: s.createdAt })),
+      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({
+        author: s.author,
+        body: s.body,
+        createdAt: s.createdAt,
+        attachments: s.attachments.map((a) => ({ name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
+      })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
@@ -1355,8 +1518,9 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
-    if (ctx.runKind === "conductor" && own.kind === "conductor") {
-      // A conductor's tickets are its children, on its driver/model unless it picks another.
+    if (input.child ?? own.kind === "conductor") {
+      // Children run on the parent's driver/model unless it picks another. Any ticket can take
+      // children; having one makes it act as a conductor (isConductor).
       return this.asTool(() =>
         this.createTicket({
           projectId: project.id,
@@ -1370,6 +1534,7 @@ export class Orchestrator {
           driver: input.driver ?? own.driver,
           model: input.model !== undefined ? input.model : input.driver ? null : own.model,
           permissionMode,
+          useWorktree: input.useWorktree,
         }),
       );
     }
@@ -1385,6 +1550,7 @@ export class Orchestrator {
         driver: input.driver,
         model: input.model,
         permissionMode,
+        useWorktree: input.useWorktree,
       }),
     );
   }
@@ -1484,10 +1650,9 @@ export class Orchestrator {
 
   // --- conductor ---
 
-  private conductorOf(ctx: ToolContext): Ticket {
-    const c = this.ctxTicket(ctx);
-    if (c.kind !== "conductor") throw new Error("Only conductor tickets can review or complete other tickets");
-    return c;
+  /** The caller, standing in for its children's human reviewer. Any ticket may: childOf checks the parent. */
+  private conductorOf(ctx: ToolContext, tool: string): Ticket {
+    return this.boardActor(ctx, tool);
   }
 
   private childOf(conductor: Ticket, key: string): Ticket {
@@ -1498,7 +1663,7 @@ export class Orchestrator {
   }
 
   async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
+    const child = this.childOf(this.conductorOf(ctx, "review_ticket"), key);
     try {
       return this.applyReview(child, decision, notes ?? "", "conductor");
     } catch (err) {
@@ -1507,7 +1672,7 @@ export class Orchestrator {
   }
 
   async completeTicket_(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
+    const child = this.childOf(this.conductorOf(ctx, "complete_ticket"), key);
     if (child.status !== "review" || child.agentReview !== "approved" || child.humanReview !== "approved") {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
@@ -1847,11 +2012,19 @@ export class Orchestrator {
     return classifier;
   }
 
+  /** HarnessOps.fileOutputScope: review runs only read too, whatever the ticket's mode. */
+  async fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }> {
+    const ticket = ctx.ticket ? (this.store.tickets.get(ctx.ticket.id) ?? null) : null;
+    const readOnly = READ_ONLY_RUNS.includes(ctx.runKind) || ctx.runKind === "review" || this.permissionModeFor(ticket) === "read_only";
+    return { scratchDir: join(this.paths.scratchDir, ctx.session.id), readOnly };
+  }
+
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
-    // Plan runs are read-only for every driver (claude-code runs them in --permission-mode plan).
-    const mode: PermissionMode = ctx.runKind === "plan" || ctx.runKind === "triage" ? "read_only" : this.permissionModeFor(ticket);
+    // Plan, triage and chat runs are read-only for every driver (claude-code runs plan runs in
+    // --permission-mode plan, chat runs in dontAsk).
+    const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
     return this.gate.check(toolName, input, {
       mode,
       runKind: ctx.runKind,
@@ -1868,10 +2041,10 @@ export class Orchestrator {
   }
 
   /** Transcript status entry for a permission decision (rendered as an audit row). */
-  private logPermission(sessionId: string, runId: string | null, entry: PermissionDecisionLog) {
+  private logPermission(sessionId: string, runId: string | null, entry: PermissionDecisionLog, subagentId?: string) {
     const verb = entry.decision === "allow" ? (entry.source === "classifier" ? "Auto-approved" : "Allowed") : entry.decision === "ask" ? "Asked you" : "Denied";
     const took = entry.latencyMs !== undefined ? ` (${entry.backend ?? "classifier"}, ${(entry.latencyMs / 1000).toFixed(1)}s)` : "";
-    this.append(sessionId, runId, "system", { type: "status", text: `${verb}: ${entry.summary} — ${entry.reason}${took}`, permission: entry });
+    this.append(sessionId, runId, "system", { type: "status", text: `${verb}: ${entry.summary} — ${entry.reason}${took}`, permission: entry }, subagentId);
   }
 
   /** The last few transcript entries as short lines, for the classifier's sense of intent. */
@@ -1941,7 +2114,7 @@ export class Orchestrator {
         branch = null;
         const project = this.store.projects.get(ticket.projectId)!;
         workdir = project.path;
-        if (project.useWorktrees && (await isGitRepo(project.path))) {
+        if ((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path))) {
           try {
             ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
           } catch (err) {
@@ -1975,16 +2148,16 @@ export class Orchestrator {
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
       }
-      if (t.kind === "conductor" && to === "in_progress") queueMicrotask(() => this.flushConductor(t.id));
+      if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
       if (to === "done") this.kickScheduler();
     }
     return t;
   }
 
-  private submit(ticket: Ticket, summary: string, author: SummaryAuthor) {
+  private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
     const project = this.store.projects.get(ticket.projectId);
     const humanReview = project && !project.requireHumanReview ? "approved" : "pending";
-    this.addSummary(ticket.sessionId, ticket.id, author, summary);
+    this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
     this.transition(ticket, "review", { agentReview: "pending", humanReview, blockedReason: null }, "Moved to review", summary);
   }
 
@@ -2017,13 +2190,24 @@ export class Orchestrator {
     this.enqueueRun(t.sessionId, "complete", prompts.completePrompt(t));
   }
 
+  /**
+   * Refuse to queue work behind a complete run. The work run would start after the merge, in the
+   * worktree the complete run just removed, fail, and block a ticket that is already done.
+   */
+  private notCompleting(t: Ticket, what: string) {
+    if (!this.completing(t)) return;
+    throw conflict(
+      `${t.key} is completing: its complete run is merging the branch and removing the worktree, so it can't be ${what} now. Once it's done, re-open it with notes if anything needs to change.`,
+    );
+  }
+
   /** A complete run is queued or running for the ticket. */
   private completing(t: Ticket): boolean {
     return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
   }
 
   private enqueueReview(t: Ticket) {
-    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId)));
+    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
   }
 
   private allChildrenDone(t: Ticket): boolean {
@@ -2074,7 +2258,7 @@ export class Orchestrator {
     // Busy conductors are flushed from afterRun (which runs after the run left `active`).
     if ([...this.active.values()].some((a) => a.run.sessionId === c.sessionId) || this.queue.pendingFor(c.sessionId).length) return;
     this.conductorBuffer.delete(conductorId);
-    this.enqueueRun(c.sessionId, "conductor", prompts.conductorUpdatePrompt(buf));
+    this.enqueueRun(c.sessionId, this.workKind(c), prompts.conductorUpdatePrompt(buf));
   }
 
   // =========================================================================
@@ -2117,61 +2301,24 @@ export class Orchestrator {
       offeredGrants: [],
     };
     this.active.set(run.id, active);
-    run = this.store.runs.markRunning(run.id);
-    active.run = run;
-    this.bus.emit({ kind: "run.upserted", run });
-    const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
-    this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
-
-    let error: string | null = null;
-    const cwd = (run.kind === "plan" ? null : ticket?.workdir) ?? session.cwd ?? project?.path ?? this.paths.home;
-    if (!driver) error = `Unknown driver: ${run.driver}`;
-    else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
-    else {
-      const ctx: ToolContext = {
-        runId: run.id,
-        runKind: run.kind,
-        session,
-        ticket,
-        cwd,
-        ops: this.opsFacade,
-        browser: this.browser,
-        signal: controller.signal,
-      };
-      const tools = this.tools(run.kind, driver);
-      const token = randomBytes(24).toString("hex");
-      this.mcpRuns.set(token, { tools, ctx });
-      active.mcpToken = token;
-      try {
-        const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
-        const children = ticket?.kind === "conductor" ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
-        const req: RunRequest = {
-          runId: run.id,
-          kind: run.kind,
-          prompt: run.prompt,
-          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
-          cwd,
-          model,
-          permissionMode: this.permissionModeFor(ticket, project),
-          grants: this.runGrants(run.kind, ticket, project, active),
-          state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
-          tools,
-          toolContext: ctx,
-          mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
-          signal: controller.signal,
-        };
-        error = await this.consume(driver.run(req), active, controller.signal);
-      } catch (err) {
-        if (!controller.signal.aborted) error = errMsg(err);
-      } finally {
-        this.mcpRuns.delete(token);
-        active.mcpToken = null;
-      }
+    let error: string | null;
+    try {
+      error = await this.drive(active, session, ticket, project, driver);
+    } catch (err) {
+      // Bookkeeping threw (e.g. a full disk fails every SQLite write): stop the agent, fail the run.
+      controller.abort();
+      error = errMsg(err);
     }
 
     const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
-    run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
-    this.active.delete(run.id);
+    try {
+      run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
+    } finally {
+      // Even when the write fails, the run is over: reconcileRuns fails the row once it can.
+      this.active.delete(run.id);
+    }
+    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
     // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
     // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
     // input), and a grant left over would put every later run in ask mode (planGrants). A failed
@@ -2193,6 +2340,82 @@ export class Orchestrator {
     this.kickScheduler();
   }
 
+  /** Start the driver and consume its events; returns the run error, if any. */
+  private async drive(active: ActiveRun, session: Session, ticket: Ticket | null, project: Project | null, driver: Driver | undefined): Promise<string | null> {
+    const { controller } = active;
+    const run = this.store.runs.markRunning(active.run.id);
+    active.run = run;
+    this.bus.emit({ kind: "run.upserted", run });
+    const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
+    this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
+
+    let error: string | null = null;
+    // A chat about a done ticket falls back to the checkout once the complete run removed the worktree.
+    const workdir = run.kind === "plan" || (run.kind === "chat" && ticket?.workdir && !existsSync(ticket.workdir)) ? null : ticket?.workdir;
+    const cwd = workdir ?? session.cwd ?? project?.path ?? this.paths.home;
+    if (!driver) error = `Unknown driver: ${run.driver}`;
+    else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
+    else {
+      const ctx: ToolContext = {
+        runId: run.id,
+        runKind: run.kind,
+        session,
+        ticket,
+        cwd,
+        ops: this.opsFacade,
+        browser: this.browser,
+        signal: controller.signal,
+      };
+      const tools = this.tools(run.kind, driver);
+      const token = randomBytes(24).toString("hex");
+      this.mcpRuns.set(token, { tools, ctx });
+      active.mcpToken = token;
+      try {
+        const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
+        const children = ticket ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
+        const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
+        const req: RunRequest = {
+          runId: run.id,
+          kind: run.kind,
+          prompt,
+          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
+          cwd,
+          model,
+          permissionMode: run.kind === "chat" ? "read_only" : this.permissionModeFor(ticket, project),
+          grants: this.runGrants(run.kind, ticket, project, active),
+          state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
+          tools,
+          toolContext: ctx,
+          mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
+          signal: controller.signal,
+        };
+        error = await this.consume(driver.run(req), active, controller.signal);
+      } catch (err) {
+        if (!controller.signal.aborted) error = errMsg(err);
+      } finally {
+        this.mcpRuns.delete(token);
+        active.mcpToken = null;
+      }
+    }
+    return error;
+  }
+
+  /**
+   * The run's prompt with the files it @-mentions attached (DESIGN.md "File mentions"). The
+   * transcript keeps the prompt as written, plus a status line naming what was attached.
+   */
+  private async withMentions(sessionId: string, runId: string, prompt: string, cwd: string): Promise<string> {
+    try {
+      const a = await attachMentions(prompt, cwd);
+      if (a.attached.length) this.appendStatus(sessionId, runId, `Attached ${a.attached.map((p) => `@${p}`).join(", ")}`);
+      for (const s of a.skipped) this.appendStatus(sessionId, runId, `Didn't attach @${s.path}: ${s.reason}`);
+      return a.prompt;
+    } catch (err) {
+      this.appendStatus(sessionId, runId, `Couldn't attach mentioned files: ${errMsg(err)}`);
+      return prompt;
+    }
+  }
+
   /** Iterate driver events until done or aborted; returns the run error, if any. */
   private async consume(events: AsyncIterable<DriverEvent>, active: ActiveRun, signal: AbortSignal): Promise<string | null> {
     const it = events[Symbol.asyncIterator]();
@@ -2209,7 +2432,15 @@ export class Orchestrator {
         return error;
       }
       if (next.done) return error;
-      const e = this.handleEvent(active, next.value);
+      let e: string | null;
+      try {
+        e = this.handleEvent(active, next.value);
+      } catch (err) {
+        // Recording the event failed: close the driver so its finally stops the agent process.
+        const r = it.return?.();
+        if (r) r.catch(() => {});
+        throw err;
+      }
       if (e) error = e;
     }
   }
@@ -2221,15 +2452,16 @@ export class Orchestrator {
         this.bus.emit({ kind: "transcript.delta", sessionId: run.sessionId, runId: run.id, text: ev.text });
         return null;
       case "text":
-        if (ev.text.trim()) active.lastText = ev.text;
-        this.append(run.sessionId, run.id, "assistant", { type: "text", text: ev.text });
+        // A sub-agent's text is its own report to the agent, not the run's last word.
+        if (ev.text.trim() && !ev.subagentId) active.lastText = ev.text;
+        this.append(run.sessionId, run.id, "assistant", { type: "text", text: ev.text }, ev.subagentId);
         return null;
       case "thinking":
-        this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text });
+        this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text }, ev.subagentId);
         return null;
       case "tool_call":
         active.calls.set(ev.callId, { toolName: ev.name, input: ev.input });
-        this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input });
+        this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input }, ev.subagentId);
         return null;
       case "tool_result":
         if (!ev.result.isError && active.denials.length) {
@@ -2240,14 +2472,19 @@ export class Orchestrator {
             active.denials = active.denials.filter((d) => grantKey(d.toolName, d.input) !== key);
           }
         }
-        this.append(run.sessionId, run.id, "tool", {
-          type: "tool_result",
-          callId: ev.callId,
-          name: ev.name,
-          output: ev.result.content,
-          isError: !!ev.result.isError,
-        });
+        this.append(
+          run.sessionId,
+          run.id,
+          "tool",
+          { type: "tool_result", callId: ev.callId, name: ev.name, output: ev.result.content, isError: !!ev.result.isError },
+          ev.subagentId,
+        );
         return null;
+      case "subagent": {
+        const subagent = this.store.subagents.upsert(run.sessionId, run.id, ev.subagent);
+        if (subagent) this.bus.emit({ kind: "subagent.upserted", subagent });
+        return null;
+      }
       case "state":
         if (run.kind !== "review") this.store.sessions.setDriverState(run.sessionId, ev.state);
         return null;
@@ -2257,7 +2494,7 @@ export class Orchestrator {
         this.appendStatus(run.sessionId, run.id, ev.text);
         return null;
       case "permission":
-        this.logPermission(run.sessionId, run.id, ev.log);
+        this.logPermission(run.sessionId, run.id, ev.log, ev.subagentId);
         return null;
       case "permission_denied":
         active.denials.push({ toolName: ev.toolName, input: ev.input, reason: ev.reason });
@@ -2292,6 +2529,11 @@ export class Orchestrator {
     if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
     if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
+      // A done ticket stays done: a run queued before it completed can only fail on the removed worktree.
+      if (ticket.status === "done" && run.kind !== "complete") {
+        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
+        return;
+      }
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
         this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
@@ -2310,12 +2552,12 @@ export class Orchestrator {
             const question = active.lastText!.trim();
             this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
             this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
-          } else if (!moreWork && (run.kind === "work" || this.allChildrenDone(ticket))) {
+          } else if (!moreWork && this.allChildrenDone(ticket)) {
             this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
             this.enqueueReview(this.store.tickets.get(ticket.id)!);
           }
         }
-        if (run.kind === "conductor") this.flushConductor(ticket.id);
+        this.flushConductor(ticket.id);
         break;
       }
       case "complete":
@@ -2323,6 +2565,9 @@ export class Orchestrator {
         break;
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+        break;
+      case "chat":
+        if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
         break;
       case "plan":
         break;
@@ -2337,10 +2582,10 @@ export class Orchestrator {
 
   private buildOps(): HarnessOps {
     return {
-      postSummary: (c, b) => this.postSummary(c, b),
+      postSummary: (c, b, a) => this.postSummary(c, b, a),
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
-      submitForReview: (c, s) => this.submitForReview(c, s),
+      submitForReview: (c, s, a) => this.submitForReview(c, s, a),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),
@@ -2364,6 +2609,7 @@ export class Orchestrator {
       declineWork: (c, r, title) => this.declineWork(c, r, title),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
+      fileOutputScope: (c) => this.fileOutputScope(c),
       listWatchers: (c) => this.listWatchers_(c),
       getSettings: (c) => this.getSettings_(c),
       listDrivers: (c) => this.listDrivers_(c),
@@ -2388,8 +2634,8 @@ export class Orchestrator {
   // Persistence + event helpers
   // =========================================================================
 
-  private append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent) {
-    const entry = this.store.transcript.append(sessionId, runId, role, content);
+  private append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent, subagentId?: string | null) {
+    const entry = this.store.transcript.append(sessionId, runId, role, content, subagentId ?? null);
     this.bus.emit({ kind: "transcript.appended", entry });
     return entry;
   }
@@ -2398,8 +2644,14 @@ export class Orchestrator {
     return this.append(sessionId, runId, "system", { type: "status", text });
   }
 
-  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
-    const summary = this.store.summaries.add({ sessionId, ticketId, author, body });
+  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string, attachments: SummaryAttachment[] = []) {
+    let summary: Summary;
+    try {
+      summary = this.store.summaries.add({ sessionId, ticketId, author, body, attachments });
+    } catch (err) {
+      removeAttachmentFiles(attachments.map((a) => attachmentPath(this.paths.attachmentsDir, a)));
+      throw err;
+    }
     this.bus.emit({ kind: "summary.added", summary });
     return summary;
   }

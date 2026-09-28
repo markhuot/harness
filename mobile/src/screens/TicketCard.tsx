@@ -4,11 +4,11 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
-import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
+import { isConductor, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO, RADIUS } from "../theme/tokens";
-import { Badge, Chip, DriverBadge, KindBadge, ProjectKey, ReviewMark, Spinner } from "../ui/kit";
+import { Badge, Chip, DriverBadge, ProjectKey, ReviewMark, Spinner } from "../ui/kit";
 import { ModelBadge } from "../ui/selects";
 import { ConductorRollup } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
@@ -27,11 +27,11 @@ export interface CardProps {
 export const TicketCard = memo(function TicketCard({ ticket: t, state, showProject, onMove, onOpenKey }: CardProps) {
   const c = useColors();
   const deps = dependencyStates(state, t);
-  const children = t.kind === "conductor" ? childrenOf(state, t.id) : [];
-  const progress = t.kind === "conductor" ? progressOf(children) : null;
+  const children = isConductor(t) ? childrenOf(state, t.id) : [];
+  const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
-  const ready = isReady(t);
+  const customDriver = !dim && hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
 
@@ -44,6 +44,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       ]}
     >
       <View style={styles.top}>
+        {showProject && project && <ProjectKey k={project.key} color={project.color} size="sm" />}
         <Text style={[styles.key, { color: c.text3 }]}>{t.key}</Text>
         {parent && (
           <View style={[styles.parentChip, { backgroundColor: c.violetSoft }]}>
@@ -100,18 +101,12 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         </View>
       )}
 
-      <View style={styles.wrap}>
-        {showProject && project && <ProjectKey k={project.key} color={project.color} size="sm" />}
-        {!dim && hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
-        <ModelBadge model={t.model} driver={t.driver} />
-        <KindBadge ticket={t} />
-        <View style={{ flex: 1 }} />
-        {ready && (
-          <Badge tone="green" icon="check">
-            Ready
-          </Badge>
-        )}
-      </View>
+      {(customDriver || t.model) && (
+        <View style={styles.wrap}>
+          {customDriver && <DriverBadge driver={t.driver} />}
+          <ModelBadge model={t.model} driver={t.driver} />
+        </View>
+      )}
     </View>
   );
 
@@ -158,7 +153,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
   if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
-  if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
+  if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || isConductor(a.ticket) || a.ticket.parentId)) return false;
   return true;
 }
 

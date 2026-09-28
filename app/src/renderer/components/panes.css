@@ -1,4 +1,5 @@
-/* Pane chrome: the collapsible, resizable sidebar and the resizable ticket panel. */
+/* Pane chrome: the collapsible, resizable sidebar and the pane workspace (board + ticket panes
+   split and resized by dividers, see PaneWorkspace.tsx). */
 
 /* ------------------------------------------------------------------ resize handles */
 
@@ -44,9 +45,17 @@
   cursor: col-resize;
   -webkit-app-region: no-drag;
 }
+.resize-overlay-y {
+  cursor: row-resize;
+}
 .is-resizing,
 .is-resizing * {
   cursor: col-resize !important;
+  user-select: none !important;
+}
+.is-resizing-y,
+.is-resizing-y * {
+  cursor: row-resize !important;
   user-select: none !important;
 }
 
@@ -102,18 +111,261 @@
 .sidebar-toggle:hover {
   color: var(--text);
 }
-/* The first header in the main area clears the traffic lights and the toggle. */
-.main :is(.view > .view-header, .board-pane > .view-header, .inbox-list > .view-header, .detail.wide .detail-titlebar) {
+/* The first header in the main area clears the traffic lights and the toggle. In the pane
+   workspace that's only the top-left pane's (the zoomed one while zoomed). */
+.main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar) {
   transition: padding-left 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
-.sidebar-collapsed .main :is(.view > .view-header, .board-pane > .view-header, .inbox-list > .view-header, .detail.wide .detail-titlebar) {
+.sidebar-collapsed .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar) {
   padding-left: var(--chrome-inset);
 }
 
-/* ------------------------------------------------------------------ ticket panel */
+/* ------------------------------------------------------------------ pane workspace */
 
-/* A wide ticket panel can leave the board narrow (≥320px): its header sheds extras instead of
-   wrapping or clipping. */
+.pane-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Positioned by layoutPanes as fractions of the workspace. */
+.pane {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.pane > .board-pane,
+.pane > .detail,
+.pane > .terminal-pane {
+  flex: 1;
+  min-height: 0;
+}
+/* Only headers along the window's top edge drag the window; a lower pane's header is just a header. */
+.pane:not(.pane-top) .view-header {
+  -webkit-app-region: no-drag;
+}
+/* Zoomed: one pane fills the workspace; the others stay mounted underneath, out of reach. */
+.pane.zoomed {
+  z-index: 5;
+}
+.pane.covered {
+  visibility: hidden;
+}
+/* With more than one pane, the focused one's header takes a faint accent tint. */
+.pane-workspace.multi:not(.has-zoom) .pane.focused :is(.board-pane > .view-header, .detail-titlebar) {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Keyboard mode (html[data-input="keyboard"], state/inputModality.ts): the pane the keyboard acts
+   on gets an inset accent ring, drawn over its content (plugin iframes and the browser canvas
+   included) without taking pointer events. A click switches back to pointer mode and hides it, and
+   it steps aside while the sidebar holds the focus. */
+.pane.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.active::after {
+  opacity: 1;
+}
+
+/* A divider's hit area straddles the boundary; its visible line is the 1px border between panes. */
+.pane-divider {
+  position: absolute;
+  z-index: 20;
+  touch-action: none;
+  outline: 0;
+  -webkit-app-region: no-drag;
+}
+.pane-divider-v {
+  width: 7px;
+  cursor: col-resize;
+}
+.pane-divider-h {
+  height: 7px;
+  cursor: row-resize;
+}
+.pane-divider::after {
+  content: "";
+  position: absolute;
+  background: var(--border);
+  transition: background-color 0.12s ease 0.08s;
+}
+.pane-divider-v::after {
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+}
+.pane-divider-h::after {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 1px;
+}
+.pane-divider:is(:hover, .dragging, :focus-visible)::after {
+  background: var(--accent);
+}
+.pane-divider-v:is(:hover, .dragging, :focus-visible)::after {
+  left: 2px;
+  width: 3px;
+}
+.pane-divider-h:is(:hover, .dragging, :focus-visible)::after {
+  top: 2px;
+  height: 3px;
+}
+.pane-divider:focus-visible::after {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* ------------------------------------------------------------------ drag to split */
+
+/* Over every pane (and its iframes and canvas) while a card or pane header is being dragged. */
+.pane-drop-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  -webkit-app-region: no-drag;
+}
+/* Where the drop lands: the half of the pane under the pointer. */
+.pane-drop-preview {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+  transition: left 0.14s cubic-bezier(0.2, 0, 0, 1), top 0.14s cubic-bezier(0.2, 0, 0, 1), width 0.14s cubic-bezier(0.2, 0, 0, 1), height 0.14s cubic-bezier(0.2, 0, 0, 1);
+  animation: pane-drop-in 0.14s ease-out;
+}
+@keyframes pane-drop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* The drag image: a compact chip with the ticket's key and title (see paneDrag.tsx). */
+.drag-chip {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12px;
+  box-shadow: var(--shadow);
+}
+.drag-chip-key {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.drag-chip-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+/* A ticket pane's header grip: drag it onto another pane's half to move the pane there. */
+.pane-grip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  margin: 0 -4px 0 -8px;
+  border-radius: 4px;
+  color: var(--text-3);
+  cursor: grab;
+  -webkit-app-region: no-drag;
+}
+.pane-grip:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.pane-grip:active {
+  cursor: grabbing;
+}
+
+/* A narrow ticket pane's titlebar sheds its lower-priority badges instead of running into the next
+   pane: the model first, then the status pill; then the key truncates, and as a last resort the
+   row clips. (The titlebar is the container, not the pane: a container is the containing block for
+   fixed descendants, which would trap the ticket's modals inside the pane.) */
+.detail-titlebar {
+  container: pane-titlebar / inline-size;
+  overflow: clip;
+}
+.detail .detail-titlebar > .detail-key {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-titlebar > :is(.no-drag, .btn, .pane-grip) {
+  flex: none;
+}
+@container pane-titlebar (max-width: 460px) {
+  .detail-titlebar > .model-badge {
+    display: none;
+  }
+}
+@container pane-titlebar (max-width: 380px) {
+  .detail-titlebar > .status-pill {
+    display: none;
+  }
+}
+
+/* The ticket header's More → Move pane rows: a target's name, then ← → ↑ ↓ buttons. */
+.menu .menu-caption {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.menu .menu-move {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 0 8px;
+}
+.menu .menu-move-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+.menu .menu-move button {
+  flex: none;
+  width: 26px;
+  justify-content: center;
+  padding: 4px 0;
+}
+.menu .menu-move button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* A narrow board pane (≥320px) sheds header extras instead of wrapping or clipping. */
 .board-pane {
   container: board-pane / inline-size;
 }
@@ -126,33 +378,17 @@
   flex: none;
 }
 @container board-pane (max-width: 640px) {
-  .board-pane .header-path,
-  .board-pane .board-new .kbd {
+  .board-pane .header-path {
     display: none;
   }
   .board-pane .search {
-    width: 110px;
+    width: 130px;
   }
 }
 @container board-pane (max-width: 460px) {
-  .board-pane .board-new-label {
-    display: none;
-  }
-  .board-pane .board-new {
-    width: 30px;
-    padding: 0;
-    justify-content: center;
-  }
   .board-pane .search {
-    width: 84px;
+    width: 104px;
   }
-}
-
-.detail {
-  position: relative;
-}
-.detail-resizer {
-  left: -4px;
 }
 
 .is-resizing .sidebar,
@@ -161,9 +397,14 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
-  .main :is(.view > .view-header, .board-pane > .view-header, .inbox-list > .view-header, .detail.wide .detail-titlebar),
-  .resize-handle::after {
+  .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar),
+  .resize-handle::after,
+  .pane-divider::after,
+  .pane-drop-preview {
     transition: none;
+  }
+  .pane-drop-preview {
+    animation: none;
   }
   .detail {
     animation: none;

@@ -13,5 +13,9 @@ export default defineConfig({
     emptyOutDir: true,
     target: "chrome130",
     sourcemap: true,
+    // ghostty-web (terminal panes) is a lazy chunk of ~650 KB, most of it its WASM core inlined as a
+    // data: URL, which it fetches from memory; that works from file:// and inside the asar with no
+    // asset to locate. It only loads when the first terminal opens.
+    chunkSizeWarningLimit: 700,
   },
 });

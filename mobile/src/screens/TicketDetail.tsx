@@ -2,13 +2,40 @@
 // breadcrumb, title, badges, approval card, actions), tabs (built-in + plugin)
 // and the message composer with the desktop's state-dependent placeholders.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Ticket } from "@harness/shared";
-import { childrenOf, hasCustomDriver, ticketByKey, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import { isConductor, type Ticket } from "@harness/shared";
+import {
+  CHAT_PLACEHOLDER,
+  chatHint,
+  chatModes,
+  childrenOf,
+  closeChatMode,
+  hasCustomDriver,
+  isChatMode,
+  moveSwitchLabel,
+  openChatMode,
+  setChatMode,
+  ticketByKey,
+  COMPOSER_PLACEHOLDER,
+  composerHint,
+  effectiveTab,
+  isReady,
+  isTicketTab,
+  parsePluginTab,
+  parseSubagentTab,
+  pluginTabRoute,
+  showsAgentsTab,
+  subagentsOf,
+  subagentTabRoute,
+  TAB_LABEL,
+  tabStripTab,
+  TICKET_TABS,
+  type TicketTab,
+} from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -20,10 +47,12 @@ import { Icon } from "../ui/Icon";
 import { isIconName } from "@harness/shared/state";
 import { confirm } from "../ui/pick";
 import { haptic } from "../ui/haptics";
+import { MentionList, useFileMentions } from "../ui/mentions";
 import { action, menuItem } from "../ui/header";
 import { ApprovalCard } from "./Approval";
 import { Transcript } from "./Transcript";
 import { ChildrenTab, DetailsTab, SummariesTab } from "./TicketTabs";
+import { AgentsTab, SubagentView } from "./AgentsTab";
 import { BrowserTab } from "./BrowserTab";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 
@@ -75,7 +104,9 @@ export function TicketDetailScreen() {
     );
   }
 
-  const shown = effectiveTab(tab, { conductor: ticket.kind === "conductor", pluginTabs });
+  const shown = effectiveTab(tab, { conductor: isConductor(ticket), pluginTabs, subagents: subagentsOf(state, ticket.sessionId) });
+  const openAgent = parseSubagentTab(shown);
+  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const activePlugin = (() => {
     const p = parsePluginTab(shown);
     return p ? pluginTabs?.find((t) => t.pluginId === p.pluginId && t.id === p.tabId) : undefined;
@@ -84,12 +115,14 @@ export function TicketDetailScreen() {
   return (
     <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Header ticket={ticket} />
-      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown)} />
+      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown) || !!openAgent} />
       <TabStrip ticket={ticket} tab={shown} onTab={setTab} pluginTabs={pluginTabs} />
       <View style={{ flex: 1 }}>
         {shown === "summaries" && <SummariesTab ticket={ticket} />}
         {shown === "children" && <ChildrenTab ticket={ticket} />}
-        {shown === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
+        {shown === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+        {shown === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
         {shown === "browser" && <BrowserTab sessionId={ticket.sessionId} />}
         {shown === "details" && <DetailsTab ticket={ticket} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${shown}`} ticket={ticket} tab={activePlugin} />}
@@ -145,7 +178,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
+  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
@@ -210,21 +243,25 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
 function TabStrip({ ticket, tab, onTab, pluginTabs }: { ticket: Ticket; tab: TicketTab; onTab: (t: TicketTab) => void; pluginTabs: ReturnType<typeof usePluginTabs> }) {
   const { state } = useStore();
   const c = useColors();
-  const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
   const summaryCount = state.summaries[ticket.sessionId]?.length ?? 0;
+  const subagents = subagentsOf(state, ticket.sessionId);
+  const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
+  // A sub-agent's transcript sits under Agents.
+  const stripTab = tabStripTab(tab);
   const items: { id: TicketTab; label: string; count?: number; live?: boolean; icon?: string }[] = [
-    ...TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => ({
+    ...TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => ({
       id: t as TicketTab,
       label: TAB_LABEL[t],
-      count: t === "summaries" ? summaryCount : t === "children" ? childCount : undefined,
-      live: t === "transcript" && ticket.busy,
+      count: t === "summaries" ? summaryCount : t === "children" ? childCount : t === "agents" ? subagents?.length : undefined,
+      live: (t === "transcript" && ticket.busy) || (t === "agents" && agentsRunning),
     })),
     ...(pluginTabs ?? []).map((p) => ({ id: pluginTabRoute(p.pluginId, p.id), label: p.title, icon: p.icon ?? undefined })),
   ];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }} contentContainerStyle={{ paddingHorizontal: 8 }}>
       {items.map((it) => {
-        const on = it.id === tab;
+        const on = it.id === stripTab;
         return (
           <Pressable
             key={it.id}
@@ -261,32 +298,69 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<TextInput>(null);
-  const hint = composerHint(ticket);
+  const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
+  const mentions = useFileMentions(text, setText, searchFiles);
+  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
+  // Leaving the ticket starts the chat mode's TTL; coming back within it picks the chat back up.
+  useEffect(() => {
+    openChatMode(chatModes, ticket.key, Date.now());
+    return () => closeChatMode(chatModes, ticket.key, Date.now());
+  }, [ticket.key]);
+  const switchLabel = moveSwitchLabel(ticket);
+  const chat = !!switchLabel && chatMode;
+  const toggleMove = (move: boolean) => {
+    haptic("select");
+    setChatMode(chatModes, ticket.key, !move);
+    setChat(!move);
+  };
+  const hint = chat ? chatHint(ticket) : composerHint(ticket);
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
     setSending(false);
     if (ok) {
       haptic("success");
       setText("");
     }
   };
-  const attention = ticket.status === "blocked";
+  const attention = ticket.status === "blocked" && !chat;
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
-      {!!hint && <Text style={{ color: c.text3, fontSize: 12, paddingHorizontal: 6 }}>{hint}</Text>}
+      <MentionList mentions={mentions} maxHeight={200} />
+      {(!!switchLabel || !!hint) && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 6 }}>
+          {switchLabel && (
+            <>
+              <Switch
+                value={!chat}
+                onValueChange={toggleMove}
+                trackColor={{ true: c.accent }}
+                style={{ transform: [{ scale: 0.75 }], marginHorizontal: -6 }}
+                accessibilityLabel={switchLabel}
+              />
+              <Text style={{ color: c.text2, fontSize: 13 }}>{switchLabel}</Text>
+            </>
+          )}
+          {!!hint && (
+            <Text style={{ flex: 1, color: c.text3, fontSize: 12, textAlign: switchLabel ? "right" : "left" }} numberOfLines={1}>
+              {hint}
+            </Text>
+          )}
+        </View>
+      )}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <TextInput
           ref={ref}
           multiline
           value={text}
           onChangeText={setText}
-          placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+          placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}
           accessibilityLabel="Message the agent"
+          {...mentions.inputProps}
         />
         <Pressable
           accessibilityRole="button"

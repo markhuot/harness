@@ -25,6 +25,11 @@ export interface Project {
   defaultModels: Record<string, string>;
   /** When the project path is a git repo, give each ticket its own worktree + branch */
   useWorktrees: boolean;
+  /**
+   * Whether the project path is inside a git checkout (checked each time the project is read).
+   * Clients hide worktree choices when it's false. Optional only so older payloads type-check.
+   */
+  isGit?: boolean;
   /** When false, the human review step is skipped (agent review alone gates completion) */
   requireHumanReview: boolean;
   /**
@@ -97,6 +102,11 @@ export interface Ticket {
   driver: string;
   /** Conductor that owns this ticket, if any */
   parentId: string | null;
+  /**
+   * How many tickets have this one as their parent. Any ticket with children acts as a conductor
+   * (see `isConductor`), whatever its kind. Optional only so older services and fixtures type-check.
+   */
+  childCount?: number;
   /** Keys of tickets that must be done before this one can start */
   dependsOn: string[];
   /** Start automatically once every dependency is done (used by conductors) */
@@ -109,6 +119,11 @@ export interface Ticket {
   workdir: string | null;
   /** Git branch when running in a worktree */
   branch: string | null;
+  /**
+   * Per-ticket worktree choice, applied when work starts: true → its own worktree, false → the
+   * project checkout, null → the project's useWorktrees. Optional only so older payloads type-check.
+   */
+  useWorktree?: boolean | null;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -131,6 +146,14 @@ export interface Ticket {
   completedAt?: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * A ticket acts as a conductor (steers child tickets, shows their rollup and Tickets tab) when it
+ * was created as one or once it has children. `kind` only picks the ticket's first prompt.
+ */
+export function isConductor(t: Pick<Ticket, "kind" | "childCount">): boolean {
+  return t.kind === "conductor" || (t.childCount ?? 0) > 0;
 }
 
 /**
@@ -195,7 +218,8 @@ export interface Session {
 
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage";
+/** chat: the human talks with the ticket's agent without changing its status (read-only). */
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface Run {
@@ -226,17 +250,70 @@ export interface TranscriptEntry {
   id: string;
   sessionId: string;
   runId: string | null;
+  /**
+   * The sub-agent that produced this entry (Subagent.id), or null for the session's own agent.
+   * GET /sessions/:id/transcript leaves sub-agent entries out unless `?subagent=<id>` asks for
+   * them. Optional so clients tolerate an older service without sub-agents.
+   */
+  subagentId?: string | null;
   seq: number;
   role: TranscriptRole;
   content: TranscriptContent;
   createdAt: number;
 }
 
+/**
+ * A sub-agent an agent started inside its own session (Claude Code's Agent / Task tool), not a
+ * ticket. Drivers report them with the "subagent" driver event; its conversation is the session's
+ * transcript entries carrying its id as `subagentId` (DESIGN.md "Sub-agents").
+ */
+export interface Subagent {
+  /** The id of the tool call that started it (unique within the session) */
+  id: string;
+  sessionId: string;
+  /** The run it was started in */
+  runId: string | null;
+  /** The sub-agent that started this one (nested agents), else null */
+  parentId: string | null;
+  /** Short description of its task, e.g. "Find the auth middleware" */
+  description: string;
+  /** The kind of agent, e.g. "general-purpose", "Explore" (null when the driver doesn't say) */
+  agentType: string | null;
+  /** The instructions it was given */
+  prompt: string;
+  status: SubagentStatus;
+  /** Its final report when it finished (or why it failed) */
+  result: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  updatedAt: number;
+}
+
+/** stopped: its run ended (cancelled, failed, or the driver never reported an outcome) */
+export type SubagentStatus = "running" | "succeeded" | "failed" | "stopped";
+
 export type ToolResultContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string }; // base64
 
 export type SummaryAuthor = "agent" | "human" | "system";
+
+export type AttachmentKind = "image" | "video";
+
+/** A file an agent attached to a summary; served at GET /attachments/:id. */
+export interface SummaryAttachment {
+  id: string;
+  kind: AttachmentKind;
+  /** e.g. "image/png", "video/mp4" */
+  mimeType: string;
+  /** The original file name, e.g. "after.png" */
+  name: string;
+  /** Bytes */
+  size: number;
+  /** Pixels, when known from the file header (images only) */
+  width?: number;
+  height?: number;
+}
 
 export interface Summary {
   id: string;
@@ -246,6 +323,8 @@ export interface Summary {
   /** Short markdown update, e.g. "Implemented X; tests pass; next: Y" */
   body: string;
   createdAt: number;
+  /** In the order the agent listed them; [] when there are none */
+  attachments: SummaryAttachment[];
 }
 
 export interface Watcher {
@@ -278,6 +357,26 @@ export interface Watcher {
   lastError: string | null;
   createdAt: number;
   updatedAt: number;
+  /**
+   * What the watcher's process is doing right now. Not stored: the service fills it in from its
+   * supervisor. Absent from services that don't report it (older builds, watchers switched off).
+   */
+  live?: WatcherLive;
+}
+
+/**
+ * A watcher's process state. `running`: a process is alive (since `since`). `waiting`: between
+ * runs; `nextRunAt` is the next interval tick or the loop's restart after its delay or failure
+ * backoff (null while it waits on a previous process to stop). `stopped`: not supervised (disabled,
+ * deleted, or the service is shutting down). Whether the last run failed is `Watcher.lastError`.
+ */
+export interface WatcherLive {
+  state: "running" | "waiting" | "stopped";
+  /** When this state began (ms) */
+  since: number;
+  nextRunAt: number | null;
+  /** Consecutive failed runs; 0 after a clean exit */
+  failures: number;
 }
 
 export interface DriverInfo {
@@ -399,6 +498,7 @@ export type HarnessEvent =
   | { kind: "session.deleted"; id: string }
   | { kind: "run.upserted"; run: Run }
   | { kind: "transcript.appended"; entry: TranscriptEntry }
+  | { kind: "subagent.upserted"; subagent: Subagent }
   /** Ephemeral streaming text; the full block is persisted later as transcript.appended */
   | { kind: "transcript.delta"; sessionId: string; runId: string; text: string }
   | { kind: "summary.added"; summary: Summary }
@@ -406,7 +506,26 @@ export type HarnessEvent =
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
   | { kind: "browser.frame"; sessionId: string; data: string; width: number; height: number }
-  | { kind: "browser.state"; sessionId: string; state: BrowserState };
+  | { kind: "browser.state"; sessionId: string; state: BrowserState }
+  /** The service's code on disk changed since it started (or changed back) */
+  | { kind: "service.status"; status: ServiceStatus };
+
+/**
+ * Whether the service runs the code on disk. `stale`: the checkout changed since it started; it
+ * restarts onto the new code by itself once no runs are active. `build` is null when the service
+ * doesn't track its source (tests, embedded services).
+ */
+export interface ServiceStatus {
+  build: string | null;
+  stale: boolean;
+}
+
+/** GET /health (unauthenticated). Services from before build tracking omit `build` and `stale`. */
+export interface Health extends Partial<ServiceStatus> {
+  ok: true;
+  version: string;
+  pid: number;
+}
 
 export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean };
 
@@ -479,6 +598,8 @@ export interface CreateTicketBody {
   permissionMode?: PermissionMode | null;
   /** Skip planning and start work right away (default true for quick sessions) */
   start?: boolean;
+  /** Worktree for this ticket: false → the project checkout (null / omitted → project.useWorktrees) */
+  useWorktree?: boolean | null;
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;
@@ -508,6 +629,16 @@ export interface MessageBody {
 export interface HumanReviewBody {
   decision: "approve" | "request_changes";
   notes?: string;
+}
+
+/** POST /tickets/:key/messages */
+export interface MessageBody {
+  text: string;
+  /**
+   * true: just talk with the agent; the ticket keeps its status (a read-only chat run). Default:
+   * the message moves a blocked or review ticket back to in progress and the agent acts on it.
+   */
+  chat?: boolean;
 }
 
 /** Re-open a done ticket: back to in progress, with notes for the agent */
@@ -545,6 +676,8 @@ export interface TicketDetail {
   /** The conductor this ticket belongs to (when parentId is set), so clients can show the
    *  "Part of …" breadcrumb even when the parent isn't loaded (e.g. a done conductor off-page). */
   parent?: Ticket | null;
+  /** Sub-agents started in the ticket's session, oldest first (absent from older services) */
+  subagents?: Subagent[];
 }
 
 export interface ApiOk<T> {

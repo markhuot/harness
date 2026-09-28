@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
+import type { DriverInfo, ModelInfo, PermissionMode, Settings, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
 
@@ -76,9 +76,10 @@ export const PERMISSION_PROMPT_TOOL = `${MCP_PREFIX}permission_prompt`;
  */
 export const CLI_PERMISSION_MODES: Record<PermissionMode, string> = { auto: "auto", ask: "acceptEdits", read_only: "dontAsk" };
 
-/** The --permission-mode a run gets: plan runs always "plan", else the mapped harness mode. */
+/** The --permission-mode a run gets: plan runs always "plan", chat runs "dontAsk", else the mapped harness mode. */
 export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode">, settings: Pick<Settings, "permissionMode">): string {
   if (req.kind === "plan") return "plan";
+  if (req.kind === "chat") return CLI_PERMISSION_MODES.read_only;
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
 
@@ -240,10 +241,41 @@ export interface ClaudeResultInfo {
   errors: string[];
 }
 
+/** Claude Code's sub-agent tools: "Agent" (2.1+) and "Task" (older CLIs). */
+const AGENT_TOOLS = new Set(["Agent", "Task"]);
+/** The Agent tool's result when it started the sub-agent in the background (the default in 2.1). */
+const ASYNC_LAUNCH = /^\s*Async agent launched/i;
+
+/** task_notification / task_updated status → SubagentStatus (running for anything unfinished). */
+function taskStatus(status: unknown): SubagentStatus | null {
+  switch (status) {
+    case "completed":
+      return "succeeded";
+    case "failed":
+      return "failed";
+    case "killed":
+    case "stopped":
+    case "cancelled":
+      return "stopped";
+    default:
+      return null;
+  }
+}
+
+const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
 /**
  * Stateful translator from `claude -p --output-format stream-json` lines to DriverEvents.
- * Messages from subagents (parent_tool_use_id set) are skipped; the Task tool call
- * and its final result still show up at the top level.
+ *
+ * Sub-agents (verified against claude 2.1.283, DESIGN.md "Sub-agents"): an Agent (or Task) tool
+ * call starts one, reported as a "subagent" event keyed by the call id. Its own messages carry
+ * that id as parent_tool_use_id and become events with `subagentId`. Its outcome is the tool
+ * result, unless the result only says it was launched in the background; then the CLI's
+ * task_notification (or task_updated, by task id) reports it later. Sub-agents' streaming deltas
+ * are dropped (their full blocks still arrive), and their classifier denials are logged in their
+ * transcript but never become the run's pending approval: the sub-agent reports back to the agent.
+ * Anything else carrying parent_tool_use_id (tool_progress heartbeats of a long Bash call,
+ * sub-agent stream events) is dropped.
  */
 export class StreamJsonParser {
   sessionId: string | null = null;
@@ -253,6 +285,10 @@ export class StreamJsonParser {
   initPermissionMode: string | null = null;
   private toolNames = new Map<string, string>();
   private toolInputs = new Map<string, unknown>();
+  /** Sub-agents reported so far (their tool call ids) */
+  private subagents = new Set<string>();
+  /** CLI task id → the tool call id of the sub-agent it runs */
+  private tasks = new Map<string, string>();
 
   /**
    * @param baseline the resumed session and its cumulative cost before this run (from state)
@@ -278,11 +314,40 @@ export class StreamJsonParser {
         events.push({ type: "state", state: { sessionId: id, costUsd: this.priorCost() } satisfies ClaudeCodeState });
       }
     };
-    if (msg.parent_tool_use_id) return [];
+    const parentId = typeof msg.parent_tool_use_id === "string" && msg.parent_tool_use_id ? msg.parent_tool_use_id : null;
+    // parent_tool_use_id means "inside that tool call". Only conversation messages (assistant /
+    // user) under it are a sub-agent's output; the rest is the tool's own progress, e.g. the
+    // tool_progress heartbeat a long-running Bash call sends every 30s (claude 2.1.283).
+    if (parentId && msg.type !== "assistant" && msg.type !== "user") return [];
+    const subagentId = parentId;
+    if (subagentId && !this.subagents.has(subagentId)) {
+      // A known call that isn't an agent tool never runs a sub-agent.
+      const known = this.toolNames.get(subagentId);
+      if (known !== undefined && !AGENT_TOOLS.has(known)) return [];
+      // Output from a sub-agent this run didn't see start (e.g. one continued from an earlier run).
+      this.subagents.add(subagentId);
+      events.push({ type: "subagent", subagent: { id: subagentId, description: "Sub-agent" } });
+    }
+    const from = subagentId ? { subagentId } : {};
 
     switch (msg.type) {
       case "system":
-        if (msg.subtype === "init") {
+        if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string") {
+          const callId = msg.tool_use_id;
+          // Background Bash commands are tasks too; only agents are sub-agents.
+          if (!this.subagents.has(callId) && msg.task_type !== "local_agent") break;
+          if (typeof msg.task_id === "string") this.tasks.set(msg.task_id, callId);
+          this.subagents.add(callId);
+          events.push({
+            type: "subagent",
+            subagent: { id: callId, description: str(msg.description), agentType: str(msg.subagent_type), prompt: str(msg.prompt) },
+          });
+        } else if (msg.subtype === "task_notification" || msg.subtype === "task_updated") {
+          const callId = str(msg.tool_use_id) ?? (typeof msg.task_id === "string" ? this.tasks.get(msg.task_id) : undefined);
+          const status = taskStatus(msg.subtype === "task_updated" ? msg.patch?.status : msg.status);
+          if (!callId || !this.subagents.has(callId) || !status) break;
+          events.push({ type: "subagent", subagent: { id: callId, status, ...(typeof msg.summary === "string" ? { result: msg.summary } : {}) } });
+        } else if (msg.subtype === "init") {
           this.sawInit = true;
           noteSession(msg.session_id);
           if (typeof msg.permissionMode === "string") this.initPermissionMode = msg.permissionMode;
@@ -311,14 +376,30 @@ export class StreamJsonParser {
         if (!Array.isArray(content)) break;
         for (const block of content) {
           if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
-            events.push({ type: "text", text: block.text });
+            events.push({ type: "text", text: block.text, ...from });
           } else if (block?.type === "thinking" && typeof block.thinking === "string" && block.thinking.trim()) {
-            events.push({ type: "thinking", text: block.thinking });
+            events.push({ type: "thinking", text: block.thinking, ...from });
           } else if (block?.type === "tool_use") {
             const name = displayToolName(String(block.name));
-            this.toolNames.set(block.id, name);
-            this.toolInputs.set(block.id, block.input ?? {});
-            events.push({ type: "tool_call", callId: String(block.id), name, input: block.input ?? {} });
+            const callId = String(block.id);
+            const input = block.input ?? {};
+            this.toolNames.set(callId, name);
+            this.toolInputs.set(callId, input);
+            events.push({ type: "tool_call", callId, name, input, ...from });
+            if (AGENT_TOOLS.has(name) && !this.subagents.has(callId)) {
+              this.subagents.add(callId);
+              events.push({
+                type: "subagent",
+                subagent: {
+                  id: callId,
+                  parentId: subagentId,
+                  description: str(input.description) ?? "",
+                  agentType: str(input.subagent_type) ?? null,
+                  prompt: str(input.prompt) ?? "",
+                  status: "running",
+                },
+              });
+            }
           }
         }
         break;
@@ -331,9 +412,12 @@ export class StreamJsonParser {
           const callId = String(block.tool_use_id);
           const content = toolResultContent(block.content);
           const name = this.toolNames.get(callId) ?? "unknown";
-          events.push({ type: "tool_result", callId, name, result: { content, ...(block.is_error ? { isError: true } : {}) } });
+          events.push({ type: "tool_result", callId, name, result: { content, ...(block.is_error ? { isError: true } : {}) }, ...from });
+          const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+          if (this.subagents.has(callId) && !ASYNC_LAUNCH.test(text)) {
+            events.push({ type: "subagent", subagent: { id: callId, status: block.is_error ? "failed" : "succeeded", result: text } });
+          }
           if (block.is_error) {
-            const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
             const denied = CLASSIFIER_DENIAL.exec(text);
             if (denied) {
               const reason = denied[1]?.trim().replace(/\.$/, "") || "denied by Claude Code's auto mode classifier";
@@ -348,8 +432,9 @@ export class StreamJsonParser {
                   backend: "claude-code",
                   mode: this.permission?.mode ?? "auto",
                 },
+                ...from,
               });
-              events.push({ type: "permission_denied", callId, toolName: name, input: this.toolInputs.get(callId) ?? {}, reason });
+              if (!subagentId) events.push({ type: "permission_denied", callId, toolName: name, input: this.toolInputs.get(callId) ?? {}, reason });
             }
           }
         }

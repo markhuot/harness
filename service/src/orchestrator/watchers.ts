@@ -10,7 +10,7 @@
 // Exit codes follow watch-jira: 0 = ok, 4 = nothing to report (--once / --timeout), anything
 // else = failure.
 
-import type { Watcher } from "@harness/shared";
+import type { Watcher, WatcherLive } from "@harness/shared";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -143,7 +143,10 @@ interface Entry {
   restarting: boolean;
   timer: Timer | null;
   interval: ReturnType<typeof setInterval> | null;
+  /** Consecutive failed runs */
   failures: number;
+  /** Interval mode: when the schedule started and its period, for the next tick's time */
+  schedule: { startedAt: number; everyMs: number } | null;
   /** Resolves once the previous entry for this id has fully stopped */
   ready: Promise<void>;
 }
@@ -171,6 +174,8 @@ export interface WatcherRunnerOptions {
   /** Called once per chunk of output, in order, with the latest watcher object */
   onOutput: (watcher: Watcher, output: WatcherOutput) => void | Promise<void>;
   onStatus: (watcherId: string, patch: { lastRunAt?: number; lastError?: string | null }) => void;
+  /** Called whenever a watcher's process state changes (see WatcherLive) */
+  onLive?: (watcherId: string, live: WatcherLive) => void;
   spawn?: SpawnFn;
   timing?: Partial<WatcherTiming>;
   /** Shell for command-line watchers (default loginShell()) */
@@ -182,6 +187,7 @@ export interface WatcherRunnerOptions {
 export class WatcherRunner {
   private readonly onOutput: WatcherRunnerOptions["onOutput"];
   private readonly onStatus: WatcherRunnerOptions["onStatus"];
+  private readonly onLive: NonNullable<WatcherRunnerOptions["onLive"]>;
   private readonly spawn: SpawnFn;
   private readonly timing: WatcherTiming;
   private readonly shell: string;
@@ -193,26 +199,37 @@ export class WatcherRunner {
   /** One-off runs (runNow on a watcher that isn't supervised) */
   private readonly oneOffs = new Map<string, Entry>();
   private readonly stopping = new Set<Promise<void>>();
+  /** Latest process state per known watcher id */
+  private readonly lives = new Map<string, WatcherLive>();
 
   constructor(opts: WatcherRunnerOptions) {
     this.onOutput = opts.onOutput;
     this.onStatus = opts.onStatus;
+    this.onLive = opts.onLive ?? (() => {});
     this.spawn = opts.spawn ?? bunSpawn;
     this.timing = { ...DEFAULT_TIMING, ...(opts.timing ?? {}) };
     this.shell = opts.shell ?? loginShell();
     this.maxOutputChars = opts.maxOutputChars ?? MAX_OUTPUT_CHARS;
   }
 
+  /** What a watcher's process is doing now; undefined for ids the last sync didn't include. */
+  live(id: string): WatcherLive | undefined {
+    return this.lives.get(id);
+  }
+
   /** Reconcile running processes with the given watcher list. */
   sync(watchers: Watcher[]): void {
     this.known = new Map(watchers.map((w) => [w.id, w]));
     const wanted = new Map(watchers.filter((w) => w.enabled).map((w) => [w.id, w]));
+    for (const id of this.lives.keys()) if (!this.known.has(id)) this.lives.delete(id);
 
     for (const [id, entry] of this.entries) {
       const next = wanted.get(id);
       if (!next) {
         this.entries.delete(id);
         this.track(this.stopEntry(entry));
+        // A one-off run of the now-disabled watcher reports its own state.
+        if (this.known.has(id) && !this.oneOffs.get(id)?.running) this.report(id, "stopped", null, 0);
       } else if (signatureOf(next) !== entry.signature) {
         this.entries.delete(id);
         const stopped = this.track(this.stopEntry(entry));
@@ -225,6 +242,7 @@ export class WatcherRunner {
     for (const [id, w] of wanted) {
       if (!this.entries.has(id)) this.startEntry(w, this.oneOffs.get(id)?.running ?? Promise.resolve());
     }
+    for (const w of watchers) if (!this.lives.has(w.id)) this.report(w.id, "stopped", null, 0);
   }
 
   /**
@@ -268,10 +286,33 @@ export class WatcherRunner {
     const all = [...this.entries.values(), ...this.oneOffs.values()];
     this.entries.clear();
     this.oneOffs.clear();
+    for (const [id, live] of this.lives) if (live.state !== "stopped") this.report(id, "stopped", null, live.failures);
     await Promise.all([...all.map((e) => this.stopEntry(e)), ...this.stopping]);
   }
 
   // --- internals -----------------------------------------------------------
+
+  private report(id: string, state: WatcherLive["state"], nextRunAt: number | null, failures: number): void {
+    const live: WatcherLive = { state, since: Date.now(), nextRunAt, failures };
+    this.lives.set(id, live);
+    this.onLive(id, live);
+  }
+
+  /** Report an entry's state, unless it has been replaced (a restart) or stopped. */
+  private setLive(entry: Entry, state: WatcherLive["state"], nextRunAt: number | null = null): void {
+    const id = entry.watcher.id;
+    const supervised = this.entries.get(id);
+    const current = supervised ? supervised === entry : this.oneOffs.get(id) === entry;
+    if (current && !entry.stopped) this.report(id, state, nextRunAt, entry.failures);
+  }
+
+  /** Interval mode: the next scheduled tick after now. */
+  private nextTick(entry: Entry): number | null {
+    const s = entry.schedule;
+    if (!s) return null;
+    const now = Date.now();
+    return s.startedAt + (Math.floor((now - s.startedAt) / s.everyMs) + 1) * s.everyMs;
+  }
 
   private track(p: Promise<void>): Promise<void> {
     this.stopping.add(p);
@@ -290,6 +331,7 @@ export class WatcherRunner {
       timer: null,
       interval: null,
       failures: 0,
+      schedule: null,
       ready,
     };
   }
@@ -297,10 +339,13 @@ export class WatcherRunner {
   private startEntry(w: Watcher, after: Promise<void>): void {
     const entry = this.makeEntry(w, after.catch(() => {}));
     this.entries.set(w.id, entry);
+    // Starting, possibly after the previous process for this id has stopped.
+    this.setLive(entry, "waiting");
     entry.ready.then(() => {
       if (entry.stopped) return;
       if (w.mode === "interval") {
         const every = Math.max((w.intervalSec || 0) * 1000, this.timing.minIntervalMs);
+        entry.schedule = { startedAt: Date.now(), everyMs: every };
         this.execute(entry);
         entry.interval = setInterval(() => {
           if (!entry.stopped && !entry.running) this.execute(entry);
@@ -340,6 +385,7 @@ export class WatcherRunner {
         delay = Math.min(this.timing.backoffBaseMs * 2 ** (entry.failures - 1), this.timing.backoffMaxMs);
       }
       this.clearTimer(entry);
+      this.setLive(entry, "waiting", Date.now() + delay);
       entry.timer = setTimeout(() => {
         entry.timer = null;
         if (!entry.stopped) this.loopRun(entry);
@@ -355,22 +401,39 @@ export class WatcherRunner {
     settled.then(() => {
       if (entry.running === settled) entry.running = null;
     });
-    return run.catch(() => false);
+    return run
+      .catch(() => false)
+      .then((ok) => {
+        const id = entry.watcher.id;
+        if (this.oneOffs.get(id) === entry) {
+          // A one-off run (the watcher isn't supervised) leaves it stopped.
+          if (!this.entries.has(id)) this.report(id, "stopped", null, ok ? 0 : entry.failures + 1);
+        } else if (entry.watcher.mode === "interval") {
+          // Loop mode reports its own restart delay (loopRun).
+          entry.failures = ok ? 0 : entry.failures + 1;
+          this.setLive(entry, "waiting", this.nextTick(entry));
+        }
+        return ok;
+      });
   }
 
   private async executeInner(entry: Entry): Promise<boolean> {
     const w = entry.watcher;
-    this.onStatus(w.id, { lastRunAt: Date.now() });
+    const startedAt = Date.now();
 
     let proc: SpawnedProcess;
     const [cmd, args] = watcherArgv(w, this.shell);
     try {
       proc = this.spawn(cmd, args, { cwd: expandHome(w.cwd), env: w.env ?? {} });
     } catch (err) {
-      this.onStatus(w.id, { lastError: `Failed to start ${w.command}: ${errorMessage(err)}` });
+      this.onStatus(w.id, { lastRunAt: startedAt, lastError: `Failed to start ${w.command}: ${errorMessage(err)}` });
       return false;
     }
+    // A loop process that is up has recovered from whatever stopped the last one; an interval
+    // run's error stands until the next run finishes.
+    this.onStatus(w.id, w.mode === "loop" ? { lastRunAt: startedAt, lastError: null } : { lastRunAt: startedAt });
     entry.proc = proc;
+    this.setLive(entry, "running");
     // A stop/restart may have raced the spawn.
     if (entry.stopped) proc.kill();
 

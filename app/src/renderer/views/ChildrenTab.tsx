@@ -4,16 +4,21 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
+import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
+import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
+import { keysArea } from "../components/commands";
+import { useRovingList } from "../components/useRovingList";
+import { dragProps, ticketContextMenu } from "../components/paneDrag";
 
 /** Ticket.model arrives with per-ticket model selection; read it defensively. */
 const modelOf = (t: Ticket) => (t as Ticket & { model?: string | null }).model ?? null;
 
 export function ChildrenTab({ ticket }: { ticket: Ticket }) {
-  const { state, client, dispatch, navigate, route, epoch } = useStore();
+  const { state, client, dispatch, epoch } = useStore();
+  const openTicket = useOpenTicket();
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
@@ -32,11 +37,17 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   }, [children, client, dispatch, state.summaries]);
   useEffect(() => fetched.current.clear(), [epoch]);
 
-  const open = (key: string) => navigate({ view: "board", projectId: route.view === "board" ? route.projectId : null, ticketKey: key, tab: "summaries" });
+  const open = (key: string) => openTicket(key);
+
+  // The rows are one Tab stop; j/k (↑/↓) move between them before the ticket pane scrolls. The
+  // container is the same element with or without children, so the hook keeps watching it.
+  const listRef = useRef<HTMLDivElement>(null);
+  const owner = `children:${usePane()?.paneId ?? ticket.id}`;
+  useRovingList(listRef, { owner });
 
   if (children.length === 0) {
     return (
-      <div className="children-tab">
+      <div className="children-tab" ref={listRef} {...keysArea("list", owner)}>
         <div className="empty" data-testid="children-empty">
           <Icon name="conductor" />
           <strong>No tickets yet</strong>
@@ -47,7 +58,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   }
 
   return (
-    <div className="children-tab">
+    <div className="children-tab" ref={listRef} {...keysArea("list", owner)}>
       <div className="children-progress card-surface">
         <div className="children-progress-text" data-testid="children-progress">
           {progressLabel(progress)}
@@ -87,15 +98,21 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
   const model = modelOf(c);
   const showDriver = hasCustomDriver(state, c);
   const quietDone = c.status === "done";
+  const paneId = usePane()?.paneId ?? null;
+  const scope = usePaneScope();
 
   return (
     <div
       role="button"
-      tabIndex={0}
+      // The roving list (ChildrenTab) sets tabIndex: the current row 0, the rest -1.
+      data-roving-item
       className={`child-row ${attention ? `attn attn-${attention}` : ""} ${quietDone ? "is-done" : ""}`}
       data-key={c.key}
       onClick={() => onOpen(c.key)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(c.key))}
+      // Drag onto a half of this pane (or any other) to see the child beside its conductor.
+      {...dragProps(c.key, c.title)}
+      onContextMenu={(e) => void ticketContextMenu(e, scope, c.key, () => onOpen(c.key), paneId)}
     >
       <div className="child-main">
         <div className="child-top">
@@ -124,7 +141,17 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
             <span>{c.blockedReason || "Blocked"}</span>
           </div>
         ) : (
-          summary && <div className="child-summary">{plainText(summary.body)}</div>
+          summary && (
+            <>
+              <div className="child-summary">{plainText(summary.body)}</div>
+              {summary.attachments?.length > 0 && (
+                <div className="child-attachments">
+                  <Icon name="image" size={11} />
+                  {attachmentsLabel(summary.attachments)}
+                </div>
+              )}
+            </>
+          )
         )}
 
         {(deps.length > 0 || showDriver || model) && (

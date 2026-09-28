@@ -6,6 +6,7 @@ interface EntryRow {
   id: string;
   session_id: string;
   run_id: string | null;
+  subagent_id: string | null;
   seq: number;
   role: string;
   content: string;
@@ -16,6 +17,7 @@ const toEntry = (r: EntryRow): TranscriptEntry => ({
   id: r.id,
   sessionId: r.session_id,
   runId: r.run_id,
+  subagentId: r.subagent_id ?? null,
   seq: r.seq,
   role: r.role as TranscriptRole,
   content: fromJson<TranscriptContent>(r.content, { type: "text", text: "" }),
@@ -25,29 +27,33 @@ const toEntry = (r: EntryRow): TranscriptEntry => ({
 export class TranscriptRepo {
   constructor(private db: Database) {}
 
-  /** Append an entry with the session's next monotonic seq (1, 2, 3, ...). */
-  append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent): TranscriptEntry {
+  /**
+   * Append an entry with the session's next monotonic seq (1, 2, 3, ...). Seqs are shared by the
+   * session's agent and its sub-agents (`subagentId`), so `after` paging works for either view.
+   */
+  append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent, subagentId: string | null = null): TranscriptEntry {
     const id = newId();
     this.db.transaction(() => {
       const row = this.db.query("SELECT next_seq FROM sessions WHERE id = $sessionId").get({ sessionId }) as { next_seq: number } | null;
       if (!row) throw new Error(`Unknown session ${sessionId}`);
       this.db.query("UPDATE sessions SET next_seq = next_seq + 1 WHERE id = $sessionId").run({ sessionId });
       this.db
-        .query("INSERT INTO transcript (id, session_id, run_id, seq, role, content, created_at) VALUES ($id, $sessionId, $runId, $seq, $role, $content, $t)")
-        .run({ id, sessionId, runId, seq: row.next_seq, role, content: JSON.stringify(content), t: now() });
+        .query("INSERT INTO transcript (id, session_id, run_id, subagent_id, seq, role, content, created_at) VALUES ($id, $sessionId, $runId, $subagentId, $seq, $role, $content, $t)")
+        .run({ id, sessionId, runId, subagentId, seq: row.next_seq, role, content: JSON.stringify(content), t: now() });
     })();
     return toEntry(this.db.query("SELECT * FROM transcript WHERE id = $id").get({ id }) as EntryRow);
   }
 
-  list(sessionId: string, afterSeq = 0, limit = 5000): TranscriptEntry[] {
+  /** The session agent's entries, or with `subagentId` that sub-agent's. */
+  list(sessionId: string, afterSeq = 0, limit = 5000, subagentId: string | null = null): TranscriptEntry[] {
     return (
       this.db
-        .query("SELECT * FROM transcript WHERE session_id = $sessionId AND seq > $afterSeq ORDER BY seq LIMIT $limit")
-        .all({ sessionId, afterSeq, limit }) as EntryRow[]
+        .query("SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS $subagentId AND seq > $afterSeq ORDER BY seq LIMIT $limit")
+        .all({ sessionId, subagentId, afterSeq, limit }) as EntryRow[]
     ).map(toEntry);
   }
 
-  /** The last `limit` entries whose content type is in `types`, oldest first. */
+  /** The session agent's last `limit` entries whose content type is in `types`, oldest first. */
   tail(sessionId: string, limit: number, types: TranscriptContent["type"][]): TranscriptEntry[] {
     if (limit <= 0 || !types.length) return [];
     const params: Record<string, string | number> = { sessionId, limit };
@@ -55,7 +61,7 @@ export class TranscriptRepo {
     const inTypes = types.map((_, i) => `$type${i}`).join(", ");
     return (
       this.db
-        .query(`SELECT * FROM transcript WHERE session_id = $sessionId AND json_extract(content, '$.type') IN (${inTypes}) ORDER BY seq DESC LIMIT $limit`)
+        .query(`SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND json_extract(content, '$.type') IN (${inTypes}) ORDER BY seq DESC LIMIT $limit`)
         .all(params) as EntryRow[]
     )
       .reverse()

@@ -101,16 +101,8 @@ function run(cmd: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs: num
   });
 }
 
-/**
- * Resolve a connection to the service:
- *  1. HARNESS_URL + HARNESS_TOKEN env overrides (dev / tests / mock service)
- *  2. `<bun> <repoRoot>/service/src/cli.ts service ensure --json` → { url, tokenPath }
- */
-export async function ensureService(appRoot: string, env: NodeJS.ProcessEnv = process.env): Promise<ConnectionResult> {
-  if (env.HARNESS_URL && env.HARNESS_TOKEN) {
-    return { baseUrl: env.HARNESS_URL, token: env.HARNESS_TOKEN, source: "env" } satisfies Connection;
-  }
-
+/** Run the service CLI (`<bun> <repoRoot>/service/src/cli.ts …`) from the build's harness.json. */
+async function runCli(appRoot: string, env: NodeJS.ProcessEnv, args: string[]) {
   const res = readResources(appRoot);
   // Dev override: point a built app at a different checkout.
   if (res && env.HARNESS_REPO_ROOT) res.repoRoot = env.HARNESS_REPO_ROOT;
@@ -125,10 +117,56 @@ export async function ensureService(appRoot: string, env: NodeJS.ProcessEnv = pr
   if (!existsSync(res.bunPath)) return fail("Couldn't find bun.", `Expected bun at ${res.bunPath} (from harness.json).`);
 
   const childEnv = { ...env, PATH: augmentedPath(res.bunPath) };
-  const out = await run(res.bunPath, [cli, "service", "ensure", "--json"], childEnv, 45_000);
-  const transcript = [`$ ${res.bunPath} ${cli} service ensure --json`, out.stdout.trim(), out.stderr.trim(), out.error ?? ""]
+  const out = await run(res.bunPath, [cli, ...args], childEnv, 45_000);
+  const transcript = [`$ ${res.bunPath} ${cli} ${args.join(" ")}`, out.stdout.trim(), out.stderr.trim(), out.error ?? ""]
     .filter(Boolean)
     .join("\n");
+  return { out, transcript };
+}
+
+/**
+ * Restart the service now; running agents are stopped. A service the app started goes through
+ * launchd (\`service restart\`), which works on a service of any age, including one from before
+ * POST /service/restart existed. Other connections (HARNESS_URL) ask the service to restart itself.
+ */
+export async function restartService(
+  appRoot: string,
+  conn: ConnectionResult | null,
+  env: NodeJS.ProcessEnv = process.env,
+  doFetch: typeof fetch = fetch,
+): Promise<{ ok: true } | ConnectionError> {
+  if (!conn || "error" in conn) return fail("Not connected to the service.", "");
+  if (conn.source === "service") {
+    const cli = await runCli(appRoot, env, ["service", "restart", "--json"]);
+    if ("error" in cli) return cli;
+    return cli.out.code === 0 ? { ok: true } : fail("The harness service didn't restart.", cli.transcript);
+  }
+  try {
+    const res = await doFetch(`${conn.baseUrl.replace(/\/$/, "")}/service/restart`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${conn.token}` },
+    });
+    if (res.ok) return { ok: true };
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return fail("The harness service didn't restart.", body.error ?? `HTTP ${res.status}`);
+  } catch (e) {
+    return fail("The harness service didn't restart.", (e as Error).message);
+  }
+}
+
+/**
+ * Resolve a connection to the service:
+ *  1. HARNESS_URL + HARNESS_TOKEN env overrides (dev / tests / mock service)
+ *  2. `<bun> <repoRoot>/service/src/cli.ts service ensure --json` → { url, tokenPath }
+ */
+export async function ensureService(appRoot: string, env: NodeJS.ProcessEnv = process.env): Promise<ConnectionResult> {
+  if (env.HARNESS_URL && env.HARNESS_TOKEN) {
+    return { baseUrl: env.HARNESS_URL, token: env.HARNESS_TOKEN, source: "env" } satisfies Connection;
+  }
+
+  const cli = await runCli(appRoot, env, ["service", "ensure", "--json"]);
+  if ("error" in cli) return cli;
+  const { out, transcript } = cli;
 
   if (out.code !== 0) return fail("The harness service didn't start.", transcript);
   const parsed = parseEnsureOutput(out.stdout);

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AnthropicApiClassifier, buildClassifierPrompt, ClaudeCliClassifier, parseDecision, type ClassifierRequest, type MessagesCreateLike } from "./classifier";
 import { BUILTIN_RULES, type AutoModeRules } from "./rules";
+import { tempDir } from "@harness/shared/testing";
 
 const rules: AutoModeRules = {
   source: "claude-cli",
@@ -64,7 +65,7 @@ describe("parseDecision", () => {
 });
 
 function fakeClaude(output: string, exitCode = 0) {
-  const dir = mkdtempSync(join(tmpdir(), "fake-classifier-"));
+  const dir = tempDir("fake-classifier-");
   const record = join(dir, "record.json");
   const bin = join(dir, "claude");
   writeFileSync(
@@ -85,7 +86,7 @@ process.exit(${exitCode});
 
 describe("ClaudeCliClassifier (fake claude)", () => {
   test("runs claude -p with a JSON schema, no tools, the rules as the system prompt, in the workdir", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "cls-cwd-"));
+    const cwd = tempDir("cls-cwd-");
     const f = fakeClaude("warning: extra certs\n" + JSON.stringify({ type: "result", is_error: false, structured_output: { decision: "allow", reason: "routine" } }));
     const c = new ClaudeCliClassifier({ bin: () => f.bin, env: () => ({ PATH: process.env.PATH! }), rules: async () => rules });
     expect(await c.classify(req({ cwd }), new AbortController().signal)).toEqual({ decision: "allow", reason: "routine" });

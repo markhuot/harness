@@ -203,12 +203,6 @@ code {
 .btn.spinning .icon {
   animation: spin 0.9s linear infinite;
 }
-.files-toggle {
-  display: none !important;
-}
-.narrow .files-toggle {
-  display: inline-grid !important;
-}
 
 /* --- commits + notices ---------------------------------------------------------------- */
 .commits {
@@ -278,6 +272,9 @@ code {
   overflow: auto;
   padding: 0 12px;
 }
+.files-collapsed .files {
+  display: none; /* the diffs column takes the freed width */
+}
 .narrow .files {
   position: absolute;
   z-index: 5;
@@ -293,7 +290,8 @@ code {
   transform: none;
 }
 .empty .files,
-.empty .diffs {
+.empty .diffs,
+.empty .files-toggle {
   display: none;
 }
 
@@ -351,4 +349,65 @@ code {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* --- diff header controls (slotted into @pierre/diffs' file header) --------------------- */
+.disclosure {
+  border: 0;
+  background: none;
+  width: 20px;
+  height: 20px;
+  margin: 0 2px 0 -4px;
+  padding: 0;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-3);
+  cursor: default;
+}
+.disclosure:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.disclosure .icon {
+  transition: transform 0.12s ease;
+}
+.disclosure[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
+}
+.viewed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: 12px/1.45 var(--font);
+  color: var(--text-2);
+  white-space: nowrap;
+  user-select: none;
+}
+.viewed:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.viewed.on {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.viewed input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.disclosure:focus-visible,
+.viewed:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.viewed-count {
+  color: var(--text-3);
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
 }

@@ -102,7 +102,9 @@ function watcherRule(prompt: string): RegExp | null {
   }
 }
 
-const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools)\b[ \t]*([^\n]*)/;
+const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools|agents|child)\b[ \t]*([^\n]*)/;
+/** conductorUpdatePrompt: the orchestrator telling a parent (of either kind) that children changed. */
+const CHILD_UPDATES = /^(Child ticket updates:|Check on your children)/;
 
 interface ChildView {
   key: string;
@@ -208,6 +210,62 @@ export class DummyDriver implements Driver {
       yield* say(`Ran ${calls.map((c) => c.name).join(", ")}.`);
       yield* call("submit_for_review", { summary: `Ran ${calls.length} tool call${calls.length === 1 ? "" : "s"}.` });
     }
+    // A later conductor run, or a work run on a task ticket with children: approve and complete
+    // children whose agent review passed, and submit once every child is done.
+    async function* steerChildren(): AsyncGenerator<DriverEvent> {
+      const out: { result?: ToolResult } = {};
+      yield* call("list_tickets", { scope: "children", limit: 200 }, out);
+      let children: ChildView[] = [];
+      try {
+        const parsed = out.result && !out.result.isError ? JSON.parse(resultText(out.result)) : [];
+        if (Array.isArray(parsed)) children = parsed;
+      } catch {
+        children = [];
+      }
+      let acted = 0;
+      for (const child of children) {
+        if (child.status !== "review" || child.agentReview !== "approved") continue;
+        if (child.humanReview === "pending") {
+          yield* call("review_ticket", { key: child.key, decision: "approve", notes: "Approved by the dummy conductor." });
+          yield* call("complete_ticket", { key: child.key });
+          acted++;
+        } else if (child.humanReview === "approved") {
+          yield* call("complete_ticket", { key: child.key });
+          acted++;
+        }
+      }
+      if (children.length > 0 && children.every((c) => c.status === "done")) {
+        yield* say("All child tickets are done.");
+        yield* call("submit_for_review", { summary: `All ${children.length} child tickets are done.` });
+      } else {
+        yield* say(acted ? `Handled ${acted} child ticket${acted === 1 ? "" : "s"}; waiting on the rest.` : "Waiting on child tickets.");
+      }
+    }
+    // `/agents [n]`: run n sub-agents (DESIGN.md "Sub-agents"), the way claude-code reports its
+    // Agent tool: the call, a "subagent" event, the sub-agent's own tagged output, its result.
+    // From three on, the last one is started by the one before it (a nested agent).
+    async function* subagent(n: number, parentId: string | null, inner?: () => AsyncGenerator<DriverEvent>): AsyncGenerator<DriverEvent> {
+      check();
+      const id = `dummy_agent_${req.runId}_${n}`;
+      const description = `Sub-task ${n}`;
+      const input = { description, subagent_type: "general-purpose", prompt: `Look into sub-task ${n} and report back.` };
+      const from = parentId ? { subagentId: parentId } : {};
+      yield { type: "tool_call", callId: id, name: "Agent", input, ...from };
+      yield { type: "subagent", subagent: { id, parentId, description, agentType: "general-purpose", prompt: input.prompt, status: "running" } };
+      await sleep(delay * 10, req.signal);
+      yield { type: "text", text: `Looking into sub-task ${n}.`, subagentId: id };
+      const readId = `${id}_read`;
+      yield { type: "tool_call", callId: readId, name: "Read", input: { file_path: "README.md" }, subagentId: id };
+      await sleep(delay * 10, req.signal);
+      yield { type: "tool_result", callId: readId, name: "Read", result: { content: [{ type: "text", text: `(dummy) notes for sub-task ${n}` }] }, subagentId: id };
+      if (inner) yield* inner();
+      const report = `Sub-task ${n} is done.`;
+      yield { type: "text", text: report, subagentId: id };
+      check();
+      yield { type: "tool_result", callId: id, name: "Agent", result: { content: [{ type: "text", text: report }] }, ...from };
+      yield { type: "subagent", subagent: { id, status: "succeeded", result: report } };
+    }
+
     const prompt = req.prompt;
 
     switch (req.kind) {
@@ -220,6 +278,11 @@ export class DummyDriver implements Driver {
           "2. Make the change in small, testable steps.",
           "3. Run the tests and check the result.",
           "4. Submit the work for review.",
+          "",
+          "| Step | Check | Risk |",
+          "|:-----|:------|:----:|",
+          "| Change | `bun run test` | low |",
+          "| Review | The reviewer agent reads the diff against the ticket, then approves it or asks for changes | **medium** |",
         ].join("\n");
         yield* say(plan);
         yield* call("update_plan", { plan });
@@ -231,7 +294,14 @@ export class DummyDriver implements Driver {
         const m = prompt.match(DIRECTIVE);
         const directive = m?.[1];
         const arg = (m?.[2] ?? "").trim();
-        if (directive === "block") {
+        if (!directive && CHILD_UPDATES.test(prompt)) {
+          yield* steerChildren();
+        } else if (directive === "child") {
+          // `/child <title>`: a child of this task ticket, which then conducts it (no submit yet).
+          const title = arg || "Child task";
+          yield* call("create_ticket", { title, description: `Dummy child ticket: ${title}`, child: true });
+          yield* say(`Created a child ticket for "${title}"; I'll review and complete it when it's ready.`);
+        } else if (directive === "block") {
           yield* call("block", { question: arg || "The dummy driver needs input." });
         } else if (directive === "approve") {
           // `/approve <tool> [json input]`: ask for permission the way the claude-code CLI does.
@@ -277,6 +347,15 @@ export class DummyDriver implements Driver {
           yield* call("browser_content", { format: "text", max_chars: 2000 }, out);
           const text = out.result ? resultText(out.result) : "";
           yield* say(out.result?.isError ? `Could not read ${arg}: ${text}` : `Page content: ${text.slice(0, 500)}`);
+        } else if (directive === "agents") {
+          const count = Math.min(5, Math.max(1, Number.parseInt(arg, 10) || 2));
+          const nestLast = count >= 3;
+          for (let n = 1; n <= count - (nestLast ? 1 : 0); n++) {
+            const parent = `dummy_agent_${req.runId}_${n}`;
+            yield* subagent(n, null, nestLast && n === count - 1 ? () => subagent(count, parent) : undefined);
+          }
+          yield* say(`The ${count} sub-agent${count === 1 ? "" : "s"} finished.`);
+          yield* call("submit_for_review", { summary: `Ran ${count} sub-agent${count === 1 ? "" : "s"}.` });
         } else if (directive === "bash") {
           if (hasTool("bash")) {
             const out: { result?: ToolResult } = {};
@@ -301,6 +380,11 @@ export class DummyDriver implements Driver {
             ? { decision: "request_changes", notes: "The dummy reviewer was asked to reject this ([dummy:reject])." }
             : { decision: "approve", notes: "The dummy reviewer approves." },
         );
+        break;
+      }
+
+      case "chat": {
+        yield* say(`(dummy chat) You said: "${prompt}"`);
         break;
       }
 
@@ -329,33 +413,7 @@ export class DummyDriver implements Driver {
           }
           state.children = keys;
         } else {
-          const out: { result?: ToolResult } = {};
-          yield* call("list_tickets", { scope: "children", limit: 200 }, out);
-          let children: ChildView[] = [];
-          try {
-            const parsed = out.result && !out.result.isError ? JSON.parse(resultText(out.result)) : [];
-            if (Array.isArray(parsed)) children = parsed;
-          } catch {
-            children = [];
-          }
-          let acted = 0;
-          for (const child of children) {
-            if (child.status !== "review" || child.agentReview !== "approved") continue;
-            if (child.humanReview === "pending") {
-              yield* call("review_ticket", { key: child.key, decision: "approve", notes: "Approved by the dummy conductor." });
-              yield* call("complete_ticket", { key: child.key });
-              acted++;
-            } else if (child.humanReview === "approved") {
-              yield* call("complete_ticket", { key: child.key });
-              acted++;
-            }
-          }
-          if (children.length > 0 && children.every((c) => c.status === "done")) {
-            yield* say("All child tickets are done.");
-            yield* call("submit_for_review", { summary: `All ${children.length} child tickets are done.` });
-          } else {
-            yield* say(acted ? `Handled ${acted} child ticket${acted === 1 ? "" : "s"}; waiting on the rest.` : "Waiting on child tickets.");
-          }
+          yield* steerChildren();
         }
         break;
       }
