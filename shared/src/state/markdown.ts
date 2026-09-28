@@ -1,5 +1,5 @@
 // Markdown-ish parsing for agent summaries and transcript text: paragraphs, headings, bullet /
-// numbered lists, fenced code, quotes, rules, and inline code / bold / italic / links. Pure: each
+// numbered lists, fenced code, quotes, rules, GFM pipe tables, and inline code / bold / italic / links. Pure: each
 // client renders the blocks and tokens with its own primitives (DOM on desktop, <Text> on iOS), so
 // agent output can never inject markup.
 
@@ -9,7 +9,45 @@ export type Block =
   | { t: "ul" | "ol"; items: string[] }
   | { t: "code"; lang: string; text: string }
   | { t: "quote"; text: string }
+  | { t: "table"; align: Align[]; header: string[]; rows: string[][] }
   | { t: "hr" };
+
+export type Align = "left" | "center" | "right" | null;
+
+/** Cells of one GFM table row. `\|` is a literal pipe, and so is a pipe inside a `code span`. */
+function splitRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
+  const cells: string[] = [];
+  let cell = "";
+  let tick = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch === "\\" && s[i + 1] === "|") {
+      cell += "|";
+      i++;
+    } else if (ch === "`") {
+      tick = !tick;
+      cell += ch;
+    } else if (ch === "|" && !tick) {
+      cells.push(cell.trim());
+      cell = "";
+    } else cell += ch;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+const DELIM_CELL = /^:?-+:?$/;
+
+/** The `| --- | :-: |` row under a table header: its alignments, or null when the line isn't one. */
+function delimiterRow(line: string): Align[] | null {
+  if (!line.includes("|") || !/-/.test(line)) return null;
+  const cells = splitRow(line);
+  if (!cells.every((c) => DELIM_CELL.test(c))) return null;
+  return cells.map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : null));
+}
 
 export function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
@@ -32,6 +70,19 @@ export function parseBlocks(src: string): Block[] {
     }
     if (!line.trim()) {
       flush();
+      continue;
+    }
+    const align = line.includes("|") && i + 1 < lines.length ? delimiterRow(lines[i + 1]!) : null;
+    const header = align && splitRow(line);
+    if (align && header && header.length === align.length) {
+      flush();
+      const rows: string[][] = [];
+      i++;
+      while (i + 1 < lines.length && lines[i + 1]!.includes("|") && lines[i + 1]!.trim()) {
+        const cells = splitRow(lines[++i]!);
+        rows.push(header.map((_, k) => cells[k] ?? ""));
+      }
+      blocks.push({ t: "table", align, header, rows });
       continue;
     }
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
@@ -109,6 +160,7 @@ export function inlineTokens(text: string): InlineToken[] {
 export function plainText(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^.*$/gm, (line) => (delimiterRow(line) ? "" : /^\s*\|.*\|\s*$/.test(line) ? splitRow(line).join(" · ") : line))
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")

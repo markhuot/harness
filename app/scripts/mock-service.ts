@@ -470,7 +470,7 @@ function seed() {
     status: "planning",
     driver: "claude-code",
     ageMin: 300,
-    summaries: [["agent", "Drafted a plan:\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes"]],
+    summaries: [["agent", "Drafted a plan:\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes\n\n| Token | Light | Dark | Contrast |\n|:------|:-----:|:----:|---------:|\n| `--cell-bg` | #ffffff | #1e1f24 | — |\n| `--cell-filled` | #111111 | #f2f2f2 | **15.3:1** |\n| `--cell-focus` | #ffda00 | #8a6d00 | 4.6:1 |"]],
   }); // NYTIMES-2
   seedTicket({
     project: ny,

@@ -245,6 +245,11 @@ export class DummyDriver implements Driver {
           "2. Make the change in small, testable steps.",
           "3. Run the tests and check the result.",
           "4. Submit the work for review.",
+          "",
+          "| Step | Check | Risk |",
+          "|:-----|:------|:----:|",
+          "| Change | `bun run test` | low |",
+          "| Review | reviewer agent | **medium** |",
         ].join("\n");
         yield* say(plan);
         yield* call("update_plan", { plan });

@@ -71,6 +71,7 @@ const editWatcher = `document.querySelector("#settings-watchers .settings-row bu
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
+  { name: "plan", route: "#/board/all/ticket/NYTIMES-2" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
   { name: "blocked", route: "#/board/all/ticket/NYTIMES-3" },
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },

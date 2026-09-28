@@ -685,6 +685,36 @@ kbd {
   border-top: 1px solid var(--border);
   margin: 10px 0;
 }
+.md-table {
+  margin: 0 0 8px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.md table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.md th,
+.md td {
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.md th + th,
+.md td + td {
+  border-left: 1px solid var(--border);
+}
+.md th {
+  font-weight: 600;
+  background: var(--bg-sunken);
+}
+.md tbody tr:last-child td {
+  border-bottom: 0;
+}
 
 /* ------------------------------------------------------------------ app shell */
 

@@ -1,9 +1,9 @@
 // Agent markdown with native <Text>: blocks and inline tokens come from the shared parser
-// (@harness/shared/state "markdown"); links open in Safari. Nothing is ever interpreted as markup.
+// (@harness/shared/state "markdown"); links open in Safari, and tables scroll sideways when wide. Nothing is ever interpreted as markup.
 
 import { Fragment } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
-import { inlineTokens, parseBlocks, type InlineToken } from "@harness/shared/state";
+import { inlineTokens, parseBlocks, plainText, type InlineToken } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
 
@@ -95,6 +95,29 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
                 </Text>
               </View>
             );
+          case "table": {
+            const cellText: TextStyle = { fontSize: size - 1.5, lineHeight: Math.round((size - 1.5) * 1.4), color: base.color };
+            const widths = columnWidths(b.header, b.rows, size - 1.5);
+            const row = (cells: string[], head: boolean, key: number, last: boolean) => (
+              <View key={key} style={{ flexDirection: "row", backgroundColor: head ? c.bgSunken : undefined, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderColor: c.border }}>
+                {cells.map((cell, j) => (
+                  <View key={j} style={{ width: widths[j], paddingHorizontal: 8, paddingVertical: 5, borderLeftWidth: j ? StyleSheet.hairlineWidth : 0, borderColor: c.border }}>
+                    <Text style={[cellText, head && { fontWeight: "700" }, { textAlign: b.align[j] ?? "left" }]} selectable>
+                      <Inline tokens={inlineTokens(cell)} base={cellText} />
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            );
+            return (
+              <ScrollView key={i} horizontal showsHorizontalScrollIndicator={false}>
+                <View style={[styles.table, { borderColor: c.border }]}>
+                  {row(b.header, true, -1, !b.rows.length)}
+                  {b.rows.map((r, k) => row(r, false, k, k === b.rows.length - 1))}
+                </View>
+              </ScrollView>
+            );
+          }
           case "hr":
             return <View key={i} style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 4 }} />;
         }
@@ -103,6 +126,16 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
   );
 }
 
+/** React Native has no table layout, so each column gets a width from its longest cell (clamped, so
+ *  a long cell wraps instead of stretching the table) and every row lays out against those widths. */
+function columnWidths(header: string[], rows: string[][], fontSize: number): number[] {
+  return header.map((_, j) => {
+    const chars = Math.max(...[header, ...rows].map((r) => plainText(r[j] ?? "").length));
+    return Math.min(240, Math.max(56, Math.ceil(chars * fontSize * 0.56) + 18));
+  });
+}
+
 const styles = StyleSheet.create({
   code: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
+  table: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
 });

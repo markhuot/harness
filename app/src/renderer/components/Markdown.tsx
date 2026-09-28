@@ -1,5 +1,5 @@
 // Markdown-ish rendering for agent summaries and transcript text: paragraphs, headings,
-// bullet/numbered lists, fenced code, inline code, bold/italic, links. Parsing is shared with the
+// bullet/numbered lists, fenced code, tables, inline code, bold/italic, links. Parsing is shared with the
 // iOS app (@harness/shared/state "markdown"); this builds React DOM nodes directly (no innerHTML),
 // so agent output can't inject markup.
 
@@ -82,6 +82,33 @@ export function Markdown({ text, className }: { text: string; className?: string
             );
           case "quote":
             return <blockquote key={i}>{withBreaks(b.text)}</blockquote>;
+          case "table":
+            return (
+              <div key={i} className="md-table">
+                <table>
+                  <thead>
+                    <tr>
+                      {b.header.map((cell, j) => (
+                        <th key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                          {inline(cell)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b.rows.map((row, r) => (
+                      <tr key={r}>
+                        {row.map((cell, j) => (
+                          <td key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                            {inline(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
           case "hr":
             return <hr key={i} />;
         }
