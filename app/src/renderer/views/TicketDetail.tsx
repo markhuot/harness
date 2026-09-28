@@ -34,6 +34,7 @@ import {
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
 import { Transcript } from "./Transcript";
@@ -574,6 +575,8 @@ function Summaries({ ticket }: { ticket: Ticket }) {
                   </span>
                 </div>
                 <Markdown text={s.body} />
+                {/* An older service sends summaries without attachments. */}
+                <Attachments list={s.attachments ?? []} />
               </div>
             </li>
           ))}

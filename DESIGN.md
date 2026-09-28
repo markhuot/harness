@@ -729,6 +729,17 @@ has a visible result, and `browser_screenshot { save_to }` writes one to a file 
   and the stored absolute path, so reviewer and conductor agents can open them with a file tool.
 - **Deletion.** Deleting a ticket (so also a project) collects its attachment files, deletes the
   rows with the session, then removes the files.
+- **Mac app** (`app/src/renderer/components/Attachments.tsx`). The Summaries tab shows a strip
+  of thumbnails under each summary's text, sized from `width`/`height` by `thumbnailBox`
+  (`shared/src/state/attachments.ts`) so nothing shifts when they load: images lazy-load with
+  `object-fit: cover`, videos show a `preload="metadata"` frame with a play badge, and one that
+  fails to load (a 404) shows a placeholder with its name. Clicking one opens a lightbox (a
+  `Modal`, so app key commands pause): the image fit to the window or the video playing with
+  controls, ← → and the side buttons step through the summary's attachments with wraparound
+  (`stepAttachment`), Esc or the backdrop closes it. URLs are built from the current client on
+  each render, so a rotated token swaps them. A conductor's Tickets tab notes a child's latest
+  summary attachments ("2 images, 1 video"). The renderer's CSP allows `img-src`/`media-src` from
+  the local service origins, like `connect-src`.
 
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is

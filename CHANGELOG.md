@@ -29,6 +29,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   ticket can show what changed (a UI before and after, or a browser flow) along with the
   description. They're asked to do this whenever their work has a visible result, especially
   when they submit it for review.
+- On the Mac, a summary's screenshots and recordings show as thumbnails under its text, and a
+  video thumbnail carries a play badge. Click one to see it at full window size (videos play
+  with controls). Use ← and → or the side arrows to move between a summary's attachments, and
+  Esc or a click outside to close it. A file that can't be loaded shows its name instead of a
+  broken image. A conductor's Tickets tab notes when a child's latest summary has attachments.
 
 - When the harness service is running older code than the Mac app, a banner under the board says
   so, and it stays until the service restarts. Actions the older service doesn't know about fail

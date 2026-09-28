@@ -86,7 +86,7 @@ function modalOpener(): HTMLElement | null {
  * control unless something in it autofocused, and it gives the focus back to what had it (read at
  * its first render, before it takes the focus) when it closes.
  */
-export function Modal({ onClose, children, width }: { onClose: () => void; children: ReactNode; width?: number }) {
+export function Modal({ onClose, children, width, className }: { onClose: () => void; children: ReactNode; width?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [opener] = useState(modalOpener);
   useEffect(() => {
@@ -121,7 +121,7 @@ export function Modal({ onClose, children, width }: { onClose: () => void; child
     };
   }, [opener]);
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={className ? `overlay ${className}` : "overlay"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} className="modal" style={width ? { width: `min(${width}px, calc(100vw - 40px))` } : undefined} role="dialog">
         {children}
       </div>

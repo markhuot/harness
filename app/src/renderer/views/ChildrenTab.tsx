@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
+import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -141,7 +141,17 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
             <span>{c.blockedReason || "Blocked"}</span>
           </div>
         ) : (
-          summary && <div className="child-summary">{plainText(summary.body)}</div>
+          summary && (
+            <>
+              <div className="child-summary">{plainText(summary.body)}</div>
+              {summary.attachments?.length > 0 && (
+                <div className="child-attachments">
+                  <Icon name="image" size={11} />
+                  {attachmentsLabel(summary.attachments)}
+                </div>
+              )}
+            </>
+          )
         )}
 
         {(deps.length > 0 || showDriver || model) && (

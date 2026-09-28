@@ -15,3 +15,4 @@ export * from "./markdown";
 export * from "./icons";
 export * from "./stickToBottom";
 export * from "./watchers";
+export * from "./attachments";
