@@ -2,13 +2,13 @@
 // written to be short, concrete and consistent with the tool names in DESIGN.md.
 //
 // Two constraints from the dummy driver (DESIGN.md → "Dummy driver script"):
-//  * The triage prompt opens with `Mapping hint: <EXTERNAL-KEY> → <PROJECT>` lines (or one
-//    `Mapping hint: none`), placed before any watcher output.
+//  * The triage prompt puts the watcher's prompt under a `## What the human wants` heading and
+//    the output in a fenced `## Output` section; dummy triage reads its markers from the former.
 //  * Run prompts never contain `- ` bullets or slash directives of our own; the dummy
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { Mapping, Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
+import type { Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 
 export interface PromptInfo {
@@ -111,12 +111,12 @@ Limits, enforced by the harness: these never act on your own ticket (${kind === 
  * work and conductor runs, which have a human to approve them.
  */
 function configSection(kind: RunKind): string {
-  const reads = `\`list_watchers\`, \`list_mappings\`, \`get_settings\` and \`list_drivers\` show how the harness is set up: its watchers (commands whose output lands in the Inbox for a triage agent), the mappings that hint which project triage should pick, the settings, and the agent drivers with their models. They only read, and never show environment variable values or the API key.`;
+  const reads = `\`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up: its watchers (commands whose output lands in the Inbox for a triage agent, with the prompt that says what to do with it and which project it goes to), the settings, and the agent drivers with their models. They only read, and never show environment variable values or the API key.`;
   if (kind !== "work" && kind !== "conductor") return section("Harness configuration", reads);
   return section(
     "Harness configuration",
     `${reads}
-When your task is to change the harness itself, what a person does on the Settings screens is a tool: \`create_watcher\`, \`update_watcher\`, \`delete_watcher\`, \`run_watcher\`, \`create_mapping\`, \`delete_mapping\`, \`create_project\`, \`update_project\`, \`delete_project\`, \`update_settings\` and \`delete_ticket\`. A human approves every one of these calls: the ticket blocks on an approval card showing the call, you are resumed with their answer, and then you make exactly the same call again (a changed call asks again). Get the input right before calling, since each call is its own approval. To set up a watcher from a plain-English request, put the user's command line in command and their instructions for its output (what to dispatch, to which project, what to ignore) in prompt; create_watcher's description explains every field. Secrets such as the Anthropic API key, pairing and tokens are for the human to enter in the app.`,
+When your task is to change the harness itself, what a person does on the Settings screens is a tool: \`create_watcher\`, \`update_watcher\`, \`delete_watcher\`, \`run_watcher\`, \`create_project\`, \`update_project\`, \`delete_project\`, \`update_settings\` and \`delete_ticket\`. A human approves every one of these calls: the ticket blocks on an approval card showing the call, you are resumed with their answer, and then you make exactly the same call again (a changed call asks again). Get the input right before calling, since each call is its own approval. To set up a watcher from a plain-English request, put the user's command line in command and their instructions for its output (what to dispatch, to which project, what to ignore) in prompt; create_watcher's description explains every field. Secrets such as the Anthropic API key, pairing and tokens are for the human to enter in the app.`,
   );
 }
 
@@ -268,7 +268,7 @@ function triageInstructions(): string {
     `A watcher (a command the human set up, such as a Jira poller or a looping \`curl\` against an API) printed some output. The output has no fixed format: it may be JSON, a log line, or prose. The human wrote a prompt for this watcher saying what they want done with its output. Decide whether the output becomes local work. Do not do the work, and do not create or modify files.
 How to work it out:
 * Read the output and the human's prompt first. The prompt decides what is worth acting on ("only events assigned to me", "only failures"); when the output doesn't qualify, decline and say why.
-* Work out what the output is about: a title, the external item's key and link if it has them, and which project it belongs to. Mapping hints point at a project when a key in the output matches a mapping; read the mapping notes, and call \`list_projects\` when you need the full list. If the right project is unclear, decline and say so rather than guess: work dispatched to the wrong repository costs more than a question.
+* Work out what the output is about: a title, the external item's key and link if it has them, and which project it belongs to. The human's prompt usually names the project ("dispatch it to the WEB project"); otherwise go by the output and the project list, and call \`list_projects\` when you need more detail. If the right project is unclear or ambiguous, decline and say so rather than guess: work dispatched to the wrong repository costs more than a question.
 * Check whether the output is an update to something that already has a ticket: look at the existing tickets listed with the output${findOthers}. An update to a known ticket goes to that ticket as a message: call \`dispatch_ticket\` with its key.
 * Actionable work has a clear goal, an obvious definition of done, and enough context for an agent to start without asking. An empty or one-line request with no definition of done is a question for its author, not work.
 * News that changes nothing about the work (someone else moved it, a comment with nothing new) is not worth forwarding.
@@ -408,13 +408,6 @@ export function reopenPrompt(ticket: Ticket, notes: string): string {
   );
 }
 
-export interface MappingHint {
-  /** External key found in the output */
-  key: string;
-  mapping: Mapping;
-  project: Project;
-}
-
 export function triagePrompt(input: {
   source: string;
   /** Inbox title derived from the output */
@@ -423,25 +416,16 @@ export function triagePrompt(input: {
   truncated: boolean;
   /** The watcher's prompt ("" → none) */
   prompt: string;
-  hints: MappingHint[];
   projects: Project[];
-  mappings: Mapping[];
   /** Local tickets whose keys appear in the output */
   existingTickets: Ticket[];
 }): string {
-  const { source, title, text, truncated, prompt, hints, projects, mappings, existingTickets } = input;
-  const byId = new Map(projects.map((p) => [p.id, p]));
+  const { source, title, text, truncated, prompt, projects, existingTickets } = input;
 
-  // Hint lines come first, before anything taken from the output.
-  const header = [
-    `New output from watcher ${quote(source)}.`,
-    ...(hints.length ? hints.map((h) => `Mapping hint: ${h.key} → ${h.project.key}`) : ["Mapping hint: none"]),
-    `Inbox title: ${quote(title)}`,
-  ].join("\n");
+  const header = [`New output from watcher ${quote(source)}.`, `Inbox title: ${quote(title)}`].join("\n");
 
-  const why = hints.length
-    ? `The hints come from mappings (${[...new Set(hints.map((h) => h.mapping.pattern))].join(", ")}) matching keys in the output. They are hints: override them when the output clearly belongs elsewhere.`
-    : "No mapping matched a key in the output. Dispatch only if the output and the prompt make the right project unambiguous; otherwise decline and say the project is unknown.";
+  const why =
+    "Pick the project from the human's prompt and the output. Dispatch only when they make the right project unambiguous; when they don't, decline and say the project is unknown.";
 
   const wants = section(
     "What the human wants (their prompt for this watcher)",
@@ -464,14 +448,6 @@ export function triagePrompt(input: {
   const projectList = projects.length
     ? projects.map((p) => `* ${p.key}: ${p.name} (${p.path})`).join("\n")
     : "(no projects are configured; decline)";
-  const mappingList = mappings.length
-    ? mappings
-        .map((m) => {
-          const p = byId.get(m.projectId);
-          return `* ${m.pattern} → ${p ? p.key : `unknown project ${m.projectId}`}${m.notes.trim() ? `: ${m.notes.trim()}` : ""}`;
-        })
-        .join("\n")
-    : "(none)";
 
   return join(
     header,
@@ -480,7 +456,6 @@ export function triagePrompt(input: {
     existing,
     output,
     section("Projects", projectList),
-    section("Mappings (routing hints: an external key prefix or /regex/ → project)", mappingList),
     "Decide, then call `dispatch_ticket` (once per separate item that qualifies) or `decline_work`.",
   );
 }

@@ -9,14 +9,12 @@ const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", 
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR = ["review_ticket", "complete_ticket"];
 
-const CONFIG_READ = ["list_watchers", "list_mappings", "get_settings", "list_drivers"];
+const CONFIG_READ = ["list_watchers", "get_settings", "list_drivers"];
 const CONFIG_WRITE = [
   "create_watcher",
   "update_watcher",
   "delete_watcher",
   "run_watcher",
-  "create_mapping",
-  "delete_mapping",
   "create_project",
   "update_project",
   "delete_project",

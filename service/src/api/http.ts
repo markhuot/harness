@@ -187,7 +187,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.transcript(params.id!, Number.isFinite(after) ? after : 0);
   });
 
-  // Watchers & mappings (inject before :id so it isn't captured as an id)
+  // Watchers (inject before :id so it isn't captured as an id)
   add("GET", "/watchers", () => o.listWatchers());
   add("POST", "/watchers", async ({ body }) => o.createWatcher(await body()));
   add("POST", "/watchers/inject", async ({ body }) => {
@@ -198,9 +198,6 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/watchers/:id", async ({ params, body }) => o.updateWatcher(params.id!, await body()));
   add("DELETE", "/watchers/:id", ({ params }) => (o.deleteWatcher(params.id!), ok));
   add("POST", "/watchers/:id/run", async ({ params }) => (await o.runWatcher(params.id!), ok));
-  add("GET", "/mappings", () => o.listMappings());
-  add("POST", "/mappings", async ({ body }) => o.createMapping(await body()));
-  add("DELETE", "/mappings/:id", ({ params }) => (o.deleteMapping(params.id!), ok));
 
   // Drivers & settings
   add("GET", "/drivers", () => o.driverInfos());

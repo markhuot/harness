@@ -75,7 +75,7 @@ describe("watcher output → Inbox", () => {
     expect(prompt).toContain(PROMPT);
     expect(prompt).toContain('New output from watcher "events".');
     await h.orch.idle();
-    expect(h.orch.getSession(s.id).triageStatus).toBe("declined"); // the dummy has no mapping hint to follow
+    expect(h.orch.getSession(s.id).triageStatus).toBe("declined"); // the prompt names no project, so the dummy can't route it
 
     // The same output on the next run is not triaged again.
     await h.orch.runWatcher(w.id);

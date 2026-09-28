@@ -2,11 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Mapping, Watcher } from "@harness/shared";
+import type { Watcher } from "@harness/shared";
 import {
   findKeys,
   loginShell,
-  matchMapping,
   toOutput,
   watcherArgv,
   WatcherRunner,
@@ -62,62 +61,6 @@ describe("watcherArgv", () => {
     expect(loginShell({ SHELL: "/opt/homebrew/bin/fish" })).toBe("/opt/homebrew/bin/fish");
     expect(loginShell({ SHELL: "zsh" })).toMatch(/^\/bin\/(zsh|sh)$/);
     expect(loginShell({})).toMatch(/^\/bin\/(zsh|sh)$/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// matchMapping
-// ---------------------------------------------------------------------------
-
-function mapping(pattern: string, projectId = pattern): Mapping {
-  return { id: `m-${pattern}`, pattern, projectId, notes: "", createdAt: 0 };
-}
-
-describe("matchMapping", () => {
-  test("prefix matches only on a PREFIX- boundary, case-insensitively", () => {
-    const ms = [mapping("FOO")];
-    expect(matchMapping("FOO-1", ms)?.projectId).toBe("FOO");
-    expect(matchMapping("foo-12", ms)?.projectId).toBe("FOO");
-    expect(matchMapping("FOOBAR-1", ms)).toBeNull();
-    expect(matchMapping("FOO", ms)).toBeNull();
-    expect(matchMapping("XFOO-1", ms)).toBeNull();
-  });
-
-  test("a trailing dash in the pattern is accepted", () => {
-    expect(matchMapping("FOO-1", [mapping("foo-")])?.projectId).toBe("foo-");
-  });
-
-  test("longest prefix wins regardless of order", () => {
-    const ms = [mapping("FOO", "short"), mapping("FOO-BAR", "long")];
-    expect(matchMapping("FOO-BAR-3", ms)?.projectId).toBe("long");
-    expect(matchMapping("FOO-3", ms)?.projectId).toBe("short");
-    expect(matchMapping("FOO-BAR-3", [...ms].reverse())?.projectId).toBe("long");
-  });
-
-  test("regexes are checked after prefixes, in list order", () => {
-    const ms = [mapping("/.*/", "catchall"), mapping("/^OPS-\\d+$/", "ops"), mapping("OPS", "prefix")];
-    expect(matchMapping("OPS-1", ms)?.projectId).toBe("prefix");
-    expect(matchMapping("ZED-1", ms)?.projectId).toBe("catchall");
-    const ordered = [mapping("/^OPS-\\d+$/", "ops"), mapping("/.*/", "catchall")];
-    expect(matchMapping("OPS-1", ordered)?.projectId).toBe("ops");
-  });
-
-  test("regex flags apply and g does not make matching stateful", () => {
-    expect(matchMapping("ops-1", [mapping("/^OPS-/i", "ops")])?.projectId).toBe("ops");
-    expect(matchMapping("ops-1", [mapping("/^OPS-/", "ops")])).toBeNull();
-    const g = [mapping("/^OPS-/g", "ops")];
-    expect(matchMapping("OPS-1", g)?.projectId).toBe("ops");
-    expect(matchMapping("OPS-1", g)?.projectId).toBe("ops");
-  });
-
-  test("invalid regexes are ignored", () => {
-    const ms = [mapping("/([/", "broken"), mapping("/^A-/", "a")];
-    expect(matchMapping("A-1", ms)?.projectId).toBe("a");
-    expect(matchMapping("B-1", ms)).toBeNull();
-  });
-
-  test("no mappings, no match", () => {
-    expect(matchMapping("A-1", [])).toBeNull();
   });
 });
 

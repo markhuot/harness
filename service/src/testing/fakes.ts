@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserState, DriverInfo, ModelInfo } from "@harness/shared";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
+import { outputKey, watcherProject } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
 import { openDb } from "../db";
@@ -248,9 +249,8 @@ export class FakeDriver implements Driver {
         return;
       }
       case "triage": {
-        const hint = /^[^\n]*\nMapping hint: (\S+) → (\S+)/.exec(p); // the first hint line only
-        const key = hint?.[1];
-        const suggested = hint?.[2];
+        const suggested = watcherProject(p);
+        const key = outputKey(p);
         if (p.includes("[unscoped]") || !suggested) {
           await ops.declineWork(ctx, "No project for this item");
           return;

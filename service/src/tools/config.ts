@@ -1,5 +1,5 @@
-// Config tools: what the Settings and Project Settings screens do (watchers, mappings,
-// projects, settings), plus deleting projects and tickets. Reads are open to every ticket run
+// Config tools: what the Settings and Project Settings screens do (watchers, projects,
+// settings), plus deleting projects and tickets. Reads are open to every ticket run
 // and triage; every mutation is a gated tool (defineGatedTool): a human approves each call.
 
 import { commandLine, PERMISSION_MODES, type Watcher } from "@harness/shared";
@@ -16,11 +16,11 @@ import { defineGatedTool, defineTool, json, schema } from "./util";
 const WATCHER_GUIDE = [
   `A watcher runs a command and sends whatever text it prints to the Inbox, together with the watcher's prompt. A triage agent reads each piece of output with that prompt and decides what to do: dispatch it to an agent in a project, send it to an existing ticket, or decline it. The output can be in any format (JSON, a table, plain lines). The harness service runs the command on this machine as the user, outside any ticket sandbox.`,
   `command: the user's shell command line, exactly as they'd type it in a terminal. It runs through their login shell, so their PATH, pipes, quoting and loops work. Leave args out: args are only for older watchers whose command is an executable run directly, without a shell.`,
-  `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." Name the project when the user does.`,
+  `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." The prompt is where routing lives: it names the project (by key) that matching output goes to, and triage declines output whose project it can't tell. When the user names a project, put its key in the prompt; when several projects are involved, say in the prompt which output goes where.`,
   `mode: "loop" for a command that runs for a long time or loops by itself; it's restarted when it exits, and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10), and each run's output becomes one Inbox item. Output identical to an earlier item from the same watcher is skipped, so a loop that re-prints unchanged data doesn't fill the Inbox.`,
   `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
   `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "watch-jira --project=PLAYR --assigned=@me --once", "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
-  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run. Mappings (create_mapping) are optional routing hints for the triage agent; a watcher works without them, so when the user names the project, put it in the prompt rather than adding a mapping.`,
+  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run.`,
 ].join(" ");
 
 const watcherRefProp = { type: "string", minLength: 1, description: "The watcher's id (from list_watchers) or its exact name." };
@@ -39,7 +39,7 @@ const watcherProps = {
   name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"jira-sprint\"." },
   command: { type: "string", minLength: 1, description: "A shell command line whose stdout text goes to the Inbox, e.g. \"watch-jira --project=PLAYR --once\"." },
   args: { type: "array", items: { type: "string" }, description: "Legacy only: with args, command is an executable run directly with them and no shell. Leave it out; update_watcher with args [] turns a legacy watcher into a shell command line." },
-  prompt: { type: "string", description: "The user's instructions to the triage agent for this watcher's output." },
+  prompt: { type: "string", description: "The user's instructions to the triage agent for this watcher's output, including the project (by key) to dispatch matching work to." },
   cwd: { type: "string", description: "Working directory; empty for the service's." },
   env: { type: "object", description: "Environment variables (string values)." },
   mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for long-running or self-looping commands (restarted when they exit), \"interval\" for commands that print once and exit. Default \"loop\"." },
@@ -155,18 +155,6 @@ export const listWatchers = defineTool<Record<string, never>>({
   },
 });
 
-export const listMappings = defineTool<Record<string, never>>({
-  name: "list_mappings",
-  description:
-    "List the mappings: routing hints for triage. When a watcher's output contains a key matching a mapping's pattern (a key prefix, \"FOO\" matches FOO-123, or a /regex/), the triage agent is told that project is the likely home for it; the agent makes the final call.",
-  inputSchema: schema({}),
-  async run(_input, ctx) {
-    const mappings = await ctx.ops.listMappings(ctx);
-    if (mappings.length === 0) return "No mappings are configured.";
-    return json(mappings.map((m) => ({ id: m.id, pattern: m.pattern, project_key: m.projectKey, notes: m.notes })));
-  },
-});
-
 export const getSettings = defineTool<Record<string, never>>({
   name: "get_settings",
   description:
@@ -271,42 +259,6 @@ export const runWatcher = defineGatedTool<{ watcher: string }>({
 });
 
 // ---------------------------------------------------------------------------
-// Mappings
-// ---------------------------------------------------------------------------
-
-export const createMapping = defineGatedTool<{ pattern: string; project_key: string; notes?: string }>({
-  name: "create_mapping",
-  description:
-    "Add a routing hint for triage: when a watcher's output contains a key matching pattern, the triage agent is told project_key is the likely project for it (it still decides; a watcher's prompt can route work on its own). pattern is a key prefix (\"FOO\" matches FOO-123 but not FOOBAR-1; the longest matching prefix wins) or a /regex/flags tried after all prefixes. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
-  inputSchema: schema(
-    {
-      pattern: { type: "string", minLength: 1, description: "Key prefix (\"FOO\") or /regex/ (\"/^OPS-\\\\d+$/i\")." },
-      project_key: projectKeyProp,
-      notes: { type: "string", description: "Optional guidance shown to the triage agent along with the hint." },
-    },
-    ["pattern", "project_key"],
-  ),
-  describe: (i) => ({ summary: `Hint that ${i.pattern} keys belong in project ${i.project_key}`, reason: "Changes where triage files incoming work." }),
-  check: (i, ctx) => ctx.ops.createMapping(ctx, { pattern: i.pattern, projectKey: i.project_key, notes: i.notes }, true),
-  async run(i, ctx) {
-    const m = (await ctx.ops.createMapping(ctx, { pattern: i.pattern, projectKey: i.project_key, notes: i.notes }))!;
-    return `Created mapping ${m.id}: ${m.pattern} → ${i.project_key.toUpperCase()}.`;
-  },
-});
-
-export const deleteMapping = defineGatedTool<{ id: string }>({
-  name: "delete_mapping",
-  description: "Delete a mapping by id (see list_mappings). A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
-  inputSchema: schema({ id: { type: "string", minLength: 1, description: "Mapping id from list_mappings." } }, ["id"]),
-  describe: (i) => ({ summary: `Delete mapping ${i.id}`, reason: "Changes where triage files incoming work." }),
-  check: (i, ctx) => ctx.ops.deleteMapping(ctx, i.id, true),
-  async run(i, ctx) {
-    const m = await ctx.ops.deleteMapping(ctx, i.id);
-    return `Deleted mapping ${m.pattern}.`;
-  },
-});
-
-// ---------------------------------------------------------------------------
 // Projects
 // ---------------------------------------------------------------------------
 
@@ -390,11 +342,11 @@ export const updateProject = defineGatedTool<ProjectToolInput & { project_key: s
 export const deleteProject = defineGatedTool<{ project_key: string }>({
   name: "delete_project",
   description:
-    "Delete a project with all of its tickets, their transcripts and its mappings. The project directory on disk is left alone. You can't delete the project your own ticket is in. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
+    "Delete a project with all of its tickets and their transcripts. The project directory on disk is left alone. You can't delete the project your own ticket is in. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
   inputSchema: schema({ project_key: projectKeyProp }, ["project_key"]),
   describe: (i) => ({
     summary: `Delete project ${i.project_key} and all of its tickets`,
-    reason: "Deletes the project's tickets, transcripts and mappings. This can't be undone.",
+    reason: "Deletes the project's tickets and transcripts. This can't be undone.",
   }),
   check: (i, ctx) => ctx.ops.deleteProject(ctx, i.project_key, true),
   async run(i, ctx) {
@@ -480,14 +432,12 @@ export const deleteTicket = defineGatedTool<{ key: string }>({
   },
 });
 
-export const configReadTools = [listWatchers, listMappings, getSettings, listDrivers];
+export const configReadTools = [listWatchers, getSettings, listDrivers];
 export const configWriteTools = [
   createWatcher,
   updateWatcher,
   deleteWatcher,
   runWatcher,
-  createMapping,
-  deleteMapping,
   createProject,
   updateProject,
   deleteProject,

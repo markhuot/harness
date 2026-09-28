@@ -6,7 +6,6 @@ import type {
   CreateProjectBody,
   DriverInfo,
   DriverModels,
-  Mapping,
   PermissionMode,
   PublicSettings,
   RunKind,
@@ -252,8 +251,6 @@ export interface HarnessOps {
   // validation (and throws the same errors) without changing anything, so a tool can reject a bad
   // call before it puts an approval card in front of the human.
   listWatchers(ctx: ToolContext): Promise<Watcher[]>;
-  /** Mappings with the target project's key */
-  listMappings(ctx: ToolContext): Promise<(Mapping & { projectKey: string | null })[]>;
   /** Settings without secrets (anthropicApiKeySet instead of the key) */
   getSettings(ctx: ToolContext): Promise<PublicSettings>;
   listDrivers(ctx: ToolContext): Promise<(DriverInfo & { models: DriverModels })[]>;
@@ -262,8 +259,6 @@ export interface HarnessOps {
   updateWatcher(ctx: ToolContext, ref: string, input: WatcherFields, dryRun?: boolean): Promise<Watcher | null>;
   deleteWatcher(ctx: ToolContext, ref: string, dryRun?: boolean): Promise<Watcher>;
   runWatcher(ctx: ToolContext, ref: string, dryRun?: boolean): Promise<Watcher>;
-  createMapping(ctx: ToolContext, input: { pattern: string; projectKey: string; notes?: string }, dryRun?: boolean): Promise<Mapping | null>;
-  deleteMapping(ctx: ToolContext, id: string, dryRun?: boolean): Promise<Mapping>;
   createProject(ctx: ToolContext, input: CreateProjectBody, dryRun?: boolean): Promise<ProjectView | null>;
   /** `key` is the project's current key; input.key renames it */
   updateProject(ctx: ToolContext, key: string, input: Partial<CreateProjectBody>, dryRun?: boolean): Promise<ProjectView | null>;

@@ -290,6 +290,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE watchers ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
   `,
+  // 9: routing moved into the watcher's prompt, so the key-pattern → project table goes. Its rows
+  //    are dropped with it; nothing else referenced them.
+  `
+  DROP TABLE mappings;
+  `,
 ];
 
 /**
