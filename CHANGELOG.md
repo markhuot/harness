@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Agents can now read other tickets on the board for context. Any agent (planning, working,
+  reviewing, completing, conducting, or triaging) can search tickets by key or words, list a
+  project's tickets by status, and open a ticket to see its brief, its summaries and, when it
+  asks, the last few messages of that ticket's agent. They can only read these tickets, not change them.
+
 ### Fixed
 
 - The Changes tab stays on a ticket after it's completed. Once the branch is merged and its

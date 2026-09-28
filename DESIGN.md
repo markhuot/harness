@@ -58,7 +58,7 @@ directories (`worktrees/OLD-n`) keep their names: they're stored on the ticket, 
 progress isn't disturbed. Transcript and summary text isn't rewritten.
 
 Old keys keep working. Each rename records `OLD-n → ticket id` in `ticket_key_aliases`
-(migration 5), so bookmarks (`#/…/ticket/OLD-2`), conductors calling `get_ticket` /
+(migration 5), so bookmarks (`#/…/ticket/OLD-2`), agents calling `get_ticket`, conductors calling
 `start_ticket` / `message_ticket` / `review_ticket` / `complete_ticket` with a key they
 learned earlier, `dependsOn` inputs, triage dispatch and the CLI all still find the ticket.
 Aliases point at the ticket rather than at a key, so chained renames (`A → B → C`) resolve
@@ -162,13 +162,14 @@ Harness tools (always exposed, via MCP for claude-code):
 | `submit_for_review` | work, conductor | `{ summary }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `create_ticket` | conductor | `{ title, description, depends_on?: string[], auto_start?: boolean }` (depends_on takes keys returned by earlier create_ticket calls) |
-| `list_tickets` | conductor | `{ scope?: "children"\|"project" }` |
-| `get_ticket` | conductor | `{ key }` |
+| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
+| `list_projects` | all | `{}` |
 | `start_ticket` | conductor | `{ key }` |
 | `message_ticket` | conductor | `{ key, text }` |
 | `review_ticket` | conductor | `{ key, decision, notes }` |
 | `complete_ticket` | conductor | `{ key, instructions? }` |
-| `list_projects` | triage | `{}` |
 | `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason }` |
 | `browser_open` | plan, work, review, conductor | `{ url }` |
@@ -178,6 +179,10 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_eval` | ″ | `{ expression }` |
 | `browser_screenshot` | ″ | `{}` → image |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
+
+The four board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
+`HarnessOps`) only read: every run kind gets them so an agent can look up related or earlier
+work anywhere on the board, and each prompt has a short "Board" section naming them.
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`.
