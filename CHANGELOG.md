@@ -87,6 +87,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   opens a dropdown menu next to the field, with a checkmark on the current choice, instead of a
   sheet of buttons at the bottom of the screen. Permission modes show
   their description under each name, and drivers that aren't signed in say so.
+- On the Mac board, Show child tickets moved from the header into a menu on the search box.
+  Click the filter button at the right end of the search box to turn it on or off. The button
+  stays highlighted while child tickets are showing.
 
 ### Removed
 
@@ -97,6 +100,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   actionable ticket assigned to me comes in, dispatch it to the PLAYR project." Updating deletes
   any mappings you had, so add the project to each watcher's prompt. Triage declines output when
   the prompt and the output don't make the project clear.
+- The Mac board header no longer shows a ticket count or a New session button. Each column
+  still shows its own count, and New session is still at the top of the sidebar and on ⌘N.
 
 ## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
 

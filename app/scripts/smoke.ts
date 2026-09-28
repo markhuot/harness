@@ -57,7 +57,19 @@ try {
   // No "N hidden" count anywhere.
   const cardKeys = () => js<string[]>(`[...document.querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
   const hiddenCountText = () => js<boolean>(`/\\d+\\s*hidden/i.test(document.body.innerText)`);
-  const toggleState = () => js<{ checked: string | null; text: string }>(`(() => { const b = document.querySelector("[data-testid=show-children]"); return { checked: b?.getAttribute("aria-checked") ?? null, text: b?.textContent ?? "" }; })()`);
+  // The switch lives in the search box's options dropdown: open it (if it isn't) before reading it.
+  const openOptions = async () => {
+    if (!(await exists("[data-testid=show-children]"))) await js(`document.querySelector("[data-testid=search-options]").click()`);
+    await until("search options menu", () => exists("[data-testid=show-children]"));
+  };
+  const toggleState = async () => {
+    await openOptions();
+    return js<{ checked: string | null; text: string }>(`(() => { const b = document.querySelector("[data-testid=show-children]"); return { checked: b?.getAttribute("aria-checked") ?? null, text: b?.textContent ?? "" }; })()`);
+  };
+  const toggleChildren = async () => {
+    await openOptions();
+    await js(`document.querySelector("[data-testid=show-children]").click()`);
+  };
   {
     const first = await until("board cards", async () => {
       const k = await cardKeys();
@@ -68,10 +80,18 @@ try {
       ["HARNESS-2", "HARNESS-3", "HARNESS-6", "HARNESS-10"].every((k) => !first.includes(k)) && ["HARNESS-1", "HARNESS-7", "HARNESS-8"].every((k) => first.includes(k)),
       first.join(","),
     );
+    const header = await js<{ title: string; newSession: boolean; switchOutside: boolean }>(`(() => {
+      const h = document.querySelector(".board-pane > .view-header");
+      return { title: h.querySelector(".view-title").textContent, newSession: [...h.querySelectorAll("button")].some(b => /new session/i.test(b.textContent + (b.getAttribute("aria-label") ?? ""))), switchOutside: !!h.querySelector("[data-testid=show-children]") };
+    })()`);
+    check("the board header shows no card count", !/\d/.test(header.title), header.title);
+    check("the board header has no New session button (the sidebar has it)", !header.newSession);
+    check("Show child tickets is tucked in the search options, not the header", !header.switchOutside);
     const off = await toggleState();
+    check("the options button sits inside the search box", await exists(".search [data-testid=search-options][aria-expanded=true]"));
     check("the toolbar switch reads Show child tickets, off", off.checked === "false" && off.text === "Show child tickets", JSON.stringify(off));
     check("no hidden-count text while children are hidden", !(await hiddenCountText()));
-    await js(`document.querySelector("[data-testid=show-children]").click()`);
+    await toggleChildren();
     const shownKeys = await until("children shown", async () => {
       const k = await cardKeys();
       return k.includes("HARNESS-2") && k;
@@ -79,6 +99,10 @@ try {
     check("the switch shows child tickets", ["HARNESS-2", "HARNESS-3", "HARNESS-6", "HARNESS-10"].every((k) => shownKeys.includes(k)), shownKeys.join(","));
     const on = await toggleState();
     check("…and reads on, still with no count", on.checked === "true" && on.text === "Show child tickets" && !(await hiddenCountText()), JSON.stringify(on));
+    check("the menu stays open after toggling", await exists("[data-testid=show-children]"));
+    check("the options button marks a non-default filter", await exists("[data-testid=search-options].active"));
+    await js(`document.querySelector("[data-testid=search-options]").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    check("Escape closes the options menu", !!(await until("menu closed", async () => !(await exists("[data-testid=show-children]")))));
   }
 
   // 1a'. Done pages from the service: first 50, the server total in the header, Load more, live
@@ -581,7 +605,7 @@ try {
     check("conductor card has no left accent border", edge.left === edge.top && edge.lc === edge.tc, JSON.stringify(edge));
 
     // Switch off: hides quiet children only, persists across a reload, and turns back on.
-    await js(`document.querySelector("[data-testid=show-children]").click()`);
+    await toggleChildren();
     const hidden = await until("children hidden", async () => {
       const k = await cardKeys();
       return !k.includes("HARNESS-6") && k;
@@ -600,7 +624,7 @@ try {
       return k.includes("HARNESS-1") && k;
     });
     check("hiding children survives a reload", !afterReload.includes("HARNESS-6") && afterReload.includes("HARNESS-8") && (await toggleState()).checked === "false", afterReload.join(","));
-    await js(`document.querySelector("[data-testid=show-children]").click()`);
+    await toggleChildren();
     const shown = await until("children shown", async () => {
       const k = await cardKeys();
       return k.includes("HARNESS-6") && k;

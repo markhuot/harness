@@ -37,8 +37,8 @@ const projects = (await (await fetch(base + "/projects", { headers: { authorizat
 const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
 const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
 
-// Child tickets are hidden by default; this flips the toolbar switch to show them.
-const showChildren = `document.querySelector("[data-testid=show-children]")?.click()`;
+// Child tickets are hidden by default; this opens the search options and flips the switch.
+const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
 const search = (q: string) =>
   `(() => { const el = document.querySelector("[data-testid=board-search]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(q)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
 const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
@@ -73,6 +73,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
   { name: "board-conductor", route: `#/board/${harness}`, setup: showChildren },
   { name: "board-hidden", route: `#/board/${harness}` },
+  { name: "board-options", route: `#/board/${harness}`, setup: `document.querySelector("[data-testid=search-options]")?.click()` },
   { name: "board-search", route: "#/board/all", setup: search("the") },
   { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
   { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
