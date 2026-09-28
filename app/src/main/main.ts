@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, sc
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { nodePtySpawn } from "./pty";
-import { ensureService, reloadToken } from "./service";
+import { ensureService, reloadToken, restartService } from "./service";
 import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
 import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
@@ -310,6 +310,7 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
+ipcMain.handle("harness:restartService", async () => restartService(appRoot, await getConnection()));
 ipcMain.handle("harness:reloadToken", async (_e, rotated: unknown) => {
   const next = reloadToken(await getConnection(), typeof rotated === "string" ? rotated : undefined);
   // Keep the refreshed token for later getConnection() calls (reloads, new windows).

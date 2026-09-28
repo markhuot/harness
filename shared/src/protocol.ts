@@ -454,7 +454,26 @@ export type HarnessEvent =
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
   | { kind: "browser.frame"; sessionId: string; data: string; width: number; height: number }
-  | { kind: "browser.state"; sessionId: string; state: BrowserState };
+  | { kind: "browser.state"; sessionId: string; state: BrowserState }
+  /** The service's code on disk changed since it started (or changed back) */
+  | { kind: "service.status"; status: ServiceStatus };
+
+/**
+ * Whether the service runs the code on disk. `stale`: the checkout changed since it started; it
+ * restarts onto the new code by itself once no runs are active. `build` is null when the service
+ * doesn't track its source (tests, embedded services).
+ */
+export interface ServiceStatus {
+  build: string | null;
+  stale: boolean;
+}
+
+/** GET /health (unauthenticated). Services from before build tracking omit `build` and `stale`. */
+export interface Health extends Partial<ServiceStatus> {
+  ok: true;
+  version: string;
+  pid: number;
+}
 
 export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean };
 

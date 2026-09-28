@@ -638,7 +638,8 @@ the static plugin UIs under `/plugins/:id/ui/`. That holds for loopback and remo
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
-GET    /health
+GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
+POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
@@ -728,6 +729,36 @@ file typed in full (`.env`) stays in the list, first.
   transcript keeps the prompt as typed plus a status line, `Attached @README.md, @src/app.ts`,
   and one `Didn't attach @…: <reason>` line per skipped path. Contents are read when the run
   starts, so a message queued behind a run gets the files as they are when it runs.
+
+## Service updates
+
+launchd runs the daemon straight from the repo checkout, so a merge into that checkout (a
+ticket's complete run, a `git pull`) changes the code on disk under a service that keeps running
+the old code. Routes the new app calls then 404 until the service restarts.
+
+- At boot the daemon hashes the files it loads (`sourceFingerprint` in `service/src/code-watch.ts`):
+  `service/src`, `shared/src` and `plugins`, skipping tests, `node_modules`, `dist` and dotfiles,
+  plus the package manifests and `bun.lock`. `build` is that hash.
+- Every 20s it hashes again. When the result differs from `build` the service is `stale`:
+  `/health` says so and a `service.status { build, stale }` event goes out (again if the code
+  changes back).
+- A stale service run by launchd (`XPC_SERVICE_NAME` is the label and its parent is launchd, pid 1;
+  agents inherit the variable) restarts by itself once the
+  new code is settled (the same hash two checks in a row, so a checkout still writing files isn't
+  loaded half-done) and nothing is queued, running or starting (`Orchestrator.isIdle`). It exits
+  through the normal shutdown and KeepAlive starts the new code. Run by hand, it only reports stale.
+- `POST /service/restart` restarts right away. Running agents are stopped: their runs end
+  cancelled and their tickets stay in their columns.
+- Tests and embedded services don't track their source: `/health` reports `build: null`,
+  `stale: false`.
+
+The desktop app shows a banner under the main view while the service is stale, and it can't be
+dismissed. A service whose `/health` has no `build` at all predates build tracking. It never
+restarts by itself, and the app counts it as stale too. "Restart now" asks for confirmation when
+agents are running. For the service the app started, the main process runs
+`cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age. Other
+connections call `POST /service/restart`. The banner goes away when the reconnected service
+reports fresh code.
 
 ## Network
 

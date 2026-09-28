@@ -9,11 +9,22 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- When the harness service is running older code than the Mac app, a banner under the board says
+  so, and it stays until the service restarts. Actions the older service doesn't know about fail
+  with a plain "Not found" until it restarts (re-opening a done ticket was one), so the banner
+  explains those errors. Restart now restarts the service right away. If agents are running, it
+  asks first, since restarting stops them.
+
 ### Changed
 
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.
+- The service restarts onto new code by itself. When a merge updates the code it runs from, it
+  waits until no agents are running and then restarts, so you don't have to restart it by hand
+  after an update.
 
 ## [app-20260928.1702](https://github.com/markhuot/harness/releases/tag/app-20260928.1702) - 2026-09-28
 

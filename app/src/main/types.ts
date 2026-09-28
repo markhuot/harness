@@ -90,6 +90,8 @@ export interface HarnessBridge {
   retryService(): Promise<ConnectionResult>;
   /** Re-read the token file after POST /token/rotate (env connections take `rotated`). */
   reloadToken(rotated?: string): Promise<ConnectionResult>;
+  /** Restart the service now (launchd for the service the app started); running agents are stopped. */
+  restartService(): Promise<{ ok: true } | ConnectionError>;
   pickDirectory(opts?: PickDirectoryOptions): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   /** Reveal a file or folder in Finder */

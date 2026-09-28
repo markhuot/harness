@@ -38,6 +38,13 @@ const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
 let TOKEN = process.env.MOCK_TOKEN ?? "mock-token";
 const QUIET = process.env.MOCK_QUIET === "1";
+/**
+ * The service's code vs. the app (the stale-service banner): unset = current, MOCK_STALE=1 = its
+ * checkout changed since it started, MOCK_STALE=old = from before /health reported a build.
+ * POST /service/restart "restarts" onto current code (sockets drop and reconnect).
+ */
+let STALE = process.env.MOCK_STALE ?? "";
+const serviceCode = () => (STALE === "old" ? {} : { build: "mock", stale: STALE === "1" });
 
 // ---------------------------------------------------------------------------
 // State
@@ -994,6 +1001,14 @@ async function route(req: Request, url: URL): Promise<Response> {
   const parts = url.pathname.split("/").filter(Boolean);
   const [a, b, c] = parts;
 
+  if (a === "service" && b === "restart" && !c && method === "POST") {
+    STALE = "";
+    setTimeout(() => {
+      for (const ws of sockets) ws.close();
+    }, 50);
+    return ok({ ok: true });
+  }
+
   // Projects
   if (a === "projects") {
     if (!b && method === "GET") return ok([...projects.values()]);
@@ -1639,7 +1654,7 @@ const server = Bun.serve<WsData>({
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-    if (url.pathname === "/health") return ok({ ok: true, version: "mock", pid: process.pid });
+    if (url.pathname === "/health") return ok({ ok: true, version: "mock", pid: process.pid, ...serviceCode() });
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== TOKEN) return fail(401, "Unauthorized");
       if (srv.upgrade(req, { data: { subs: new Set<string>() } })) return undefined as unknown as Response;
