@@ -45,7 +45,8 @@
           }
         }
       ],
-      "./plugins/withSceneLifecycle"
+      "./plugins/withSceneLifecycle",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": false
