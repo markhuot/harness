@@ -1,24 +1,49 @@
 // Driver contract. A driver turns one "run" (a prompt in the context of a session)
 // into a stream of events. Drivers never touch the DB; the orchestrator persists events.
 
-import type { DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind } from "@harness/shared";
+import type { DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 
+/**
+ * What a driver knows about a sub-agent (DESIGN.md "Sub-agents"). The first report for an id
+ * creates it (running unless `status` says otherwise); later reports fill in the fields they
+ * carry. Once it has finished, later reports don't change its status.
+ */
+export interface SubagentReport {
+  /** Unique within the session: the id of the tool call that started it */
+  id: string;
+  /** The sub-agent that started this one, for nested agents */
+  parentId?: string | null;
+  description?: string;
+  agentType?: string | null;
+  prompt?: string;
+  status?: SubagentStatus;
+  result?: string | null;
+}
+
+/**
+ * `subagentId` on a content event: a sub-agent (reported earlier with a "subagent" event)
+ * produced it, and it belongs in that sub-agent's transcript rather than the session's.
+ */
+type FromSubagent = { subagentId?: string };
+
 export type DriverEvent =
-  /** Streaming text fragment (not persisted by itself) */
+  /** Streaming text fragment (not persisted by itself). The session's own agent only. */
   | { type: "text_delta"; text: string }
   /** A completed assistant text block (persisted) */
-  | { type: "text"; text: string }
-  | { type: "thinking"; text: string }
-  | { type: "tool_call"; callId: string; name: string; input: unknown }
-  | { type: "tool_result"; callId: string; name: string; result: ToolResult }
+  | ({ type: "text"; text: string } & FromSubagent)
+  | ({ type: "thinking"; text: string } & FromSubagent)
+  | ({ type: "tool_call"; callId: string; name: string; input: unknown } & FromSubagent)
+  | ({ type: "tool_result"; callId: string; name: string; result: ToolResult } & FromSubagent)
+  /** A sub-agent started, changed or finished (drivers that run sub-agents) */
+  | { type: "subagent"; subagent: SubagentReport }
   /** Driver-specific state to persist for resuming the conversation next run */
   | { type: "state"; state: unknown }
   | { type: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number }
   /** A notice for the human, persisted as a transcript status entry (e.g. a mode downgrade) */
   | { type: "status"; text: string }
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
-  | { type: "permission"; log: PermissionDecisionLog }
+  | ({ type: "permission"; log: PermissionDecisionLog } & FromSubagent)
   /**
    * A tool call a permission system inside the driver denied without asking the harness
    * (Claude Code's auto-mode classifier). The orchestrator turns the run's last one into a

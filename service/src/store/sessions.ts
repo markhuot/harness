@@ -136,6 +136,7 @@ export class SessionRepo {
   delete(id: string) {
     this.db.transaction(() => {
       this.db.query("DELETE FROM transcript WHERE session_id = $id").run({ id });
+      this.db.query("DELETE FROM subagents WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM summaries WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM runs WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM sessions WHERE id = $id").run({ id });

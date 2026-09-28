@@ -226,11 +226,47 @@ export interface TranscriptEntry {
   id: string;
   sessionId: string;
   runId: string | null;
+  /**
+   * The sub-agent that produced this entry (Subagent.id), or null for the session's own agent.
+   * GET /sessions/:id/transcript leaves sub-agent entries out unless `?subagent=<id>` asks for
+   * them. Optional so clients tolerate an older service without sub-agents.
+   */
+  subagentId?: string | null;
   seq: number;
   role: TranscriptRole;
   content: TranscriptContent;
   createdAt: number;
 }
+
+/**
+ * A sub-agent an agent started inside its own session (Claude Code's Agent / Task tool), not a
+ * ticket. Drivers report them with the "subagent" driver event; its conversation is the session's
+ * transcript entries carrying its id as `subagentId` (DESIGN.md "Sub-agents").
+ */
+export interface Subagent {
+  /** The id of the tool call that started it (unique within the session) */
+  id: string;
+  sessionId: string;
+  /** The run it was started in */
+  runId: string | null;
+  /** The sub-agent that started this one (nested agents), else null */
+  parentId: string | null;
+  /** Short description of its task, e.g. "Find the auth middleware" */
+  description: string;
+  /** The kind of agent, e.g. "general-purpose", "Explore" (null when the driver doesn't say) */
+  agentType: string | null;
+  /** The instructions it was given */
+  prompt: string;
+  status: SubagentStatus;
+  /** Its final report when it finished (or why it failed) */
+  result: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  updatedAt: number;
+}
+
+/** stopped: its run ended (cancelled, failed, or the driver never reported an outcome) */
+export type SubagentStatus = "running" | "succeeded" | "failed" | "stopped";
 
 export type ToolResultContent =
   | { type: "text"; text: string }
@@ -399,6 +435,7 @@ export type HarnessEvent =
   | { kind: "session.deleted"; id: string }
   | { kind: "run.upserted"; run: Run }
   | { kind: "transcript.appended"; entry: TranscriptEntry }
+  | { kind: "subagent.upserted"; subagent: Subagent }
   /** Ephemeral streaming text; the full block is persisted later as transcript.appended */
   | { kind: "transcript.delta"; sessionId: string; runId: string; text: string }
   | { kind: "summary.added"; summary: Summary }
@@ -545,6 +582,8 @@ export interface TicketDetail {
   /** The conductor this ticket belongs to (when parentId is set), so clients can show the
    *  "Part of …" breadcrumb even when the parent isn't loaded (e.g. a done conductor off-page). */
   parent?: Ticket | null;
+  /** Sub-agents started in the ticket's session, oldest first (absent from older services) */
+  subagents?: Subagent[];
 }
 
 export interface ApiOk<T> {

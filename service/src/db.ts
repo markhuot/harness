@@ -300,6 +300,30 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN color TEXT;
   `,
+  // 11: sub-agents (DESIGN.md "Sub-agents"): agents an agent starts inside its own session.
+  //     transcript.subagent_id marks the entries a sub-agent produced (NULL: the session's own
+  //     agent); existing entries all belong to the session's agent.
+  `
+  ALTER TABLE transcript ADD COLUMN subagent_id TEXT;
+  CREATE INDEX transcript_subagent ON transcript(session_id, subagent_id, seq);
+
+  CREATE TABLE subagents (
+    session_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    run_id TEXT,
+    parent_id TEXT,
+    description TEXT NOT NULL DEFAULT '',
+    agent_type TEXT,
+    prompt TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    result TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (session_id, id)
+  );
+  CREATE INDEX subagents_run ON subagents(run_id, status);
+  `,
 ];
 
 /**

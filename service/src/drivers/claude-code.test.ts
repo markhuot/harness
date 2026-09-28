@@ -178,7 +178,7 @@ describe("cleanClaudeEnv", () => {
 });
 
 describe("StreamJsonParser", () => {
-  test("maps every message type and skips subagent output", () => {
+  test("maps every message type", () => {
     const p = new StreamJsonParser();
     const all = [
       init("s-9"),
@@ -188,8 +188,6 @@ describe("StreamJsonParser", () => {
       { type: "assistant", message: { content: [{ type: "text", text: "Hello" }] } },
       { type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "mcp__harness__post_summary", input: { summary: "x" } }] } },
       { type: "assistant", message: { content: [{ type: "tool_use", id: "tu2", name: "Bash", input: { command: "ls" } }] } },
-      { type: "assistant", parent_tool_use_id: "task1", message: { content: [{ type: "text", text: "subagent text" }] } },
-      { type: "stream_event", parent_tool_use_id: "task1", event: { type: "content_block_delta", delta: { type: "text_delta", text: "sub" } } },
       {
         type: "user",
         message: {
@@ -217,6 +215,109 @@ describe("StreamJsonParser", () => {
       { type: "state", state: { sessionId: "s-9", costUsd: 0.0123 } },
     ]);
     expect(p.result).toEqual({ isError: false, message: "All done", errors: [] });
+  });
+
+  describe("sub-agents", () => {
+    const agentCall = (id: string, input: Record<string, unknown>, parent?: string) => ({
+      type: "assistant",
+      ...(parent ? { parent_tool_use_id: parent } : {}),
+      message: { content: [{ type: "tool_use", id, name: "Agent", input }] },
+    });
+    const result = (id: string, text: string, extra: Record<string, unknown> = {}) => ({
+      type: "user",
+      ...extra,
+      message: { content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text }], ...(extra.is_error ? { is_error: true } : {}) }] },
+    });
+    const subagentEvents = (evs: DriverEvent[]) => evs.filter((e) => e.type === "subagent").map((e) => (e as Extract<DriverEvent, { type: "subagent" }>).subagent);
+
+    // The shape claude 2.1.283 streams for a background Agent call (recorded, trimmed).
+    test("a background agent: started by the tool call, its messages tagged, finished by task_notification", () => {
+      const p = new StreamJsonParser(null, { requested: "auto", mode: "auto" });
+      p.handle(init("s-1"));
+      const started = p.handle(agentCall("toolu_A", { description: "Count files", subagent_type: "general-purpose", prompt: "Run ls" }));
+      expect(started).toEqual([
+        { type: "tool_call", callId: "toolu_A", name: "Agent", input: { description: "Count files", subagent_type: "general-purpose", prompt: "Run ls" } },
+        { type: "subagent", subagent: { id: "toolu_A", parentId: null, description: "Count files", agentType: "general-purpose", prompt: "Run ls", status: "running" } },
+      ]);
+      const rest = [
+        { type: "system", subtype: "task_started", task_id: "t1", tool_use_id: "toolu_A", description: "Count files", subagent_type: "general-purpose", task_type: "local_agent", prompt: "Run ls" },
+        result("toolu_A", "Async agent launched successfully.\nagentId: t1"),
+        { type: "stream_event", parent_tool_use_id: "toolu_A", event: { type: "content_block_delta", delta: { type: "text_delta", text: "sub" } } },
+        { type: "assistant", parent_tool_use_id: "toolu_A", message: { content: [{ type: "tool_use", id: "toolu_B", name: "Bash", input: { command: "ls /tmp" } }] } },
+        result("toolu_B", "Permission for this action has been denied by the Claude Code auto mode classifier. Reason: [nope]. If you have other tasks", { parent_tool_use_id: "toolu_A", is_error: true }),
+        { type: "assistant", parent_tool_use_id: "toolu_A", message: { content: [{ type: "text", text: "I couldn't run it." }] } },
+        { type: "system", subtype: "task_notification", task_id: "t1", tool_use_id: "toolu_A", status: "completed", summary: "I couldn't run it." },
+      ].flatMap((m) => p.handle(m));
+
+      // No streaming deltas for sub-agents, and the launch notice isn't an outcome.
+      expect(rest.some((e) => e.type === "text_delta")).toBe(false);
+      expect(rest.filter((e) => e.type !== "subagent" && e.type !== "permission" && e.type !== "tool_result").map((e) => [e.type, "subagentId" in e ? e.subagentId : null])).toEqual([
+        ["tool_call", "toolu_A"],
+        ["text", "toolu_A"],
+      ]);
+      const results = rest.filter((e) => e.type === "tool_result") as Extract<DriverEvent, { type: "tool_result" }>[];
+      expect(results.map((r) => [r.callId, r.subagentId ?? null])).toEqual([
+        ["toolu_A", null],
+        ["toolu_B", "toolu_A"],
+      ]);
+      // The sub-agent's classifier denial is logged in its transcript, not turned into the run's approval.
+      const perm = rest.find((e) => e.type === "permission") as Extract<DriverEvent, { type: "permission" }>;
+      expect(perm.subagentId).toBe("toolu_A");
+      expect(perm.log.reason).toBe("[nope]");
+      expect(rest.some((e) => e.type === "permission_denied")).toBe(false);
+      expect(subagentEvents(rest)).toEqual([
+        { id: "toolu_A", description: "Count files", agentType: "general-purpose", prompt: "Run ls" },
+        { id: "toolu_A", status: "succeeded", result: "I couldn't run it." },
+      ]);
+    });
+
+    test("a foreground agent (Task on older CLIs) finishes with its tool result; an error result fails it", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "t_ok", name: "Task", input: { description: "Look", prompt: "Look around" } }] } });
+      p.handle(agentCall("t_bad", { description: "Break", prompt: "Break things" }));
+      const evs = [result("t_ok", "Found 3 files."), result("t_bad", "Agent crashed", { is_error: true })].flatMap((m) => p.handle(m));
+      expect(subagentEvents(evs)).toEqual([
+        { id: "t_ok", status: "succeeded", result: "Found 3 files." },
+        { id: "t_bad", status: "failed", result: "Agent crashed" },
+      ]);
+    });
+
+    test("an agent started by a sub-agent names its parent", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      p.handle(agentCall("outer", { description: "Outer", prompt: "o" }));
+      const nested = subagentEvents(p.handle(agentCall("inner", { description: "Inner", prompt: "i" }, "outer")));
+      expect(nested).toEqual([{ id: "inner", parentId: "outer", description: "Inner", agentType: null, prompt: "i", status: "running" }]);
+    });
+
+    test("background Bash tasks aren't sub-agents; task_updated finishes an agent by its task id", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      const bash = [
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "bash1", name: "Bash", input: { command: "sleep 9", run_in_background: true } }] } },
+        { type: "system", subtype: "task_started", task_id: "b1", tool_use_id: "bash1", description: "sleep 9", task_type: "local_bash" },
+        { type: "system", subtype: "task_notification", task_id: "b1", tool_use_id: "bash1", status: "completed", summary: "done" },
+      ].flatMap((m) => p.handle(m));
+      expect(subagentEvents(bash)).toEqual([]);
+
+      p.handle(agentCall("ag", { description: "Long job", prompt: "p" }));
+      p.handle({ type: "system", subtype: "task_started", task_id: "t9", tool_use_id: "ag", task_type: "local_agent" });
+      const progress = p.handle({ type: "system", subtype: "task_updated", task_id: "t9", patch: { status: "running" } });
+      expect(subagentEvents(progress)).toEqual([]);
+      expect(subagentEvents(p.handle({ type: "system", subtype: "task_updated", task_id: "t9", patch: { status: "killed" } }))).toEqual([{ id: "ag", status: "stopped" }]);
+    });
+
+    test("output from a sub-agent the run didn't see start still gets a sub-agent", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      const evs = p.handle({ type: "assistant", parent_tool_use_id: "old", message: { content: [{ type: "text", text: "picking up" }] } });
+      expect(evs).toEqual([
+        { type: "subagent", subagent: { id: "old", description: "Sub-agent" } },
+        { type: "text", text: "picking up", subagentId: "old" },
+      ]);
+      expect(p.handle({ type: "assistant", parent_tool_use_id: "old", message: { content: [{ type: "text", text: "again" }] } })).toEqual([{ type: "text", text: "again", subagentId: "old" }]);
+    });
   });
 
   test("result state carries the session id seen last", () => {

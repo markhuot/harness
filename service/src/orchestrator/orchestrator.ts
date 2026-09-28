@@ -316,6 +316,7 @@ export class Orchestrator {
       if (this.active.has(run.id)) continue;
       const r = this.store.runs.finish(run.id, "failed", "service restarted");
       this.bus.emit({ kind: "run.upserted", run: r });
+      for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
       this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): service restarted`);
       const session = this.store.sessions.get(run.sessionId);
       if (session?.kind === "triage" && session.triageStatus === "triaging") {
@@ -589,6 +590,7 @@ export class Orchestrator {
       dependents: this.store.tickets.dependents(ticket.key).map((t) => t.key),
       children: this.store.tickets.list({ parentId: ticket.id }),
       parent: ticket.parentId ? this.store.tickets.get(ticket.parentId) : null,
+      subagents: this.store.subagents.listBySession(ticket.sessionId),
     };
   }
 
@@ -942,9 +944,16 @@ export class Orchestrator {
     return s;
   }
 
-  transcript(sessionId: string, after = 0) {
+  /** The session agent's transcript, or with `subagentId` one sub-agent's (404 when unknown). */
+  transcript(sessionId: string, after = 0, subagentId: string | null = null) {
     this.getSession(sessionId);
-    return this.store.transcript.list(sessionId, after);
+    if (subagentId && !this.store.subagents.get(sessionId, subagentId)) throw notFound(`Unknown sub-agent: ${subagentId}`);
+    return this.store.transcript.list(sessionId, after, undefined, subagentId);
+  }
+
+  subagents(sessionId: string) {
+    this.getSession(sessionId);
+    return this.store.subagents.listBySession(sessionId);
   }
 
   // =========================================================================
@@ -1870,10 +1879,10 @@ export class Orchestrator {
   }
 
   /** Transcript status entry for a permission decision (rendered as an audit row). */
-  private logPermission(sessionId: string, runId: string | null, entry: PermissionDecisionLog) {
+  private logPermission(sessionId: string, runId: string | null, entry: PermissionDecisionLog, subagentId?: string) {
     const verb = entry.decision === "allow" ? (entry.source === "classifier" ? "Auto-approved" : "Allowed") : entry.decision === "ask" ? "Asked you" : "Denied";
     const took = entry.latencyMs !== undefined ? ` (${entry.backend ?? "classifier"}, ${(entry.latencyMs / 1000).toFixed(1)}s)` : "";
-    this.append(sessionId, runId, "system", { type: "status", text: `${verb}: ${entry.summary} — ${entry.reason}${took}`, permission: entry });
+    this.append(sessionId, runId, "system", { type: "status", text: `${verb}: ${entry.summary} — ${entry.reason}${took}`, permission: entry }, subagentId);
   }
 
   /** The last few transcript entries as short lines, for the classifier's sense of intent. */
@@ -2185,6 +2194,8 @@ export class Orchestrator {
     const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
     run = this.store.runs.finish(run.id, status, status === "cancelled" ? null : error);
     this.active.delete(run.id);
+    // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
+    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
     // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
     // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
     // input), and a grant left over would put every later run in ask mode (planGrants). A failed
@@ -2234,15 +2245,16 @@ export class Orchestrator {
         this.bus.emit({ kind: "transcript.delta", sessionId: run.sessionId, runId: run.id, text: ev.text });
         return null;
       case "text":
-        if (ev.text.trim()) active.lastText = ev.text;
-        this.append(run.sessionId, run.id, "assistant", { type: "text", text: ev.text });
+        // A sub-agent's text is its own report to the agent, not the run's last word.
+        if (ev.text.trim() && !ev.subagentId) active.lastText = ev.text;
+        this.append(run.sessionId, run.id, "assistant", { type: "text", text: ev.text }, ev.subagentId);
         return null;
       case "thinking":
-        this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text });
+        this.append(run.sessionId, run.id, "assistant", { type: "thinking", text: ev.text }, ev.subagentId);
         return null;
       case "tool_call":
         active.calls.set(ev.callId, { toolName: ev.name, input: ev.input });
-        this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input });
+        this.append(run.sessionId, run.id, "assistant", { type: "tool_call", callId: ev.callId, name: ev.name, input: ev.input }, ev.subagentId);
         return null;
       case "tool_result":
         if (!ev.result.isError && active.denials.length) {
@@ -2253,14 +2265,19 @@ export class Orchestrator {
             active.denials = active.denials.filter((d) => grantKey(d.toolName, d.input) !== key);
           }
         }
-        this.append(run.sessionId, run.id, "tool", {
-          type: "tool_result",
-          callId: ev.callId,
-          name: ev.name,
-          output: ev.result.content,
-          isError: !!ev.result.isError,
-        });
+        this.append(
+          run.sessionId,
+          run.id,
+          "tool",
+          { type: "tool_result", callId: ev.callId, name: ev.name, output: ev.result.content, isError: !!ev.result.isError },
+          ev.subagentId,
+        );
         return null;
+      case "subagent": {
+        const subagent = this.store.subagents.upsert(run.sessionId, run.id, ev.subagent);
+        if (subagent) this.bus.emit({ kind: "subagent.upserted", subagent });
+        return null;
+      }
       case "state":
         if (run.kind !== "review") this.store.sessions.setDriverState(run.sessionId, ev.state);
         return null;
@@ -2270,7 +2287,7 @@ export class Orchestrator {
         this.appendStatus(run.sessionId, run.id, ev.text);
         return null;
       case "permission":
-        this.logPermission(run.sessionId, run.id, ev.log);
+        this.logPermission(run.sessionId, run.id, ev.log, ev.subagentId);
         return null;
       case "permission_denied":
         active.denials.push({ toolName: ev.toolName, input: ev.input, reason: ev.reason });
@@ -2406,8 +2423,8 @@ export class Orchestrator {
   // Persistence + event helpers
   // =========================================================================
 
-  private append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent) {
-    const entry = this.store.transcript.append(sessionId, runId, role, content);
+  private append(sessionId: string, runId: string | null, role: TranscriptRole, content: TranscriptContent, subagentId?: string | null) {
+    const entry = this.store.transcript.append(sessionId, runId, role, content, subagentId ?? null);
     this.bus.emit({ kind: "transcript.appended", entry });
     return entry;
   }

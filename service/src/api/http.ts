@@ -184,8 +184,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/sessions/:id", ({ params }) => o.getSession(params.id!));
   add("GET", "/sessions/:id/transcript", ({ params, url }) => {
     const after = Number(url.searchParams.get("after") ?? 0);
-    return o.transcript(params.id!, Number.isFinite(after) ? after : 0);
+    return o.transcript(params.id!, Number.isFinite(after) ? after : 0, url.searchParams.get("subagent") || null);
   });
+  add("GET", "/sessions/:id/subagents", ({ params }) => o.subagents(params.id!));
 
   // Watchers (inject before :id so it isn't captured as an id)
   add("GET", "/watchers", () => o.listWatchers());
