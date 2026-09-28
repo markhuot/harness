@@ -10,6 +10,7 @@ import type {
   DriverModels,
   HarnessEvent,
   HumanReviewBody,
+  MessageBody,
   ReopenBody,
   ApprovalBody,
   Project,
@@ -138,8 +139,9 @@ export class HarnessClient {
   startTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/start`);
   }
-  sendMessage(key: string, text: string) {
-    return this.request<Ticket>("POST", `/tickets/${key}/messages`, { text });
+  sendMessage(key: string, text: string, opts: { chat?: boolean } = {}) {
+    const body: MessageBody = opts.chat ? { text, chat: true } : { text };
+    return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);

@@ -205,7 +205,8 @@ export interface Session {
 
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage";
+/** chat: the human talks with the ticket's agent without changing its status (read-only). */
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface Run {
@@ -557,6 +558,16 @@ export interface MessageBody {
 export interface HumanReviewBody {
   decision: "approve" | "request_changes";
   notes?: string;
+}
+
+/** POST /tickets/:key/messages */
+export interface MessageBody {
+  text: string;
+  /**
+   * true: just talk with the agent; the ticket keeps its status (a read-only chat run). Default:
+   * the message moves a blocked or review ticket back to in progress and the agent acts on it.
+   */
+  chat?: boolean;
 }
 
 /** Re-open a done ticket: back to in progress, with notes for the agent */

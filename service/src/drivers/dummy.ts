@@ -338,6 +338,11 @@ export class DummyDriver implements Driver {
         break;
       }
 
+      case "chat": {
+        yield* say(`(dummy chat) You said: "${prompt}"`);
+        break;
+      }
+
       case "complete": {
         yield* say("Finalizing the ticket.");
         yield* call("post_summary", { summary: "Completed." });

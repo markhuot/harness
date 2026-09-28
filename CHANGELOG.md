@@ -16,6 +16,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   agent works directly in the project folder instead of its own worktree and branch. The switch
   only appears for projects in a git repository. On the Mac, the two switches now sit on their own
   row with the start button.
+- The message box on a ticket in planning, blocked or review has a "Move to in progress" switch
+  ("Revise the plan" in planning), on by default. Turn it off to just talk with the agent about
+  the ticket: it answers without changing any files, and the ticket stays where it is. Your
+  question and its answer show in Summaries. The switch stays off while the ticket is open and
+  for 5 minutes after you close it, so you can come back and keep chatting.
 
 ### Changed
 

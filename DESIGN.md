@@ -97,6 +97,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
+| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
@@ -230,7 +231,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor | `{ url }` |
+| `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
 | `browser_click` | ″ | `{ selector }` |
 | `browser_type` | ″ | `{ selector, text, submit? }` |
@@ -417,7 +418,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
-`auto`). Null at a level means "inherit". Plan (and triage) runs are always read-only.
+`auto`). Null at a level means "inherit". Plan, triage and chat runs are always read-only
+(claude-code runs chat runs with `--permission-mode dontAsk`).
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -641,7 +643,7 @@ GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages {text, chat?} | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]

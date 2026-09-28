@@ -160,6 +160,8 @@ export interface IngestInput {
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+/** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
+const READ_ONLY_RUNS: RunKind[] = ["plan", "triage", "chat"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
 export const MAX_AGENT_REJECTIONS = 3;
@@ -810,9 +812,22 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
-  async sendMessage(key: string, text: string): Promise<Ticket> {
+  /**
+   * A human message to the ticket's agent. By default it acts on the ticket: a blocked or review
+   * ticket goes back to in progress. With chat, the agent answers in a read-only chat run and the
+   * ticket keeps its status and reviews.
+   */
+  async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
+    if (opts.chat) {
+      if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
+      this.notCompleting(ticket, "messaged");
+      // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
+      this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
+      this.enqueueRun(ticket.sessionId, "chat", text);
+      return this.store.tickets.get(ticket.id)!;
+    }
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
@@ -1917,8 +1932,9 @@ export class Orchestrator {
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
-    // Plan runs are read-only for every driver (claude-code runs them in --permission-mode plan).
-    const mode: PermissionMode = ctx.runKind === "plan" || ctx.runKind === "triage" ? "read_only" : this.permissionModeFor(ticket);
+    // Plan, triage and chat runs are read-only for every driver (claude-code runs plan runs in
+    // --permission-mode plan, chat runs in dontAsk).
+    const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
     return this.gate.check(toolName, input, {
       mode,
       runKind: ctx.runKind,
@@ -2244,7 +2260,9 @@ export class Orchestrator {
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
-    const cwd = (run.kind === "plan" ? null : ticket?.workdir) ?? session.cwd ?? project?.path ?? this.paths.home;
+    // A chat about a done ticket falls back to the checkout once the complete run removed the worktree.
+    const workdir = run.kind === "plan" || (run.kind === "chat" && ticket?.workdir && !existsSync(ticket.workdir)) ? null : ticket?.workdir;
+    const cwd = workdir ?? session.cwd ?? project?.path ?? this.paths.home;
     if (!driver) error = `Unknown driver: ${run.driver}`;
     else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
     else {
@@ -2272,7 +2290,7 @@ export class Orchestrator {
           systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
           cwd,
           model,
-          permissionMode: this.permissionModeFor(ticket, project),
+          permissionMode: run.kind === "chat" ? "read_only" : this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,
@@ -2440,6 +2458,9 @@ export class Orchestrator {
         break;
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+        break;
+      case "chat":
+        if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
         break;
       case "plan":
         break;
