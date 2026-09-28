@@ -6,9 +6,12 @@ import {
   defaultPanes,
   dropContent,
   findLeaf,
+  focusedTicket,
   focusPane,
   keySplit,
+  layoutPanes,
   leaves,
+  minSize,
   movePane,
   normalize,
   openTicket,
@@ -404,6 +407,25 @@ describe("resizeSplit", () => {
     expect(resizeSplit([0.5, 0.5], 0, 10, 0, 10)).toEqual([0.5, 0.5]);
     expect(resizeSplit([0.5, 0.5], 0, NaN, 1000, 10)).toEqual([0.5, 0.5]);
   });
+
+  test("each side can have its own minimum", () => {
+    // Board (≥320) | ticket (≥360) in 1000px: the ticket can grow to 680, the board to 640.
+    expect(resizeSplit([0.6, 0.4], 0, -10_000, 1000, [320, 360]).map(r)).toEqual([0.32, 0.68]);
+    expect(resizeSplit([0.6, 0.4], 0, 10_000, 1000, [320, 360]).map(r)).toEqual([0.64, 0.36]);
+    // Too small for both: shared in proportion to the minimums (100:300 of 400px).
+    expect(resizeSplit([0.2, 0.2, 0.6], 0, 50, 1000, [100, 300]).map(r)).toEqual([0.1, 0.3, 0.6]);
+  });
+});
+
+describe("minSize", () => {
+  test("leaves need their own minimum; splits add along the axis and take the largest across it", () => {
+    expect(minSize(B, "row")).toBe(320);
+    expect(minSize(T("A"), "row")).toBe(360);
+    expect(minSize(T("A"), "column")).toBe(200);
+    const tree = split("row", "r", [B, split("column", "c", [T("A"), T("C"), T("D")])]);
+    expect(minSize(tree, "row")).toBe(320 + 360);
+    expect(minSize(tree, "column")).toBe(600);
+  });
 });
 
 describe("keySplit", () => {
@@ -522,5 +544,51 @@ describe("ids", () => {
     const s = parsePanes(JSON.stringify({ root: row("p1", [{ ...B, id: "p2" }, T("A-1")].map((l, i) => (i ? { ...l, id: "p3" } : l))) }));
     const next = valid(dropContent(openTicket(s, "A-2"), "p2", "bottom", ticketContent("A-3")));
     expect(new Set(leaves(next.root).map((l) => l.id)).size).toBe(leaves(next.root).length);
+  });
+});
+
+describe("focusedTicket", () => {
+  test("is the focused ticket pane's key and tab, or null for the board or no focus", () => {
+    const root = split("row", "r", [B, T("A", "transcript")]);
+    expect(focusedTicket({ root, focusedId: "A", zoomedId: null })).toEqual({ ticketKey: "A", tab: "transcript" });
+    expect(focusedTicket({ root, focusedId: "B", zoomedId: null })).toBeNull();
+    expect(focusedTicket({ root, focusedId: null, zoomedId: null })).toBeNull();
+  });
+});
+
+describe("layoutPanes", () => {
+  const rr = (x: { x: number; y: number; w: number; h: number }) => [r(x.x), r(x.y), r(x.w), r(x.h)];
+  // B | (A over C), 60/40, the column 25/75.
+  const state: PaneState = { root: split("row", "r", [B, split("column", "c", [T("A"), T("C")], [0.25, 0.75])], [0.6, 0.4]), focusedId: null, zoomedId: null };
+
+  test("places nested panes as fractions of the whole area, in tree order", () => {
+    const l = layoutPanes(state);
+    expect(l.leaves.map((b) => [b.leaf.id, ...rr(b.rect)])).toEqual([
+      ["B", 0, 0, 0.6, 1],
+      ["A", 0.6, 0, 0.4, 0.25],
+      ["C", 0.6, 0.25, 0.4, 0.75],
+    ]);
+    expect(l.leaves.every((b) => !b.hidden)).toBe(true);
+  });
+
+  test("puts a divider on each boundary, spanning its split", () => {
+    const l = layoutPanes(state);
+    expect(l.dividers.map((d) => [d.split.id, d.index, r(d.at), ...rr(d.rect)])).toEqual([
+      ["r", 0, 0.6, 0, 0, 1, 1],
+      ["c", 0, 0.25, 0.6, 0, 0.4, 1],
+    ]);
+  });
+
+  test("the corner pane is the first leaf, even when the board isn't on the left", () => {
+    expect(layoutPanes(state).cornerId).toBe("B");
+    expect(layoutPanes({ ...state, root: split("column", "c", [T("A"), B]) }).cornerId).toBe("A");
+  });
+
+  test("a zoomed pane fills the area, hides the others and has no dividers", () => {
+    const l = layoutPanes({ ...state, focusedId: "C", zoomedId: "C" });
+    expect(l.leaves.map((b) => [b.leaf.id, b.hidden])).toEqual([["B", true], ["A", true], ["C", false]]);
+    expect(rr(l.leaves[2]!.rect)).toEqual([0, 0, 1, 1]);
+    expect(l.dividers).toEqual([]);
+    expect(l.cornerId).toBe("C");
   });
 });

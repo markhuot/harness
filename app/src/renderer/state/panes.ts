@@ -446,32 +446,118 @@ export function pruneTickets(state: PaneState, exists: (key: string) => boolean)
   return next;
 }
 
+/** The ticket in the focused pane (what the URL hash mirrors), or null when no ticket pane is focused. */
+export function focusedTicket(state: PaneState): { ticketKey: string; tab: TicketTab } | null {
+  const leaf = state.focusedId ? findLeaf(state.root, state.focusedId) : null;
+  return leaf?.content.kind === "ticket" ? { ticketKey: leaf.content.ticketKey, tab: leaf.content.tab } : null;
+}
+
+// ---------------------------------------------------------------------------
+// Layout
+// ---------------------------------------------------------------------------
+
+/** A box as fractions (0–1) of the whole pane area. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export interface LeafBox {
+  leaf: PaneLeaf;
+  rect: Rect;
+  /** Covered by a zoomed pane (still mounted, just not shown). */
+  hidden: boolean;
+}
+export interface DividerBox {
+  split: PaneSplit;
+  /** Between child `index` and `index + 1`. */
+  index: number;
+  /** The split's own box (its length along the axis is what the divider resizes). */
+  rect: Rect;
+  /** Where the divider sits along the split's axis (x for "row", y for "column"). */
+  at: number;
+}
+export interface PaneLayout {
+  leaves: LeafBox[];
+  dividers: DividerBox[];
+  /** The pane in the top-left corner (the one whose header clears the window controls). */
+  cornerId: string;
+}
+
+/**
+ * Where every pane and divider goes. Panes are laid out flat (absolutely positioned siblings, not
+ * nested boxes) so reshaping the tree never remounts one. A zoomed pane fills the area and the rest
+ * are hidden, with no dividers.
+ */
+export function layoutPanes(state: PaneState): PaneLayout {
+  const out: PaneLayout = { leaves: [], dividers: [], cornerId: "" };
+  const zoomed = state.zoomedId;
+  const walk = (node: PaneNode, rect: Rect) => {
+    if (node.type === "leaf") {
+      const isZoomed = node.id === zoomed;
+      out.leaves.push({ leaf: node, rect: isZoomed ? { x: 0, y: 0, w: 1, h: 1 } : rect, hidden: !!zoomed && !isZoomed });
+      return;
+    }
+    const row = node.dir === "row";
+    let offset = 0;
+    node.children.forEach((c, i) => {
+      const share = node.sizes[i]!;
+      const box = row ? { x: rect.x + rect.w * offset, y: rect.y, w: rect.w * share, h: rect.h } : { x: rect.x, y: rect.y + rect.h * offset, w: rect.w, h: rect.h * share };
+      offset += share;
+      if (i < node.children.length - 1 && !zoomed) out.dividers.push({ split: node, index: i, rect, at: row ? rect.x + rect.w * offset : rect.y + rect.h * offset });
+      walk(c, box);
+    });
+  };
+  walk(state.root, { x: 0, y: 0, w: 1, h: 1 });
+  out.cornerId = zoomed ?? leaves(state.root)[0]!.id;
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Resizing
 // ---------------------------------------------------------------------------
 
+/** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs. */
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360 } as const;
+/** The shortest any pane may get in a column split. */
+export const PANE_MIN_HEIGHT = 200;
+
+/**
+ * The least room `node` needs along `dir`'s axis (width for "row", height for "column"): leaves
+ * need their own minimum, a split along the same axis the sum of its children's, a split across it
+ * the largest of theirs.
+ */
+export function minSize(node: PaneNode, dir: SplitDir): number {
+  if (node.type === "leaf") return dir === "row" ? PANE_MIN_WIDTH[node.content.kind] : PANE_MIN_HEIGHT;
+  const mins = node.children.map((c) => minSize(c, dir));
+  return node.dir === dir ? mins.reduce((a, b) => a + b, 0) : Math.max(...mins);
+}
+
 /**
  * New sizes while dragging the divider between child `index` and `index + 1` by `deltaPx`, in a
- * split `totalPx` long. Only those two children change, and neither goes below `minPx`; when the
- * pair is too small for two minimums they share it equally.
+ * split `totalPx` long. Only those two children change, and neither goes below its minimum
+ * (`minPx`, or `[before, after]` for different minimums); when the pair is too small for both
+ * minimums it's shared in proportion to them (equally for a single `minPx`).
  */
-export function resizeSplit(sizes: readonly number[], index: number, deltaPx: number, totalPx: number, minPx: number): number[] {
+export function resizeSplit(sizes: readonly number[], index: number, deltaPx: number, totalPx: number, minPx: number | readonly [number, number]): number[] {
   const out = [...sizes];
   if (index < 0 || index + 1 >= sizes.length || !(totalPx > 0) || Number.isNaN(deltaPx)) return out;
+  const [minA, minB] = typeof minPx === "number" ? [minPx, minPx] : minPx;
   const a = sizes[index]! * totalPx;
   const pair = a + sizes[index + 1]! * totalPx;
-  const na = pair < 2 * minPx ? pair / 2 : Math.max(minPx, Math.min(pair - minPx, a + deltaPx));
+  const na = pair < minA + minB ? (minA + minB > 0 ? (pair * minA) / (minA + minB) : pair / 2) : Math.max(minA, Math.min(pair - minB, a + deltaPx));
   out[index] = na / totalPx;
   out[index + 1] = (pair - na) / totalPx;
   return out;
 }
 
 /**
- * Keyboard resizing on a focused divider (role=separator), like keyWidth in layout.ts: the arrows
+ * Keyboard resizing on a focused divider (role=separator): the arrows
  * along the split's axis move it 16px (64px with Shift); Home/End move it as far back/forward as it
  * goes. Returns the new sizes, or null when the key isn't a resize key for this split.
  */
-export function keySplit(key: string, shift: boolean, dir: SplitDir, sizes: readonly number[], index: number, totalPx: number, minPx: number): number[] | null {
+export function keySplit(key: string, shift: boolean, dir: SplitDir, sizes: readonly number[], index: number, totalPx: number, minPx: number | readonly [number, number]): number[] | null {
   const step = shift ? 64 : 16;
   const [back, forward] = dir === "row" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
   const delta = key === back ? -step : key === forward ? step : key === "Home" ? -Infinity : key === "End" ? Infinity : null;

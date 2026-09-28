@@ -1,5 +1,8 @@
-// Hash routing: the whole UI state that's worth linking to (and screenshotting) lives in the URL.
+// Hash routing: the UI state that's worth linking to (and screenshotting) lives in the URL.
 //   #/board[/<projectId>][/ticket/<KEY>[/<tab>]]
+// On the board, the ticket part is an entry point into the pane workspace (state/panes.ts):
+// arriving at it opens the ticket in a pane, and afterwards the hash mirrors the focused ticket
+// pane (see mirrorRoute) without adding history entries.
 //   #/inbox[/<sessionId>]
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
@@ -52,4 +55,10 @@ export function formatRoute(r: Route): string {
       return s;
     }
   }
+}
+
+/** The board route the hash should show for the focused ticket pane (none focused = just the board). */
+export function mirrorRoute(r: Route, focused: { ticketKey: string; tab: TicketTab } | null): Route {
+  if (r.view !== "board") return r;
+  return { view: "board", projectId: r.projectId, ticketKey: focused?.ticketKey ?? null, tab: focused?.tab ?? "summaries" };
 }
