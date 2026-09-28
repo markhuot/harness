@@ -1,12 +1,13 @@
 // Create / edit a watcher (the desktop's WatcherForm).
 import { useState } from "react";
-import { KeyboardAvoidingView, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { Watcher } from "@harness/shared";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
 import { Segmented } from "../ui/kit";
+import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
 import { PickerButton } from "../ui/selects";
 import { pick } from "../ui/pick";
@@ -68,7 +69,7 @@ export function WatcherFormScreen() {
     if (v !== undefined) set("driver", v);
   };
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen
         options={{
           title: existing ? "Edit watcher" : "New watcher",
@@ -115,6 +116,6 @@ export function WatcherFormScreen() {
           <SSwitch label="Enabled" value={d.enabled} onChange={(v) => set("enabled", v)} />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoider>
   );
 }

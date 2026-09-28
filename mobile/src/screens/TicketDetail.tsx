@@ -3,7 +3,7 @@
 // and the message composer with the desktop's state-dependent placeholders.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
 import { Badge, Button, Callout, DriverBadge, Empty, KindBadge, ReviewMark, Spinner, StatusPill } from "../ui/kit";
+import { KeyboardAvoider, useKeyboardShown } from "../ui/KeyboardAvoider";
 import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
@@ -81,7 +82,7 @@ export function TicketDetailScreen() {
   })();
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }} keyboardVerticalOffset={0}>
+    <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Header ticket={ticket} />
       <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown)} />
       <TabStrip ticket={ticket} tab={shown} onTab={setTab} pluginTabs={pluginTabs} />
@@ -99,7 +100,7 @@ export function TicketDetailScreen() {
         )}
       </View>
       {ticket.status !== "done" && <Composer ticket={ticket} key={ticket.id} />}
-    </KeyboardAvoidingView>
+    </KeyboardAvoider>
   );
 }
 
@@ -255,6 +256,8 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const act = useAction();
   const c = useColors();
   const insets = useSafeAreaInsets();
+  // The keyboard covers the home indicator, so its inset would only leave a gap above the keyboard.
+  const keyboardShown = useKeyboardShown();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<TextInput>(null);
@@ -272,7 +275,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
   };
   const attention = ticket.status === "blocked";
   return (
-    <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
+    <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
       {!!hint && <Text style={{ color: c.text3, fontSize: 12, paddingHorizontal: 6 }}>{hint}</Text>}
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <TextInput
@@ -303,7 +306,7 @@ function SheetFrame({ title, subtitle, onClose, children, primary }: { title: st
   const c = useColors();
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={{ flexDirection: "row", alignItems: "center", padding: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
           <Button title="Cancel" variant="ghost" onPress={onClose} hapticKind={null} />
           <View style={{ flex: 1, alignItems: "center" }}>
@@ -315,7 +318,7 @@ function SheetFrame({ title, subtitle, onClose, children, primary }: { title: st
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
-      </View>
+      </KeyboardAvoider>
     </Modal>
   );
 }

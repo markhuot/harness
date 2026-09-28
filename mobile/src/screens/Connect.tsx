@@ -1,13 +1,14 @@
 // Pairing: scan the desktop's QR code (or let the Camera app open harness://pair…), or enter the
 // URL and token by hand. Saved Macs can be switched between.
 import { useState } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useApp, useColors } from "../state/app";
 import { useMaybeStore } from "../state/store";
 import { checkToken, displayHost, normalizeBaseUrl, pairParams } from "../lib/pair";
 import { MONO } from "../theme/tokens";
 import { Button, Callout, Spinner } from "../ui/kit";
+import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { Icon } from "../ui/Icon";
 import { Group, SRow, useInputStyle } from "../ui/settings";
 import { haptic } from "../ui/haptics";
@@ -46,7 +47,7 @@ export function ConnectScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: c.bg }}>
+    <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen options={{ title: "Connect to a Mac", headerShown: true }} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 22 }} keyboardShouldPersistTaps="handled">
         <View style={{ alignItems: "center", gap: 10, paddingTop: 8 }}>
@@ -87,7 +88,7 @@ export function ConnectScreen() {
         {error && <Callout tone="red" icon="wifiOff">{error}</Callout>}
         <Button title="Connect" variant="secondary" onPress={() => void connect()} loading={busy} disabled={!url.trim() || !token.trim()} hapticKind={null} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoider>
   );
 }
 
