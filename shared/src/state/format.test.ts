@@ -73,6 +73,25 @@ test("approval input: Write/Edit show file_path, WebFetch shows the url as plain
   expect(describeApprovalInput("WebFetch", { url: "https://x.y", prompt: "p" })).toMatchObject({ primary: { label: "URL", value: "https://x.y", code: false }, rest: { prompt: "p" } });
 });
 
+test("approval input: config tools show the watcher command line and what they act on", () => {
+  expect(describeApprovalInput("create_watcher", { name: "gh", command: "/bin/zsh", args: ["-lc", "gh issue list --repo a/b"], mode: "loop" })).toEqual({
+    primary: { label: "Command", value: "/bin/zsh -lc 'gh issue list --repo a/b'", code: true },
+    description: null,
+    rest: { name: "gh", mode: "loop" },
+  });
+  // an args-only update still shows what will run
+  expect(describeApprovalInput("mcp__harness__update_watcher", { watcher: "gh", args: ["it's"] })).toMatchObject({
+    primary: { value: "'(unchanged command)' 'it'\\''s'" },
+    rest: { watcher: "gh" },
+  });
+  expect(describeApprovalInput("update_watcher", { watcher: "gh", enabled: false }).primary).toEqual({ label: "Watcher", value: "gh", code: false });
+  expect(describeApprovalInput("delete_ticket", { key: "ACME-3" }).primary).toEqual({ label: "Ticket", value: "ACME-3", code: false });
+  expect(describeApprovalInput("update_project", { project_key: "ACME", auto_complete: true })).toMatchObject({
+    primary: { label: "Project", value: "ACME" },
+    rest: { auto_complete: true },
+  });
+});
+
 test("approval input: unknown tools fall back to JSON, non-objects are shown raw", () => {
   expect(describeApprovalInput("mcp__x__thing", { a: 1 })).toEqual({ primary: null, description: null, rest: { a: 1 } });
   expect(describeApprovalInput("Odd", "raw")).toMatchObject({ primary: { label: "Input", value: '"raw"' } });

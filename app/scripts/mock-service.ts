@@ -499,6 +499,34 @@ function seed() {
     summaries: [["agent", "Scaffolded `tests/smoke.spec.ts`. Needs Playwright installed to run it."]],
   }); // HARNESS-9
   seedTicket({
+    project: hx,
+    key: "HARNESS-20",
+    title: "Watch acme/site issues",
+    description: "Add a watcher for the GitHub repository acme/site that files issues into this project.",
+    status: "blocked",
+    driver: "claude-code",
+    blockedReason: 'Permission needed: create_watcher — Create watcher "github" (every 300s)',
+    pendingApproval: {
+      id: "appr_cfg",
+      runId: "run_appr_cfg",
+      toolName: "mcp__harness__create_watcher",
+      input: {
+        name: "github",
+        command: "/bin/zsh",
+        args: ["-lc", "gh issue list --repo acme/site --state open --json number,title,url,updatedAt --jq '.[] | {key: \"SITE-\\(.number)\", title, url, updated: .updatedAt} | tojson'"],
+        mode: "interval",
+        interval_sec: 300,
+      },
+      requestedAt: now() - 30_000,
+      reason: "A watcher's command runs on this Mac as you, outside any ticket sandbox, every time the watcher fires.",
+      source: "policy",
+      summary: 'Create watcher "github" (every 300s)',
+      onceOnly: true,
+    },
+    ageMin: 5,
+    summaries: [["agent", "Checked `gh` is logged in. Asking to add the watcher, then a SITE → HARNESS mapping."]],
+  }); // HARNESS-20
+  seedTicket({
     project: ny,
     title: "Lazy-load below-the-fold images on section fronts",
     description: "Use native loading=lazy and add width/height to avoid CLS.",
@@ -1130,6 +1158,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (!pa) throw new HttpError(409, "No pending approval");
           const decision = String(body.decision ?? "");
           if (!["allow_once", "allow_tool", "deny"].includes(decision)) throw new HttpError(400, "decision must be allow_once, allow_tool or deny");
+          if (decision === "allow_tool" && pa.onceOnly) throw new HttpError(400, `${pa.toolName} can only be allowed once`);
           if (decision === "allow_tool" && !t.allowedTools.includes(pa.toolName)) t.allowedTools = [...t.allowedTools, pa.toolName];
           t.pendingApproval = null;
           t.blockedReason = null;

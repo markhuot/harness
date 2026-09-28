@@ -43,7 +43,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
             The agent wants to use <code>{tool}</code>
           </div>
           <div className="muted approval-sub">
-            {description ?? "Approve to let this run continue."} · requested {relativeTime(approval.requestedAt, now)}
+            {approval.summary ?? description ?? "Approve to let this run continue."} · requested {relativeTime(approval.requestedAt, now)}
           </div>
         </div>
       </div>
@@ -91,9 +91,11 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
             <button className="btn btn-primary" onClick={() => answer("allow_once")} disabled={!!busy}>
               {busy === "allow_once" ? <span className="spinner" /> : <Icon name="check" strokeWidth={2.25} />} Allow once
             </button>
-            <button className="btn" onClick={() => answer("allow_tool")} disabled={!!busy} title={`Every future ${tool} call on ${ticket.key} runs without asking`}>
-              {busy === "allow_tool" ? <span className="spinner" /> : <Icon name="checkCircle" />} Always allow {tool} on this ticket
-            </button>
+            {!approval.onceOnly && (
+              <button className="btn" onClick={() => answer("allow_tool")} disabled={!!busy} title={`Every future ${tool} call on ${ticket.key} runs without asking`}>
+                {busy === "allow_tool" ? <span className="spinner" /> : <Icon name="checkCircle" />} Always allow {tool} on this ticket
+              </button>
+            )}
             <div className="grow" />
             <button className="btn btn-ghost btn-danger" onClick={() => setDenying(true)} disabled={!!busy}>
               Deny…

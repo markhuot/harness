@@ -59,6 +59,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "appearance", route: "#/settings/appearance" },
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
+  { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
   { name: "compose", route: "#/compose" },
   { name: "permissions", route: "#/settings/permissions" },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },

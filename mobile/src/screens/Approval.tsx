@@ -40,7 +40,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
             The agent wants to use <Text style={{ fontFamily: MONO }}>{tool}</Text>
           </Text>
           <Text style={{ color: c.text2, fontSize: 13 }}>
-            {description ?? "Approve to let this run continue."} · requested {relativeTime(approval.requestedAt, now)}
+            {approval.summary ?? description ?? "Approve to let this run continue."} · requested {relativeTime(approval.requestedAt, now)}
           </Text>
         </View>
       </View>
@@ -97,7 +97,9 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
             <Button title="Allow once" icon="check" variant="primary" style={{ flex: 1 }} onPress={() => void answer("allow_once")} loading={busy === "allow_once"} disabled={!!busy && busy !== "allow_once"} hapticKind={null} />
             <Button title="Deny…" variant="secondary" onPress={() => setDenying(true)} disabled={!!busy} />
           </View>
-          <Button title={`Always allow ${tool} on this ticket`} icon="checkCircle" onPress={() => void answer("allow_tool")} loading={busy === "allow_tool"} disabled={!!busy && busy !== "allow_tool"} hapticKind={null} />
+          {!approval.onceOnly && (
+            <Button title={`Always allow ${tool} on this ticket`} icon="checkCircle" onPress={() => void answer("allow_tool")} loading={busy === "allow_tool"} disabled={!!busy && busy !== "allow_tool"} hapticKind={null} />
+          )}
         </View>
       )}
     </View>
