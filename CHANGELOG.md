@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.0244](https://github.com/markhuot/harness/releases/tag/app-20260928.0244) - 2026-09-28
+
 ### Added
 
 - Done tickets have a Re-open button (desktop and iPhone). Write what the agent should do next, and
