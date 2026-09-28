@@ -99,13 +99,13 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
-| Work run fails | status `blocked`, `blockedReason` = error |
+| Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a Claude Code classifier denial | status `blocked` with a classifier `pendingApproval` (see "Permissions"), even if the agent submitted |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
 | Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
-| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
+| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately. While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
 | `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |

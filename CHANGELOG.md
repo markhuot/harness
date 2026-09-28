@@ -58,6 +58,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A ticket that's finishing up (merging its branch and removing its worktree) no longer gets
+  stuck in Blocked with "Working directory does not exist" when someone messages it or asks for
+  changes mid-merge. Those now get an error that says to wait until it's done and re-open it, and
+  a ticket that's already done stays done.
 - On iPhone, opening a watcher's edit screen from a link while the app was closed no longer
   shows an empty form.
 - The Changes tab stays on a ticket after it's completed. Once the branch is merged and its

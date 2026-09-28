@@ -244,6 +244,47 @@ describe("ticket lifecycle", () => {
     expect(runKinds(h, t).filter((k) => k.startsWith("complete"))).toEqual(["complete:succeeded"]);
   });
 
+  test("while the complete run is in flight, a message or request for changes is refused and the ticket ends done", async () => {
+    const h = setup({ autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    let started = false;
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      started = true;
+      await gate;
+    };
+    await h.orch.completeTicket(t.key);
+    // Queued, then running: both count as completing.
+    await expect(h.orch.sendMessage(t.key, "merge into main instead")).rejects.toThrow(/is completing/);
+    while (!started) await Bun.sleep(2);
+    await expect(h.orch.sendMessage(t.key, "never mind")).rejects.toThrow(/is completing/);
+    expect(() => h.orch.humanReview(t.key, { decision: "request_changes", notes: "redo" })).toThrow(/is completing/);
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    open();
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+  });
+
+  test("a work run that fails after its ticket was marked done leaves it done", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    h.driver.script = async function* (req) {
+      if (req.kind !== "work") return;
+      await h.orch.completeTicket(t.key, { skipAgent: true });
+      yield { type: "error", message: "Working directory does not exist" };
+    };
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.blockedReason]).toEqual(["done", null]);
+    expect(runKinds(h, t)).toEqual(["plan:succeeded", "work:failed"]);
+  });
+
   test("auto-complete: turning it off per project brings back the manual Complete step", async () => {
     const h = setup();
     const p = h.orch.updateProject(h.project.id, { autoComplete: false });
