@@ -508,6 +508,11 @@ export interface HumanReviewBody {
   notes?: string;
 }
 
+/** Re-open a done ticket: back to in progress, with notes for the agent */
+export interface ReopenBody {
+  notes: string;
+}
+
 export interface ApprovalBody {
   /** allow_once: this exact call; allow_tool: every future call of this tool on this ticket; deny */
   decision: "allow_once" | "allow_tool" | "deny";

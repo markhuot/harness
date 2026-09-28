@@ -14,6 +14,7 @@ import type {
   CreateTicketBody,
   DriverInfo,
   HumanReviewBody,
+  ReopenBody,
   Mapping,
   Project,
   PublicSettings,
@@ -644,7 +645,8 @@ export class Orchestrator {
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
         case "in_progress":
-          await this.begin(ticket, prompts.workStartPrompt(ticket));
+          if (ticket.status === "done") await this.reopen(ticket, prompts.workStartPrompt(ticket), "Re-opened: moved to in progress");
+          else await this.begin(ticket, prompts.workStartPrompt(ticket));
           break;
         case "done":
           this.transition(ticket, "done", { blockedReason: null }, "Moved to done");
@@ -704,15 +706,17 @@ export class Orchestrator {
         this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
         break;
       case "blocked":
-        if (!ticket.workdir) {
+        if (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir))) {
           await this.begin(ticket, text);
         } else {
           this.transition(ticket, "in_progress", { blockedReason: null }, "Unblocked by human reply");
           this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
         }
         break;
-      case "review":
       case "done":
+        await this.reopen(ticket, text, "Re-opened by human message");
+        break;
+      case "review":
         this.transition(
           ticket,
           "in_progress",
@@ -722,6 +726,26 @@ export class Orchestrator {
         this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
         break;
     }
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
+  async reopenTicket(key: string, body: ReopenBody): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
+    const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
+    if (!notes) throw badRequest("notes are required");
+    this.addSummary(ticket.sessionId, ticket.id, "human", `Re-opened: ${notes}`);
+    return this.reopen(ticket, prompts.reopenPrompt(ticket, notes), "Re-opened by human");
+  }
+
+  /**
+   * Done → in progress. Both reviews start over, and begin() recreates the worktree when the
+   * complete run removed it.
+   */
+  private async reopen(ticket: Ticket, prompt: string, note: string): Promise<Ticket> {
+    this.autoRetries.delete(ticket.id);
+    await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1402,14 +1426,18 @@ export class Orchestrator {
     return t.dependsOn.every((k) => this.isDone(k));
   }
 
-  /** Prepare the workdir, move to in_progress and enqueue the first work/conductor run. */
-  private async begin(ticket: Ticket, prompt: string) {
+  /**
+   * Prepare the workdir, move to in_progress and enqueue the first work/conductor run. A worktree
+   * that has gone missing (removed by the complete run of a ticket now re-opened) is recreated.
+   */
+  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress") {
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
     try {
       let workdir = ticket.workdir;
       let branch = ticket.branch;
-      if (!workdir) {
+      if (!workdir || (branch && !existsSync(workdir))) {
+        branch = null;
         const project = this.store.projects.get(ticket.projectId)!;
         workdir = project.path;
         if (project.useWorktrees && (await isGitRepo(project.path))) {
@@ -1424,7 +1452,7 @@ export class Orchestrator {
       const fresh = this.store.tickets.get(ticket.id);
       if (!fresh) return;
       this.store.sessions.update(fresh.sessionId, { cwd: workdir });
-      this.transition(fresh, "in_progress", { workdir, branch, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, "Moved to in progress");
+      this.transition(fresh, "in_progress", { ...patch, workdir, branch, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note);
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt);
     } finally {
       this.starting.delete(ticket.id);

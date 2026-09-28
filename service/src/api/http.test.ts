@@ -150,6 +150,20 @@ describe("http api", () => {
     await expect(client.getTicket(f.key)).rejects.toMatchObject({ status: 404 });
   });
 
+  test("re-open a done ticket over REST: 409 before done, 400 without notes", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, prompt: "x" });
+    await h.orchestrator.idle();
+    await expect(client.reopenTicket(t.key, { notes: "more" })).rejects.toMatchObject({ status: 409 });
+    await client.completeTicket(t.key, { skipAgent: true });
+    await expect(client.reopenTicket(t.key, { notes: "" })).rejects.toMatchObject({ status: 400 });
+    const reopened = await client.reopenTicket(t.key, { notes: "more" });
+    expect(reopened.status).toBe("in_progress");
+    await h.orchestrator.idle();
+    expect((await client.getTicket(t.key)).ticket.status).toBe("review");
+  });
+
   test("triage via /watchers/inject dispatches with the external key; mappings CRUD", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });

@@ -338,6 +338,19 @@ export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "c
   );
 }
 
+/** A done ticket sent back to in progress by the human. */
+export function reopenPrompt(ticket: Ticket, notes: string): string {
+  const where = ticket.branch
+    ? `The earlier work was probably merged when the ticket was completed, and the worktree may have been recreated on \`${ticket.branch}\` from the current base branch. Check \`git log\` to see what is already there before you change anything.`
+    : "Check the current state of the working tree before you change anything; the earlier work is already in it.";
+  return join(
+    `${ticketLabel(ticket)} was done, and the human has re-opened it.`,
+    section("What the human wants", notes.trim()),
+    where,
+    "Do the work and verify it, then call `submit_for_review` again with a summary of what changed.",
+  );
+}
+
 export function triagePrompt(input: {
   item: WorkItem;
   source: string;
