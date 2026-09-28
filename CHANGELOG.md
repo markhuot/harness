@@ -34,6 +34,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone, opening a watcher's edit screen from a link while the app was closed no longer
+  shows an empty form.
 - The Changes tab stays on a ticket after it's completed. Once the branch is merged and its
   worktree removed, the tab shows the diff as it was when the work was approved, including any
   changes that were never committed, along with the branch's commits. A "Saved" label in the
