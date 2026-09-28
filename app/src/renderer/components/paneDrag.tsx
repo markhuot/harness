@@ -1,5 +1,5 @@
 // Dragging tickets and panes onto the pane workspace. Sources (board cards, conductor child rows,
-// a ticket pane's header grip) call `dragProps`; while one of them is being dragged, the workspace
+// a pane's header grip) call `dragProps`; while one of them is being dragged, the workspace
 // shows a drop layer over every pane (PaneWorkspace.tsx) that previews and applies the drop through
 // the pure helpers in state/panes.ts (zoneAt, dropTargetAt, applyDrop).
 //

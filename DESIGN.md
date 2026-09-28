@@ -942,19 +942,18 @@ Settings, project settings, or on the board route the pane workspace.
   one on screen. The single tree stored before scopes existed migrates into All projects. It was
   shared by every board, and All projects is the board that can show all of its tickets; project
   boards start bare. Parsing drops a scope entry it can't read. Pane ids are unique across all
-  scopes, because content is keyed by leaf id (and a terminal pane's id will name its PTY
-  session): loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
+  scopes, because content is keyed by leaf id: loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
   that repeats an id gets a new one, and a scope that isn't stored yet gets the fixed board id
   `b:<scope>`, so re-reading the store (another window wrote it) doesn't remount that board.
   `paneScopeOf(route)` (`state/route.ts`) is the route's scope. `PaneWorkspace` takes it as a
   prop and provides it to the panes (`usePaneScope`, `components/paneContext.ts`). Switching
   scope unmounts the other board's panes rather than keeping every board mounted. Leaves mount
-  again by id when you come back, and content that lives outside the renderer (a terminal's PTY)
-  can reattach by that id. Keeping every board mounted would mean running a board per project,
-  each with its own search. Leaves show content (`{ kind: "board" }` or
-  `{ kind: "ticket", ticketKey, tab }`), splits lay their children out side by side (`row`) or
-  stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board pane, and
-  a ticket is open in at most one of its panes. `PaneWorkspace.tsx`
+  again by id when you come back, and a terminal re-attaches to its shell, which lives in the
+  main process. Keeping every board mounted would mean running a board per project, each with its
+  own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
+  `{ kind: "terminal", sessionId, cwd, title? }`), splits lay their children out side by side
+  (`row`) or stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board
+  pane, and a ticket or a terminal session is open in at most one pane of any scope. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -989,7 +988,8 @@ Settings, project settings, or on the board route the pane workspace.
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
-  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, any pane 200 px tall.
+  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, any
+  pane 200 px tall.
   They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
   never shows a pane below its minimum while there's room. The stored sizes stay as they were
@@ -997,7 +997,7 @@ Settings, project settings, or on the board route the pane workspace.
 - **Focus, close, zoom.** Clicking or tabbing into a pane focuses it (a faint header tint). ✕
   closes a ticket pane and its neighbours take its room; the board can't be closed. Maximize
   zooms a pane. Escape ends a zoom, or else closes the focused ticket pane (never while a text
-  field, modal or menu has it). Deleting a ticket closes its pane, and a renamed key follows the
+  field, modal, menu or terminal has it, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its pane, and a renamed key follows the
   rename.
 - **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
@@ -1022,15 +1022,63 @@ Settings, project settings, or on the board route the pane workspace.
   keeps it inside the window. It shifts the menu left or right at the sides and flips it above
   the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
   and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
+- **Terminal panes.** New ▾ → New terminal in the sidebar (a split button whose main part is
+  still New session ⌘N), File ▸ New Terminal (⌘T) and a project's context menu call the store's
+  `openTerminal(projectId?)`. It picks the board (`terminalScope`: the board on screen, a
+  project's own board from its settings, otherwise the board last shown or All projects) and the
+  folder (`terminalCwd`: the project's `path`, `~` on All projects or for an unknown project).
+  Then it runs `openTerminal` in that scope, which docks the terminal on the right of the focused
+  pane (half of it) or of the board (40%) and focuses it, and goes to that board if it isn't on
+  screen. Each call adds a pane. The content's `sessionId` is `t:<uuid>` (`newTerminalContent`)
+  and names the PTY. It isn't the leaf id: leaf ids come from a per-window counter, so two
+  windows can mint the same one before either sees the other's write, and loading re-ids a
+  duplicate. A shell must never be handed to the wrong pane, and a UUID never collides. Parsing
+  drops a terminal whose session id the main process would reject, and a session stored in two
+  scopes stays in the first. `views/TerminalPane.tsx` renders it with
+  [ghostty-web](https://github.com/coder/ghostty-web), Ghostty's VT core compiled to WASM behind
+  an xterm.js-like API, drawn on a canvas. The package is pinned to a `next` build because the
+  0.4.0 release doesn't report the mouse to programs like vim and htop. It loads on the first
+  terminal, in its own chunk. Its WASM is inlined as a `data:` URL, so it works from `file://` and
+  inside the asar with no asset to find, and the CSP adds `'wasm-unsafe-eval'` to `script-src`
+  (`connect-src` already allowed `data:`). A FitAddon sizes the terminal to its pane and follows
+  resizes. ghostty-web can't change colors after `open()`, so a theme change disposes the
+  terminal and makes a new one that re-attaches (`terminalColors` turns the theme's tokens into
+  the `#rrggbb` its VT core needs, flattening translucent ones). Attaching (`createAttach`,
+  `state/terminal.ts`): data events are held until `ensure` resolves, then the scrollback is
+  written and only output past its `end` offset (below) is, so nothing prints twice or goes
+  missing whichever order the reply and the events arrive in. A re-attached pane resizes the PTY
+  to itself, since `ensure` ignores cols/rows for an existing shell. The shell's title (OSC 0/2)
+  goes into the content (`setTerminalTitle`) for the header, else the folder's name. Keys: ⌘
+  shortcuts other than ⌘C/⌘V never reach the terminal. ghostty-web marks every key it handles
+  with preventDefault, and a prevented ⌘ key never reaches the native menu, so a capture listener
+  stops them before the terminal and they go unhandled, as from a text field. ⌃⌘ keys (the
+  renderer's own ⌃⌘S) pass through. ghostty-web's custom key handler is the reverse of xterm's:
+  returning true means "handled". ⌘C (and Edit ▸ Copy) copies the selection, and a paste goes
+  through the terminal's bracketed paste. An exited shell shows its code with Restart, which is
+  `kill` then `ensure` under the same session id. Lifecycle: `useTerminalLifecycle`
+  (`state/store.tsx`) watches the pane store (`watchPaneStore`, including another window's writes
+  re-read on `storage`) and kills every session that's in no scope any more (`closedSessions`).
+  That covers closing the pane, removing a project and a close in another window, while moving a
+  pane (even to another board) kills nothing. At startup it re-reads the stored panes and kills
+  the pane sessions (`t:` ids) none of them show (`orphanSessions` over `list()`), which are left
+  over from a renderer reload. Sessions with other ids aren't a pane's, so they're left alone. Shells
+  don't outlive the app, so after a relaunch a stored terminal pane starts a new shell in its
+  folder. `scripts/terminal-pane-check.ts [--packaged]` drives all of this in the real app over
+  CDP, with real key events.
 - **Terminals (process side).** `TerminalManager` (`main/terminals.ts`) keeps one PTY per id,
-  and the id is the renderer's pane leaf id. Each PTY runs the user's login shell (`$SHELL -l`,
+  and the id is the terminal pane's `sessionId`. Each PTY runs the user's login shell (`$SHELL -l`,
   else `/bin/zsh`) with `TERM=xterm-256color` and without `ELECTRON_*` or `NODE_OPTIONS`. The
   preload exposes it as `window.harness.terminal` over `harness:terminal:*` IPC. `ensure(id,
   { cwd, cols, rows })` is idempotent. It spawns on the first call (`~` expands, and a missing
   directory falls back to home), and later calls re-attach to the same shell and return its
   bounded scrollback (1 MiB), so a remounted pane replays what it missed. Output is coalesced
   for a few ms, then broadcast as `terminal:data` to every window, and the exit code goes out as
-  `terminal:exit`. An exited session stays until `kill`, so the pane can show the exit. `list()`
+  `terminal:exit`. Each data event carries the offset its output ends at (UTF-16 code units of
+  everything the shell has printed, which keeps counting after the scrollback trims), and
+  `ensure` returns the offset its scrollback ends at (`end`). Data events and the `ensure` reply
+  are separate IPC messages that can arrive in either order, so the offsets are how a
+  re-attaching pane knows which output its scrollback already has. `ensure` doesn't touch unsent
+  output, which still goes to other windows showing that shell. An exited session stays until `kill`, so the pane can show the exit. `list()`
   lets the renderer kill sessions no pane shows any more. `kill` sends SIGHUP, then SIGKILL after
   3 s, and every shell is killed on quit. IPC arguments are validated (id pattern, dimensions
   1–1000, writes up to 1 MiB) because the main process trusts nothing from a renderer. node-pty

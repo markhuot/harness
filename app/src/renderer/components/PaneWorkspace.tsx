@@ -1,5 +1,5 @@
 // The pane workspace: everything in <main> on the board route is a split tree of panes
-// (state/panes.ts). The board is one pane and each open ticket another. Panes are rendered as flat,
+// (state/panes.ts). The board is one pane, and each open ticket or terminal another. Panes are rendered as flat,
 // absolutely positioned siblings (layoutPanes), so reshaping the tree never remounts one: the board
 // keeps its search and scroll, and a ticket keeps its transcript, browser and plugin frames.
 //
@@ -38,6 +38,7 @@ import {
 } from "../state/panes";
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
+import { TerminalPane } from "../views/TerminalPane";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
@@ -69,7 +70,7 @@ function applyLayout(root: HTMLElement, layout: PaneLayout) {
   }
 }
 
-/** Escape ends a zoom, or else closes the focused ticket pane (never the board). */
+/** Escape ends a zoom, or else closes the focused ticket pane (never the board, nor a terminal: Escape is the shell's). */
 function escapePanes(s: PaneState): PaneState {
   if (s.zoomedId) return toggleZoom(s, s.zoomedId);
   const leaf = s.focusedId ? findLeaf(s.root, s.focusedId) : null;
@@ -104,9 +105,9 @@ export function PaneWorkspace({ scope }: { scope: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
-      // Text fields and the browser canvas keep their Escape; an open modal or menu closes first.
+      // Text fields, the browser canvas and terminals keep their Escape; an open modal or menu closes first.
       const el = e.target as HTMLElement;
-      if (el.closest?.("input, textarea, select, [contenteditable=true], canvas") || document.querySelector(".modal, .menu")) return;
+      if (el.closest?.("input, textarea, select, [contenteditable=true], canvas, [data-terminal]") || document.querySelector(".modal, .menu")) return;
       updatePanes(scope, escapePanes);
     };
     // A click inside a plugin iframe never reaches this document; the window blurs instead.
@@ -133,6 +134,7 @@ export function PaneWorkspace({ scope }: { scope: string }) {
           rect={rect}
           hidden={hidden}
           focused={multi && leaf.id === panes.focusedId}
+          active={leaf.id === panes.focusedId}
           corner={leaf.id === layout.cornerId}
           zoomed={leaf.id === panes.zoomedId}
         />
@@ -153,11 +155,15 @@ function Pane({
   focused,
   corner,
   zoomed,
+  active,
 }: {
   leaf: PaneLeaf;
   rect: Rect;
   hidden: boolean;
+  /** Drawn as the focused pane (only when there's more than one). */
   focused: boolean;
+  /** The store's focused pane, drawn or not (a terminal takes the keyboard when it becomes this). */
+  active: boolean;
   corner: boolean;
   zoomed: boolean;
 }) {
@@ -177,7 +183,13 @@ function Pane({
       onKeyUpCapture={(e) => e.key === "Tab" && focus()}
     >
       <PaneContext.Provider value={ctx}>
-        {c.kind === "board" ? <BoardPane /> : <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />}
+        {c.kind === "board" ? (
+          <BoardPane />
+        ) : c.kind === "ticket" ? (
+          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
+        ) : (
+          <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
+        )}
       </PaneContext.Provider>
     </section>
   );

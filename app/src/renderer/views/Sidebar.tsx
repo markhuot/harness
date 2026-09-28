@@ -3,11 +3,22 @@ import type { Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { MOD } from "../components/bits";
+import { MenuButton, MOD } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
 import { forgetProjectPanes } from "../state/panes";
 
-export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession: (projectId?: string) => void; collapsed?: boolean; ref?: Ref<HTMLElement> }) {
+export function Sidebar({
+  onNewSession,
+  onNewTerminal,
+  collapsed = false,
+  ref,
+}: {
+  onNewSession: (projectId?: string) => void;
+  /** A terminal on the board on screen (omitted), or on `projectId`'s board. */
+  onNewTerminal: (projectId?: string) => void;
+  collapsed?: boolean;
+  ref?: Ref<HTMLElement>;
+}) {
   const { state, route, navigate, client } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
@@ -57,6 +68,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     const choice = await bridge.showContextMenu([
       { id: "settings", label: "Project settings…" },
       { id: "new", label: `New session in ${p.name}` },
+      { id: "terminal", label: `New terminal in ${p.name}` },
       { type: "separator" },
       { id: "reveal", label: "Reveal in Finder" },
       { type: "separator" },
@@ -64,6 +76,7 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
     ]);
     if (choice === "settings") openSettings(p);
     else if (choice === "new") onNewSession(p.id);
+    else if (choice === "terminal") onNewTerminal(p.id);
     else if (choice === "reveal") void bridge.revealInFinder(p.path);
     else if (choice === "remove") void removeProject(p);
   };
@@ -75,13 +88,36 @@ export function Sidebar({ onNewSession, collapsed = false, ref }: { onNewSession
       <div className="sidebar-inner">
         <div className="sidebar-top" />
         <div className="sidebar-scroll">
-          <button className="btn new-session-btn" onClick={() => onNewSession()}>
-            <Icon name="plus" strokeWidth={2.25} />
-            <span className="grow" style={{ textAlign: "left" }}>
-              New session
-            </span>
-            <span className="kbd">{MOD}N</span>
-          </button>
+          {/* A split button: the main part is New session (⌘N), the chevron offers a terminal too. */}
+          <div className="new-session-split" role="group" aria-label="New">
+            <button className="btn new-session-btn" data-testid="new-session" onClick={() => onNewSession()}>
+              <Icon name="plus" strokeWidth={2.25} />
+              <span className="grow" style={{ textAlign: "left" }}>
+                New session
+              </span>
+              <span className="kbd">{MOD}N</span>
+            </button>
+            <MenuButton
+              className="new-session-more"
+              align="right"
+              trigger={(toggle, open) => (
+                <button className="btn new-session-chevron" data-testid="new-menu" aria-haspopup="menu" aria-expanded={open} aria-label="More ways to start" title="New session or terminal" onClick={toggle}>
+                  <Icon name="chevron" strokeWidth={2.25} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <button onClick={() => (close(), onNewSession())}>
+                    <Icon name="plus" /> <span className="grow">New session</span> <span className="kbd">{MOD}N</span>
+                  </button>
+                  <button data-testid="new-terminal" onClick={() => (close(), onNewTerminal())}>
+                    <Icon name="terminal" /> <span className="grow">New terminal</span> <span className="kbd">{MOD}T</span>
+                  </button>
+                </>
+              )}
+            </MenuButton>
+          </div>
 
           <nav className="nav">
             <NavItem

@@ -32,7 +32,7 @@ const bridge: HarnessBridge = {
     kill: (id) => ipcRenderer.invoke("harness:terminal:kill", id),
     list: () => ipcRenderer.invoke("harness:terminal:list"),
     onData: (cb) => {
-      const listener = (_e: IpcRendererEvent, id: string, data: string) => cb(id, data);
+      const listener = (_e: IpcRendererEvent, id: string, data: string, end: number) => cb(id, data, end);
       ipcRenderer.on("terminal:data", listener);
       return () => ipcRenderer.removeListener("terminal:data", listener);
     },

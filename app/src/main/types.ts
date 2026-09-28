@@ -21,7 +21,7 @@ export interface ConnectionError {
 
 export type ConnectionResult = Connection | ConnectionError;
 
-export type MenuCommand = "new-session" | "settings" | "inbox" | "board" | "toggle-sidebar";
+export type MenuCommand = "new-session" | "new-terminal" | "settings" | "inbox" | "board" | "toggle-sidebar";
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =
@@ -52,6 +52,12 @@ export interface TerminalSession {
   created: boolean;
   /** Output so far (bounded), for a remounted pane to replay before appending onData */
   scrollback: string;
+  /**
+   * The output offset the scrollback ends at (UTF-16 code units of all output so far). Each onData
+   * chunk carries the offset it ends at, so a pane writes only the part of a chunk past this: data
+   * events and ensure()'s reply travel separately and can arrive in either order.
+   */
+  end: number;
   /** Set once the shell has exited; the session stays until kill() */
   exit: TerminalExit | null;
 }
@@ -65,7 +71,7 @@ export interface TerminalEnsureOptions {
 
 /** Built-in terminals (PTYs in the main process), keyed by the renderer's pane leaf id. */
 export interface TerminalBridge {
-  /** Attach to `id`, spawning a login shell if it doesn't exist. Ignore `id`'s onData until this resolves. */
+  /** Attach to `id`, spawning a login shell if it doesn't exist. Hold `id`'s onData until this resolves, then keep what ends past `end`. */
   ensure(id: string, opts: TerminalEnsureOptions): Promise<TerminalSession>;
   /** Send input; false when there's no running session */
   write(id: string, data: string): Promise<boolean>;
@@ -74,7 +80,8 @@ export interface TerminalBridge {
   kill(id: string): Promise<boolean>;
   /** Every session id (running or exited), to kill the ones no pane shows any more */
   list(): Promise<string[]>;
-  onData(cb: (id: string, data: string) => void): () => void;
+  /** `end` is the output offset just past `data` (see TerminalSession.end). */
+  onData(cb: (id: string, data: string, end: number) => void): () => void;
   onExit(cb: (id: string, exit: TerminalExit) => void): () => void;
 }
 

@@ -5,6 +5,8 @@ import {
   boardLeaf,
   checkPanes,
   clampSizes,
+  closedSessions,
+  cwdName,
   closePane,
   defaultPanes,
   dropContent,
@@ -22,8 +24,13 @@ import {
   mapScopes,
   minSize,
   movePane,
+  newTerminalContent,
   normalize,
+  orphanSessions,
+  openTerminal,
   openTicket,
+  paneLabel,
+  PANE_MIN_WIDTH,
   PANES_KEY,
   parsePaneStore,
   parsePanes,
@@ -38,11 +45,15 @@ import {
   serializePanes,
   setSizes,
   setTab,
+  setTerminalTitle,
   splitTarget,
+  terminalLeafBySession,
+  terminalSessions,
   ticketLeafByKey,
   toggleZoom,
   updateAllPanes,
   updatePanes,
+  watchPaneStore,
   zoneAt,
   type PaneContent,
   type PaneLeaf,
@@ -50,6 +61,7 @@ import {
   type PaneSplit,
   type PaneState,
   type PaneStore,
+  type TerminalContent,
 } from "./panes";
 
 // Builders: leaf ids are the ticket key (or "B" for the board) so shapes and focus read naturally.
@@ -67,7 +79,7 @@ const col = (id: string, children: PaneNode[], sizes?: number[]) => split("colum
 const st = (root: PaneNode, focusedId: string | null = null, zoomedId: string | null = null): PaneState => ({ root, focusedId, zoomedId });
 
 const ticketContent = (key: string, tab: "summaries" | "transcript" = "summaries"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
-const label = (l: PaneLeaf) => (l.content.kind === "board" ? "board" : l.content.ticketKey);
+const label = (l: PaneLeaf) => (l.content.kind === "board" ? "board" : l.content.kind === "ticket" ? l.content.ticketKey : `$${l.content.sessionId}`);
 const r = (n: number) => Math.round(n * 1000) / 1000;
 /** A compact picture of a tree: row[board .6, col[A .5, B .5] .4] */
 function shape(n: PaneNode): string {
@@ -517,7 +529,7 @@ describe("parsePanes / serializePanes", () => {
         sizes: [0.5, 0.2, 0.2, 0.1],
         children: [
           { type: "leaf", id: "B", content: { kind: "board" } },
-          { type: "leaf", id: "t", content: { kind: "terminal", cwd: "/" } },
+          { type: "leaf", id: "t", content: { kind: "spreadsheet", cwd: "/" } },
           { type: "leaf", id: "k", content: { kind: "ticket" } },
           { type: "leaf", id: "A", content: { kind: "ticket", ticketKey: "A-1", tab: "bogus" } },
         ],
@@ -959,3 +971,222 @@ describe("layoutPanes with the workspace size", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Terminal panes
+// ---------------------------------------------------------------------------
+
+const term = (sessionId: string, cwd = "/work", title?: string): TerminalContent => ({ kind: "terminal", sessionId, cwd, ...(title ? { title } : {}) });
+/** A terminal leaf whose id is `$` + its session, like `label` prints it. */
+const TT = (sessionId: string, cwd = "/work"): PaneLeaf => ({ type: "leaf", id: `$${sessionId}`, content: term(sessionId, cwd) });
+const sessionsOf = (s: PaneState) => leaves(s.root).flatMap((l) => (l.content.kind === "terminal" ? [l.content.sessionId] : []));
+
+describe("openTerminal", () => {
+  test("splits the focused pane in half, on its right, and focuses the terminal", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), term("t:1")));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.2, $t:1 0.2]");
+    expect(focusedLabel(s)).toBe("$t:1");
+  });
+
+  test("with nothing focused it opens beside the board, which keeps 60%", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.6, 0.4])), term("t:1")));
+    expect(shape(s.root)).toBe("row[board 0.36, $t:1 0.24, A-1 0.4]");
+    expect(focusedLabel(s)).toBe("$t:1");
+  });
+
+  test("a focused pane that's gone falls back to the board", () => {
+    const s = valid(openTerminal(st(B, "nope"), term("t:1")));
+    expect(shape(s.root)).toBe("row[board 0.6, $t:1 0.4]");
+  });
+
+  test("every new terminal is another pane, each with its own session", () => {
+    let s = defaultPanes();
+    let n = 0;
+    for (let i = 0; i < 3; i++) s = valid(openTerminal(s, newTerminalContent("~", () => `uuid-${++n}`)));
+    expect(sessionsOf(s).sort()).toEqual(["t:uuid-1", "t:uuid-2", "t:uuid-3"]);
+    expect(new Set(leaves(s.root).map((l) => l.id)).size).toBe(4);
+  });
+
+  test("a session that's already open is focused, not opened twice", () => {
+    const s0 = st(row("r", [B, TT("t:1"), T("A-1")]), "A-1");
+    const s = valid(openTerminal(s0, term("t:1")));
+    expect(s.root).toBe(s0.root);
+    expect(focusedLabel(s)).toBe("$t:1");
+  });
+
+  test("a zoom ends so the new terminal is visible", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")]), "A-1", "A-1"), term("t:1")));
+    expect(s.zoomedId).toBeNull();
+    expect(focusedLabel(s)).toBe("$t:1");
+  });
+
+  test("newTerminalContent mints t:<uuid> session ids, which the main process accepts", () => {
+    const a = newTerminalContent("/p");
+    const b = newTerminalContent("/p");
+    expect(a.sessionId).not.toBe(b.sessionId);
+    for (const id of [a.sessionId, b.sessionId]) expect(id).toMatch(/^t:[0-9a-f-]{36}$/);
+    expect(a.cwd).toBe("/p");
+  });
+});
+
+describe("terminal panes alongside the other operations", () => {
+  test("normalize keeps each session once, like a ticket key", () => {
+    const s = normalize(st(row("r", [B, TT("t:1"), { ...TT("t:1"), id: "dup" }, TT("t:2")])));
+    expect(sessionsOf(valid(s))).toEqual(["t:1", "t:2"]);
+    expect(checkPanes(st(row("r", [B, TT("t:1"), { ...TT("t:1"), id: "dup" }])))).toContain("terminal t:1 is open twice");
+  });
+
+  test("dropping an open terminal's content moves its pane instead of opening it twice", () => {
+    const s = valid(dropContent(st(row("r", [B, TT("t:1"), T("A-1")])), "A-1", "bottom", term("t:1")));
+    expect(shape(s.root)).toBe("row[board 0.5, col[A-1 0.5, $t:1 0.5] 0.5]");
+  });
+
+  test("moving a terminal pane keeps its session and leaf", () => {
+    const s = valid(movePane(st(row("r", [B, TT("t:1"), T("A-1")])), "$t:1", "A-1", "right"));
+    expect(terminalLeafBySession(s.root, "t:1")!.id).toBe("$t:1");
+    expect(shape(s.root)).toBe(`row[board ${r(1 / 2)}, A-1 ${r(1 / 4)}, $t:1 ${r(1 / 4)}]`);
+  });
+
+  test("Escape-style closing and ticket bookkeeping leave terminals alone", () => {
+    const s0 = st(row("r", [B, TT("t:1"), T("A-1")]), "$t:1");
+    expect(sessionsOf(pruneTickets(s0, () => false))).toEqual(["t:1"]);
+    expect(renameTicketKey(s0, "A-1", "B-1").root).not.toBe(s0.root);
+    expect(sessionsOf(renameTicketKey(s0, "A-1", "B-1"))).toEqual(["t:1"]);
+    expect(focusedTicket(s0)).toBeNull(); // a focused terminal isn't a ticket for the URL
+  });
+
+  test("navigating a terminal pane to a ticket open elsewhere focuses that pane and keeps the terminal", () => {
+    const s = valid(replaceContent(st(row("r", [B, TT("t:1"), T("A-1")]), "$t:1"), "$t:1", ticketContent("A-1")));
+    expect(focusedLabel(s)).toBe("A-1");
+    expect(sessionsOf(s)).toEqual(["t:1"]);
+  });
+
+  test("minSize counts a terminal's minimum width", () => {
+    expect(minSize(TT("t:1"), "row")).toBe(PANE_MIN_WIDTH.terminal);
+    expect(minSize(row("r", [B, TT("t:1")]), "row")).toBe(PANE_MIN_WIDTH.board + PANE_MIN_WIDTH.terminal);
+    expect(minSize(col("c", [T("A-1"), TT("t:1")]), "row")).toBe(Math.max(PANE_MIN_WIDTH.ticket, PANE_MIN_WIDTH.terminal));
+  });
+
+  test("setTerminalTitle stores the shell's title, clears it when empty, and ignores other panes", () => {
+    const s0 = st(row("r", [B, TT("t:1"), T("A-1")]));
+    const s1 = setTerminalTitle(s0, "$t:1", "vim notes.md");
+    expect(findLeaf(s1.root, "$t:1")!.content).toEqual(term("t:1", "/work", "vim notes.md"));
+    expect(setTerminalTitle(s1, "$t:1", "vim notes.md")).toBe(s1);
+    expect(findLeaf(setTerminalTitle(s1, "$t:1", "").root, "$t:1")!.content).toEqual(term("t:1"));
+    expect(setTerminalTitle(s0, "A-1", "x")).toBe(s0);
+    expect(setTerminalTitle(s0, "missing", "x")).toBe(s0);
+  });
+});
+
+describe("terminal content in storage", () => {
+  test("round-trips, title included", () => {
+    const s0 = normalize(st(row("r", [B, { type: "leaf", id: "p9", content: term("t:abc", "~/code", "zsh") }]), "p9"));
+    const s = valid(parsePanes(serializePanes(s0)));
+    expect(findLeaf(s.root, "p9")!.content).toEqual(term("t:abc", "~/code", "zsh"));
+    expect(s.focusedId).toBe("p9");
+  });
+
+  test("a terminal the main process couldn't attach to (bad session id, no folder) is dropped", () => {
+    const bad = [
+      { kind: "terminal", cwd: "/" },
+      { kind: "terminal", sessionId: "", cwd: "/" },
+      { kind: "terminal", sessionId: "t:has space", cwd: "/" },
+      { kind: "terminal", sessionId: "t:" + "x".repeat(200), cwd: "/" },
+      { kind: "terminal", sessionId: "t:1", cwd: 7 },
+      { kind: "terminal", sessionId: "t:1", cwd: "" },
+    ];
+    const raw = JSON.stringify({ root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "B", content: { kind: "board" } }, ...bad.map((content, i) => ({ type: "leaf", id: `x${i}`, content }))] } });
+    expect(shape(valid(parsePanes(raw)).root)).toBe("board");
+  });
+
+  test("a non-string title is ignored, the terminal kept", () => {
+    const raw = JSON.stringify({ root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "B", content: { kind: "board" } }, { type: "leaf", id: "t", content: { kind: "terminal", sessionId: "t:1", cwd: "/", title: 5 } }] } });
+    expect(findLeaf(parsePanes(raw).root, "t")!.content).toEqual(term("t:1", "/"));
+  });
+
+  test("a session stored in two scopes stays in the first; a pane re-id'd on load keeps its session", () => {
+    const tree = (sessionId: string) => ({ root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "B", content: { kind: "board" } }, { type: "leaf", id: "p1", content: term(sessionId) }] } });
+    // Two windows minted p1 for different terminals (in a and b), and a third copy of t:1 in c.
+    const store = parsePaneStore(JSON.stringify({ scopes: { a: tree("t:1"), b: tree("t:2"), c: tree("t:1") } }));
+    expect(sessionsOf(store.scopes.a!)).toEqual(["t:1"]);
+    expect(sessionsOf(store.scopes.b!)).toEqual(["t:2"]);
+    expect(sessionsOf(store.scopes.c!)).toEqual([]);
+    const bLeaf = terminalLeafBySession(store.scopes.b!.root, "t:2")!;
+    expect(bLeaf.id).not.toBe("p1");
+    expect(terminalSessions(store)).toEqual(new Set(["t:1", "t:2"]));
+  });
+});
+
+describe("closedSessions (which shells to kill)", () => {
+  const withTerms = (...ids: string[]) => normalize(st(ids.length ? row("r", [B, ...ids.map((id) => TT(id))]) : B));
+
+  test("closing a terminal pane closes its session", () => {
+    const before: PaneStore = { scopes: { a: withTerms("t:1", "t:2") } };
+    const after = mapScopes(before, (s) => closePane(s, "$t:1"));
+    expect(closedSessions(before, after)).toEqual(["t:1"]);
+  });
+
+  test("moving a pane, or a session showing up in another scope, kills nothing", () => {
+    const before: PaneStore = { scopes: { a: withTerms("t:1", "t:2") } };
+    expect(closedSessions(before, mapScopes(before, (s) => movePane(s, "$t:1", "$t:2", "bottom")))).toEqual([]);
+    expect(closedSessions(before, { scopes: { a: withTerms("t:2"), b: withTerms("t:1") } })).toEqual([]);
+    expect(closedSessions(before, before)).toEqual([]);
+  });
+
+  test("removing a project closes the terminals on its board, not the ones on All projects", () => {
+    const before: PaneStore = { scopes: { [ALL_SCOPE]: withTerms("t:home"), p1: withTerms("t:1", "t:2") } };
+    expect(closedSessions(before, forgetProject(before, "p1", "P")).sort()).toEqual(["t:1", "t:2"]);
+    expect(closedSessions(before, retainScopes(before, (s) => s !== "p1")).sort()).toEqual(["t:1", "t:2"]);
+  });
+});
+
+test("orphanSessions: pane shells no scope shows, never a shell with another kind of id", () => {
+  const store: PaneStore = { scopes: { a: normalize(st(row("r", [B, TT("t:open")]))) } };
+  expect(orphanSessions(["t:open", "t:gone", "t1", "debug"], store)).toEqual(["t:gone"]);
+  expect(orphanSessions([], store)).toEqual([]);
+});
+
+describe("paneLabel / cwdName", () => {
+  test("a terminal is named by its title, else its folder", () => {
+    expect(paneLabel(term("t:1", "/Users/me/Sites/harness", "htop"))).toBe("htop");
+    expect(paneLabel(term("t:1", "/Users/me/Sites/harness"))).toBe("harness");
+    expect(paneLabel({ kind: "board" })).toBe("the board");
+    expect(paneLabel(ticketContent("A-1"))).toBe("A-1");
+  });
+
+  test("home, the root, trailing slashes and ~ paths", () => {
+    expect(cwdName("~")).toBe("~");
+    expect(cwdName("~/")).toBe("~");
+    expect(cwdName("/")).toBe("/");
+    expect(cwdName("/Users/me/code/")).toBe("code");
+    expect(cwdName("~/code/app")).toBe("app");
+  });
+});
+
+describe("watchPaneStore", () => {
+  const saved = (globalThis as { localStorage?: Storage }).localStorage;
+  beforeEach(() => {
+    const data = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+    reloadPanes();
+  });
+  afterEach(() => {
+    (globalThis as { localStorage?: unknown }).localStorage = saved;
+    reloadPanes();
+  });
+
+  test("reports each change with the store before and after, and nothing once unsubscribed", () => {
+    const seen: string[][] = [];
+    const stop = watchPaneStore((before, after) => seen.push(closedSessions(before, after)));
+    updatePanes("a", (s) => openTerminal(s, term("t:1")));
+    updatePanes("a", (s) => s); // a no-op isn't a change
+    const leaf = terminalLeafBySession(getPanes("a").root, "t:1")!;
+    updatePanes("a", (s) => closePane(s, leaf.id));
+    stop();
+    updatePanes("a", (s) => openTerminal(s, term("t:2")));
+    expect(seen).toEqual([[], ["t:1"]]);
+  });
+});
