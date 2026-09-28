@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessClient, type HarnessEvent } from "@harness/shared";
+import { onTempCleanup } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { stubBrowser, tempHome } from "../testing/fakes";
@@ -27,6 +28,7 @@ async function boot() {
   let connected!: () => void;
   const ready = new Promise<void>((r) => (connected = r));
   const socket = client.connect({ onEvent: (e) => events.push(e), onStatus: (up) => up && connected() });
+  onTempCleanup(() => socket.close());
   await ready;
   return { h: harness, client, dir, other, events, socket };
 }
