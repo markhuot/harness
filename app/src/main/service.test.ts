@@ -1,7 +1,7 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { ensureService, parseEnsureOutput, reloadToken } from "./service";
 
 describe("parseEnsureOutput", () => {
@@ -19,13 +19,9 @@ describe("parseEnsureOutput", () => {
 });
 
 describe("ensureService", () => {
-  const dirs: string[] = [];
-  afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
-
   /** A fake app root + repo whose service CLI is a script we control. */
   function fixture(cli: string) {
-    const root = mkdtempSync(join(tmpdir(), "harness-app-test-"));
-    dirs.push(root);
+    const root = tempDir("harness-app-test-");
     const repo = join(root, "repo");
     mkdirSync(join(repo, "service/src"), { recursive: true });
     writeFileSync(join(repo, "service/src/cli.ts"), cli);
@@ -76,8 +72,7 @@ describe("ensureService", () => {
 });
 
 describe("reloadToken", () => {
-  const dir = mkdtempSync(join(tmpdir(), "harness-token-test-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = tempDir("harness-token-test-");
   const tokenPath = join(dir, "token");
   const conn = { baseUrl: "http://127.0.0.1:7717", token: "old", source: "service" as const, tokenPath, pid: 1 };
 
