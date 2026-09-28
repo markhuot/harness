@@ -5,7 +5,7 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { isConductor, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
-import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
+import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO, RADIUS } from "../theme/tokens";
 import { Badge, Chip, DriverBadge, ProjectKey, ReviewMark, Spinner } from "../ui/kit";
@@ -31,7 +31,6 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
   const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
-  const ready = isReady(t);
   const customDriver = !dim && hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
@@ -102,16 +101,10 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         </View>
       )}
 
-      {(customDriver || t.model || ready) && (
+      {(customDriver || t.model) && (
         <View style={styles.wrap}>
           {customDriver && <DriverBadge driver={t.driver} />}
           <ModelBadge model={t.model} driver={t.driver} />
-          <View style={{ flex: 1 }} />
-          {ready && (
-            <Badge tone="green" icon="check">
-              Ready
-            </Badge>
-          )}
         </View>
       )}
     </View>

@@ -294,6 +294,12 @@ try {
   );
   check("with auto-complete off, Complete enables once both reviews approve", completeEnabled);
   check("with auto-complete off, the ticket waits in review", (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "review");
+  // The two approved review marks say it's ready; the card has no separate Ready badge.
+  const readyCard = await until("ready card marks", () =>
+    js<{ marks: number; ready: boolean } | null>(`(() => { const card = document.querySelector('.card[data-key="${manual.key}"]'); if (!card) return null;
+      const marks = card.querySelectorAll(".card-reviews .badge-green").length; return marks === 2 ? { marks, ready: card.querySelectorAll(".badge-green").length > marks } : null; })()`),
+  );
+  check("a ready card shows both approved marks and no Ready badge", readyCard.marks === 2 && !readyCard.ready, JSON.stringify(readyCard));
   await clickText(".actions button", "Complete");
   await until("complete modal", () => exists(".modal"));
   await clickText(".modal-foot button", "Complete");

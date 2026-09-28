@@ -74,6 +74,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Agents tab no longer lists an empty "Sub-agent" for every command the agent ran for more
   than 30 seconds. Those rows weren't sub-agents, and they're gone from existing tickets too.
 
+### Removed
+
+- Board cards no longer show a green Ready badge once both reviews approve. The two checkmarks
+  next to the bot and person icons already say it's ready. This applies on the Mac and the
+  iPhone.
+
 ## [app-20260928.1702](https://github.com/markhuot/harness/releases/tag/app-20260928.1702) - 2026-09-28
 
 ### Added
