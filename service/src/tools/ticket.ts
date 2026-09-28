@@ -1,18 +1,30 @@
 // Ticket-lifecycle tools used by plan / work / review / complete / conductor runs.
 
+import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../attachments";
 import { defineTool, schema } from "./util";
 
-export const postSummary = defineTool<{ summary: string }>({
+const attachmentsProp = {
+  type: "array",
+  items: { type: "string" },
+  description: `Image or video files that show the result, e.g. ["shots/after.png"]: absolute paths or paths relative to your working directory. At most ${MAX_ATTACHMENTS}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB; ${ALLOWED_EXTENSIONS.join(", ")}. They are copied when the summary is posted.`,
+};
+
+const attached = (n: number) => (n === 0 ? "" : n === 1 ? " with 1 attachment" : ` with ${n} attachments`);
+
+export const postSummary = defineTool<{ summary: string; attachments?: string[] }>({
   name: "post_summary",
   description:
-    "Post a short progress or result summary on the current ticket. Humans read these on the board instead of the full transcript, so keep it to a few lines of markdown: what changed, what state things are in, what is next. Does not change the ticket status.",
+    "Post a short progress or result summary on the current ticket. Humans read these on the board instead of the full transcript, so keep it to a few lines of markdown: what changed, what state things are in, what is next. Attach screenshots or a short screen recording when the work has a visible result. Does not change the ticket status.",
   inputSchema: schema(
-    { summary: { type: "string", minLength: 1, description: "Markdown summary, e.g. \"Implemented X; tests pass; next: Y\"." } },
+    {
+      summary: { type: "string", minLength: 1, description: "Markdown summary, e.g. \"Implemented X; tests pass; next: Y\"." },
+      attachments: attachmentsProp,
+    },
     ["summary"],
   ),
-  async run({ summary }, ctx) {
-    await ctx.ops.postSummary(ctx, summary);
-    return "Summary posted.";
+  async run({ summary, attachments }, ctx) {
+    await ctx.ops.postSummary(ctx, summary, attachments);
+    return `Summary posted${attached(attachments?.length ?? 0)}.`;
   },
 });
 
@@ -47,16 +59,19 @@ export const block = defineTool<{ question: string }>({
   },
 });
 
-export const submitForReview = defineTool<{ summary: string }>({
+export const submitForReview = defineTool<{ summary: string; attachments?: string[] }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete. Moves the ticket to Review and posts your summary. The summary should say what you changed, how you verified it (tests, commands run), and anything the reviewer should look at closely. Make no further changes after calling it.",
+    "Call this when the work is complete. Moves the ticket to Review and posts your summary. The summary should say what you changed, how you verified it (tests, commands run), and anything the reviewer should look at closely. When the work has a visible result (a UI change, rendered output, a browser flow), attach screenshots or a short screen recording that show it. Make no further changes after calling it.",
   inputSchema: schema(
-    { summary: { type: "string", minLength: 1, description: "Markdown summary of the finished work and how it was verified." } },
+    {
+      summary: { type: "string", minLength: 1, description: "Markdown summary of the finished work and how it was verified." },
+      attachments: attachmentsProp,
+    },
     ["summary"],
   ),
-  async run({ summary }, ctx) {
-    await ctx.ops.submitForReview(ctx, summary);
+  async run({ summary, attachments }, ctx) {
+    await ctx.ops.submitForReview(ctx, summary, attachments);
     return "Ticket moved to review. Stop here.";
   },
 });

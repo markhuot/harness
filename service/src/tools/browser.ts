@@ -1,6 +1,9 @@
 // Browser tools: drive this session's tab in the harness's headless Chrome.
 // The human can watch (and take over) the same tab from the app.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import type { ToolResultContent } from "@harness/shared";
 import { defineTool, schema } from "./util";
 
 const DEFAULT_MAX_CHARS = 20_000;
@@ -72,12 +75,26 @@ export const browserEval = defineTool<{ expression: string }>({
   },
 });
 
-export const browserScreenshot = defineTool<Record<string, never>>({
+export const browserScreenshot = defineTool<{ save_to?: string }>({
   name: "browser_screenshot",
-  description: "Take a PNG screenshot of the current viewport.",
-  inputSchema: schema({}),
-  async run(_input, ctx) {
+  description:
+    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to that path, so you can attach it to post_summary or submit_for_review.",
+  inputSchema: schema({
+    save_to: {
+      type: "string",
+      minLength: 1,
+      description: "Also save the PNG here: an absolute path or one relative to your working directory, e.g. \"screenshots/after.png\". Parent folders are created.",
+    },
+  }),
+  async run({ save_to }, ctx) {
     const data = await ctx.browser.screenshot(ctx.session.id);
-    return { content: [{ type: "image", data, mimeType: "image/png" }] };
+    const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
+    if (save_to) {
+      const path = isAbsolute(save_to) ? save_to : resolve(ctx.cwd, save_to);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, Buffer.from(data, "base64"));
+      content.push({ type: "text", text: `Saved the screenshot to ${path}` });
+    }
+    return { content };
   },
 });

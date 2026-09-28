@@ -17,6 +17,8 @@ export interface HarnessPaths {
   worktreesDir: string;
   chromeProfileDir: string;
   serviceJsonPath: string;
+  /** Summary attachments, stored as <id>.<ext> */
+  attachmentsDir: string;
 }
 
 export interface ServiceInfo {
@@ -50,13 +52,14 @@ export function harnessPaths(home: string): HarnessPaths {
     worktreesDir: join(home, "worktrees"),
     chromeProfileDir: join(home, "chrome-profile"),
     serviceJsonPath: join(home, "service.json"),
+    attachmentsDir: join(home, "attachments"),
   };
 }
 
 /** Create HARNESS_HOME and its subdirectories. */
 export function ensureHome(home: string): HarnessPaths {
   const paths = harnessPaths(home);
-  for (const dir of [paths.home, paths.logsDir, paths.worktreesDir]) mkdirSync(dir, { recursive: true });
+  for (const dir of [paths.home, paths.logsDir, paths.worktreesDir, paths.attachmentsDir]) mkdirSync(dir, { recursive: true });
   return paths;
 }
 

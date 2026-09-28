@@ -8,7 +8,7 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
+import type { Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 
 export interface PromptInfo {
@@ -67,11 +67,23 @@ const LIFECYCLE = section(
 * done: an approved ticket gets one final completion run that merges and cleans up.`,
 );
 
-const SUMMARIES = section(
-  "Summaries",
-  `Humans read summaries instead of the transcript. Write each one so a human can skip the transcript entirely: what you did, what you found, what is next or what you need. Keep it to a few sentences or short markdown lines, and name files, commands and results concretely ("Added retry to src/sync.ts; \`bun test\` passes, 42 tests").
-Call \`post_summary\` at meaningful milestones, not after every step.`,
-);
+/**
+ * Summaries, with attachments for showing the work. Only work and conductor runs have
+ * submit_for_review; complete runs have no browser.
+ */
+function summariesSection(kind: RunKind, browser: boolean): string {
+  const submits = kind === "work" || kind === "conductor";
+  const tools = submits ? "`post_summary` and `submit_for_review` take" : "`post_summary` takes";
+  const capture = browser
+    ? "`browser_screenshot` with `save_to` writes the page to a file, and a simulator or app screenshot or a short screen recording works too."
+    : "a simulator or app screenshot or a short screen recording works well.";
+  return section(
+    "Summaries",
+    `Humans read summaries instead of the transcript. Write each one so a human can skip the transcript entirely: what you did, what you found, what is next or what you need. Keep it to a few sentences or short markdown lines, and name files, commands and results concretely ("Added retry to src/sync.ts; \`bun test\` passes, 42 tests").
+Call \`post_summary\` at meaningful milestones, not after every step.
+Show your work. ${tools} \`attachments\`: paths to image or video files (png, jpg, gif, webp, mp4, webm, mov), absolute or relative to your working directory. When the work has a visible result, such as a UI change, rendered output or a browser flow, capture it and attach it${submits ? ", above all to the submit summary" : ""}: ${capture}`,
+  );
+}
 
 const APPROVALS_BODY = `Some tool calls need a human's approval first. If a tool call is denied pending human approval, stop immediately: don't retry it, don't work around it with another tool, and don't call any other tool. The ticket is blocked until the human decides, and you will be resumed in this conversation with their answer.`;
 const CLASSIFIER_DENIALS = (next: string) =>
@@ -85,7 +97,7 @@ const approvals = (kind: RunKind) =>
 
 const BROWSER = section(
   "Browser",
-  `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\`. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
+  `This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\` { save_to? }. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
 );
 
 /** Read-only board tools, given to every run kind (tools/board.ts). */
@@ -325,7 +337,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && LIFECYCLE,
     instructions,
     ticketRun && filesSection(kind, info.builtinTools ?? true),
-    ticketRun && SUMMARIES,
+    ticketRun && summariesSection(kind, browser),
     BOARD,
     (kind === "work" || kind === "conductor") && boardChanges(kind),
     configSection(kind),
@@ -351,11 +363,17 @@ export function workStartPrompt(ticket: Ticket): string {
 
 const AUTHOR_LABEL: Record<Summary["author"], string> = { agent: "agent", human: "human", system: "system" };
 
-export function reviewPrompt(ticket: Ticket, summaries: Summary[]): string {
+/** A summary's attachments as lines naming the stored copy, for agents to open with a file tool. */
+function attachmentLines(s: Summary, pathOf: (a: SummaryAttachment) => string): string {
+  if (!s.attachments?.length) return "";
+  return `\nAttachments:\n${s.attachments.map((a) => `* ${a.name} (${a.kind}): ${pathOf(a)}`).join("\n")}`;
+}
+
+export function reviewPrompt(ticket: Ticket, summaries: Summary[], attachmentPath: (a: SummaryAttachment) => string = (a) => a.id): string {
   const ordered = [...summaries].sort((a, b) => a.createdAt - b.createdAt);
   const log = ordered.length
     ? ordered
-        .map((s, i) => `${i + 1}. [${AUTHOR_LABEL[s.author]}, ${new Date(s.createdAt).toISOString()}]\n${s.body.trim()}`)
+        .map((s, i) => `${i + 1}. [${AUTHOR_LABEL[s.author]}, ${new Date(s.createdAt).toISOString()}]\n${s.body.trim()}${attachmentLines(s, attachmentPath)}`)
         .join("\n\n")
     : "(no summaries were posted)";
   return join(
