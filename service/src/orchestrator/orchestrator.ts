@@ -41,11 +41,12 @@ import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, sear
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
-import type { BoardListFilter, BoardScope, BoardTicket, BoardTicketDetail, HarnessOps, ToolContext, ToolDefinition } from "../tools/types";
+import type { BoardListFilter, BoardScope, BoardTicket, BoardTicketDetail, CreateTicketInput, HarnessOps, UpdateTicketInput, ToolContext, ToolDefinition } from "../tools/types";
 import { truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { toolsForRun } from "../tools/index";
+import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { matchMapping, parseWorkItem, WatcherRunner } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
@@ -163,6 +164,9 @@ export function endsWithQuestion(text: string | null | undefined): boolean {
 }
 
 /** Validate a permission-mode field from a request body (null / "" → inherit). */
+/** Higher is stricter; agents may only raise a ticket's effective mode (updateTicket_). */
+const PERMISSION_STRICTNESS: Record<PermissionMode, number> = { auto: 0, ask: 1, read_only: 2 };
+
 function validPermissionMode(value: unknown): PermissionMode | null {
   if (value === undefined || value === null || value === "") return null;
   if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
@@ -1213,11 +1217,173 @@ export class Orchestrator {
     return this.store.projects.list().map((p) => ({ key: p.key, name: p.name, path: p.path }));
   }
 
+  // --- board (write): work and conductor runs; the HTTP API's code paths plus guard rails ---
+
+  /** The caller's ticket, for a run kind that may change the board. */
+  private boardActor(ctx: ToolContext, tool: string): Ticket {
+    if (ctx.runKind !== "work" && ctx.runKind !== "conductor") throw new Error(`${tool} is only available in work and conductor runs`);
+    return this.ctxTicket(ctx);
+  }
+
+  /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
+  private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
+    const actor = this.boardActor(ctx, tool);
+    const target = this.store.tickets.lookup(String(key ?? "").trim())?.ticket;
+    if (!target) throw new Error(`Unknown ticket: ${key}`);
+    if (target.id === actor.id) {
+      throw new Error(`${target.key} is your own ticket. ${tool} acts on other tickets; use ${actor.kind === "conductor" ? "submit_for_review" : "block or submit_for_review"} to change your own.`);
+    }
+    return { actor, target };
+  }
+
+  private noPendingApproval(t: Ticket) {
+    if (t.pendingApproval) {
+      throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only a human can answer it or move it.`);
+    }
+  }
+
+  /** HarnessErrors (HTTP status codes) become plain tool errors with the same message. */
+  private async asTool<T>(fn: () => Promise<T> | T): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  private asToolSync<T>(fn: () => T): T {
+    try {
+      return fn();
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  async createTicket_(ctx: ToolContext, input: CreateTicketInput): Promise<Ticket> {
+    const own = this.boardActor(ctx, "create_ticket");
+    const project = input.projectKey ? this.boardProject(input.projectKey) : this.store.projects.get(own.projectId);
+    if (!project) throw new Error(`Unknown project for ${own.key}`);
+    const kind = input.conductor ? "conductor" : "task";
+    if (ctx.runKind === "conductor" && own.kind === "conductor") {
+      // A conductor's tickets are its children, on its driver/model unless it picks another.
+      return this.asTool(() =>
+        this.createTicket({
+          projectId: project.id,
+          prompt: input.description || input.title,
+          title: input.title,
+          kind,
+          dependsOn: input.dependsOn,
+          autoStart: input.autoStart ?? true,
+          parentId: own.id,
+          start: input.start ?? false,
+          driver: input.driver ?? own.driver,
+          model: input.model !== undefined ? input.model : input.driver ? null : own.model,
+        }),
+      );
+    }
+    return this.asTool(() =>
+      this.createTicket({
+        projectId: project.id,
+        prompt: input.description || input.title,
+        title: input.title,
+        kind,
+        dependsOn: input.dependsOn,
+        autoStart: input.autoStart,
+        start: input.start ?? false,
+        driver: input.driver,
+        model: input.model,
+      }),
+    );
+  }
+
+  async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "update_ticket");
+    const body: UpdateTicketBody = {};
+    if (input.title !== undefined) {
+      if (!String(input.title).trim()) throw new Error("title can't be empty");
+      body.title = String(input.title).trim();
+    }
+    if (input.description !== undefined) body.description = input.description;
+    if (input.driver !== undefined) body.driver = input.driver;
+    if (input.model !== undefined) body.model = input.model;
+    if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
+    if (input.permissionMode !== undefined) {
+      // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
+      // around the approvals a human set up.
+      const mode = this.asToolSync(() => validPermissionMode(input.permissionMode));
+      const project = this.store.projects.get(target.projectId);
+      const from = resolvePermissionMode(target, project, this.settings()).mode;
+      const to = resolvePermissionMode({ permissionMode: mode }, project, this.settings()).mode;
+      if (PERMISSION_STRICTNESS[to] < PERMISSION_STRICTNESS[from]) {
+        throw new Error(`Agents can't loosen a ticket's permission mode (${target.key} runs in ${from}; ${mode ?? "inherit"} would be ${to}). Ask a human.`);
+      }
+      body.permissionMode = mode;
+    }
+    if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
+    return this.asTool(() => this.updateTicket(target.key, body));
+  }
+
+  async moveTicket_(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "move_ticket");
+    if (!(TICKET_STATUSES as readonly string[]).includes(status)) throw new Error(`Unknown status: ${status}. Use one of ${TICKET_STATUSES.join(", ")}`);
+    if (position !== undefined && (typeof position !== "number" || !Number.isInteger(position) || position < 0)) {
+      throw new Error("position must be a whole number ≥ 0 (0 = top of the column)");
+    }
+    if (status !== target.status) {
+      this.noPendingApproval(target);
+      if (target.status === "review") {
+        throw new Error(
+          `${target.key} is in review: its reviewers decide what happens next (review_ticket / complete_ticket when it's your conductor's child, otherwise a human).`,
+        );
+      }
+      if (status === "review") throw new Error(`Only ${target.key}'s own agent moves it to review (submit_for_review).`);
+      if (status === "done" && target.status !== "planning") {
+        throw new Error(`${target.key} is ${target.status}: only a ticket still in planning can be moved straight to done (to close one that isn't needed). Finished work goes through review.`);
+      }
+    } else if (position === undefined) {
+      throw new Error(`${target.key} is already ${status}; pass position to reorder it`);
+    }
+    let pos: number | undefined;
+    if (position !== undefined) {
+      if (status === "done") throw new Error("The done column is ordered by completion time; position doesn't apply");
+      const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status] }).filter((t) => t.id !== target.id);
+      pos = positionForDrop(column, position);
+    }
+    return this.asTool(() => this.updateTicket(target.key, { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) }));
+  }
+
+  async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "start_ticket");
+    this.noPendingApproval(target);
+    return this.asTool(() => this.startTicket(target.key));
+  }
+
+  async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
+    const { actor, target } = this.boardTarget(ctx, key, "message_ticket");
+    this.noPendingApproval(target);
+    // A message moves a ticket in review back to in progress: that's a review decision, which only
+    // its conductor (standing in for the human reviewer) may make.
+    if (target.status === "review" && target.parentId !== actor.id) {
+      throw new Error(`${target.key} is in review; messaging it would send it back to in progress. Only its reviewers can do that.`);
+    }
+    await this.asTool(() => this.sendMessage(target.key, text));
+  }
+
+  async cancelTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "cancel_ticket");
+    return this.asTool(() => this.cancelTicket(target.key));
+  }
+
+  async reopenTicket_(ctx: ToolContext, key: string, notes: string): Promise<Ticket> {
+    const { target } = this.boardTarget(ctx, key, "reopen_ticket");
+    return this.asTool(() => this.reopenTicket(target.key, { notes }));
+  }
+
   // --- conductor ---
 
   private conductorOf(ctx: ToolContext): Ticket {
     const c = this.ctxTicket(ctx);
-    if (c.kind !== "conductor") throw new Error("Only conductor tickets can manage other tickets");
+    if (c.kind !== "conductor") throw new Error("Only conductor tickets can review or complete other tickets");
     return c;
   }
 
@@ -1226,33 +1392,6 @@ export class Orchestrator {
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
     return t;
-  }
-
-  async createTicket_(ctx: ToolContext, input: Parameters<HarnessOps["createTicket"]>[1]): Promise<Ticket> {
-    const c = this.conductorOf(ctx);
-    const project = input.projectKey ? this.store.projects.getByKey(input.projectKey) : this.store.projects.get(c.projectId);
-    if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
-    return this.createTicket({
-      projectId: project.id,
-      prompt: input.description || input.title,
-      title: input.title,
-      dependsOn: input.dependsOn,
-      autoStart: input.autoStart ?? true,
-      parentId: c.id,
-      start: false,
-      driver: c.driver,
-      model: c.model,
-    });
-  }
-
-  async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx), key);
-    return this.startTicket(child.key);
-  }
-
-  async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
-    const child = this.childOf(this.conductorOf(ctx), key);
-    await this.sendMessage(child.key, text);
   }
 
   async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
@@ -1923,15 +2062,20 @@ export class Orchestrator {
       block: (c, q) => this.block(c, q),
       submitForReview: (c, s) => this.submitForReview(c, s),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
-      createTicket: (c, i) => this.createTicket_(c, i),
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),
       getTicket: (c, k, o) => this.getTicket_(c, k, o),
       searchTickets: (c, i) => this.searchTickets_(c, i),
       listProjects: (c) => this.listProjects_(c),
-      // --- conductor ---
+      // --- board (write) ---
+      createTicket: (c, i) => this.createTicket_(c, i),
+      updateTicket: (c, k, p) => this.updateTicket_(c, k, p),
+      moveTicket: (c, k, st, pos) => this.moveTicket_(c, k, st, pos),
       startTicket: (c, k) => this.startTicket_(c, k),
       messageTicket: (c, k, t) => this.messageTicket_(c, k, t),
+      cancelTicket: (c, k) => this.cancelTicket_(c, k),
+      reopenTicket: (c, k, n) => this.reopenTicket_(c, k, n),
+      // --- conductor ---
       reviewTicket: (c, k, d, n) => this.reviewTicket_(c, k, d, n),
       completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
       // --- triage ---

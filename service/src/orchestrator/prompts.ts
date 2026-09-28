@@ -95,6 +95,18 @@ const BOARD = section(
   `You can read the rest of the board for context: \`search_tickets\` { query, project_key?, limit?, cursor? } finds tickets by key or words, \`list_tickets\` { scope?: "children" | "project" | "all", project_key?, status?, limit? } lists them, \`get_ticket\` { key, include_transcript? } shows one in full (description, summaries and, with include_transcript, the tail of its agent's transcript), and \`list_projects\` gives the project keys. Use them to find related or earlier work, such as how a similar change was made or what another agent decided. They only read; they never change another ticket.`,
 );
 
+/** Board tools that change other tickets: work and conductor runs (tools/board-write.ts). */
+const boardChanges = (kind: RunKind) =>
+  section(
+    "Changing other tickets",
+    `You can change other tickets the way a person does on the board. ${
+      kind === "conductor"
+        ? "Beyond creating, starting and messaging your children (above), you"
+        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
+    } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on? }, move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
+Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide${kind === "conductor" ? " (for your children, that's you with review_ticket and complete_ticket)" : ""}. Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser. Change another ticket only when your task calls for it, and say what you changed in your summary.`,
+  );
+
 /**
  * File tools over the shell. Claude Code's auto mode tells the model shell edits (sed, heredocs)
  * are fine; in ask mode those need a human's approval where Edit/Write in the workdir don't, and
@@ -288,6 +300,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && filesSection(kind, info.builtinTools ?? true),
     ticketRun && SUMMARIES,
     BOARD,
+    (kind === "work" || kind === "conductor") && boardChanges(kind),
     (kind === "work" || kind === "complete" || kind === "conductor") && approvals(kind),
     browser && BROWSER,
   );

@@ -1,59 +1,9 @@
-// Conductor tools: create and steer child tickets (reading the board is in board.ts).
+// Conductor tools: stand in for the human reviewer of child tickets and complete them
+// (creating and steering tickets is in board-write.ts, reading the board in board.ts).
 
 import { defineTool, json, schema, ticketView } from "./util";
 
 const keyProp = { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." };
-
-export const createTicket = defineTool<{ title: string; description: string; depends_on?: string[]; auto_start?: boolean }>({
-  name: "create_ticket",
-  description:
-    "Create a child ticket for a sub-task of this conductor ticket. Another agent will do the work in the ticket, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. Returns the new ticket's key. Use depends_on with keys returned by earlier create_ticket calls to order work; a child with auto_start (default true) starts as soon as all its dependencies are done.",
-  inputSchema: schema(
-    {
-      title: { type: "string", minLength: 1, description: "Short ticket title." },
-      description: { type: "string", minLength: 1, description: "Self-contained brief for the agent that will do the work." },
-      depends_on: { type: "array", items: { type: "string" }, description: "Keys of tickets that must be done before this one starts." },
-      auto_start: { type: "boolean", description: "Start automatically once dependencies are done. Default true." },
-    },
-    ["title", "description"],
-  ),
-  async run(input, ctx) {
-    const ticket = await ctx.ops.createTicket(ctx, {
-      title: input.title,
-      description: input.description,
-      dependsOn: input.depends_on,
-      autoStart: input.auto_start,
-    });
-    return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
-  },
-});
-
-export const startTicket = defineTool<{ key: string }>({
-  name: "start_ticket",
-  description: "Start work on a ticket that is still in planning (for children created with auto_start false, or to start one before its dependencies finish).",
-  inputSchema: schema({ key: keyProp }, ["key"]),
-  async run({ key }, ctx) {
-    const ticket = await ctx.ops.startTicket(ctx, key);
-    return `Started ${ticket.key} (status: ${ticket.status}).`;
-  },
-});
-
-export const messageTicket = defineTool<{ key: string; text: string }>({
-  name: "message_ticket",
-  description:
-    "Send a message to the agent working on a ticket, as if a human had written it: answer a blocked ticket's question, give extra direction, or correct course. A blocked ticket resumes work when messaged.",
-  inputSchema: schema(
-    {
-      key: keyProp,
-      text: { type: "string", minLength: 1, description: "The message for that ticket's agent." },
-    },
-    ["key", "text"],
-  ),
-  async run({ key, text }, ctx) {
-    await ctx.ops.messageTicket(ctx, key, text);
-    return `Message sent to ${key}.`;
-  },
-});
 
 export const reviewTicket = defineTool<{ key: string; decision: "approve" | "request_changes"; notes: string }>({
   name: "review_ticket",

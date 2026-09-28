@@ -567,21 +567,23 @@ describe("conductor", () => {
     expect(secondRun.startedAt!).toBeGreaterThanOrEqual(firstDone.endedAt!);
   });
 
-  test("conductor-only ops reject non-conductor callers and non-children", async () => {
+  test("review_ticket and complete_ticket reject non-conductor callers and non-children", async () => {
     const h = setup();
     const other = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
-    let err: unknown = null;
+    const errs: string[] = [];
     h.driver.script = async function* (req) {
-      try {
-        await req.toolContext.ops.startTicket(req.toolContext, other.key);
-      } catch (e) {
-        err = e;
+      const ctx = req.toolContext;
+      if (ctx.ticket?.key === other.key) return;
+      for (const call of [() => ctx.ops.reviewTicket(ctx, other.key, "approve", ""), () => ctx.ops.completeTicket(ctx, other.key)]) {
+        await call().catch((e) => errs.push(String(e)));
       }
     };
     await h.orch.idle();
-    await h.orch.startTicket(other.key);
+    await h.orch.createTicket({ projectId: h.project.id, prompt: "work" });
+    await h.orch.createTicket({ projectId: h.project.id, prompt: "conduct", kind: "conductor" });
     await h.orch.idle();
-    expect(String(err)).toMatch(/Only conductor tickets/);
+    expect(errs.slice(0, 2).every((e) => /Only conductor tickets/.test(e))).toBe(true);
+    expect(errs.slice(-2).every((e) => e.includes(`${other.key} is not a child of`))).toBe(true);
   });
 });
 

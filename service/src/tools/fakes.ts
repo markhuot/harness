@@ -110,8 +110,13 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       summaries: [{ author: "agent", body: "did it", createdAt: 1 }],
     }),
     searchTickets: async () => ({ hits: [], nextCursor: null, total: 0 }),
+    updateTicket: async (_ctx: ToolContext, key: string, patch: Record<string, unknown>) =>
+      Object.assign(find(key), Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))),
+    moveTicket: async (_ctx: ToolContext, key: string, status: Ticket["status"]) => Object.assign(find(key), { status }),
     startTicket: async (_ctx: ToolContext, key: string) => ({ ...find(key), status: "in_progress" }),
     messageTicket: async () => {},
+    cancelTicket: async (_ctx: ToolContext, key: string) => find(key),
+    reopenTicket: async (_ctx: ToolContext, key: string) => Object.assign(find(key), { status: "in_progress" }),
     reviewTicket: async (_ctx: ToolContext, key: string, decision: string) => ({
       ...find(key),
       humanReview: decision === "approve" ? "approved" : "changes_requested",
