@@ -24,6 +24,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the all-projects board, a card's project key now sits in front of its ticket key
+  ("HAR HARNESS-39") instead of at the bottom of the card. Cards no longer carry a Conductor
+  badge either, since a conductor's progress bar already marks it. Both changes apply on the Mac
+  and the iPhone. The ticket page still shows the Conductor badge.
 - The `@` file list now includes files your project's `.gitignore` leaves out, like build output,
   local specs and `.env` files. `node_modules` shows up as a folder: pick it (or type
   `@node_modules/`) to browse what's inside.

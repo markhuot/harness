@@ -23,7 +23,7 @@ import {
   type State,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { DriverBadge, KindBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
+import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
@@ -256,6 +256,7 @@ const TicketCard = memo(function TicketCard({
   const dim = dimOnBoard(t);
   const summary = latestSummary(state, t.sessionId);
   const ready = isReady(t);
+  const customDriver = hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
   const scope = usePaneScope();
@@ -275,6 +276,7 @@ const TicketCard = memo(function TicketCard({
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onOpen(t.key))}
     >
       <div className="card-top">
+        {showProject && project && <ProjectKey project={project} size="sm" />}
         <span className="card-key">{t.key}</span>
         {parent && (
           <span className="card-parent-chip" title={`Part of ${parent.key} · ${parent.title}`}>
@@ -326,19 +328,19 @@ const TicketCard = memo(function TicketCard({
         </div>
       )}
 
-      <div className="card-foot">
-        {showProject && project && <ProjectKey project={project} size="sm" />}
-        {hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
-        <ModelBadge model={t.model} driver={t.driver} />
-        <KindBadge ticket={t} />
-        <div className="grow" />
-        {ready && (
-          <span className="badge badge-green">
-            <Icon name="check" strokeWidth={2.5} />
-            Ready
-          </span>
-        )}
-      </div>
+      {(customDriver || t.model || ready) && (
+        <div className="card-foot">
+          {customDriver && <DriverBadge driver={t.driver} />}
+          <ModelBadge model={t.model} driver={t.driver} />
+          <div className="grow" />
+          {ready && (
+            <span className="badge badge-green">
+              <Icon name="check" strokeWidth={2.5} />
+              Ready
+            </span>
+          )}
+        </div>
+      )}
     </article>
   );
 }, cardPropsEqual);
