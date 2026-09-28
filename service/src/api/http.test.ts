@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type HarnessEvent } from "@harness/shared";
+import { onTempCleanup } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, stubBrowser, tempHome } from "../testing/fakes";
@@ -29,6 +30,7 @@ function collect(client: HarnessClient) {
   let connected!: () => void;
   const ready = new Promise<void>((r) => (connected = r));
   const socket = client.connect({ onEvent: (e) => events.push(e), onStatus: (up) => up && connected() });
+  onTempCleanup(() => socket.close());
   return { events, socket, ready };
 }
 

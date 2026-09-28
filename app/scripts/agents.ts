@@ -2,17 +2,17 @@
 // a dummy `/agents 3` ticket, its Agents tab, a sub-agent's transcript, in light and dark.
 //
 //   bun run build && bun scripts/agents.ts [screenshotDir]
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project } from "@harness/shared";
+import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 import { checkAgentsTab } from "./lib/agents-check";
 
 const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "agents"));
 mkdirSync(shots, { recursive: true });
-const home = mkdtempSync(join(tmpdir(), "harness-agents-home-"));
-const projectDir = mkdtempSync(join(tmpdir(), "harness-agents-project-"));
+const home = tempDir("harness-agents-home-");
+const projectDir = tempDir("harness-agents-project-");
 const port = 7800 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
 const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
@@ -34,7 +34,7 @@ try {
     const a = app;
     await until("app connected", () => a.exists(".conn.on"), 15000);
     await checkAgentsTab({ api, app: a, check: c.check, project, shot: (name) => a.screenshot(join(shots, `${name}-${theme}.png`)) });
-    app.close();
+    await app.close();
     app = null;
   }
 } catch (e) {
@@ -42,11 +42,11 @@ try {
   console.error("✗", (e as Error).stack ?? (e as Error).message);
   if (app) await app.screenshot(join(shots, "failure.png")).catch(() => {});
 } finally {
-  app?.close();
+  await app?.close();
   daemon.kill();
   await daemon.exited;
-  rmSync(home, { recursive: true, force: true });
-  rmSync(projectDir, { recursive: true, force: true });
+  // Only now that nothing writes into them (and tempDir's exit listener covers a crash).
+  await cleanupTempDirs();
 }
 console.log(c.failures ? `${c.failures} check(s) failed` : "all checks passed");
 process.exit(c.failures ? 1 : 0);

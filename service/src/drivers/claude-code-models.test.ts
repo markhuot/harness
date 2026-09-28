@@ -1,21 +1,17 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Settings } from "@harness/shared";
 import { ClaudeCodeDriver } from "./claude-code";
 import { CLAUDE_MODEL_ALIASES, parseClaudeModels, queryClaudeModels } from "./claude-code-models";
 import { ModelListError } from "./types";
+import { tempDir } from "@harness/shared/testing";
 
 const FAKE = join(import.meta.dir, "__fixtures__", "fake-claude.ts");
-const dirs: string[] = [];
-afterAll(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
 
 function env(extra: Record<string, string> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "harness-ccm-"));
-  dirs.push(dir);
+  const dir = tempDir("harness-ccm-");
   const record = join(dir, "record.ndjson");
   return { record, env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", FAKE_CLAUDE_RECORD: record, ...extra } };
 }

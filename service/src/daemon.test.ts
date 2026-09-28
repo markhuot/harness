@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessClient } from "@harness/shared";
+import { onTempCleanup } from "@harness/shared/testing";
 import { tempHome } from "./testing/fakes";
 
 describe("daemon", () => {
@@ -14,6 +15,12 @@ describe("daemon", () => {
       env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port) },
       stdout: "pipe",
       stderr: "pipe",
+    });
+    onTempCleanup(async () => {
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      proc.kill("SIGTERM");
+      if ((await Promise.race([proc.exited, Bun.sleep(10_000)])) === undefined) proc.kill("SIGKILL");
+      await proc.exited;
     });
     const serviceJson = join(home, "service.json");
     const deadline = Date.now() + 10_000;

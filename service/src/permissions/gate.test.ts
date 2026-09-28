@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionDecisionLog, PermissionMode } from "@harness/shared";
 import type { Classifier, ClassifierDecision, ClassifierRequest } from "./classifier";
 import { insideWorkdir, PermissionGate, type GateEnv } from "./gate";
+import { tempDir } from "@harness/shared/testing";
 
 function fakeClassifier(answer: ClassifierDecision | ((req: ClassifierRequest, signal: AbortSignal) => Promise<ClassifierDecision>)) {
   const calls: ClassifierRequest[] = [];
@@ -22,7 +22,7 @@ function fakeClassifier(answer: ClassifierDecision | ((req: ClassifierRequest, s
 function env(mode: PermissionMode, overrides: Partial<GateEnv> = {}) {
   const logs: PermissionDecisionLog[] = [];
   const approvals: { tool: string; input: unknown; meta: { reason: string; source: string } }[] = [];
-  const cwd = mkdtempSync(join(tmpdir(), "gate-"));
+  const cwd = tempDir("gate-");
   const e: GateEnv = {
     mode,
     runKind: "work",
@@ -223,8 +223,8 @@ describe("PermissionGate auto mode (classifier)", () => {
 
 describe("insideWorkdir", () => {
   test("resolves .., ~ and symlinks that point out of the workdir", () => {
-    const root = mkdtempSync(join(tmpdir(), "gate-root-"));
-    const outside = mkdtempSync(join(tmpdir(), "gate-out-"));
+    const root = tempDir("gate-root-");
+    const outside = tempDir("gate-out-");
     mkdirSync(join(root, "src"));
     symlinkSync(outside, join(root, "escape"));
     expect(insideWorkdir(root, "src/new-file.ts")).toBe(true);

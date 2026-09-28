@@ -1,24 +1,16 @@
 import { toolsForRun } from "../tools/index";
-import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
 import { buildClaudeArgs, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
 import type { DriverEvent, RunRequest } from "./types";
+import { tempDir } from "@harness/shared/testing";
 
 const FAKE = join(import.meta.dir, "__fixtures__", "fake-claude.ts");
-const dirs: string[] = [];
-afterAll(() => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
-});
 
-function tmp(): string {
-  const d = mkdtempSync(join(tmpdir(), "harness-cc-"));
-  dirs.push(d);
-  return d;
-}
+const tmp = () => tempDir("harness-cc-");
 
 const baseSettings: Settings = {
   defaultDriver: "claude-code",
