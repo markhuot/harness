@@ -3,6 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
+import { watcherCommandLine } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -311,7 +312,7 @@ function GeneralSection({ settings, drivers }: { settings: PublicSettings; drive
 interface WatcherDraft {
   name: string;
   command: string;
-  args: string;
+  prompt: string;
   cwd: string;
   mode: Watcher["mode"];
   intervalSec: number;
@@ -319,17 +320,19 @@ interface WatcherDraft {
   driver: string;
 }
 
-const emptyWatcher: WatcherDraft = { name: "", command: "", args: "", cwd: "", mode: "loop", intervalSec: 300, enabled: true, driver: "" };
+const emptyWatcher: WatcherDraft = { name: "", command: "", prompt: "", cwd: "", mode: "loop", intervalSec: 300, enabled: true, driver: "" };
 
 function toDraft(w: Watcher): WatcherDraft {
-  return { name: w.name, command: w.command, args: w.args.join("\n"), cwd: w.cwd ?? "", mode: w.mode, intervalSec: w.intervalSec, enabled: w.enabled, driver: w.driver ?? "" };
+  return { name: w.name, command: watcherCommandLine(w), prompt: w.prompt ?? "", cwd: w.cwd ?? "", mode: w.mode, intervalSec: w.intervalSec, enabled: w.enabled, driver: w.driver ?? "" };
 }
 
 function fromDraft(d: WatcherDraft): Partial<Watcher> & { name: string; command: string } {
   return {
     name: d.name.trim(),
+    // Always saved as a shell command line, which converts legacy direct-exec watchers
     command: d.command.trim(),
-    args: d.args.split("\n").map((a) => a.trim()).filter(Boolean),
+    args: [],
+    prompt: d.prompt.trim(),
     cwd: d.cwd.trim() || null,
     mode: d.mode,
     intervalSec: Math.max(1, Math.round(d.intervalSec) || 60),
@@ -361,14 +364,27 @@ function WatcherForm({ initial, drivers, onCancel, onSubmit, submitLabel }: { in
           <label>Name</label>
           <input className="input" value={d.name} autoFocus placeholder="jira" onChange={(e) => set("name", e.target.value)} />
         </div>
-        <div className="field">
+        <div className="field span-2">
           <label>Command</label>
-          <input className="input mono" value={d.command} placeholder="node" onChange={(e) => set("command", e.target.value)} />
+          <textarea
+            className="textarea mono"
+            rows={2}
+            value={d.command}
+            placeholder={"~/Sites/Jira/watch-jira.js\nwhile true; do curl -s https://example.com/events; sleep 60; done"}
+            onChange={(e) => set("command", e.target.value)}
+          />
+          <div className="field-hint">Runs in your login shell, so pipes, PATH and loops work. Whatever it prints shows up in the Inbox.</div>
         </div>
         <div className="field span-2">
-          <label>Arguments</label>
-          <textarea className="textarea mono" rows={2} value={d.args} placeholder={"~/Sites/Jira/watch-jira.js"} onChange={(e) => set("args", e.target.value)} />
-          <div className="field-hint">One argument per line. Executed without a shell; each line should print NDJSON work items.</div>
+          <label>Prompt</label>
+          <textarea
+            className="textarea"
+            rows={2}
+            value={d.prompt}
+            placeholder="If this event is assigned to me and has actionable next steps, dispatch it to an agent."
+            onChange={(e) => set("prompt", e.target.value)}
+          />
+          <div className="field-hint">Optional. Tells triage what to do with this watcher's output.</div>
         </div>
         <div className="field">
           <label>Working directory</label>
@@ -436,7 +452,7 @@ function WatchersSection() {
     <Section
       id="watchers"
       title="Watchers"
-      desc="Commands that emit work items. Each new item opens a triage session in the Inbox."
+      desc="Any command that prints text, plus a prompt. Whatever it prints opens a triage session in the Inbox with that prompt."
       actions={
         editing !== "new" && (
           <button className="btn btn-sm" onClick={() => setEditing("new")}>
@@ -459,7 +475,7 @@ function WatchersSection() {
           <div className="empty">
             <Icon name="eye" />
             <strong>No watchers yet</strong>
-            Add a command like watch-jira to feed work into triage.
+            Add a command whose output should be triaged, like watch-jira or a curl loop.
           </div>
         )}
         {watchers.map((w) =>
@@ -481,9 +497,14 @@ function WatchersSection() {
                   <span className="badge">{w.mode === "loop" ? "Loop" : `Every ${w.intervalSec}s`}</span>
                   {!w.enabled && <span className="badge badge-outline">Paused</span>}
                 </div>
-                <div className="settings-row-sub mono" title={[w.command, ...w.args].join(" ")}>
-                  {[w.command, ...w.args].join(" ")}
+                <div className="settings-row-sub mono" title={watcherCommandLine(w)}>
+                  {watcherCommandLine(w)}
                 </div>
+                {w.prompt && (
+                  <div className="settings-row-sub" title={w.prompt}>
+                    {w.prompt}
+                  </div>
+                )}
                 <div className="settings-row-sub">
                   {driverName(w.driver)} · last run {relativeTime(w.lastRunAt)}
                   {w.cwd && <> · in <span className="mono">{w.cwd}</span></>}
@@ -539,7 +560,7 @@ function MappingsSection() {
   };
 
   return (
-    <Section id="mappings" title="Mappings" desc="Route external ticket keys to local projects. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
+    <Section id="mappings" title="Mappings" desc="Routing hints for triage. Keys in watcher output that match a mapping are pointed out to triage with their project. A key prefix (FOO matches FOO-123) or /regex/. Longest prefix wins.">
       <div className="card-surface settings-card">
         {mappings.length > 0 && (
           <table className="settings-table">
