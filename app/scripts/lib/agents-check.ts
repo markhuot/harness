@@ -11,6 +11,15 @@ type Check = (name: string, ok: boolean, detail?: string) => void;
 
 export async function checkAgentsTab({ api, app, check, shot, project }: { api: Api; app: App; check: Check; shot: (name: string) => Promise<void>; project: Project }) {
   const { js, exists, go } = app;
+  // A session without sub-agents has no Agents tab, even when a link asks for it.
+  const plain = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "No helpers needed", driver: "dummy", start: true });
+  await until("plain ticket settles", async () => !(await api<TicketDetail>("GET", `/tickets/${plain.key}`)).ticket.busy, 20000);
+  await go(`#/board/${project.id}/ticket/${plain.key}/agents`);
+  await until("plain ticket pane", () => exists('.tab[data-tab="summaries"]'));
+  await Bun.sleep(500);
+  check("no Agents tab on a session without sub-agents", !(await exists('.tab[data-tab="agents"]')));
+  check("a link to its Agents tab shows Summaries instead", (await exists('.tab.on[data-tab="summaries"]')) && !(await exists(".agents-tab")));
+
   const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Split this up /agents 3", driver: "dummy", start: true });
   await go(`#/board/${project.id}/ticket/${t.key}/summaries`);
 

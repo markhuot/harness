@@ -31,32 +31,12 @@ export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
   );
 }
 
+/** Only shown once the session has sub-agents (effectiveTab falls back to Summaries until then). */
 export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (subagentId: string) => void }) {
   const { state } = useStore();
   const list = subagentsOf(state, ticket.sessionId);
   const groups = useMemo(() => groupSubagents(list ?? []), [list]);
   const now = useNow(groups.running.length > 0);
-
-  if (!list) {
-    return (
-      <div className="agents-tab">
-        <div className="empty">
-          <div className="spinner" />
-        </div>
-      </div>
-    );
-  }
-  if (list.length === 0) {
-    return (
-      <div className="agents-tab">
-        <div className="empty" data-testid="agents-empty">
-          <Icon name="bot" />
-          <strong>No sub-agents</strong>
-          Agents this ticket's agent starts to work in parallel show up here.
-        </div>
-      </div>
-    );
-  }
 
   const sections: { id: string; label: string; items: Subagent[] }[] = [
     { id: "running", label: "Running", items: groups.running },

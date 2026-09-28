@@ -5,7 +5,7 @@
 
 /**
  * "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" lists the
- * session's sub-agents; it shows once the session has any.
+ * session's sub-agents; it exists only once the session has any.
  */
 export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "agents" | "browser" | "details";
 /** Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>". */
@@ -55,23 +55,28 @@ export function isTicketTab(t: string | undefined | null): t is TicketTab {
   return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t) || AGENT_TAB.test(t));
 }
 
-/** Whether the tab strip shows Agents: the session has sub-agents, or one of its tabs is open. */
-export function showsAgentsTab(tab: TicketTab, subagents: { id: string }[] | null): boolean {
-  return (subagents?.length ?? 0) > 0 || tabStripTab(tab) === "agents";
+/** Whether the tab strip shows Agents: only once the session has sub-agents to list. */
+export function showsAgentsTab(subagents: { id: string }[] | null | undefined): boolean {
+  return (subagents?.length ?? 0) > 0;
 }
 
 /**
  * The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
  * tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to Summaries.
- * A sub-agent that isn't among the session's (once they're known) falls back to the Agents list.
+ * The Agents tab and a sub-agent's view need sub-agents: without any (or before they're known)
+ * they fall back to Summaries, and a sub-agent that isn't among them falls back to the list.
+ * The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
  */
 export function effectiveTab(
   requested: TicketTab,
   opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null },
 ): TicketTab {
   if (requested === "children" && !opts.conductor) return "summaries";
-  const agent = parseSubagentTab(requested);
-  if (agent && opts.subagents && !opts.subagents.some((s) => s.id === agent)) return "agents";
+  if (tabStripTab(requested) === "agents") {
+    if (!showsAgentsTab(opts.subagents)) return "summaries";
+    const agent = parseSubagentTab(requested);
+    if (agent && !opts.subagents!.some((s) => s.id === agent)) return "agents";
+  }
   const p = parsePluginTab(requested);
   if (p && opts.pluginTabs && !opts.pluginTabs.some((t) => t.pluginId === p.pluginId && t.id === p.tabId)) return "summaries";
   return requested;

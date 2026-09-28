@@ -9,7 +9,7 @@ import { groupSubagents, plainText, SUBAGENT_STATUS_LABEL, subagentById, subagen
 import { useColors } from "../state/app";
 import { useStore } from "../state/store";
 import { MONO, RADIUS } from "../theme/tokens";
-import { Badge, Card, Empty, Spinner, toneColors, useNow } from "../ui/kit";
+import { Badge, Card, Spinner, toneColors, useNow } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
 import { Transcript } from "./Transcript";
@@ -25,6 +25,7 @@ export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
   );
 }
 
+/** Only shown once the session has sub-agents (effectiveTab falls back to Summaries until then). */
 export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (id: string) => void }) {
   const { state } = useStore();
   const c = useColors();
@@ -32,18 +33,6 @@ export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (id: str
   const groups = useMemo(() => groupSubagents(list ?? []), [list]);
   const now = useNow(groups.running.length ? 1000 : 60_000);
 
-  if (!list)
-    return (
-      <View style={{ padding: 30 }}>
-        <Spinner />
-      </View>
-    );
-  if (!list.length)
-    return (
-      <Empty icon="bot" title="No sub-agents">
-        Agents this ticket's agent starts to work in parallel show up here.
-      </Empty>
-    );
 
   const sections = [
     { id: "running", label: "Running", items: groups.running },

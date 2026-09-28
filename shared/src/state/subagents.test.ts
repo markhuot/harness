@@ -93,19 +93,22 @@ describe("sub-agent tabs", () => {
     expect(parseSubagentTab("plugin:git:changes")).toBeNull();
   });
 
-  test("an unknown sub-agent falls back to the Agents list once the list is known", () => {
+  test("Agents and a sub-agent's view need sub-agents; an unknown one falls back to the list", () => {
     const opts = { conductor: false, pluginTabs: null };
-    expect(effectiveTab("agent:x", { ...opts, subagents: null })).toBe("agent:x");
+    for (const subagents of [null, undefined, []]) {
+      expect(effectiveTab("agents", { ...opts, subagents })).toBe("summaries");
+      expect(effectiveTab("agent:x", { ...opts, subagents })).toBe("summaries");
+    }
+    expect(effectiveTab("agents", { ...opts, subagents: [{ id: "y" }] })).toBe("agents");
     expect(effectiveTab("agent:x", { ...opts, subagents: [{ id: "y" }] })).toBe("agents");
     expect(effectiveTab("agent:y", { ...opts, subagents: [{ id: "y" }] })).toBe("agent:y");
+    expect(effectiveTab("transcript", { ...opts, subagents: [] })).toBe("transcript");
   });
 
-  test("the Agents tab shows with sub-agents, or while one of its views is open", () => {
-    expect(showsAgentsTab("summaries", null)).toBe(false);
-    expect(showsAgentsTab("summaries", [])).toBe(false);
-    expect(showsAgentsTab("summaries", [{ id: "a" }])).toBe(true);
-    expect(showsAgentsTab("agents", [])).toBe(true);
-    expect(showsAgentsTab("agent:a", null)).toBe(true);
+  test("the Agents tab shows only when there are sub-agents", () => {
+    expect(showsAgentsTab(null)).toBe(false);
+    expect(showsAgentsTab([])).toBe(false);
+    expect(showsAgentsTab([{ id: "a" }])).toBe(true);
   });
 });
 

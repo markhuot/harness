@@ -7,9 +7,6 @@
   flex-direction: column;
   gap: 16px;
 }
-.agents-tab > .empty {
-  flex: 1;
-}
 .agent-row .badge {
   flex: none;
   height: 18px;

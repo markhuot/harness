@@ -606,8 +606,9 @@ parser didn't see start creates one called "Sub-agent".
 
 **Apps** (`@harness/shared/state` `subagents.ts`, `tabs.ts`). State keeps `subagents[sessionId]`
 and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).
-The Agents tab shows once the session has a sub-agent, and while one of its views is open. It
-lists running sub-agents first, then finished ones newest first. A row opens the tab
+The Agents tab exists only once the session has a sub-agent: until then (and on a session
+without any) the tab is hidden, and `agents` or `agent:<id>` fall back to Summaries, while the
+requested tab is kept so a deep link opens when the sub-agents arrive. It lists running sub-agents first, then finished ones newest first. A row opens the tab
 `agent:<id>`: that sub-agent's transcript, with its task above it and a breadcrumb back through
 its parents. An unknown id falls back to the list. In every transcript, a tool row that started a
 sub-agent links to its transcript.

@@ -241,7 +241,7 @@ function TabStrip({ ticket, tab, onTab, pluginTabs }: { ticket: Ticket; tab: Tic
   // A sub-agent's transcript sits under Agents.
   const stripTab = tabStripTab(tab);
   const items: { id: TicketTab; label: string; count?: number; live?: boolean; icon?: string }[] = [
-    ...TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(tab, subagents))).map((t) => ({
+    ...TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => ({
       id: t as TicketTab,
       label: TAB_LABEL[t],
       count: t === "summaries" ? summaryCount : t === "children" ? childCount : t === "agents" ? subagents?.length : undefined,

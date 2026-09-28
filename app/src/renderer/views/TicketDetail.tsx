@@ -97,7 +97,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
   const subagents = subagentsOf(state, ticket.sessionId);
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
-  // Likewise the conductor-only Tickets tab on a plain ticket; an unknown sub-agent shows the Agents list.
+  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
   const tab = effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents });
   const openAgent = parseSubagentTab(tab);
   const stripTab = tabStripTab(tab);
@@ -110,7 +110,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
     <aside className="detail">
       <DetailHeader ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs">
-        {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(tab, subagents))).map((t) => (
+        {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
