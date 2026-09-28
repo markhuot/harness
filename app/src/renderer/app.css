@@ -302,6 +302,11 @@
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
+.card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
 /* Open in the focused pane (selected), or in another pane (open). */
 .card.selected {
   border-color: var(--accent);

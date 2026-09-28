@@ -891,11 +891,35 @@ Settings, project settings, or on the board route the pane workspace.
   plugin's open-ticket request) replace that pane's content through `useOpenTicket`
   (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
   highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
+  drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
+  or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
+  key-and-title chip as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
+  layer over every pane, above plugin iframes and the browser canvas (which would otherwise
+  swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
+  drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
+  four triangles, ties go to left/right, and the centre goes to the right. The preview is the
+  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `applyDrop`
+  (`dropContent` for a ticket, `movePane` for a pane). A ticket that's already open moves with its
+  pane and keeps its tab, and a pane over itself isn't a target. Docking against the board leaves
+  it 60%, the same split a click makes, while any other pane is split in half. Drags that don't
+  carry our types (files, text) are ignored. The layer goes away on drop, on dragend (Escape
+  cancels a native drag with a dragend), or on the first buttonless mouse move if the source
+  left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
+  Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
+  (`splitTarget`), and it skips a pane already showing that ticket. Cards are focusable, and
+  Enter opens them. A ticket pane's More menu has a Move pane section with a row for each other
+  pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call `movePane`,
+  so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
   taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, any pane 200 px tall.
+  They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
+  each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
+  never shows a pane below its minimum while there's room. The stored sizes stay as they were
+  until a divider moves, and a drag starts from the sizes on screen.
 - **Focus, close, zoom.** Clicking or tabbing into a pane focuses it (a faint header tint). ✕
   closes a ticket pane and its neighbours take its room; the board can't be closed. Maximize
   zooms a pane. Escape ends a zoom, or else closes the focused ticket pane (never while a text
@@ -903,14 +927,25 @@ Settings, project settings, or on the board route the pane workspace.
   rename.
 - **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
-  opens the ticket the way a card click does. After that the hash mirrors the focused ticket
+  opens the ticket the way a card click does. The route the app launches with opens its ticket
+  in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
+  hash alone. After that the hash mirrors the focused ticket
   pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
   board. Opening an already focused ticket is a no-op, so the two never fight. Leaving for Inbox
   or Settings and coming back restores the saved panes.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a
-  container query when its pane is narrow.
+  container query when its pane is narrow. A ticket pane's titlebar does the same. It hides the
+  model badge below 460 px and the status pill below 380 px, then the key truncates and the row
+  clips, so its buttons never run into the next pane. The titlebar is the container, not the pane:
+  a container is the containing block for fixed descendants, which would trap modals inside the
+  pane.
+- **Menus.** `MenuButton` (`components/bits.tsx`) renders its menu in a portal with fixed
+  positioning, so a pane's `overflow: hidden` can't clip it. `placeMenu` (`menuPlacement.ts`)
+  keeps it inside the window. It shifts the menu left or right at the sides and flips it above
+  the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
+  and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
 
 ## iPhone app (`mobile/`)
 

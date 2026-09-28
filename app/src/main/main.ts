@@ -18,7 +18,7 @@ app.setName("Harness");
 // Debug / screenshot hooks (used by scripts/shoot.ts, scripts/smoke.ts):
 //   HARNESS_THEME=dark|light   force the theme (overrides Settings → Appearance)
 //   HARNESS_THEME_ID=<id>      force one color theme, e.g. catppuccin-mocha (and its appearance)
-//   HARNESS_MENU_AUTOPICK=id   context menus pick this item instead of popping up (smoke tests)
+//   HARNESS_MENU_AUTOPICK=id,… context menus pick the first of these items instead of popping up (smoke tests)
 //   HARNESS_ROUTE=#/ticket/X   open the renderer at a route
 //   HARNESS_CAPTURE=/path.png  capture the window after HARNESS_CAPTURE_DELAY ms, then quit
 //   HARNESS_CAPTURE_SETUP=js   run this in the renderer just before the capture (e.g. click a
@@ -330,9 +330,9 @@ ipcMain.handle("harness:revealInFinder", (_e, path: unknown) => {
 });
 ipcMain.handle("harness:contextMenu", (e, raw: unknown) => {
   const items = Array.isArray(raw) ? (raw as ContextMenuItem[]) : [];
-  const autopick = process.env.HARNESS_MENU_AUTOPICK;
+  const autopick = process.env.HARNESS_MENU_AUTOPICK?.split(",");
   if (autopick) {
-    const hit = items.find((i) => i.type !== "separator" && i.id === autopick && i.enabled !== false);
+    const hit = items.find((i) => i.type !== "separator" && autopick.includes(i.id) && i.enabled !== false);
     return hit && hit.type !== "separator" ? hit.id : null;
   }
   return new Promise<string | null>((resolve) => {

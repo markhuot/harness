@@ -11,6 +11,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- On the Mac, you can drag a card onto the left, right, top or bottom half of the board or an
+  open ticket to see several tickets side by side or stacked. While you drag, a tinted outline
+  shows where the new pane will go. Dropping a card on the board's right half opens it the same
+  way a click does. Rows in a conductor's Tickets tab drag the same way, so you can open a child
+  next to its conductor. To move a pane you already have open, drag the grip beside its ticket key.
+  Right-click a card (or press the context-menu key on it) and pick Open to the Right, Below, to
+  the Left or Above to do the same thing without dragging. Cards now take keyboard focus, and
+  Enter opens them. A ticket's More menu has Move pane buttons that put its pane to the left or
+  right of, above, or below the board or any other open ticket.
 - Each file in the Changes tab has a Viewed checkbox in its header, like a pull request review on
   GitHub. Checking it folds that file's diff down to its header, the file list marks it with a
   check, and the toolbar counts how many files you've viewed. The arrow at the left of the header
@@ -68,6 +77,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the Mac, menus (like a ticket's More menu) stay inside the window. Near the right edge they
+  shift left, and near the bottom they open upward. When panes are narrow, a ticket's title bar
+  hides its model and status badges instead of running into the pane next to it.
+- On the Mac, a split layout saved in a wider window (or a window you've made narrower) no
+  longer squeezes a pane below its minimum width. Ticket panes stay at least 360 pixels wide and
+  the board at least 320 pixels, as long as the window has room for them.
 - When the agent edits a file again while the Changes tab is open, that file's diff now updates
   to show the new lines. Before, the tab kept showing the older diff for that file until you
   reloaded it.

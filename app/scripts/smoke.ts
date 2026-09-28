@@ -45,7 +45,7 @@ let mock2: ReturnType<typeof Bun.spawn> | null = null;
 
 try {
   // Native context menus can't be clicked over CDP; this makes them pick "Project settings…".
-  app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "settings" } });
+  app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "settings,split-below" } });
   const { cdp, js, exists, type, cmdEnter, clickText } = app;
 
   // 1. Board renders every column and the seeded cards.
@@ -216,7 +216,7 @@ try {
   check("transcript shows permission decisions as a shield row", audit.startsWith("Allowed") && audit.includes("read-only command") && audit.includes("policy"), audit);
   await js(`location.hash = "#/board/all"`);
 
-  // 2. Cards can't be dragged between columns (agents move them): a synthetic drop is a no-op.
+  // 2. Cards drag onto panes (6e), not between columns (agents move them): a drop on a column is a no-op.
   // Then move NYTIMES-2 (planning) to In progress through the API and watch the board follow.
   const dragged = await js<{ draggable: number; accepted: boolean }>(`(() => {
     const card = [...document.querySelectorAll(".card")].find(c => c.querySelector(".card-key")?.textContent === "NYTIMES-2");
@@ -232,7 +232,7 @@ try {
   })()`);
   await new Promise((r) => setTimeout(r, 300));
   const stayed = (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-2")).ticket.status === "planning";
-  check("board cards aren't draggable and a drop on a column does nothing", dragged.draggable === 0 && !dragged.accepted && stayed, JSON.stringify({ ...dragged, stayed }));
+  check("board cards are draggable, but a drop on a column does nothing", dragged.draggable > 0 && !dragged.accepted && stayed, JSON.stringify({ ...dragged, stayed }));
   await js(`[...document.querySelectorAll(".card")].find(c => c.dataset.key === "NYTIMES-2").click()`);
   const cardOpened = await until("card click opens the ticket", () => js<string>("location.hash").then((h) => h.startsWith("#/board/all/ticket/NYTIMES-2") && h));
   check("clicking a board card opens it", !!cardOpened, cardOpened);
@@ -821,6 +821,298 @@ try {
     }).catch(() => 0);
     check("dragging a divider resizes the browser viewport", stageW > 0, String(stageW));
     await setPanes({ root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null });
+    await js(`location.hash = "#/board/all"`);
+  }
+
+  // 6e. Drag to split: a card, a child row or a pane's header grip dropped on a half of a pane
+  // docks there. Synthetic DragEvents drive the renderer's handlers; one real Chromium drag
+  // (Input.setInterceptDrags) checks the native path end to end.
+  {
+    const setPanes = (st: object) =>
+      js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify(st))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);
+    const boardOnly = { root: { type: "leaf", id: "b", content: { kind: "board" } }, focusedId: null, zoomedId: null };
+    await setPanes(boardOnly);
+    await js(`location.hash = "#/board/all"`);
+    await until("board cards", () => exists('.card[data-key="NYTIMES-4"]'));
+    /** Each pane's ticket key (or "board") and rounded box, left to right then top to bottom. */
+    type Box = { key: string; x: number; y: number; w: number; h: number };
+    const boxes = () =>
+      js<Box[]>(`[...document.querySelectorAll(".pane")].map(p => { const r = p.getBoundingClientRect();
+        return { key: p.querySelector(".detail-key")?.textContent ?? "board", x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; })
+        .sort((a, b) => a.x - b.x || a.y - b.y)`);
+    const paneOf = (key: string) => `[...document.querySelectorAll(".pane")].find(p => (p.querySelector(".detail-key")?.textContent ?? "board") === ${JSON.stringify(key)})`;
+    /**
+     * Drag `src` (a selector) to a point in the pane showing `onto`, `fx`/`fy` of the way across
+     * it. Returns whether the layer took the dragover and the preview it showed; `drop: false`
+     * holds the drag there (end it with endDrag).
+     */
+    const dragTo = (src: string, onto: string, fx: number, fy: number, drop = true) =>
+      js<{ layer: boolean; accepted: boolean; zone: string | null; preview: Box | null; topAtPoint: string }>(`(async () => {
+        const tick = () => new Promise(r => setTimeout(r, 60));
+        const el = document.querySelector(${JSON.stringify(src)});
+        const t = (${paneOf(onto)}).getBoundingClientRect();
+        const x = t.left + t.width * ${fx}, y = t.top + t.height * ${fy};
+        const dt = window.__smokeDT = new DataTransfer();
+        window.__smokeSrc = el;
+        el.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        await tick();
+        const layer = document.querySelector("[data-testid=pane-drop-layer]");
+        if (!layer) return { layer: false, accepted: false, zone: null, preview: null, topAtPoint: "" };
+        const ev = (type) => new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y });
+        layer.dispatchEvent(ev("dragenter"));
+        const accepted = !layer.dispatchEvent(ev("dragover"));
+        await tick();
+        await new Promise(r => setTimeout(r, 200)); // the preview's entry animation
+        const p = document.querySelector("[data-testid=pane-drop-preview]");
+        const r = p?.getBoundingClientRect();
+        const out = { layer: true, accepted, zone: p?.dataset.zone ?? null, preview: r ? { key: "", x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } : null,
+          topAtPoint: document.elementFromPoint(x, y)?.dataset.testid ?? "" };
+        if (${drop}) {
+          if (accepted) layer.dispatchEvent(ev("drop"));
+          el.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));
+          await tick();
+        }
+        return out;
+      })()`);
+    const endDrag = () => js(`window.__smokeSrc.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: window.__smokeDT }))`);
+    const near = (a: number, b: number) => Math.abs(a - b) <= 2;
+
+    // A card on the right half of the board: the same 60/40 split a click makes.
+    const card = (key: string) => `.card[data-key="${key}"]`;
+    const r1 = await dragTo(card("NYTIMES-4"), "board", 0.9, 0.5);
+    const b1 = await until("the dropped ticket's pane", async () => {
+      const b = await boxes();
+      return b.length === 2 && b;
+    }).catch(() => boxes());
+    check("while a card is dragged, a drop layer covers the panes and previews the right half", r1.layer && r1.accepted && r1.zone === "right" && r1.topAtPoint === "pane-drop-layer", JSON.stringify(r1));
+    check(
+      "a card dropped on the board's right half opens beside it, taking 40%",
+      b1[0]!.key === "board" && b1[1]!.key === "NYTIMES-4" && near(b1[1]!.w, (b1[0]!.w + b1[1]!.w) * 0.4),
+      JSON.stringify({ b1, preview: r1.preview }),
+    );
+    check("the preview showed exactly where the pane landed", !!r1.preview && near(r1.preview.x, b1[1]!.x) && near(r1.preview.w, b1[1]!.w) && near(r1.preview.h, b1[1]!.h), JSON.stringify(r1.preview));
+    check("the drop layer goes away when the drag ends", !(await exists("[data-testid=pane-drop-layer]")));
+    check("the dropped ticket's pane is focused (the hash follows)", (await js<string>("location.hash")) === "#/board/all/ticket/NYTIMES-4");
+
+    // A second card on the right half of that pane: side by side. A third on the bottom half: stacked.
+    await dragTo(card("NYTIMES-3"), "NYTIMES-4", 0.9, 0.5);
+    const b2 = await until("side by side", async () => {
+      const b = await boxes();
+      return b.length === 3 && b;
+    }).catch(() => boxes());
+    check(
+      "a card dropped on a ticket pane's right half sits beside it, splitting its width",
+      b2.map((b) => b.key).join(",") === "board,NYTIMES-4,NYTIMES-3" && b2[1]!.y === b2[2]!.y && near(b2[1]!.w, b2[2]!.w) && near(b2[1]!.x + b2[1]!.w, b2[2]!.x) && (await js<number>(`document.querySelectorAll(".detail").length`)) === 2,
+      JSON.stringify(b2),
+    );
+    const r3 = await dragTo(card("NYTIMES-1"), "NYTIMES-3", 0.5, 0.92);
+    const b3 = await until("stacked", async () => {
+      const b = await boxes();
+      return b.length === 4 && b;
+    }).catch(() => boxes());
+    const top = b3.find((b) => b.key === "NYTIMES-3")!;
+    const below = b3.find((b) => b.key === "NYTIMES-1");
+    check(
+      "a card dropped on a pane's bottom half stacks under it",
+      r3.zone === "bottom" && !!below && below.x === top.x && near(below.w, top.w) && near(top.y + top.h, below.y) && near(top.h, below.h),
+      JSON.stringify({ r3, b3 }),
+    );
+
+    // Dropping an already-open ticket moves its pane (no duplicate); a pane over itself isn't a target.
+    await dragTo(card("NYTIMES-4"), "NYTIMES-1", 0.08, 0.5);
+    const b4 = await until("moved", async () => {
+      const b = await boxes();
+      const one = b.find((x) => x.key === "NYTIMES-1");
+      const four = b.find((x) => x.key === "NYTIMES-4");
+      return b.length === 4 && one && four && four.y === one.y && four.x < one.x && b;
+    }).catch(() => boxes());
+    check("dropping a card whose ticket is open moves that pane instead of opening it twice", b4.length === 4 && b4.filter((b) => b.key === "NYTIMES-4").length === 1, JSON.stringify(b4));
+    await js(`(${paneOf("NYTIMES-3")}).querySelector("[data-testid=pane-grip]").id = "smoke-grip"`);
+    const own = await dragTo("#smoke-grip", "NYTIMES-3", 0.5, 0.5, false);
+    check("a pane dragged over itself shows no preview and isn't a drop target", own.layer && !own.accepted && own.zone === null, JSON.stringify(own));
+    await js(`document.querySelector("[data-testid=pane-drop-layer]").dispatchEvent(new DragEvent("dragleave", { bubbles: true }))`);
+    await endDrag();
+    check("dragend clears the drop layer", !(await exists("[data-testid=pane-drop-layer]")));
+
+    // Drag a pane by its header grip onto the board's left half: it re-docks there.
+    await dragTo("#smoke-grip", "board", 0.1, 0.5);
+    const b5 = await until("re-docked", async () => {
+      const b = await boxes();
+      return b[0]?.key === "NYTIMES-3" && b;
+    }).catch(() => boxes());
+    const board5 = b5.find((b) => b.key === "board")!;
+    check("dragging a pane's header grip onto the board's left half moves the pane there", b5[0]!.key === "NYTIMES-3" && near(b5[0]!.x + b5[0]!.w, board5.x) && b5[0]!.h === board5.h, JSON.stringify(b5));
+    check("the board has no grip (it can't be dragged)", !(await exists(".pane-board [data-testid=pane-grip]")));
+
+    // The keyboard route for re-docking: More → Move pane → Board ↓ puts the pane below the board (movePane).
+    const boardId = await js<string>(`document.querySelector(".pane-board").dataset.paneId`);
+    await js(`(${paneOf("NYTIMES-4")}).querySelector(".detail-titlebar button[title=More]").click()`);
+    await until("move menu", () => exists(`[data-testid="move-pane-bottom-${boardId}"]`));
+    const moveLabel = await js<string>(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').getAttribute("aria-label")`);
+    await js(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').click()`);
+    const underBoard = await until("moved below the board", async () => {
+      const b = await boxes();
+      const bd = b.find((x) => x.key === "board");
+      const four = b.find((x) => x.key === "NYTIMES-4");
+      return bd && four && four.y > bd.y && { bd, four };
+    }).catch(() => null);
+    check(
+      "More → Move pane → below the board docks the pane under the board, sharing its width",
+      !!underBoard && moveLabel === "Move pane below the board" && near(underBoard.four.x, underBoard.bd.x) && near(underBoard.four.w, underBoard.bd.w) && near(underBoard.bd.y + underBoard.bd.h, underBoard.four.y) && !(await exists(".menu")),
+      JSON.stringify({ moveLabel, underBoard }),
+    );
+
+    // Narrow panes: 4 across a 1280px window. The rightmost pane's More menu (with its Move pane
+    // arrows) stays inside the window, and no titlebar runs into the pane next to it. Then a pane
+    // stacked at the bottom opens its menu upward, still inside the window.
+    await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+    const tLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "summaries" } });
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, tLeaf("n1", "NYTIMES-4"), tLeaf("n2", "NYTIMES-3"), tLeaf("n3", "NYTIMES-1")], sizes: [0.25, 0.25, 0.25, 0.25] },
+      focusedId: "n3",
+      zoomedId: null,
+    });
+    await until("four panes", async () => (await boxes()).length === 4 && (await exists("[data-pane-id=n3] .detail-titlebar button[title=More]")));
+    await Bun.sleep(300);
+    /** The open menu's rect, how far its Move pane arrows reach, and the viewport. */
+    const menuFit = () =>
+      js<{ vw: number; vh: number; left: number; right: number; top: number; bottom: number; arrowsRight: number; above: boolean }>(`(() => {
+        const m = document.querySelector(".menu"); const r = m.getBoundingClientRect();
+        const arrows = [...m.querySelectorAll(".menu-move button")].map(b => b.getBoundingClientRect().right);
+        return { vw: innerWidth, vh: innerHeight, left: r.left, right: r.right, top: r.top, bottom: r.bottom, arrowsRight: Math.max(0, ...arrows), above: m.dataset.above === "true" };
+      })()`);
+    const inside = (f: Awaited<ReturnType<typeof menuFit>>) => f.left >= 0 && f.top >= 0 && f.right <= f.vw && f.bottom <= f.vh && f.arrowsRight > 0 && f.arrowsRight <= f.vw;
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await until("rightmost menu", () => exists(".menu .menu-move"));
+    await Bun.sleep(100);
+    const fit = await menuFit();
+    const titlebarSpill = await js<string[]>(`[...document.querySelectorAll(".pane-ticket")].flatMap(p => {
+      const pr = p.getBoundingClientRect();
+      return [...p.querySelectorAll(".detail-titlebar > *")].filter(c => getComputedStyle(c).display !== "none" && c.getBoundingClientRect().right > pr.right + 0.5).map(c => p.dataset.paneId + ":" + c.className);
+    })`);
+    const narrow = (await boxes()).map((b) => b.w);
+    check("at 1280px with 4 panes, the rightmost pane's More menu and its Move pane arrows stay inside the window", fit.vw === 1280 && inside(fit), JSON.stringify({ fit, narrow }));
+    check("narrow ticket panes' titlebars don't run into the next pane", titlebarSpill.length === 0, titlebarSpill.join(","));
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "split", id: "c", dir: "column", children: [tLeaf("n1", "NYTIMES-4"), tLeaf("n3", "NYTIMES-1")], sizes: [0.85, 0.15] }], sizes: [0.6, 0.4] },
+      focusedId: "n3",
+      zoomedId: null,
+    });
+    await until("stacked pane", () => exists("[data-pane-id=n3] .detail-titlebar button[title=More]"));
+    await Bun.sleep(300);
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await until("bottom menu", () => exists(".menu .menu-move"));
+    await Bun.sleep(100);
+    const low = await menuFit();
+    check("a More menu near the bottom of the window opens upward, inside it", low.above && inside(low), JSON.stringify(low));
+    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await cdp("Emulation.clearDeviceMetricsOverride");
+    await Bun.sleep(200);
+
+    // Over a Browser tab's canvas the layer still takes the drag; other drags (text, files) are ignored.
+    await setPanes(boardOnly);
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
+    await until("browser canvas", () => exists(".browser-canvas"));
+    await Bun.sleep(400);
+    const overCanvas = await dragTo(card("NYTIMES-4"), "NYTIMES-1", 0.5, 0.85);
+    // While our drag is up, a dragover that carries only text isn't accepted (one evaluation, so
+    // nothing ends the drag in between).
+    const foreign = await js<boolean | null>(`(async () => {
+      const src = document.querySelector(${JSON.stringify(card("NYTIMES-4"))});
+      src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+      await new Promise(r => setTimeout(r, 60));
+      const layer = document.querySelector("[data-testid=pane-drop-layer]");
+      const dt = new DataTransfer(); dt.setData("text/plain", "hello");
+      const accepted = layer ? !layer.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: 400, clientY: 300 })) : null;
+      src.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+      return accepted;
+    })()`);
+    check("dragging over the browser canvas reaches the drop layer", overCanvas.accepted && overCanvas.zone === "bottom" && overCanvas.topAtPoint === "pane-drop-layer", JSON.stringify(overCanvas));
+    check("a drag that isn't a ticket or pane (text, files) isn't accepted", foreign === false, String(foreign));
+
+    // A conductor's child row dragged onto the right half of the conductor's own pane.
+    await setPanes(boardOnly);
+    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+    await until("child rows", () => exists('.child-row[data-key="HARNESS-6"]'));
+    await dragTo('.child-row[data-key="HARNESS-6"]', "HARNESS-1", 0.9, 0.5);
+    const b6 = await until("child beside conductor", async () => {
+      const b = await boxes();
+      return b.length === 3 && b;
+    }).catch(() => boxes());
+    check("a child row dropped on its conductor pane's right half opens beside it", b6.map((b) => b.key).join(",") === "board,HARNESS-1,HARNESS-6", JSON.stringify(b6));
+
+    // The keyboard route: a card's context menu → "Open Below" (autopicked) splits the focused pane.
+    await js(`document.querySelector('.card[data-key="NYTIMES-4"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))`);
+    const b7 = await until("opened below", async () => {
+      const b = await boxes();
+      return b.length === 4 && b;
+    }).catch(() => boxes());
+    const child7 = b7.find((b) => b.key === "HARNESS-6");
+    const opened7 = b7.find((b) => b.key === "NYTIMES-4");
+    check("a card's context menu opens it below the focused pane", !!child7 && !!opened7 && opened7.x === child7.x && near(child7.y + child7.h, opened7.y), JSON.stringify(b7));
+    check("cards are focusable for the keyboard route", (await js<string | null>(`document.querySelector(".card").getAttribute("tabindex")`)) === "0");
+
+    // A real Chromium drag (mouse press + move, intercepted so no OS drag session starts), then
+    // dragEnter/Over/drop at the right half of the board.
+    await setPanes(boardOnly);
+    await js(`location.hash = "#/board/all"`);
+    await until("board", () => exists(card("NYTIMES-2")));
+    await Bun.sleep(200);
+    await cdp("Input.setInterceptDrags", { enabled: true });
+    let dragData: unknown = null;
+    const off = app!.on((method, params) => {
+      if (method === "Input.dragIntercepted") dragData = params.data;
+    });
+    const from = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector(${JSON.stringify(card("NYTIMES-2"))}).getBoundingClientRect(); return { x: r.x + 30, y: r.y + 20 }; })()`);
+    const to = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector(".pane-board").getBoundingClientRect(); return { x: r.right - 40, y: r.y + r.height / 2 }; })()`);
+    await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x, y: from.y });
+    await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: from.x, y: from.y, button: "left", buttons: 1, clickCount: 1 });
+    for (let i = 1; i <= 5; i++) await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x + 8 * i, y: from.y + 4 * i, button: "left", buttons: 1 });
+    const data = await until("drag intercepted", async () => dragData, 3000).catch(() => null);
+    let realOk = false;
+    if (data) {
+      await Bun.sleep(100);
+      await cdp("Input.dispatchDragEvent", { type: "dragEnter", x: to.x, y: to.y, data });
+      await cdp("Input.dispatchDragEvent", { type: "dragOver", x: to.x, y: to.y, data });
+      await Bun.sleep(100);
+      const zone = await js<string | null>(`document.querySelector("[data-testid=pane-drop-preview]")?.dataset.zone ?? null`);
+      await cdp("Input.dispatchDragEvent", { type: "drop", x: to.x, y: to.y, data });
+      const b8 = await until("real drop", async () => {
+        const b = await boxes();
+        return b.length === 2 && b;
+      }).catch(() => boxes());
+      realOk = zone === "right" && b8[1]?.key === "NYTIMES-2";
+    }
+    await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: to.x, y: to.y, button: "left", buttons: 0, clickCount: 1 });
+    await cdp("Input.setInterceptDrags", { enabled: false });
+    off();
+    await Bun.sleep(100);
+    check("a real (native) card drag onto the board's right half opens the ticket there", realOk && !(await exists("[data-testid=pane-drop-layer]")), JSON.stringify({ intercepted: !!data, boxes: await boxes() }));
+
+    // Stored sizes are clamped to the panes' minimums when laid out: a sliver renders at 360px.
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "leaf", id: "t1", content: { kind: "ticket", ticketKey: "NYTIMES-4", tab: "summaries" } }], sizes: [0.97, 0.03] },
+      focusedId: null,
+      zoomedId: null,
+    });
+    const sliver = await until("clamped ticket pane", async () => {
+      const b = await boxes();
+      return b.length === 2 && b;
+    }).catch(() => boxes());
+    check("a stored sliver of a ticket pane renders at its 360px minimum", near(sliver[1]?.w ?? 0, 360) && sliver[1]?.key === "NYTIMES-4", JSON.stringify(sliver));
+
+    // Launching (here: reloading) at a ticket link opens that ticket once mounted, and the hash keeps it.
+    await setPanes(boardOnly);
+    await js(`history.replaceState(null, "", "#/board/all/ticket/NYTIMES-3"); location.reload()`);
+    await Bun.sleep(300);
+    const launched = await until("ticket opened from the launch route", async () => {
+      const b = await js<Box[]>(`[...document.querySelectorAll(".pane")].map(p => ({ key: p.querySelector(".detail-key")?.textContent ?? "board" }))`).catch(() => []);
+      return b.some((x) => x.key === "NYTIMES-3") && b;
+    }, 10000).catch(() => [] as Box[]);
+    check("a launch at a ticket link opens it in a pane and the hash keeps the ticket", launched.length === 2 && (await js<string>("location.hash")) === "#/board/all/ticket/NYTIMES-3", JSON.stringify({ launched, hash: await js<string>("location.hash") }));
+
+    await setPanes(boardOnly);
     await js(`location.hash = "#/board/all"`);
   }
 

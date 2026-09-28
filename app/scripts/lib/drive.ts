@@ -51,7 +51,10 @@ export async function waitHealthy(base: string, ms = 10000) {
 export async function launchApp(opts: { baseUrl: string; token: string; theme?: "light" | "dark"; env?: Record<string, string> }) {
   const cdpPort = 9300 + Math.floor(Math.random() * 600);
   const electron = join(appDir, "..", "node_modules", ".bin", "electron");
-  const proc = Bun.spawn([electron, appDir, `--remote-debugging-port=${cdpPort}`], {
+  // Keep rendering (transitions, rAF, timers) while the window is behind others or on another
+  // Space: an occluded window otherwise freezes CSS transitions and the checks that wait on them.
+  const keepRendering = ["--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"];
+  const proc = Bun.spawn([electron, appDir, `--remote-debugging-port=${cdpPort}`, ...keepRendering], {
     env: {
       ...process.env,
       HARNESS_URL: opts.baseUrl,

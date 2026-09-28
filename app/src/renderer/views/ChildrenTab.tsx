@@ -8,7 +8,8 @@ import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, 
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
-import { useOpenTicket } from "../components/paneContext";
+import { useOpenTicket, usePane } from "../components/paneContext";
+import { dragProps, ticketContextMenu } from "../components/paneDrag";
 
 /** Ticket.model arrives with per-ticket model selection; read it defensively. */
 const modelOf = (t: Ticket) => (t as Ticket & { model?: string | null }).model ?? null;
@@ -89,6 +90,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
   const model = modelOf(c);
   const showDriver = hasCustomDriver(state, c);
   const quietDone = c.status === "done";
+  const paneId = usePane()?.paneId ?? null;
 
   return (
     <div
@@ -98,6 +100,9 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
       data-key={c.key}
       onClick={() => onOpen(c.key)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(c.key))}
+      // Drag onto a half of this pane (or any other) to see the child beside its conductor.
+      {...dragProps(c.key, c.title)}
+      onContextMenu={(e) => void ticketContextMenu(e, c.key, () => onOpen(c.key), paneId)}
     >
       <div className="child-main">
         <div className="child-top">

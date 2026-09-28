@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+  applyDrop,
   boardLeaf,
   checkPanes,
+  clampSizes,
   closePane,
   defaultPanes,
   dropContent,
+  dropPreview,
+  dropTargetAt,
   findLeaf,
   focusedTicket,
   focusPane,
@@ -24,8 +28,10 @@ import {
   serializePanes,
   setSizes,
   setTab,
+  splitTarget,
   ticketLeafByKey,
   toggleZoom,
+  zoneAt,
   type PaneContent,
   type PaneLeaf,
   type PaneNode,
@@ -218,8 +224,8 @@ describe("dropContent", () => {
     expect(shape(valid(dropContent(stacked, "A-1", "right", ticketContent("A-3"))).root)).toBe("row[board 0.6, col[row[A-1 0.5, A-3 0.5] 0.5, A-2 0.5] 0.4]");
   });
 
-  test("dropping on the root leaf wraps it", () => {
-    expect(shape(valid(dropContent(defaultPanes(), "p1", "top", ticketContent("A-1"))).root)).toBe("col[A-1 0.5, board 0.5]");
+  test("dropping on the root leaf wraps it, the board keeping its 60%", () => {
+    expect(shape(valid(dropContent(defaultPanes(), "p1", "top", ticketContent("A-1"))).root)).toBe("col[A-1 0.4, board 0.6]");
   });
 
   test("the new pane is focused and a zoom ends", () => {
@@ -232,7 +238,7 @@ describe("dropContent", () => {
     const start = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25]));
     const s = valid(dropContent(start, "B", "bottom", ticketContent("A-2", "transcript")));
     // A-2's share went to A-1; the board's column holds it now.
-    expect(shape(s.root)).toBe("row[col[board 0.5, A-2 0.5] 0.5, A-1 0.5]");
+    expect(shape(s.root)).toBe("row[col[board 0.6, A-2 0.4] 0.5, A-1 0.5]");
     expect(findLeaf(s.root, "A-2")!.content).toEqual(ticketContent("A-2", "transcript"));
     expect(s.focusedId).toBe("A-2");
   });
@@ -257,7 +263,7 @@ describe("movePane", () => {
   test("re-docks a pane out of a stack, collapsing the stack", () => {
     const start = st(row("r", [B, col("c", [T("A-1"), T("A-2")])], [0.6, 0.4]));
     const s = valid(movePane(start, "A-2", "B", "left"));
-    expect(shape(s.root)).toBe("row[A-2 0.3, board 0.3, A-1 0.4]");
+    expect(shape(s.root)).toBe("row[A-2 0.24, board 0.36, A-1 0.4]");
     expect(s.focusedId).toBe("A-2");
   });
 
@@ -592,3 +598,199 @@ describe("layoutPanes", () => {
     expect(l.cornerId).toBe("C");
   });
 });
+
+describe("zoneAt", () => {
+  const box = { x: 100, y: 50, w: 400, h: 200 };
+
+  test("each edge's triangle is its zone, in the rect's own proportions", () => {
+    expect(zoneAt(box, 490, 150)).toBe("right");
+    expect(zoneAt(box, 110, 150)).toBe("left");
+    expect(zoneAt(box, 300, 60)).toBe("top");
+    expect(zoneAt(box, 300, 240)).toBe("bottom");
+    // A wide pane: 40% across and 10% down is nearer the top than the left edge.
+    expect(zoneAt(box, 260, 70)).toBe("top");
+    // …and 10% across, 40% down is nearer the left.
+    expect(zoneAt(box, 140, 130)).toBe("left");
+  });
+
+  test("just either side of a diagonal", () => {
+    // The top-left diagonal runs through (100 + 400t, 50 + 200t); t = 0.25 → (200, 100).
+    expect(zoneAt(box, 201, 100)).toBe("top");
+    expect(zoneAt(box, 199, 100)).toBe("left");
+    expect(zoneAt(box, 200, 101)).toBe("left");
+    expect(zoneAt(box, 200, 99)).toBe("top");
+    // Bottom-right diagonal at t = 0.75 → (400, 200).
+    expect(zoneAt(box, 399, 200)).toBe("bottom");
+    expect(zoneAt(box, 401, 200)).toBe("right");
+  });
+
+  test("points exactly on a diagonal split side by side; the centre goes right", () => {
+    expect(zoneAt(box, 200, 100)).toBe("left"); // top-left diagonal
+    expect(zoneAt(box, 400, 100)).toBe("right"); // top-right diagonal
+    expect(zoneAt(box, 200, 200)).toBe("left"); // bottom-left diagonal
+    expect(zoneAt(box, 400, 200)).toBe("right"); // bottom-right diagonal
+    expect(zoneAt(box, 300, 150)).toBe("right");
+  });
+
+  test("edges and corners are inside; anything past them is outside", () => {
+    expect(zoneAt(box, 100, 150)).toBe("left");
+    expect(zoneAt(box, 500, 150)).toBe("right");
+    expect(zoneAt(box, 300, 50)).toBe("top");
+    expect(zoneAt(box, 300, 250)).toBe("bottom");
+    expect(zoneAt(box, 100, 50)).toBe("left"); // a corner is on both a diagonal and two edges
+    expect(zoneAt(box, 99.9, 150)).toBeNull();
+    expect(zoneAt(box, 500.1, 150)).toBeNull();
+    expect(zoneAt(box, 300, 49.9)).toBeNull();
+    expect(zoneAt(box, 300, 250.1)).toBeNull();
+  });
+
+  test("an empty rect or a non-finite point has no zone", () => {
+    expect(zoneAt({ x: 0, y: 0, w: 0, h: 100 }, 0, 50)).toBeNull();
+    expect(zoneAt({ x: 0, y: 0, w: 100, h: 0 }, 50, 0)).toBeNull();
+    expect(zoneAt(box, NaN, 150)).toBeNull();
+  });
+});
+
+describe("dropPreview", () => {
+  const rr = (v: { x: number; y: number; w: number; h: number } | null) => v && [r(v.x), r(v.y), r(v.w), r(v.h)];
+  const three = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25]));
+
+  test("is where the new pane lands: 40% beside the board, half of a ticket pane", () => {
+    expect(rr(dropPreview(st(B), { kind: "ticket", ticketKey: "A-1" }, "B", "right"))).toEqual([0.6, 0, 0.4, 1]);
+    expect(rr(dropPreview(st(B), { kind: "ticket", ticketKey: "A-1" }, "B", "top"))).toEqual([0, 0, 1, 0.4]);
+    expect(rr(dropPreview(three, { kind: "ticket", ticketKey: "A-9" }, "A-2", "bottom"))).toEqual([0.75, 0.5, 0.25, 0.5]);
+    expect(rr(dropPreview(three, { kind: "ticket", ticketKey: "A-9" }, "A-1", "left"))).toEqual([0.5, 0, 0.125, 1]);
+  });
+
+  test("a moved pane's old space closes up first", () => {
+    // A-2 leaves (A-1 takes its quarter), then splits A-1's half.
+    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "A-1", "bottom"))).toEqual([0.5, 0.5, 0.5, 0.5]);
+  });
+
+  test("is null when the drop would do nothing", () => {
+    expect(dropPreview(three, { kind: "pane", leafId: "A-1" }, "A-1", "left")).toBeNull();
+    expect(dropPreview(three, { kind: "ticket", ticketKey: "A-2" }, "A-2", "top")).toBeNull();
+  });
+});
+
+describe("dropTargetAt", () => {
+  const state = st(row("r", [B, col("c", [T("A"), T("C")])], [0.6, 0.4]));
+
+  test("finds the pane under the point and the half pointed at", () => {
+    const l = layoutPanes(state);
+    expect(dropTargetAt(l, 0.55, 0.5)).toMatchObject({ leafId: "B", zone: "right" });
+    expect(dropTargetAt(l, 0.8, 0.45)).toMatchObject({ leafId: "A", zone: "bottom" });
+    expect(dropTargetAt(l, 0.8, 0.55)).toMatchObject({ leafId: "C", zone: "top" });
+    expect(dropTargetAt(l, 1.01, 0.5)).toBeNull();
+  });
+
+  test("skips panes hidden under a zoom", () => {
+    const l = layoutPanes({ ...state, focusedId: "C", zoomedId: "C" });
+    expect(dropTargetAt(l, 0.1, 0.5)).toMatchObject({ leafId: "C", zone: "left" });
+  });
+});
+
+describe("applyDrop", () => {
+  test("a card on the right half of the board opens beside it", () => {
+    const s = valid(applyDrop(defaultPanes(), { kind: "ticket", ticketKey: "A-1" }, "p1", "right"));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.4]");
+    expect(focusedLabel(s)).toBe("A-1");
+    // …the same split a click makes.
+    expect(shape(openTicket(defaultPanes(), "A-1").root)).toBe(shape(s.root));
+  });
+
+  test("an open ticket's card moves its pane and keeps its tab", () => {
+    const start = st(row("r", [B, T("A-1", "transcript"), T("A-2")], [0.5, 0.25, 0.25]));
+    const s = valid(applyDrop(start, { kind: "ticket", ticketKey: "A-1" }, "A-2", "bottom"));
+    expect(shape(s.root)).toBe("row[board 0.625, col[A-2 0.5, A-1 0.5] 0.375]");
+    expect(findLeaf(s.root, "A-1")!.content).toEqual(ticketContent("A-1", "transcript"));
+  });
+
+  test("dropping a ticket or a pane on its own pane is a no-op (no preview)", () => {
+    const start = st(row("r", [B, T("A-1")]));
+    expect(applyDrop(start, { kind: "ticket", ticketKey: "A-1" }, "A-1", "left")).toBe(start);
+    expect(applyDrop(start, { kind: "pane", leafId: "A-1" }, "A-1", "top")).toBe(start);
+    expect(applyDrop(start, { kind: "pane", leafId: "gone" }, "B", "top")).toBe(start);
+  });
+
+  test("a pane dragged by its header re-docks", () => {
+    const s = valid(applyDrop(st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25])), { kind: "pane", leafId: "A-2" }, "B", "top"));
+    expect(shape(s.root)).toBe("row[col[A-2 0.4, board 0.6] 0.5, A-1 0.5]");
+  });
+});
+
+describe("splitTarget", () => {
+  const start = st(row("r", [B, T("A-1"), T("A-2")]), "A-2");
+
+  test("the pane the command came from, else the focused pane, else the board", () => {
+    expect(splitTarget(start, "A-1")).toBe("A-1");
+    expect(splitTarget(start)).toBe("A-2");
+    expect(splitTarget(start, "gone")).toBe("A-2");
+    expect(splitTarget({ ...start, focusedId: null })).toBe("B");
+    expect(splitTarget({ ...start, focusedId: "gone" })).toBe("B");
+  });
+
+  test("skips a pane already showing the ticket being opened", () => {
+    expect(splitTarget(start, null, "A-2")).toBe("B");
+    expect(splitTarget(start, "A-1", "A-1")).toBe("A-2");
+    expect(splitTarget(start, "A-1", "A-9")).toBe("A-1");
+  });
+});
+
+describe("clampSizes", () => {
+  const rs = (v: number[]) => v.map(r);
+
+  test("sizes that already fit come back unchanged", () => {
+    expect(clampSizes([0.6, 0.4], [320, 360], 1200)).toEqual([0.6, 0.4]);
+    // Exactly at a minimum is fine.
+    expect(rs(clampSizes([0.3, 0.7], [300, 360], 1000))).toEqual([0.3, 0.7]);
+  });
+
+  test("a pane below its minimum is raised to it; the others give up the room in proportion", () => {
+    // 1200px: 960 | 120 | 120 → the two tickets need 360 each, the board takes what's left.
+    expect(rs(clampSizes([0.8, 0.1, 0.1], [320, 360, 360], 1200))).toEqual([0.4, 0.3, 0.3]);
+    // Raising one can push another under its own minimum: repeated until none is short.
+    expect(rs(clampSizes([0.5, 0.45, 0.05], [320, 360, 360], 1100))).toEqual([0.345, 0.327, 0.327]);
+    // Just short of fitting leaves each pane exactly at its minimum.
+    expect(rs(clampSizes([0.9, 0.1], [320, 360], 680))).toEqual([0.471, 0.529]);
+  });
+
+  test("when the minimums don't fit, the space is shared in proportion to them", () => {
+    expect(rs(clampSizes([0.9, 0.1], [320, 360], 600))).toEqual([0.471, 0.529]);
+  });
+
+  test("a zero or unknown length (not measured yet) or mismatched mins leave the sizes alone", () => {
+    expect(clampSizes([0.9, 0.1], [320, 360], 0)).toEqual([0.9, 0.1]);
+    expect(clampSizes([0.9, 0.1], [320, 360], NaN)).toEqual([0.9, 0.1]);
+    expect(clampSizes([0.9, 0.1], [320], 1000)).toEqual([0.9, 0.1]);
+  });
+});
+
+describe("layoutPanes with the workspace size", () => {
+  const rr = (v: { x: number; y: number; w: number; h: number }) => [r(v.x), r(v.y), r(v.w), r(v.h)];
+
+  test("a stale stored layout never renders a pane below its minimum when there's room", () => {
+    // Saved in a wide window with a sliver of a ticket pane, then shown 1000 × 800.
+    const state = st(row("r", [B, col("c", [T("A"), T("C")], [0.9, 0.1])], [0.95, 0.05]));
+    const l = layoutPanes(state, { width: 1000, height: 800 });
+    const box = (id: string) => rr(l.leaves.find((b) => b.leaf.id === id)!.rect);
+    expect(box("B")).toEqual([0, 0, 0.64, 1]);
+    expect(box("A")).toEqual([0.64, 0, 0.36, 0.75]); // 600px tall: C keeps its 200
+    expect(box("C")).toEqual([0.64, 0.75, 0.36, 0.25]);
+    // The dividers sit on the clamped boundaries and carry the clamped sizes for dragging.
+    expect(l.dividers.map((d) => [r(d.at), ...d.sizes.map(r)])).toEqual([
+      [0.64, 0.64, 0.36],
+      [0.75, 0.75, 0.25],
+    ]);
+    // The stored sizes aren't touched.
+    expect(state.root.type === "split" && state.root.sizes).toEqual([0.95, 0.05]);
+  });
+
+  test("without a size (or when everything fits) the stored sizes are laid out as is", () => {
+    const state = st(row("r", [B, T("A")], [0.6, 0.4]));
+    expect(rr(layoutPanes(state).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
+    expect(rr(layoutPanes(state, { width: 1400, height: 900 }).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
+    expect(rr(layoutPanes(st(row("r", [B, T("A")], [0.95, 0.05]))).leaves[1]!.rect)).toEqual([0.95, 0, 0.05, 1]);
+  });
+});
+

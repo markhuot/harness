@@ -341,10 +341,13 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
 
 /**
  * Dock `moving` (an existing leaf, re-docked with `content`) or a new leaf showing `content` on the
- * `zone` half of `targetId`, splitting the target's space 50/50. Ends any zoom.
+ * `zone` half of `targetId`, splitting the target's space 50/50. Docking against the board leaves
+ * it BOARD_SHARE instead, the same split a card click makes. Ends any zoom.
  */
 function dock(state: PaneState, moving: PaneLeaf | null, targetId: string, zone: DropZone, content: PaneContent): PaneState {
-  if (!findLeaf(state.root, targetId) || moving?.id === targetId) return state;
+  const target = findLeaf(state.root, targetId);
+  if (!target || moving?.id === targetId) return state;
+  const share = target.content.kind === "board" ? 1 - BOARD_SHARE : 0.5;
   let root = state.root;
   let leaf: PaneLeaf;
   if (moving) {
@@ -353,7 +356,7 @@ function dock(state: PaneState, moving: PaneLeaf | null, targetId: string, zone:
   } else {
     leaf = { type: "leaf", id: freshId(allIds(root)), content };
   }
-  return normalize({ root: insertLeaf(root, targetId, zone, leaf, 0.5), focusedId: leaf.id, zoomedId: null });
+  return normalize({ root: insertLeaf(root, targetId, zone, leaf, share), focusedId: leaf.id, zoomedId: null });
 }
 
 /**
@@ -473,6 +476,8 @@ export interface DividerBox {
   split: PaneSplit;
   /** Between child `index` and `index + 1`. */
   index: number;
+  /** The split's sizes as laid out (after clamping to the panes' minimums), which a drag starts from. */
+  sizes: number[];
   /** The split's own box (its length along the axis is what the divider resizes). */
   rect: Rect;
   /** Where the divider sits along the split's axis (x for "row", y for "column"). */
@@ -485,12 +490,20 @@ export interface PaneLayout {
   cornerId: string;
 }
 
+/** The workspace's size in px, which lets `layoutPanes` keep panes at their minimums. */
+export interface PaneArea {
+  width: number;
+  height: number;
+}
+
 /**
  * Where every pane and divider goes. Panes are laid out flat (absolutely positioned siblings, not
  * nested boxes) so reshaping the tree never remounts one. A zoomed pane fills the area and the rest
- * are hidden, with no dividers.
+ * are hidden, with no dividers. Given the workspace's `area`, each split's stored sizes are clamped
+ * (clampSizes) so no pane renders below its minimum while there's room, whatever was stored (a
+ * layout saved in a wider window, say); the stored sizes themselves don't change.
  */
-export function layoutPanes(state: PaneState): PaneLayout {
+export function layoutPanes(state: PaneState, area?: PaneArea): PaneLayout {
   const out: PaneLayout = { leaves: [], dividers: [], cornerId: "" };
   const zoomed = state.zoomedId;
   const walk = (node: PaneNode, rect: Rect) => {
@@ -500,18 +513,118 @@ export function layoutPanes(state: PaneState): PaneLayout {
       return;
     }
     const row = node.dir === "row";
+    const sizes = area ? clampSizes(node.sizes, node.children.map((c) => minSize(c, node.dir)), row ? rect.w * area.width : rect.h * area.height) : node.sizes;
     let offset = 0;
     node.children.forEach((c, i) => {
-      const share = node.sizes[i]!;
+      const share = sizes[i]!;
       const box = row ? { x: rect.x + rect.w * offset, y: rect.y, w: rect.w * share, h: rect.h } : { x: rect.x, y: rect.y + rect.h * offset, w: rect.w, h: rect.h * share };
       offset += share;
-      if (i < node.children.length - 1 && !zoomed) out.dividers.push({ split: node, index: i, rect, at: row ? rect.x + rect.w * offset : rect.y + rect.h * offset });
+      if (i < node.children.length - 1 && !zoomed) out.dividers.push({ split: node, index: i, sizes, rect, at: row ? rect.x + rect.w * offset : rect.y + rect.h * offset });
       walk(c, box);
     });
   };
   walk(state.root, { x: 0, y: 0, w: 1, h: 1 });
   out.cornerId = zoomed ?? leaves(state.root)[0]!.id;
   return out;
+}
+
+/**
+ * A split's `sizes` adjusted so each child gets at least `mins[i]` px of the split's `totalPx`:
+ * children below their minimum are raised to it, and the rest share what's left in proportion to
+ * their stored sizes (repeated until none is short). When the minimums don't all fit, the space is
+ * shared in proportion to them, as resizeSplit does. Sizes that already fit come back unchanged.
+ */
+export function clampSizes(sizes: readonly number[], mins: readonly number[], totalPx: number): number[] {
+  if (!(totalPx > 0) || sizes.length !== mins.length) return [...sizes];
+  const need = mins.reduce((a, b) => a + b, 0);
+  if (need >= totalPx) return need > 0 ? mins.map((m) => m / need) : [...sizes];
+  const fixed = new Set<number>();
+  const flexPx = () => {
+    const free = totalPx - [...fixed].reduce((a, i) => a + mins[i]!, 0);
+    const weight = sizes.reduce((a, s, i) => (fixed.has(i) ? a : a + s), 0);
+    return (i: number) => (weight > 0 ? (sizes[i]! / weight) * free : free / (sizes.length - fixed.size));
+  };
+  for (;;) {
+    const px = flexPx();
+    const short = sizes.map((_, i) => i).filter((i) => !fixed.has(i) && px(i) < mins[i]! - 1e-9);
+    if (!short.length) return sizes.map((_, i) => (fixed.has(i) ? mins[i]! : px(i)) / totalPx);
+    for (const i of short) fixed.add(i);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Drag and drop
+// ---------------------------------------------------------------------------
+
+/** What's being dragged onto the workspace: a ticket (a board card or child row), or a pane by its header. */
+export type DragSource = { kind: "ticket"; ticketKey: string } | { kind: "pane"; leafId: string };
+
+/** Ties go to the earlier zone, so the exact centre (and a row/column tie on a diagonal) splits side by side. */
+const ZONE_ORDER: readonly DropZone[] = ["right", "left", "bottom", "top"];
+
+/**
+ * Which half of `rect` the point (x, y) points at: the rect's diagonals cut it into four triangles,
+ * one per edge, so this is the nearest edge measured in the rect's own proportions. Points on a
+ * diagonal go to left/right, the centre to "right". Null outside the rect (edges count as inside)
+ * or for an empty rect.
+ */
+export function zoneAt(rect: Rect, x: number, y: number): DropZone | null {
+  if (!(rect.w > 0 && rect.h > 0)) return null;
+  const dx = (x - rect.x) / rect.w;
+  const dy = (y - rect.y) / rect.h;
+  if (!(dx >= 0 && dx <= 1 && dy >= 0 && dy <= 1)) return null;
+  const dist: Record<DropZone, number> = { right: 1 - dx, left: dx, bottom: 1 - dy, top: dy };
+  let best = ZONE_ORDER[0]!;
+  for (const z of ZONE_ORDER) if (dist[z] < dist[best]) best = z;
+  return best;
+}
+
+/** The visible pane under the point (fractions of the workspace, as in `layoutPanes`) and the zone pointed at. */
+export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId: string; zone: DropZone; rect: Rect } | null {
+  for (const { leaf, rect, hidden } of layout.leaves) {
+    if (hidden) continue;
+    const zone = zoneAt(rect, x, y);
+    if (zone) return { leafId: leaf.id, zone, rect };
+  }
+  return null;
+}
+
+/**
+ * Drop `source` on the `zone` half of the pane `targetLeafId`. A ticket that's already open moves
+ * with its pane (keeping its tab) instead of opening twice; a new one opens on Summaries. Returns
+ * `state` itself when the drop would do nothing (a pane dropped on itself, a missing pane), which
+ * is also how the drag preview knows not to show.
+ */
+export function applyDrop(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone): PaneState {
+  if (source.kind === "pane") return movePane(state, source.leafId, targetLeafId, zone);
+  const open = ticketLeafByKey(state.root, source.ticketKey);
+  return dropContent(state, targetLeafId, zone, open?.content ?? { kind: "ticket", ticketKey: source.ticketKey, tab: "summaries" });
+}
+
+/**
+ * Where the dropped pane would land (fractions of the workspace): its box in the layout after
+ * `applyDrop`, so the preview matches the result exactly (the board keeping 60%, a moved pane's old
+ * space closing up). Null when the drop would do nothing.
+ */
+export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone, area?: PaneArea): Rect | null {
+  const next = applyDrop(state, source, targetLeafId, zone);
+  if (next === state) return null;
+  return layoutPanes(next, area).leaves.find((b) => b.leaf.id === next.focusedId)?.rect ?? null;
+}
+
+/**
+ * The pane a menu's "Open to the Right/Below/…" splits: the pane the command came from (a child
+ * row's conductor pane), else the focused pane, else the board. A pane already showing `ticketKey`
+ * is skipped (splitting a ticket beside itself does nothing), falling through to the next choice.
+ */
+export function splitTarget(state: PaneState, fromLeafId: string | null = null, ticketKey?: string): string {
+  const usable = (id: string | null) => {
+    const leaf = id ? findLeaf(state.root, id) : null;
+    return !!leaf && !(leaf.content.kind === "ticket" && leaf.content.ticketKey === ticketKey);
+  };
+  if (usable(fromLeafId)) return fromLeafId!;
+  if (usable(state.focusedId)) return state.focusedId!;
+  return boardLeaf(state.root)!.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +776,9 @@ function subscribe(fn: () => void) {
   listeners.add(fn);
   return () => void listeners.delete(fn);
 }
+
+/** The current panes outside React (e.g. an effect checking that its render isn't already stale). */
+export const getPanes = (): PaneState => get();
 
 export function usePanes(): PaneState {
   return useSyncExternalStore(subscribe, get);

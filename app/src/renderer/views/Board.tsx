@@ -28,6 +28,7 @@ import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { focusedTicket, leaves, openTicket, updatePanes, usePanes } from "../state/panes";
+import { dragProps, ticketContextMenu } from "../components/paneDrag";
 import "./board.css";
 
 /** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
@@ -103,6 +104,9 @@ export function BoardPane() {
           )}
           <MenuButton
             className="search-options"
+            menuClassName="search-options-menu"
+            gap={8}
+            offsetX={5}
             trigger={(toggle, open) => (
               <button
                 type="button"
@@ -262,6 +266,11 @@ const TicketCard = memo(function TicketCard({
       onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
       onMouseLeave={t.kind === "conductor" ? () => onHoverConductor(null) : undefined}
       onClick={() => onOpen(t.key)}
+      // Drag onto a half of the board or an open ticket to open it in a split there.
+      {...dragProps(t.key, t.title)}
+      onContextMenu={(e) => void ticketContextMenu(e, t.key, () => onOpen(t.key))}
+      tabIndex={0}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onOpen(t.key))}
     >
       <div className="card-top">
         <span className="card-key">{t.key}</span>

@@ -16,7 +16,8 @@ import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket } from "../components/paneContext";
-import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes } from "../state/panes";
+import { dragProps } from "../components/paneDrag";
+import { closePane, leaves, movePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes, usePanes, type DropZone } from "../state/panes";
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
 export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
@@ -51,6 +52,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
     return (
       <aside className="detail">
         <div className="view-header detail-titlebar">
+          <PaneGrip paneId={paneId} ticketKey={ticketKey} title="" />
           <span className="detail-key">{ticketKey}</span>
           <div className="grow" />
           <button className="btn btn-ghost btn-icon" onClick={close} title="Close (Esc)" aria-label="Close pane">
@@ -82,7 +84,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
 
   return (
     <aside className="detail">
-      <DetailHeader ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
+      <DetailHeader paneId={paneId} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs">
         {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
           <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
@@ -120,7 +122,57 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   );
 }
 
-function DetailHeader({ ticket, onClose, zoomed, onToggleZoom }: { ticket: Ticket; onClose: () => void; zoomed: boolean; onToggleZoom: () => void }) {
+const MOVES: [DropZone, string, string][] = [
+  ["left", "←", "left of"],
+  ["right", "→", "right of"],
+  ["top", "↑", "above"],
+  ["bottom", "↓", "below"],
+];
+
+/**
+ * "Move pane" in the header's More menu: a row per other pane (the board, then each open ticket)
+ * with left/right/above/below buttons that re-dock this pane there (movePane), the keyboard way to
+ * do what dragging the header grip does. The board is always a target, so there's always a row.
+ */
+function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () => void }) {
+  const targets = leaves(usePanes().root).filter((l) => l.id !== paneId);
+  return (
+    <>
+      <div className="menu-caption">Move pane</div>
+      {targets.map((t) => {
+        const name = t.content.kind === "board" ? "the board" : t.content.ticketKey;
+        return (
+          <div key={t.id} className="menu-move" role="group" aria-label={`Move beside ${name}`}>
+            <span className="menu-move-label">{t.content.kind === "board" ? "Board" : name}</span>
+            {MOVES.map(([zone, glyph, word]) => (
+              <button
+                key={zone}
+                data-testid={`move-pane-${zone}-${t.id}`}
+                aria-label={`Move pane ${word} ${name}`}
+                title={`Move pane ${word} ${name}`}
+                onClick={() => (onDone(), updatePanes((s) => movePane(s, paneId, t.id, zone)))}
+              >
+                {glyph}
+              </button>
+            ))}
+          </div>
+        );
+      })}
+      <hr />
+    </>
+  );
+}
+
+/** Drag a ticket pane by this onto a half of another pane to move it there. */
+function PaneGrip({ paneId, ticketKey, title }: { paneId: string; ticketKey: string; title: string }) {
+  return (
+    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one (or use More → Move pane)" aria-hidden {...dragProps(ticketKey, title, paneId)}>
+      <Icon name="grip" size={13} />
+    </span>
+  );
+}
+
+function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneId: string; ticket: Ticket; onClose: () => void; zoomed: boolean; onToggleZoom: () => void }) {
   const { state, client } = useStore();
   const openTicket = useOpenTicket();
   const act = useAction();
@@ -142,6 +194,7 @@ function DetailHeader({ ticket, onClose, zoomed, onToggleZoom }: { ticket: Ticke
   return (
     <div className="detail-head">
       <div className="view-header detail-titlebar">
+        <PaneGrip paneId={paneId} ticketKey={k} title={ticket.title} />
         <span className="detail-key selectable">{k}</span>
         <StatusPill status={ticket.status} />
         <ModelBadge model={ticket.model} driver={ticket.driver} />
@@ -169,6 +222,7 @@ function DetailHeader({ ticket, onClose, zoomed, onToggleZoom }: { ticket: Ticke
                 </button>
               )}
               <hr />
+              <MovePaneItems paneId={paneId} onDone={close} />
               <button className="danger" onClick={() => (close(), void remove())}>
                 <Icon name="trash" /> Delete ticket
               </button>
