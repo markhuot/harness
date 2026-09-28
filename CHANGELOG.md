@@ -11,6 +11,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- The Changes tab has a button at the left of its toolbar that hides and shows the file list, so
+  the diffs can use the full width. Harness remembers your choice, so the file list stays the
+  way you left it when you reload or move to another ticket. In a narrow pane the same button
+  still opens the file list over the diffs.
 - Projects can have a color. Pick one of eleven presets (or Custom for any color you like) in
   project settings, and the project's key badge takes that color in the sidebar, on cards, in
   the board header and on tickets. On the Mac, Custom opens the system color panel. On iPhone it
