@@ -7,10 +7,11 @@
 //
 //   bun run build && bun scripts/terminal-pane-check.ts [--shots=<dir>]
 //   bun run package && bun scripts/terminal-pane-check.ts --packaged   # out/Harness-darwin-<arch>/Harness.app
-import { mkdtempSync, realpathSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { realpathSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
+import { tempDir } from "@harness/shared/testing";
+import { api as makeApi, appDir, checker, launchApp, stopped, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const port = 7700 + Math.floor(Math.random() * 90);
@@ -40,7 +41,8 @@ const alive = (pid: number) => {
 };
 
 // A real folder, so `pwd` proves the shell started in the project (a missing one falls back to home).
-const projectDir = realpathSync(mkdtempSync(join(tmpdir(), "harness-termproj-")));
+// Removed at the end, or by tempDir's exit listener if the script dies first.
+const projectDir = realpathSync(tempDir("harness-termproj-"));
 const project = await api<{ id: string; name: string }>("POST", "/projects", { path: projectDir, key: "TRM", name: "Termproj" });
 const app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "terminal" }, packaged: process.argv.includes("--packaged") });
 const { js, cdp, go, screenshot } = app;
@@ -265,8 +267,10 @@ try {
 } catch (e) {
   check("run", false, (e as Error).message);
 } finally {
-  app.close();
+  await app.close();
   mock.kill();
+  await stopped(mock);
+  rmSync(projectDir, { recursive: true, force: true });
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all terminal pane checks passed");
 process.exit(counter.failures ? 1 : 0);

@@ -414,7 +414,16 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
  * windows can mint the same pane id before either sees the other's write, but never the same UUID).
  */
 export function newTerminalContent(cwd: string, uuid: () => string = () => crypto.randomUUID()): TerminalContent {
-  return { kind: "terminal", sessionId: `t:${uuid()}`, cwd };
+  return { kind: "terminal", sessionId: `${TERMINAL_SESSION_PREFIX}${uuid()}`, cwd };
+}
+
+/** Every terminal pane's session id starts with this; shells with other ids aren't a pane's to clean up. */
+export const TERMINAL_SESSION_PREFIX = "t:";
+
+/** Of the shells the main process has, the ones a pane made that no scope shows any more (left over from before a reload). */
+export function orphanSessions(running: readonly string[], store: PaneStore): string[] {
+  const open = terminalSessions(store);
+  return running.filter((id) => id.startsWith(TERMINAL_SESSION_PREFIX) && !open.has(id));
 }
 
 /**

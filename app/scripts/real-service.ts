@@ -4,10 +4,10 @@
 // worktree ticket for the git plugin's Changes tab and a /agents ticket for the Agents tab.
 //
 //   bun run build && bun scripts/real-service.ts [screenshotDir] [--theme=dark]
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 import { checkChangesTab } from "./lib/changes-check";
 import { checkAgentsTab } from "./lib/agents-check";
@@ -16,8 +16,8 @@ const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) 
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
 mkdirSync(shots, { recursive: true });
 
-const home = mkdtempSync(join(tmpdir(), "harness-real-home-"));
-const projectDir = mkdtempSync(join(tmpdir(), "harness-real-project-"));
+const home = tempDir("harness-real-home-");
+const projectDir = tempDir("harness-real-project-");
 const port = 7800 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
 const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
@@ -29,7 +29,6 @@ const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
-let changesRepo: string | null = null;
 const shot = async (name: string) => {
   await Bun.sleep(350); // let fade-in animations settle
   await app!.screenshot(join(shots, `${name}-${theme}.png`));
@@ -122,7 +121,7 @@ try {
   check("agent's browser tools ran", transcript.some((e) => e.content.type === "tool_call" && e.content.name.includes("browser_open")));
 
   // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
-  changesRepo = (await checkChangesTab({ api, app, check, shot })).repo;
+  await checkChangesTab({ api, app, check, shot });
 
   // --- 7. Sub-agents: a /agents ticket's Agents tab, a sub-agent's transcript, the transcript links.
   await checkAgentsTab({ api, app, check, shot, project });
@@ -135,12 +134,12 @@ try {
   console.error("✗", (e as Error).message);
   if (app) await shot("failure").catch(() => {});
 } finally {
-  app?.close();
+  await app?.close();
   daemon.kill();
   await daemon.exited;
-  rmSync(home, { recursive: true, force: true });
-  rmSync(projectDir, { recursive: true, force: true });
-  if (changesRepo) rmSync(changesRepo, { recursive: true, force: true });
+  // HARNESS_HOME, the project and the seeded repo, now that nothing writes into them (and
+  // tempDir's exit listener covers a crash).
+  await cleanupTempDirs();
 }
 console.log(c.failures ? `${c.failures} check(s) failed` : "all checks passed");
 process.exit(c.failures ? 1 : 0);

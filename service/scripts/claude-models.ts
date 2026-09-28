@@ -3,10 +3,8 @@
 //   bun service/scripts/claude-models.ts                  # list models
 //   bun service/scripts/claude-models.ts --resume-check   # also: haiku run, then --resume with --model sonnet
 //                                                          # (spends a few haiku/sonnet tokens)
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Settings } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { cleanClaudeEnv, ClaudeCodeDriver, resolveClaudeBin } from "../src/drivers/claude-code";
 import { ModelListError } from "../src/drivers/types";
 
@@ -23,7 +21,7 @@ try {
 }
 
 if (process.argv.includes("--resume-check")) {
-  const cwd = mkdtempSync(join(tmpdir(), "harness-resume-"));
+  const cwd = tempDir("harness-resume-") // removed at exit;
   const env = cleanClaudeEnv(process.env);
   const run = async (model: string, prompt: string, resume?: string) => {
     const args = ["-p", "--output-format", "stream-json", "--verbose", "--model", model, ...(resume ? ["--resume", resume] : [])];

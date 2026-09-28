@@ -1,0 +1,3 @@
+[test]
+# Removes the temp dirs tests make with tempDir() from @harness/shared/testing.
+preload = ["../../shared/src/testing/preload.ts"]

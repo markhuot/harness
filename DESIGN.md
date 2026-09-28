@@ -1060,7 +1060,8 @@ Settings, project settings, or on the board route the pane workspace.
   re-read on `storage`) and kills every session that's in no scope any more (`closedSessions`).
   That covers closing the pane, removing a project and a close in another window, while moving a
   pane (even to another board) kills nothing. At startup it re-reads the stored panes and kills
-  the sessions none of them show (`list()`), which are left over from a renderer reload. Shells
+  the pane sessions (`t:` ids) none of them show (`orphanSessions` over `list()`), which are left
+  over from a renderer reload. Sessions with other ids aren't a pane's, so they're left alone. Shells
   don't outlive the app, so after a relaunch a stored terminal pane starts a new shell in its
   folder. `scripts/terminal-pane-check.ts [--packaged]` drives all of this in the real app over
   CDP, with real key events.

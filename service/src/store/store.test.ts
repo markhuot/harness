@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { MIGRATIONS, migrate, openDb, SCHEMA_VERSION } from "../db";
 import type { ExternalRef } from "@harness/shared";
 import { Store } from "./index";
 import { insideGitCheckout } from "./projects";
+import { tempDir } from "@harness/shared/testing";
 
 const mk = () => new Store(openDb(":memory:"));
 
@@ -33,7 +33,7 @@ const ext = (key: string): ExternalRef => ({ source: "jira", key, url: null, raw
 
 describe("db", () => {
   test("migrations set user_version and are idempotent; WAL on file dbs", () => {
-    const dir = mkdtempSync(join(tmpdir(), "harness-db-"));
+    const dir = tempDir("harness-db-");
     const db = openDb(join(dir, "h.db"));
     expect((db.query("PRAGMA user_version").get() as any).user_version).toBe(SCHEMA_VERSION);
     expect((db.query("PRAGMA journal_mode").get() as any).journal_mode).toBe("wal");
@@ -41,6 +41,7 @@ describe("db", () => {
     db.close();
     const again = openDb(join(dir, "h.db"));
     expect((again.query("PRAGMA user_version").get() as any).user_version).toBe(SCHEMA_VERSION);
+    again.close();
   });
 
   test("migration 7 turns autoComplete on for projects that already exist", () => {
@@ -139,11 +140,11 @@ describe("projects", () => {
   });
 
   test("isGit: true in a repo and below its root (a .git dir or a worktree's .git file), false elsewhere", () => {
-    const plain = mkdtempSync(join(tmpdir(), "harness-nogit-"));
-    const repo = mkdtempSync(join(tmpdir(), "harness-git-"));
+    const plain = tempDir("harness-nogit-");
+    const repo = tempDir("harness-git-");
     mkdirSync(join(repo, ".git"));
     mkdirSync(join(repo, "packages", "app"), { recursive: true });
-    const worktree = mkdtempSync(join(tmpdir(), "harness-wt-"));
+    const worktree = tempDir("harness-wt-");
     writeFileSync(join(worktree, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
     expect([plain, repo, join(repo, "packages", "app"), worktree].map(insideGitCheckout)).toEqual([false, true, true, true]);
     const s = mk();

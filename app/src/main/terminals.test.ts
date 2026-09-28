@@ -1,7 +1,7 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { ensureSpawnHelperExecutable } from "./pty";
 import { loginShell, parseEnsureOptions, resolveCwd, Scrollback, shellEnv, TerminalError, TerminalManager, type Pty, type SpawnOptions } from "./terminals";
 import type { TerminalExit } from "./types";
@@ -347,8 +347,7 @@ const electronBin = (() => {
 })();
 
 describe.skipIf(!electronBin)("real pty (Electron's Node)", () => {
-  const dir = mkdtempSync(join(tmpdir(), "harness-pty-test-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = tempDir("harness-pty-test-");
 
   test("spawns a login shell, echoes input, replays scrollback and reports the exit code", async () => {
     const driver = join(dir, "driver.ts");
@@ -397,15 +396,11 @@ setTimeout(() => { console.log("timeout " + JSON.stringify(out)); process.exit(1
 
 describe("ensureSpawnHelperExecutable", () => {
   test("adds the executable bit node-pty's tarball leaves off", () => {
-    const dir = mkdtempSync(join(tmpdir(), "harness-pty-helper-"));
-    try {
-      mkdirSync(join(dir, "prebuilds/darwin-arm64"), { recursive: true });
-      const helper = join(dir, "prebuilds/darwin-arm64/spawn-helper");
-      writeFileSync(helper, "", { mode: 0o644 });
-      ensureSpawnHelperExecutable(dir, "darwin", "arm64");
-      expect(statSync(helper).mode & 0o777).toBe(0o755);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = tempDir("harness-pty-helper-");
+    mkdirSync(join(dir, "prebuilds/darwin-arm64"), { recursive: true });
+    const helper = join(dir, "prebuilds/darwin-arm64/spawn-helper");
+    writeFileSync(helper, "", { mode: 0o644 });
+    ensureSpawnHelperExecutable(dir, "darwin", "arm64");
+    expect(statSync(helper).mode & 0o777).toBe(0o755);
   });
 });

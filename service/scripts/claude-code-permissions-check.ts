@@ -6,10 +6,10 @@
 //      permission prompt reaching the harness
 //   2. auto on haiku: the CLI downgrades to "default" and the driver emits the downgrade notice
 //   3. read_only (dontAsk): reads work, a write is denied without a prompt, nothing is written
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionMode, Settings } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { handleMcpRequest } from "../src/api/mcp";
 import { ClaudeCodeDriver } from "../src/drivers/claude-code";
 import type { DriverEvent, RunRequest } from "../src/drivers/types";
@@ -25,7 +25,7 @@ const check = (ok: boolean, what: string) => {
 };
 
 async function run(model: string, mode: PermissionMode, prompt: string) {
-  const cwd = mkdtempSync(join(tmpdir(), "harness-cc-perm-"));
+  const cwd = tempDir("harness-cc-perm-") // removed at exit;
   writeFileSync(join(cwd, "README.md"), "# demo\n");
   const prompts: string[] = [];
   const ops = fakeOps({

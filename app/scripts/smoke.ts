@@ -1290,7 +1290,7 @@ try {
   fail();
   console.error("✗", (e as Error).message);
 } finally {
-  app?.close();
+  await app?.close();
   mock.kill();
   mock2?.kill();
 }

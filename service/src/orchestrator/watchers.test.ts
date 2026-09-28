@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Watcher } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import {
   findKeys,
   loginShell,
@@ -604,7 +604,7 @@ describe("WatcherRunner sync", () => {
 // ---------------------------------------------------------------------------
 
 describe("WatcherRunner with Bun.spawn", () => {
-  const dir = mkdtempSync(join(tmpdir(), "harness-watchers-"));
+  const dir = tempDir("harness-watchers-");
   const script = join(dir, "emit.ts");
   writeFileSync(
     script,

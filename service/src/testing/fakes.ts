@@ -1,9 +1,7 @@
 // Test doubles shared by service tests. Not imported by production code.
 
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { BrowserState, DriverInfo, ModelInfo } from "@harness/shared";
+import { onTempCleanup, tempDir } from "@harness/shared/testing";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
 import { outputKey, watcherProject } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
@@ -13,8 +11,9 @@ import { Store } from "../store";
 import { EventBus } from "../events";
 import { Orchestrator, type OrchestratorOptions } from "../orchestrator/orchestrator";
 
+/** A temp HARNESS_HOME, removed after the test file by the bun test preload (see bunfig.toml). */
 export function tempHome(prefix = "harness-test-") {
-  return mkdtempSync(join(tmpdir(), prefix));
+  return tempDir(prefix);
 }
 
 export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<string, { onFrame: Function; onState: Function }> } {
@@ -277,7 +276,10 @@ export class FakeDriver implements Driver {
   }
 }
 
-/** Build an orchestrator on an in-memory DB with a temp HARNESS_HOME. */
+/**
+ * Build an orchestrator on an in-memory DB (or `dbPath`) with a temp HARNESS_HOME. It's stopped,
+ * and a DB it opened closed, before the temp dirs are removed.
+ */
 export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?: FakeDriver; dbPath?: string } = {}) {
   const home = opts.paths?.home ?? tempHome();
   const paths = ensureHome(home);
@@ -304,5 +306,9 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
   });
   store.settings.set({ defaultDriver: driver.id });
+  onTempCleanup(async () => {
+    await orch.stop();
+    if (!opts.store) store.db.close();
+  });
   return { orch, store, bus, driver, browser, paths, home };
 }

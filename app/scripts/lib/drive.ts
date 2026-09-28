@@ -1,8 +1,8 @@
 // Helpers for driving the built Electron app over the Chrome DevTools Protocol (smoke.ts,
 // real-service.ts). No test framework: small checks that print ✓/✗.
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 
 export const appDir = resolve(import.meta.dir, "..", "..");
 
@@ -47,6 +47,17 @@ export async function waitHealthy(base: string, ms = 10000) {
   await until(`${base}/health`, async () => (await fetch(base + "/health")).ok, ms);
 }
 
+/**
+ * Wait for a process that was sent SIGTERM to exit, escalating to SIGKILL. Removing a profile dir
+ * while Electron is still shutting down would race its final writes and leave files behind.
+ */
+export async function stopped(proc: { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void }, ms = 5000): Promise<void> {
+  const timedOut = await Promise.race([proc.exited.then(() => false), Bun.sleep(ms).then(() => true)]);
+  if (!timedOut) return;
+  proc.kill("SIGKILL");
+  await proc.exited;
+}
+
 /** Launch the built app (dist/, or with `packaged` the app `bun run package` made) against a service and attach over CDP. */
 export async function launchApp(opts: { baseUrl: string; token: string; theme?: "light" | "dark"; env?: Record<string, string>; packaged?: boolean }) {
   const cdpPort = 9300 + Math.floor(Math.random() * 600);
@@ -56,12 +67,15 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
   // Keep rendering (transitions, rAF, timers) while the window is behind others or on another
   // Space: an occluded window otherwise freezes CSS transitions and the checks that wait on them.
   const keepRendering = ["--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"];
+  // Electron's profile (GPUCache, Local Storage, …). close() removes it once Electron has exited;
+  // tempDir's exit listener is the backstop for a script that never gets to close().
+  const userData = tempDir("harness-drive-");
   const proc = Bun.spawn([bin, ...(opts.packaged ? [] : [appDir]), `--remote-debugging-port=${cdpPort}`, ...keepRendering], {
     env: {
       ...process.env,
       HARNESS_URL: opts.baseUrl,
       HARNESS_TOKEN: opts.token,
-      HARNESS_USER_DATA: mkdtempSync(join(tmpdir(), "harness-drive-")),
+      HARNESS_USER_DATA: userData,
       HARNESS_DEBUG: "1",
       ...(opts.theme ? { HARNESS_THEME: opts.theme } : {}),
       ...opts.env,
@@ -70,16 +84,25 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
     stderr: "ignore",
   });
 
-  const target = await until(
-    "devtools target",
-    async () => {
-      const list = (await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
-      return list.find((t) => t.type === "page" && t.url.startsWith("file://"));
-    },
-    15000,
-  );
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((r) => (ws.onopen = r));
+  let ws: WebSocket;
+  try {
+    const target = await until(
+      "devtools target",
+      async () => {
+        const list = (await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[];
+        return list.find((t) => t.type === "page" && t.url.startsWith("file://"));
+      },
+      15000,
+    );
+    ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r) => (ws.onopen = r));
+  } catch (e) {
+    // The caller never gets a close() for an app that didn't attach, so stop it here.
+    proc.kill();
+    await stopped(proc);
+    rmSync(userData, { recursive: true, force: true });
+    throw e;
+  }
   let id = 0;
   const pending = new Map<number, (v: any) => void>();
   const listeners = new Set<(method: string, params: any) => void>();
@@ -125,11 +148,14 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
     writeFileSync(file, Buffer.from(r.result.data, "base64"));
     console.log(`  📸 ${file}`);
   };
-  const close = () => {
+  /** Quit Electron, wait for it to exit (SIGKILL after 5 s), then remove its profile dir. */
+  const close = async () => {
     try {
       ws.close();
     } catch {}
     proc.kill();
+    await stopped(proc);
+    rmSync(userData, { recursive: true, force: true });
   };
   /** Evaluate in a child frame's own target (plugin iframes are out-of-process: a separate CDP target). */
   const frame = async (urlPart: string) => {

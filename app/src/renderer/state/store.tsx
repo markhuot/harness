@@ -30,11 +30,11 @@ import {
   getPaneStore,
   newTerminalContent,
   openTerminal as openTerminalPane,
+  orphanSessions,
   openTicket,
   pruneTickets,
   reloadPanes,
   retainPaneScopes,
-  terminalSessions,
   updateAllPanes,
   updatePanes,
   usePanes,
@@ -93,7 +93,8 @@ export function useStore(): Store {
 /**
  * Keep the shells in the main process in step with the terminal panes: when a change (closing a
  * pane, removing a project, another window's edit) leaves a session in no scope, its shell is
- * killed. At startup, shells no stored pane shows (left over from before a reload) are killed too.
+ * killed. At startup, pane shells no stored pane shows (left over from before a reload) are killed
+ * too. Only pane session ids (`t:<uuid>`) count: a shell something else made isn't ours to kill.
  * Every window does this against the same stored panes, so a second kill of a session is a no-op.
  */
 function useTerminalLifecycle() {
@@ -109,8 +110,7 @@ function useTerminalLifecycle() {
         if (!live) return;
         // Re-read first: another window may have stored a terminal this one hasn't heard about yet.
         reloadPanes();
-        const open = terminalSessions(getPaneStore());
-        for (const id of ids) if (!open.has(id)) kill(id);
+        orphanSessions(ids, getPaneStore()).forEach(kill);
       })
       .catch(() => {});
     return () => {

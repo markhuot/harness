@@ -26,6 +26,7 @@ import {
   movePane,
   newTerminalContent,
   normalize,
+  orphanSessions,
   openTerminal,
   openTicket,
   paneLabel,
@@ -1137,6 +1138,12 @@ describe("closedSessions (which shells to kill)", () => {
     expect(closedSessions(before, forgetProject(before, "p1", "P")).sort()).toEqual(["t:1", "t:2"]);
     expect(closedSessions(before, retainScopes(before, (s) => s !== "p1")).sort()).toEqual(["t:1", "t:2"]);
   });
+});
+
+test("orphanSessions: pane shells no scope shows, never a shell with another kind of id", () => {
+  const store: PaneStore = { scopes: { a: normalize(st(row("r", [B, TT("t:open")]))) } };
+  expect(orphanSessions(["t:open", "t:gone", "t1", "debug"], store)).toEqual(["t:gone"]);
+  expect(orphanSessions([], store)).toEqual([]);
 });
 
 describe("paneLabel / cwdName", () => {

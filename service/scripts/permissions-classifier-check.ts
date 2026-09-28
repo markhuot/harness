@@ -1,14 +1,12 @@
 // One-off REAL check of the claude-cli auto-mode classifier (not part of `bun test`).
 // Uses your Claude login and the rules from `claude auto-mode config`. Run from a clean env:
 //   env -i HOME=$HOME PATH=$PATH USER=$USER bun service/scripts/permissions-classifier-check.ts
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
 import { cleanClaudeEnv, resolveClaudeBin } from "../src/drivers/claude-code";
 import { ClaudeCliClassifier, type ClassifierRequest, type ClassifierVerdict } from "../src/permissions/classifier";
 import { AutoModeRulesProvider } from "../src/permissions/rules";
 
-const cwd = mkdtempSync(join(tmpdir(), "harness-cls-check-"));
+const cwd = tempDir("harness-cls-check-") // removed at exit;
 const env = () => cleanClaudeEnv(process.env);
 const bin = resolveClaudeBin(process.env);
 const rules = new AutoModeRulesProvider({ bin: () => bin, env });

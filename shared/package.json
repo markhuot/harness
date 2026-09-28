@@ -12,6 +12,7 @@
     ".": "./src/index.ts",
     "./state": "./src/state/index.ts",
     "./themes": "./src/themes/index.ts",
-    "./themes/types": "./src/themes/types.ts"
+    "./themes/types": "./src/themes/types.ts",
+    "./testing": "./src/testing/tmp.ts"
   }
 }
