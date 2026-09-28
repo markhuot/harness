@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { accelerator, chordMatches, COMMANDS, commandAccelerator, commandKeys, formatChord, isGlobalChord, matchCommands, type KeyContext, type KeyEventLike } from "./keys";
+import { accelerator, chordMatches, COMMANDS, commandAccelerator, commandKeys, formatChord, isAppChord, isGlobalChord, matchCommands, type KeyContext, type KeyEventLike } from "./keys";
 
 const ev = (code: string, mods: Partial<Omit<KeyEventLike, "code">> = {}): KeyEventLike => ({ code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods });
 const free: KeyContext = { inText: false, inCapture: false, overlay: false, onControl: false };
@@ -115,5 +115,19 @@ describe("accelerator", () => {
   test("keys without ⌘ are the renderer's, never the menu's", () => {
     expect(accelerator({ code: "KeyH", ctrl: true })).toBeNull();
     expect(commandAccelerator("board.down")).toBeUndefined();
+  });
+});
+
+describe("isAppChord (what the browser canvas keeps from its page)", () => {
+  test("the app's ⌘ chords, whatever scope they act in", () => {
+    expect(isAppChord(ev("BracketRight", { metaKey: true, shiftKey: true }))).toBe(true);
+    expect(isAppChord(ev("KeyK", { metaKey: true }))).toBe(true);
+    expect(isAppChord(ev("ArrowLeft", { metaKey: true, altKey: true }))).toBe(true);
+  });
+  test("not the page's own keys: plain letters, ⌃ keys, or ⌘ keys the app doesn't use", () => {
+    expect(isAppChord(ev("KeyJ"))).toBe(false);
+    expect(isAppChord(ev("KeyH", { ctrlKey: true }))).toBe(false);
+    expect(isAppChord(ev("KeyL", { metaKey: true }))).toBe(false); // ⌘L is the page's (or nobody's)
+    expect(isAppChord(ev("ArrowLeft", { metaKey: true }))).toBe(false); // ⌘← is line start in the page
   });
 });

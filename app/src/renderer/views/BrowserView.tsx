@@ -6,6 +6,7 @@ import type { BrowserInput, BrowserState } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
+import { isAppChord } from "../state/keys";
 import "./browser.css";
 
 function modifiersOf(e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
@@ -287,6 +288,8 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     const k = e.key.toLowerCase();
     // ⌘V is delivered as a paste event (with the clipboard text) instead of a key press.
     if (e.metaKey && k === "v") return;
+    // The app's own ⌘ chords (⇧⌘] next tab, ⌥⌘← another pane, ⌘K, ⌘W…) never reach the page.
+    if (isAppChord(e)) return;
     const modifiers = modifiersOf(e);
     const input: BrowserInput = { type: "key", action, key: e.key, code: e.code, modifiers };
     if (action === "down" && e.key.length === 1 && !e.ctrlKey && !e.metaKey) input.text = e.key;

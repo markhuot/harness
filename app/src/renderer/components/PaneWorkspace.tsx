@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {
   applyDrop,
+  boardLeaf,
   dropPreview,
   dropTargetAt,
   focusPane,
@@ -90,6 +91,8 @@ export function PaneWorkspace({ scope }: { scope: string }) {
   }, []);
   const layout = useMemo(() => layoutPanes(panes, area ?? undefined), [panes, area]);
   const multi = panes.root.type === "split";
+  // The pane the keyboard acts on: the focused one, or the board before anything was focused.
+  const activeId = panes.focusedId ?? boardLeaf(panes.root)?.id;
   // DOM order by id, not tree order: existing panes never move in the DOM (moving an iframe
   // reloads it), new ones are simply added.
   const boxes = useMemo(() => [...layout.leaves].sort((a, b) => a.leaf.id.localeCompare(b.leaf.id, undefined, { numeric: true })), [layout]);
@@ -121,7 +124,7 @@ export function PaneWorkspace({ scope }: { scope: string }) {
           rect={rect}
           hidden={hidden}
           focused={multi && leaf.id === panes.focusedId}
-          active={leaf.id === panes.focusedId}
+          active={leaf.id === activeId}
           corner={leaf.id === layout.cornerId}
           zoomed={leaf.id === panes.zoomedId}
         />

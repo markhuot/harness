@@ -242,3 +242,9 @@ export function commandKeys(id: string): string[] {
   const keys = COMMAND_BY_ID.get(id)?.keys ?? [];
   return [...keys.filter(isGlobalChord), ...keys.filter((c) => !isGlobalChord(c))].map(formatChord);
 }
+
+/**
+ * Whether `e` is one of the app's ⌘ chords (in any scope). Surfaces that forward keys elsewhere
+ * (the browser canvas, to its page) keep these for the app.
+ */
+export const isAppChord = (e: KeyEventLike): boolean => COMMANDS.some((c) => c.keys.some((ch) => isGlobalChord(ch) && chordMatches(ch, e)));
