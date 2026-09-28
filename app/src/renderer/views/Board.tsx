@@ -10,6 +10,7 @@ import {
   dependencyStates,
   dimOnBoard,
   doneCount,
+  hasCustomDriver,
   hideOnBoard,
   isChild,
   isReady,
@@ -383,7 +384,7 @@ const TicketCard = memo(function TicketCard({
 
       <div className="card-foot">
         {showProject && project && <span className="project-key sm">{project.key.slice(0, 3)}</span>}
-        <DriverBadge driver={t.driver} />
+        {hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
         <ModelBadge model={t.model} driver={t.driver} />
         <KindBadge ticket={t} />
         <div className="grow" />
@@ -404,7 +405,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   const s1 = a.state;
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
-  if (s1.projects !== s2.projects) return false;
+  if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
   if (s1.keyAliases !== s2.keyAliases || s1.missingKeys !== s2.missingKeys) return false;
   // Deps, children and the parent live in the tickets map.
   if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;

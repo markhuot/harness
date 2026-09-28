@@ -5,7 +5,7 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
-import { childrenOf, dependencyStates, dimOnBoard, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
+import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, isReady, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO, RADIUS } from "../theme/tokens";
 import { Badge, Chip, DriverBadge, KindBadge, ProjectKey, ReviewMark, Spinner } from "../ui/kit";
@@ -102,7 +102,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
 
       <View style={styles.wrap}>
         {showProject && project && <ProjectKey k={project.key} size="sm" />}
-        {!dim && <DriverBadge driver={t.driver} />}
+        {!dim && hasCustomDriver(state, t) && <DriverBadge driver={t.driver} />}
         <ModelBadge model={t.model} driver={t.driver} />
         <KindBadge ticket={t} />
         <View style={{ flex: 1 }} />
@@ -157,7 +157,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   const s1 = a.state;
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
-  if (s1.projects !== s2.projects) return false;
+  if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
   if ((s1.tickets !== s2.tickets || s1.keyAliases !== s2.keyAliases) && (a.ticket.dependsOn.length || a.ticket.kind === "conductor" || a.ticket.parentId)) return false;
   return true;
 }
