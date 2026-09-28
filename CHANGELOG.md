@@ -18,8 +18,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   need a particular format anymore.
 - Whatever a watcher prints shows up in the Inbox. In interval mode each run becomes one item,
   and in loop mode each burst of output does. Blank output is skipped, output the watcher
-  already printed isn't triaged twice, and output over 16,000 characters is cut off with a note. Each item
-  is titled with its first line until triage gives it a better title.
+  already printed isn't triaged twice, and output over 16,000 characters is cut off with a
+  note. Each item is titled with its first line until triage gives it a better title.
 - When one piece of output covers several tickets (like a batch of Jira issues), triage can
   dispatch each of them. When the output is about a ticket you already have, the update goes
   to that ticket as a message.
