@@ -58,8 +58,8 @@ const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
-async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
-  const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env, stdout: "pipe", stderr: "pipe" });
+async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean; env?: Record<string, string> } = {}) {
+  const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env: { ...env, ...opts.env }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   if (code !== 0 && !opts.allowFail) throw new Error(`${cmd.join(" ")} → ${code}\n${err || out}`);
   return out.trim();
@@ -158,6 +158,10 @@ async function git(cwd: string, ...a: string[]) {
 }
 
 // ---------------------------------------------------------------- simulator
+/** Whether the app process is alive; a screenshot of a crashed app is just the home screen. */
+async function running(udid: string): Promise<boolean> {
+  return (await sh(["xcrun", "simctl", "spawn", udid, "launchctl", "list"], { allowFail: true })).includes("com.markhuot.harness");
+}
 async function pickDevice(): Promise<string> {
   if (opt("udid")) return opt("udid")!;
   const list = JSON.parse(await simctl("list", "devices", "available", "--json")) as { devices: Record<string, { udid: string; name: string; state: string }[]> };
@@ -840,6 +844,14 @@ try {
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
   if (!flag("no-build") || !existsSync(appPath)) {
+    // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
+    // module, so regenerate it whenever it doesn't link every native dependency.
+    if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {
+      console.log("syncing ios/ (expo prebuild, pod install)…");
+      await sh(["bunx", "expo", "prebuild", "--platform", "ios", "--no-install"], { env: { EXPO_NO_GIT_STATUS: "1" } });
+      await sh([join(here, "Tools", "pod.sh"), "install"], { cwd: join(here, "ios") });
+      await sh(["bun", "Tools/nativeDeps.ts", "check"]);
+    }
     console.log("building Release (simulator)…");
     await sh(["xcodebuild", "-workspace", "ios/Harness.xcworkspace", "-scheme", "Harness", "-configuration", "Release", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "-derivedDataPath", "build/dd", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build"]);
   }
@@ -927,7 +939,11 @@ try {
         await Bun.sleep(wait ?? 2200);
         const file = join(shots, `${name}-${theme}.png`);
         await simctl("io", udid, "screenshot", file);
-        console.log(`  ${file}`);
+        if (await running(udid)) console.log(`  ${file}`);
+        else {
+          console.log(`✗ ${name} (${theme}): the app crashed opening ${url}`);
+          failed = true;
+        }
       }
     }
     await simctl("ui", udid, "appearance", "light");
@@ -950,6 +966,26 @@ try {
         if (url) await openUrl(udid, url);
         await Bun.sleep(2000);
       };
+      await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
+        await fresh("");
+        const card = (l: string) => l.startsWith(`${seeded.hello.key} `);
+        // The card is in the tree before its column scrolls in (x≈416, off the right edge).
+        await until("card on screen", async () => {
+          await tapWhere(udid, (l) => l.startsWith("Review,"));
+          await Bun.sleep(600);
+          return ((await findElement(udid, card))?.frame.x ?? 999) < 100;
+        }, 15000);
+        await tapWhere(udid, card);
+        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes("Approve"), 8000).catch(async (e) => {
+          throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
+        });
+        await simctl("io", udid, "screenshot", join(shots, "card-tap-detail-light.png"));
+        // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
+        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+        await until("back on the board", async () => ((l) => l.some(card) && !l.includes("Approve"))(await labels(udid)), 8000);
+        await simctl("io", udid, "screenshot", join(shots, "card-tap-back-light.png"));
+        return `${seeded.hello.key} → detail → board`;
+      });
       await check("approval card: Allow once resumes the agent", async () => {
         await fresh(`harness://ticket/${k(seeded.approval)}`);
         await tapWhere(udid, "Allow once");
