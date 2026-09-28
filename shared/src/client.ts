@@ -13,6 +13,7 @@ import type {
   ReopenBody,
   ApprovalBody,
   Project,
+  Subagent,
   PublicSettings,
   ServerMessage,
   Session,
@@ -169,8 +170,13 @@ export class HarnessClient {
   getSession(id: string) {
     return this.request<Session>("GET", `/sessions/${id}`);
   }
-  transcript(sessionId: string, afterSeq = 0) {
-    return this.request<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=${afterSeq}`);
+  /** The session agent's transcript, or one sub-agent's with `subagentId` */
+  transcript(sessionId: string, afterSeq = 0, subagentId?: string | null) {
+    const sub = subagentId ? `&subagent=${encodeURIComponent(subagentId)}` : "";
+    return this.request<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=${afterSeq}${sub}`);
+  }
+  subagents(sessionId: string) {
+    return this.request<Subagent[]>("GET", `/sessions/${sessionId}/subagents`);
   }
 
   // Watchers

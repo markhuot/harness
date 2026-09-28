@@ -1,7 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { childrenOf, COMPOSER_PLACEHOLDER, composerHint, depChipTitle, dependencyStates, hasCustomDriver, isReady, parsePluginTab, pluginTabRoute, TAB_LABEL, ticketByKey, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import {
+  childrenOf,
+  COMPOSER_PLACEHOLDER,
+  composerHint,
+  depChipTitle,
+  dependencyStates,
+  effectiveTab,
+  hasCustomDriver,
+  isReady,
+  parsePluginTab,
+  parseSubagentTab,
+  pluginTabRoute,
+  showsAgentsTab,
+  subagentsOf,
+  subagentTabRoute,
+  TAB_LABEL,
+  tabStripTab,
+  ticketByKey,
+  TICKET_TABS,
+  type TicketTab,
+} from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
@@ -12,6 +32,7 @@ import { TicketDetails } from "./TicketDetails";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
+import { AgentsTab, SubagentView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
@@ -76,21 +97,28 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
 
   const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
+  const subagents = subagentsOf(state, ticket.sessionId);
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
-  // Likewise the conductor-only Tickets tab on a plain ticket.
-  const tab: TicketTab = (wantPlugin && !activePlugin && pluginTabs) || (paneTab === "children" && ticket.kind !== "conductor") ? "summaries" : paneTab;
+  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
+  const tab = effectiveTab(paneTab, { conductor: ticket.kind === "conductor", pluginTabs, subagents });
+  const openAgent = parseSubagentTab(tab);
+  const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes((s) => setPaneTab(s, paneId, t));
+  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
+  const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
 
   return (
     <aside className="detail">
       <DetailHeader paneId={paneId} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs">
-        {TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => (
-          <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
+        {TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
+          <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t}>
             {TAB_LABEL[t]}
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
+            {t === "agents" && (subagents?.length ?? 0) > 0 && <span className="count">{subagents!.length}</span>}
+            {t === "agents" && agentsRunning && <span className="live-dot" title="A sub-agent is running" />}
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
@@ -107,7 +135,9 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
       <div className="detail-body">
         {tab === "summaries" && <Summaries ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
-        {tab === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
+        {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+        {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
         {tab === "details" && <TicketDetails ticket={ticket} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}

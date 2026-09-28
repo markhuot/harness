@@ -2,10 +2,27 @@
 // streaming delta of the current run, tool calls paired with their results as collapsible rows,
 // and permission audit rows. Sticks to the bottom while you're there.
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type ReactElement } from "react";
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { PermissionDecisionLog, ToolResultContent, TranscriptEntry } from "@harness/shared";
-import { decisionSource, formatMaybeJson, groupTranscript, liveDelta, permissionVerb, shortToolName, toolIcon, toolPreview, type ToolCallEntry, type ToolResultEntry, type TranscriptItem } from "@harness/shared/state";
+import type { PermissionDecisionLog, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
+import {
+  decisionSource,
+  formatMaybeJson,
+  groupTranscript,
+  liveDelta,
+  permissionVerb,
+  shortToolName,
+  SUBAGENT_STATUS_LABEL,
+  subagentById,
+  subagentsOf,
+  subagentTitle,
+  toolIcon,
+  toolPreview,
+  transcriptKey,
+  type ToolCallEntry,
+  type ToolResultEntry,
+  type TranscriptItem,
+} from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useStore } from "../state/store";
 import { MONO, RADIUS } from "../theme/tokens";
@@ -18,32 +35,54 @@ const timeOf = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "nume
 
 type Row = TranscriptItem | { kind: "delta"; runId: string; text: string } | { kind: "working" };
 
-export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyHint?: string }) {
+/**
+ * A session's conversation, or with `subagentId` one of its sub-agents'. `onOpenSubagent` turns
+ * the tool rows that started sub-agents into links to their transcripts.
+ */
+export function Transcript({
+  sessionId,
+  subagentId = null,
+  emptyHint,
+  header,
+  onOpenSubagent,
+}: {
+  sessionId: string;
+  subagentId?: string | null;
+  emptyHint?: string;
+  /** Rendered above the first entry, scrolling with the transcript */
+  header?: ReactElement | null;
+  onOpenSubagent?: (subagentId: string) => void;
+}) {
   const { state, client, dispatch, epoch } = useStore();
   const c = useColors();
   const [error, setError] = useState<string | null>(null);
-  const transcript = state.transcripts[sessionId];
-  const deltas = liveDelta(state, sessionId);
+  const transcript = state.transcripts[transcriptKey(sessionId, subagentId)];
+  // Sub-agents don't stream; their blocks arrive whole.
+  const deltas = useMemo(() => (subagentId ? [] : liveDelta(state, sessionId)), [subagentId, state, sessionId]);
   const session = state.sessions[sessionId];
+  const working = subagentId ? subagentById(state, sessionId, subagentId)?.status === "running" : !!session?.busy;
+  const subagents = subagentsOf(state, sessionId);
+  const who = subagentId ? "Sub-agent" : "Agent";
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     client
-      .transcript(sessionId, 0)
-      .then((entries) => !cancelled && dispatch({ type: "transcript", sessionId, entries }))
+      .transcript(sessionId, 0, subagentId)
+      .then((entries) => !cancelled && dispatch({ type: "transcript", sessionId, subagentId, entries }))
       .catch((e) => !cancelled && setError((e as Error).message));
     return () => {
       cancelled = true;
     };
-  }, [client, dispatch, sessionId, epoch]);
+  }, [client, dispatch, sessionId, subagentId, epoch]);
 
   const items = useMemo(() => groupTranscript(transcript?.entries ?? []), [transcript?.entries]);
   const rows: Row[] = useMemo(() => {
     const r: Row[] = [...items, ...deltas.map((d) => ({ kind: "delta" as const, ...d }))];
-    if (session?.busy && deltas.length === 0) r.push({ kind: "working" });
+    if (working && deltas.length === 0) r.push({ kind: "working" });
     return r;
-  }, [items, deltas, session?.busy]);
+  }, [items, deltas, working]);
+  const agentFor = (row: Row): Subagent | null => (onOpenSubagent && row.kind === "tool" ? (subagents?.find((a) => a.id === row.call.content.callId) ?? null) : null);
 
   const stick = useStickToBottom<FlatList<Row>>();
   const loading = !transcript?.loaded && !error;
@@ -53,14 +92,19 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
       {...stick}
       data={rows}
       keyExtractor={(r, i) => (r.kind === "tool" ? r.call.id : r.kind === "entry" ? r.entry.id : r.kind === "delta" ? `delta-${r.runId}` : `working-${i}`)}
-      renderItem={({ item }) => <RowView row={item} />}
+      renderItem={({ item }) => <RowView row={item} who={who} agent={agentFor(item)} onOpenAgent={onOpenSubagent} />}
       contentContainerStyle={{ padding: 14, gap: 10, paddingBottom: 24 }}
       keyboardDismissMode="interactive"
       ListHeaderComponent={
-        error ? (
-          <View style={{ flexDirection: "row", gap: 6, padding: 10, borderRadius: 8, backgroundColor: c.redSoft }}>
-            <Icon name="alert" size={14} color={c.red} />
-            <Text style={{ color: c.red, flex: 1 }}>Couldn't load the transcript: {error}</Text>
+        error || header ? (
+          <View style={{ gap: 10 }}>
+            {header}
+            {error ? (
+              <View style={{ flexDirection: "row", gap: 6, padding: 10, borderRadius: 8, backgroundColor: c.redSoft }}>
+                <Icon name="alert" size={14} color={c.red} />
+                <Text style={{ color: c.red, flex: 1 }}>Couldn't load the transcript: {error}</Text>
+              </View>
+            ) : null}
           </View>
         ) : null
       }
@@ -79,10 +123,10 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
   );
 }
 
-function RowView({ row }: { row: Row }) {
+function RowView({ row, who, agent, onOpenAgent }: { row: Row; who: string; agent: Subagent | null; onOpenAgent?: (id: string) => void }) {
   const c = useColors();
-  if (row.kind === "tool") return <ToolRow call={row.call} result={row.result} />;
-  if (row.kind === "entry") return <EntryRow entry={row.entry} />;
+  if (row.kind === "tool") return <ToolRow call={row.call} result={row.result} agent={agent} onOpenAgent={onOpenAgent} />;
+  if (row.kind === "entry") return <EntryRow entry={row.entry} who={who} />;
   if (row.kind === "delta")
     return (
       <View style={{ gap: 4 }}>
@@ -112,7 +156,7 @@ function Who({ icon, label, time }: { icon: "sparkle" | "user"; label: string; t
   );
 }
 
-const EntryRow = memo(function EntryRow({ entry }: { entry: TranscriptEntry }) {
+const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry; who: string }) {
   const c = useColors();
   const ct = entry.content;
   const time = timeOf(entry.createdAt);
@@ -135,7 +179,7 @@ const EntryRow = memo(function EntryRow({ entry }: { entry: TranscriptEntry }) {
         );
       return (
         <View style={{ gap: 4 }}>
-          <Who icon="sparkle" label="Agent" time={time} />
+          <Who icon="sparkle" label={who} time={time} />
           <Markdown text={ct.text} />
         </View>
       );
@@ -210,7 +254,18 @@ export function PermissionRow({ log, time }: { log: PermissionDecisionLog; time?
   );
 }
 
-const ToolRow = memo(function ToolRow({ call, result }: { call: ToolCallEntry | null; result?: ToolResultEntry }) {
+const ToolRow = memo(function ToolRow({
+  call,
+  result,
+  agent = null,
+  onOpenAgent,
+}: {
+  call: ToolCallEntry | null;
+  result?: ToolResultEntry;
+  /** The sub-agent this call started, when it started one */
+  agent?: Subagent | null;
+  onOpenAgent?: (id: string) => void;
+}) {
   const c = useColors();
   const [open, setOpen] = useState(false);
   const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
@@ -227,6 +282,21 @@ const ToolRow = memo(function ToolRow({ call, result }: { call: ToolCallEntry | 
         </Text>
         {!result ? <Spinner /> : isError ? <Icon name="x" size={13} color={c.red} strokeWidth={2.5} /> : <Icon name="check" size={13} color={c.green} strokeWidth={2.5} />}
       </Pressable>
+      {agent && onOpenAgent && (
+        <Pressable
+          onPress={() => onOpenAgent(agent.id)}
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${subagentTitle(agent)}'s transcript`}
+          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: pressed ? c.bgHover : "transparent" })}
+        >
+          <Icon name="bot" size={13} color={c.text2} />
+          <Text style={{ flex: 1, color: c.text2, fontSize: 13 }} numberOfLines={1}>
+            {subagentTitle(agent)} · {SUBAGENT_STATUS_LABEL[agent.status]}
+          </Text>
+          <Text style={{ color: c.accent, fontSize: 13 }}>Transcript</Text>
+          <Icon name="chevronRight" size={12} color={c.accent} />
+        </Pressable>
+      )}
       {open && (
         <View style={{ paddingHorizontal: 10, paddingBottom: 10, gap: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 8 }}>
           {call && (

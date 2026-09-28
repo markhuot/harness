@@ -96,6 +96,42 @@ describe("dummy driver", () => {
     expect(lastState(events)!.state.turns).toBe(5);
   });
 
+  test("/agents 3: two top-level sub-agents, the third nested in the second, each with tagged output", async () => {
+    const { req, ops } = makeReq("work", "/agents 3");
+    const { events, error } = await collect(driver, req);
+    expect(error).toBeNull();
+    const reports = events.filter((e) => e.type === "subagent").map((e) => (e as Extract<DriverEvent, { type: "subagent" }>).subagent);
+    const id = (n: number) => `dummy_agent_run_1_${n}`;
+    expect(reports.map((r) => [r.id, r.status, r.parentId ?? null])).toEqual([
+      [id(1), "running", null],
+      [id(1), "succeeded", null],
+      [id(2), "running", null],
+      [id(3), "running", id(2)],
+      [id(3), "succeeded", null],
+      [id(2), "succeeded", null],
+    ]);
+    // The nested agent's Agent call belongs to its parent's transcript; its own output to its own.
+    const agentCalls = calls(events).filter((c) => c.name === "Agent");
+    expect(agentCalls.map((c) => [c.callId, c.subagentId ?? null])).toEqual([
+      [id(1), null],
+      [id(2), null],
+      [id(3), id(2)],
+    ]);
+    expect(texts(events).filter((_, i, all) => all[i]!.startsWith("Sub-task"))).toEqual(["Sub-task 1 is done.", "Sub-task 3 is done.", "Sub-task 2 is done."]);
+    const tagged = events.filter((e) => "subagentId" in e && e.subagentId === id(3)).map((e) => e.type);
+    expect(tagged).toEqual(["text", "tool_call", "tool_result", "text"]);
+    expect(ops.calls.map((c) => c.method)).toEqual(["submitForReview"]);
+  });
+
+  test("/agents without a count runs two; the count is capped at five", async () => {
+    const count = async (prompt: string) => {
+      const { events } = await collect(driver, makeReq("work", prompt).req);
+      return new Set(events.filter((e) => e.type === "subagent").map((e) => (e as Extract<DriverEvent, { type: "subagent" }>).subagent.id)).size;
+    };
+    expect(await count("/agents")).toBe(2);
+    expect(await count("/agents 99")).toBe(5);
+  });
+
   test("/block calls block with the question and does not submit", async () => {
     const { req, ops } = makeReq("work", "Please /block Which database should I use?");
     await collect(driver, req);

@@ -365,6 +365,7 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
+| Board | a ticket's sub-agents and their transcripts (Agents tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
@@ -563,6 +564,55 @@ applies from its next run; claude-code resumes the same conversation with the ne
 and `project.defaultModels` PATCH-merge per driver (`null` clears one). Migration 3 moved the old
 `claudeModel` / `anthropicModel` settings into `defaultModels`.
 
+### Sub-agents
+
+A sub-agent is an agent a run's agent starts inside its own session (Claude Code's `Agent` tool,
+`Task` on older CLIs), not a ticket. It shares the session and the run, and it reports back to
+the agent that started it. The apps show them on the ticket's **Agents** tab.
+
+**Driver contract** (`service/src/drivers/types.ts`, driver-agnostic). A driver that runs
+sub-agents reports each one with `{ type: "subagent", subagent: SubagentReport }`: an id unique
+within the session (the id of the tool call that started it), and whatever it knows of
+`parentId` (nested agents), `description`, `agentType`, `prompt`, `status` (`running`,
+`succeeded`, `failed`, `stopped`) and `result`. The first report creates the sub-agent, running
+unless it says otherwise, and later reports fill in the fields they carry. Once it has finished,
+later reports can add a missing result but never change its status. `text`, `thinking`,
+`tool_call`, `tool_result` and `permission` events carry `subagentId` when a sub-agent produced
+them. Drivers without sub-agents (anthropic-api) never send any of this.
+
+**Orchestrator.** Reports upsert the `subagents` table (migration 11, keyed by session + id) and
+emit `subagent.upserted` when something changed. Tagged entries are stored with
+`transcript.subagent_id`. They share the session's seq, so `after` paging works in either view.
+When a run ends (or a stale run is recovered on boot), its sub-agents that are still running
+become `stopped`. A sub-agent's text never becomes the run's `lastText`, so it isn't the
+auto-submit summary. Its classifier denials are logged in its own transcript but never become the
+ticket's pending approval, because the sub-agent reports the denial to its agent.
+
+**Reading them.** `TicketDetail.subagents` (oldest first), `GET /sessions/:id/subagents`, and
+`GET /sessions/:id/transcript?subagent=<id>` (404 for an unknown id). The plain transcript route
+and the board's `get_ticket` transcript tail leave sub-agent entries out, so older clients see
+the same session transcript as before.
+
+**claude-code** (verified against claude 2.1.283). An `Agent`/`Task` tool call starts a sub-agent
+(`description`, `subagent_type`, `prompt` from its input; `parentId` is the call's own
+`parent_tool_use_id`). Stream messages with `parent_tool_use_id` set are that sub-agent's output.
+Its streaming deltas are dropped because the full blocks follow. Agents run in the background by
+default: the tool result only says `Async agent launched…`, and the outcome arrives later as a
+`system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
+`task_id`, mapped from `task_started`), inside the same `claude -p` process (the CLI takes
+another turn after the notification). A foreground agent's tool result is its outcome.
+`task_started` for other task types (background Bash) is ignored. Output from a sub-agent the
+parser didn't see start creates one called "Sub-agent".
+
+**Apps** (`@harness/shared/state` `subagents.ts`, `tabs.ts`). State keeps `subagents[sessionId]`
+and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).
+The Agents tab exists only once the session has a sub-agent: until then (and on a session
+without any) the tab is hidden, and `agents` or `agent:<id>` fall back to Summaries, while the
+requested tab is kept so a deep link opens when the sub-agents arrive. It lists running sub-agents first, then finished ones newest first. A row opens the tab
+`agent:<id>`: that sub-agent's transcript, with its task above it and a breadcrumb back through
+its parents. An unknown id falls back to the list. In every transcript, a tool row that started a
+sub-agent links to its transcript.
+
 ### Dummy driver script
 
 Streams its text word by word (`HARNESS_DUMMY_DELAY_MS`, default 15ms; tests use 0).
@@ -571,7 +621,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
@@ -593,7 +643,8 @@ GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPa
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 POST   /tickets/:key/start | /messages | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries
-GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq
+GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
+GET    /sessions/:id/subagents   → Subagent[]
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
