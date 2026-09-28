@@ -166,7 +166,10 @@ export interface HarnessOps {
 }
 
 /** Watcher fields a tool may set (Watcher without ids, timestamps and run status). */
-export type WatcherFields = Partial<Pick<Watcher, "name" | "command" | "args" | "cwd" | "env" | "mode" | "intervalSec" | "enabled" | "driver">>;
+export type WatcherFields = Partial<Pick<Watcher, "name" | "command" | "args" | "cwd" | "env" | "mode" | "intervalSec" | "enabled" | "driver">> & {
+  /** Triage instructions for the watcher's output; passed through to the orchestrator as-is */
+  prompt?: string;
+};
 
 /** A project as tools see it. */
 export interface ProjectView {

@@ -10,20 +10,16 @@ import { defineGatedTool, defineTool, json, schema } from "./util";
 // Shared schema pieces and descriptions
 // ---------------------------------------------------------------------------
 
-// The watcher contract, for an agent configuring a tool the user already has installed
-// (watch-jira, or any CLI that prints NDJSON work items). The examples are the shapes in
-// service/examples/watchers/jira-*.json.
-const WATCHER_CONTRACT = [
-  `A watcher runs a tool the user already has installed (for example watch-jira, or any CLI that prints work items) so incoming work is filed as tickets. The harness service runs it on this machine as the user, outside any ticket sandbox.`,
-  `How to run it: the command is spawned directly, without a shell, and the service's PATH is not the user's. Run the tool through a login shell so the user's PATH resolves and their quoting works: command "/bin/zsh", args ["-lc", "exec <tool> <options>"] (exec lets the watcher stop the tool itself). Put the user's options inside that one string exactly as they'd type them in a terminal.`,
-  `What it must print: one JSON object per line on stdout (NDJSON); other lines are ignored. key (required) is the external ticket key, e.g. "FOO-123"; summary is the title; url links to the item; updated is its version (a timestamp or revision). Alternatives are accepted: id / identifier for key, title / name for summary, link / html_url for url, version / updatedAt / updated_at for updated. Every other field is passed to the triage agent as-is.`,
-  `What happens to items: each new (watcher, key, updated) starts a triage session that files the item as a local ticket with that same key. Printing a key again with a new updated value sends the update to the existing ticket; the same value is ignored, so a tool may print its full list on every run.`,
-  `Routing: a mapping sends items to a project by key prefix. After creating the watcher, call create_mapping with pattern set to the prefix of the keys the tool prints (pattern "FOO" matches FOO-123) and the target project_key; without a matching mapping items may be declined.`,
-  `mode: "loop" re-runs the command about a second after it exits, for tools that block or follow until there's work (e.g. watch-jira --follow). "interval" runs it every interval_sec seconds (at least 10), for tools that print the current items and exit (e.g. watch-jira --once).`,
-  `Exit codes: 0 = ran (items may have been printed), 4 = nothing to report; both are normal. Anything else is a failure: the end of stderr becomes the watcher's last_error and a loop watcher backs off (2s, doubling up to 5 minutes).`,
-  `env: extra environment variables for the tool, merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if the tool needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
-  `Examples. A following watcher: {"name": "jira-sprint", "command": "/bin/zsh", "args": ["-lc", "exec watch-jira --project=PLAYR,MEDL --assigned=@me --open-sprints --follow --interval=300"], "mode": "loop"} with create_mapping {"pattern": "PLAYR", "project_key": "<project>"} (and one for MEDL). A polling watcher: {"name": "jira-once", "command": "/bin/zsh", "args": ["-lc", "exec watch-jira --project=CEPFR --assigned=unassigned --open-sprints --once"], "mode": "interval", "interval_sec": 600}.`,
-  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run.`,
+// What a watcher is, for an agent setting one up from the user's description. The output format
+// is up to the command: whatever it prints goes to the Inbox with the watcher's prompt, and the
+// triage agent decides what to do with it (HARNESS-22's generic watchers).
+const WATCHER_GUIDE = [
+  `A watcher runs a command on a schedule and sends whatever it prints to the Inbox, where a triage agent reads it and decides what to do (file a ticket in a project, send an update to an existing one, or decline it). The harness service runs the command on this machine as the user, outside any ticket sandbox.`,
+  `command: any shell command line, run through the user's login shell, so their PATH, pipes and loops work (e.g. "watch-jira --project=PLAYR --assigned=@me --once", or "curl -s https://status.example.com/api/incidents | jq -c '.incidents[]'"). Its stdout text is what goes to the Inbox, in whatever format the command prints. Put the user's options in exactly as they'd type them in a terminal.`,
+  `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." Include which project the work belongs in when the user says so.`,
+  `mode: "loop" for a command that runs for a long time or loops itself (e.g. "watch-jira --follow", or "while true; do curl -s …; sleep 60; done"); it's restarted when it exits and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10) and each run's output becomes one Inbox item.`,
+  `A command that exits non-zero is a failure: the end of its stderr becomes the watcher's last_error and a loop watcher backs off. env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
+  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run. Mappings (create_mapping) are optional routing hints for the triage agent, not required for a watcher to work.`,
 ].join(" ");
 
 const watcherRefProp = { type: "string", minLength: 1, description: "The watcher's id (from list_watchers) or its exact name." };
@@ -40,11 +36,12 @@ const modelMapProp = {
 
 const watcherProps = {
   name: { type: "string", minLength: 1, description: "Display name; also the source name triage shows, e.g. \"jira-sprint\"." },
-  command: { type: "string", minLength: 1, description: "Executable to run: \"/bin/zsh\" (with args [\"-lc\", \"exec <tool> <options>\"]) for a tool on the user's PATH, or an absolute path." },
-  args: { type: "array", items: { type: "string" }, description: "Arguments, one array entry each (no shell splitting), e.g. [\"-lc\", \"exec watch-jira --project=FOO --once\"]." },
+  command: { type: "string", minLength: 1, description: "A shell command line whose stdout text is sent to the Inbox, e.g. \"watch-jira --project=PLAYR --once\"." },
+  prompt: { type: "string", description: "The user's instructions to the triage agent for this watcher's output." },
+  args: { type: "array", items: { type: "string" }, description: "Legacy: with args, command is an executable run directly with them and no shell. Leave it out for new watchers." },
   cwd: { type: "string", description: "Working directory; empty for the service's." },
   env: { type: "object", description: "Environment variables (string values)." },
-  mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for tools that block or follow, \"interval\" for tools that print and exit. Default \"loop\"." },
+  mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for long-running or self-looping commands (restarted when they exit), \"interval\" for commands that print once and exit. Default \"loop\"." },
   interval_sec: { type: "integer", minimum: 10, description: "Seconds between runs in interval mode. Default 60." },
   enabled: { type: "boolean", description: "Whether the service runs it. Default true." },
   driver: { type: "string", description: "Driver id for this watcher's triage sessions (see list_drivers); empty for the settings default." },
@@ -53,6 +50,7 @@ const watcherProps = {
 type WatcherToolInput = {
   name?: string;
   command?: string;
+  prompt?: string;
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
@@ -66,6 +64,8 @@ function watcherFields(input: WatcherToolInput): WatcherFields {
   const out: WatcherFields = {};
   if (input.name !== undefined) out.name = input.name;
   if (input.command !== undefined) out.command = input.command;
+  // Passed straight through; the orchestrator validates and stores it.
+  if (input.prompt !== undefined) out.prompt = input.prompt;
   if (input.args !== undefined) out.args = input.args;
   if (input.cwd !== undefined) out.cwd = input.cwd || null;
   if (input.env !== undefined) out.env = input.env;
@@ -84,6 +84,7 @@ function watcherView(w: Watcher) {
     command: w.command,
     args: w.args,
     command_line: commandLine(w.command, w.args),
+    prompt: (w as Watcher & { prompt?: string }).prompt ?? "",
     cwd: w.cwd,
     env: Object.fromEntries(Object.keys(w.env ?? {}).map((k) => [k, "(set)"])),
     mode: w.mode,
@@ -128,7 +129,7 @@ export const listWatchers = defineTool<Record<string, never>>({
 export const listMappings = defineTool<Record<string, never>>({
   name: "list_mappings",
   description:
-    "List the mappings that route incoming work items to projects. pattern is a key prefix (\"FOO\" matches FOO-123; the longest prefix wins) or a /regex/ tried against the whole key after all prefixes.",
+    "List the mappings: routing hints for triage. When a watcher's output contains a key matching a mapping's pattern (a key prefix, \"FOO\" matches FOO-123, or a /regex/), the triage agent is told that project is the likely home for it; the agent makes the final call.",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const mappings = await ctx.ops.listMappings(ctx);
@@ -176,7 +177,7 @@ type NewWatcher = WatcherFields & { name: string; command: string };
 
 export const createWatcher = defineGatedTool<CreateWatcherInput>({
   name: "create_watcher",
-  description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_CONTRACT}`,
+  description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_GUIDE}`,
   inputSchema: schema(watcherProps, ["name", "command"]),
   describe: (i) => ({
     summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}`,
@@ -194,11 +195,11 @@ type UpdateWatcherInput = WatcherToolInput & { watcher: string };
 export const updateWatcher = defineGatedTool<UpdateWatcherInput>({
   name: "update_watcher",
   description:
-    "Change a watcher's fields; fields you omit keep their value. env is merged into the existing variables (an empty-string value removes one). A human must approve the call: you are resumed when they answer; then repeat exactly the same call. The watcher contract is in create_watcher's description.",
+    "Change a watcher's fields; fields you omit keep their value. env is merged into the existing variables (an empty-string value removes one). A human must approve the call: you are resumed when they answer; then repeat exactly the same call. What each field means is in create_watcher's description.",
   inputSchema: schema({ watcher: watcherRefProp, ...watcherProps, name: { ...watcherProps.name, description: "New display name." } }, ["watcher"]),
   describe: (i) => {
     const { watcher, ...rest } = i;
-    const cmd = i.command !== undefined || i.args !== undefined ? ` — command: ${commandLine(i.command ?? "(unchanged)", i.args ?? [])}` : "";
+    const cmd = i.command !== undefined || i.args !== undefined ? `; command: ${commandLine(i.command ?? "(unchanged)", i.args ?? [])}` : "";
     return { summary: `Update watcher "${watcher}": ${fieldList(rest, ["command", "args"])}${cmd}`, reason: WATCHER_REASON };
   },
   check: (i, ctx) => ctx.ops.updateWatcher(ctx, i.watcher, watcherFields(i), true),
@@ -229,7 +230,7 @@ export const runWatcher = defineGatedTool<{ watcher: string }>({
   check: (i, ctx) => ctx.ops.runWatcher(ctx, i.watcher, true),
   async run(i, ctx) {
     const w = await ctx.ops.runWatcher(ctx, i.watcher);
-    return `Started watcher "${w.name}". Items it prints are triaged in the background.`;
+    return `Started watcher "${w.name}". Its output goes to the Inbox and is triaged in the background.`;
   },
 });
 
@@ -240,16 +241,16 @@ export const runWatcher = defineGatedTool<{ watcher: string }>({
 export const createMapping = defineGatedTool<{ pattern: string; project_key: string; notes?: string }>({
   name: "create_mapping",
   description:
-    "Route incoming work items to a project. pattern is a key prefix (\"FOO\" matches FOO-123 but not FOOBAR-1; the longest matching prefix wins) or a /regex/flags tried against the whole key after all prefixes. Use the prefix of the keys your watcher emits. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
+    "Add a routing hint for triage: when a watcher's output contains a key matching pattern, the triage agent is told project_key is the likely project for it (it still decides; a watcher's prompt can route work on its own). pattern is a key prefix (\"FOO\" matches FOO-123 but not FOOBAR-1; the longest matching prefix wins) or a /regex/flags tried after all prefixes. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
   inputSchema: schema(
     {
       pattern: { type: "string", minLength: 1, description: "Key prefix (\"FOO\") or /regex/ (\"/^OPS-\\\\d+$/i\")." },
       project_key: projectKeyProp,
-      notes: { type: "string", description: "Optional guidance shown to the triage agent for items matching this pattern." },
+      notes: { type: "string", description: "Optional guidance shown to the triage agent along with the hint." },
     },
     ["pattern", "project_key"],
   ),
-  describe: (i) => ({ summary: `Route ${i.pattern} items to project ${i.project_key}`, reason: "Changes which project incoming work is filed into." }),
+  describe: (i) => ({ summary: `Hint that ${i.pattern} keys belong in project ${i.project_key}`, reason: "Changes where triage files incoming work." }),
   check: (i, ctx) => ctx.ops.createMapping(ctx, { pattern: i.pattern, projectKey: i.project_key, notes: i.notes }, true),
   async run(i, ctx) {
     const m = (await ctx.ops.createMapping(ctx, { pattern: i.pattern, projectKey: i.project_key, notes: i.notes }))!;
@@ -261,7 +262,7 @@ export const deleteMapping = defineGatedTool<{ id: string }>({
   name: "delete_mapping",
   description: "Delete a mapping by id (see list_mappings). A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
   inputSchema: schema({ id: { type: "string", minLength: 1, description: "Mapping id from list_mappings." } }, ["id"]),
-  describe: (i) => ({ summary: `Delete mapping ${i.id}`, reason: "Changes which project incoming work is filed into." }),
+  describe: (i) => ({ summary: `Delete mapping ${i.id}`, reason: "Changes where triage files incoming work." }),
   check: (i, ctx) => ctx.ops.deleteMapping(ctx, i.id, true),
   async run(i, ctx) {
     const m = await ctx.ops.deleteMapping(ctx, i.id);
