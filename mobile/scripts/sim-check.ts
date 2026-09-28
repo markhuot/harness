@@ -208,6 +208,8 @@ async function seed() {
   const configApproval = await create(other.id, `Watch the events API\n/tools ${JSON.stringify([watcherCall])}`);
   const blocked = await create(other.id, "Sign the build\n/block Which Apple Developer team should sign the build: Happy Cog or your personal account?");
   const plan = await create(other.id, "Write a landing page for the install link", { start: false });
+  // Sub-agents: two, the second starting a nested third (the dummy driver's /agents).
+  const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
 
   await settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
   const ch = await settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir);
@@ -225,6 +227,8 @@ async function seed() {
   await settle(blocked.key, (t) => t.status === "blocked" && !t.busy);
   await settle(plan.key, (t) => t.status === "planning" && !t.busy);
   await settle(browse.key, (t) => !t.busy, 90000);
+  await settle(agents.key, (t) => t.status === "review" && !t.busy);
+  const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   await until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000);
   // A watcher-less triage item for the Inbox.
   // The prompt names the project; the dummy triager reads the [dummy:project KEY] marker.
@@ -241,7 +245,7 @@ async function seed() {
     driver: "dummy",
   });
   await Bun.sleep(1500);
-  return { project, other, hello, changes, conductor, browse, approval, configApproval, blocked, plan, watcher };
+  return { project, other, hello, changes, conductor, browse, approval, configApproval, blocked, plan, watcher, agents, nestedAgent };
 }
 
 /** --paging: a long Done history on its own project, a conductor with done children, and a dependency on an old done ticket. */
@@ -627,6 +631,8 @@ try {
       ["ticket-transcript", `harness://ticket/${k(seeded.hello)}?tab=transcript`],
       ["ticket-details", `harness://ticket/${k(seeded.hello)}?tab=details`],
       ["conductor-tickets", `harness://ticket/${k(seeded.conductor)}?tab=children`],
+      ["ticket-agents", `harness://ticket/${k(seeded.agents)}?tab=agents`],
+      ["ticket-subagent", `harness://ticket/${k(seeded.agents)}?tab=${encodeURIComponent(`agent:${seeded.nestedAgent.id}`)}`],
       ["approval", `harness://ticket/${k(seeded.approval)}`],
       ["approval-config", `harness://ticket/${k(seeded.configApproval)}`],
       ["blocked", `harness://ticket/${k(seeded.blocked)}`],

@@ -8,7 +8,26 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Ticket } from "@harness/shared";
-import { childrenOf, hasCustomDriver, ticketByKey, COMPOSER_PLACEHOLDER, composerHint, effectiveTab, isReady, isTicketTab, parsePluginTab, pluginTabRoute, TAB_LABEL, TICKET_TABS, type TicketTab } from "@harness/shared/state";
+import {
+  childrenOf,
+  hasCustomDriver,
+  ticketByKey,
+  COMPOSER_PLACEHOLDER,
+  composerHint,
+  effectiveTab,
+  isReady,
+  isTicketTab,
+  parsePluginTab,
+  parseSubagentTab,
+  pluginTabRoute,
+  showsAgentsTab,
+  subagentsOf,
+  subagentTabRoute,
+  TAB_LABEL,
+  tabStripTab,
+  TICKET_TABS,
+  type TicketTab,
+} from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -24,6 +43,7 @@ import { action, menuItem } from "../ui/header";
 import { ApprovalCard } from "./Approval";
 import { Transcript } from "./Transcript";
 import { ChildrenTab, DetailsTab, SummariesTab } from "./TicketTabs";
+import { AgentsTab, SubagentView } from "./AgentsTab";
 import { BrowserTab } from "./BrowserTab";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 
@@ -75,7 +95,9 @@ export function TicketDetailScreen() {
     );
   }
 
-  const shown = effectiveTab(tab, { conductor: ticket.kind === "conductor", pluginTabs });
+  const shown = effectiveTab(tab, { conductor: ticket.kind === "conductor", pluginTabs, subagents: subagentsOf(state, ticket.sessionId) });
+  const openAgent = parseSubagentTab(shown);
+  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const activePlugin = (() => {
     const p = parsePluginTab(shown);
     return p ? pluginTabs?.find((t) => t.pluginId === p.pluginId && t.id === p.tabId) : undefined;
@@ -84,12 +106,14 @@ export function TicketDetailScreen() {
   return (
     <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Header ticket={ticket} />
-      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown)} />
+      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown) || !!openAgent} />
       <TabStrip ticket={ticket} tab={shown} onTab={setTab} pluginTabs={pluginTabs} />
       <View style={{ flex: 1 }}>
         {shown === "summaries" && <SummariesTab ticket={ticket} />}
         {shown === "children" && <ChildrenTab ticket={ticket} />}
-        {shown === "transcript" && <Transcript sessionId={ticket.sessionId} emptyHint="The agent's conversation will stream in here." />}
+        {shown === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+        {shown === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
         {shown === "browser" && <BrowserTab sessionId={ticket.sessionId} />}
         {shown === "details" && <DetailsTab ticket={ticket} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${shown}`} ticket={ticket} tab={activePlugin} />}
@@ -212,19 +236,23 @@ function TabStrip({ ticket, tab, onTab, pluginTabs }: { ticket: Ticket; tab: Tic
   const c = useColors();
   const childCount = ticket.kind === "conductor" ? childrenOf(state, ticket.id).length : 0;
   const summaryCount = state.summaries[ticket.sessionId]?.length ?? 0;
+  const subagents = subagentsOf(state, ticket.sessionId);
+  const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
+  // A sub-agent's transcript sits under Agents.
+  const stripTab = tabStripTab(tab);
   const items: { id: TicketTab; label: string; count?: number; live?: boolean; icon?: string }[] = [
-    ...TICKET_TABS.filter((t) => t !== "children" || ticket.kind === "conductor").map((t) => ({
+    ...TICKET_TABS.filter((t) => (t !== "children" || ticket.kind === "conductor") && (t !== "agents" || showsAgentsTab(tab, subagents))).map((t) => ({
       id: t as TicketTab,
       label: TAB_LABEL[t],
-      count: t === "summaries" ? summaryCount : t === "children" ? childCount : undefined,
-      live: t === "transcript" && ticket.busy,
+      count: t === "summaries" ? summaryCount : t === "children" ? childCount : t === "agents" ? subagents?.length : undefined,
+      live: (t === "transcript" && ticket.busy) || (t === "agents" && agentsRunning),
     })),
     ...(pluginTabs ?? []).map((p) => ({ id: pluginTabRoute(p.pluginId, p.id), label: p.title, icon: p.icon ?? undefined })),
   ];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }} contentContainerStyle={{ paddingHorizontal: 8 }}>
       {items.map((it) => {
-        const on = it.id === tab;
+        const on = it.id === stripTab;
         return (
           <Pressable
             key={it.id}
