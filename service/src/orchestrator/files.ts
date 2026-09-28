@@ -3,13 +3,20 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { open } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseMentions, rankPaths, type FileMatch } from "@harness/shared";
 import { git, isGitRepo } from "./worktree";
 
-/** Folders a non-git walk skips (git repos use .gitignore instead). */
-const SKIP_DIRS = new Set([".git", "node_modules", ".hg", ".svn", ".DS_Store"]);
-/** Most entries a non-git walk collects, so a mention in a huge folder (a home directory) stays fast. */
+/** Version-control internals: never listed. */
+const VCS_DIRS = new Set([".git", ".hg", ".svn"]);
+/**
+ * Folders listed but not indexed: dependency trees can hold hundreds of thousands of files.
+ * Typing into one (`@node_modules/react/`) still lists what's in it.
+ */
+const SKIP_DIRS = new Set(["node_modules"]);
+/** Finder litter, never worth a mention. */
+const JUNK_FILES = new Set([".DS_Store"]);
+/** Most files a walk collects (in a git repo, on top of git's list), so a huge folder stays fast. */
 const WALK_LIMIT = 20_000;
 /** How long a directory's listing is reused, so each keystroke doesn't re-run git. */
 const LIST_TTL_MS = 5_000;
@@ -21,8 +28,11 @@ const MAX_DIR_ENTRIES = 500;
 const cache = new Map<string, { at: number; paths: Promise<string[]> }>();
 
 /**
- * Every file under `root` (relative, "/"-separated) plus every folder that holds one ("src/").
- * Git repos list tracked and untracked-but-not-ignored files; other folders are walked.
+ * Every file under `root` (relative, "/"-separated) plus every folder that holds one ("src/"),
+ * gitignored ones included: build output, local specs and .env files are worth mentioning too.
+ * A git repo lists its tracked and untracked files, then its ignored folders are walked; other
+ * folders are walked from the top. Either way SKIP_DIRS show up as folders but aren't walked,
+ * and VCS_DIRS and JUNK_FILES are left out.
  */
 export function listPaths(root: string, now = Date.now()): Promise<string[]> {
   const hit = cache.get(root);
@@ -36,46 +46,114 @@ export function listPaths(root: string, now = Date.now()): Promise<string[]> {
 async function collect(root: string): Promise<string[]> {
   if (!existsSync(root)) return [];
   if (await isGitRepo(root)) {
-    const r = await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], root);
-    if (r.code === 0) return [...new Set(r.stdout.split("\0").filter(Boolean))];
+    const [listed, ignored] = await Promise.all([
+      git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], root),
+      // --directory reports an ignored folder once ("dist/") instead of every file in it.
+      git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], root),
+    ]);
+    if (listed.code === 0) {
+      const out = new Set(listed.stdout.split("\0").filter((p) => p && !JUNK_FILES.has(basename(p))));
+      const dirs: string[] = [];
+      for (const p of ignored.code === 0 ? ignored.stdout.split("\0").filter(Boolean) : []) {
+        if (!p.endsWith("/")) {
+          if (!JUNK_FILES.has(basename(p))) out.add(p);
+        } else if (VCS_DIRS.has(basename(p))) continue;
+        else if (SKIP_DIRS.has(basename(p))) out.add(p);
+        else {
+          out.add(p);
+          dirs.push(p.slice(0, -1));
+        }
+      }
+      // Its own budget: a big repo's tracked files shouldn't crowd out its ignored ones.
+      walk(root, dirs, out, out.size + WALK_LIMIT);
+      return [...out];
+    }
   }
-  return walk(root);
+  const out = new Set<string>();
+  walk(root, [""], out, WALK_LIMIT);
+  return [...out];
 }
 
-function walk(root: string): string[] {
-  const out: string[] = [];
-  const stack = [""];
-  while (stack.length && out.length < WALK_LIMIT) {
-    const rel = stack.pop()!;
+/**
+ * Add the files under each of `starts` (relative to `root`) to `out` until it holds `limit`
+ * entries, breadth first so shallow files make the cut. A SKIP_DIRS folder is added as "name/",
+ * unwalked.
+ */
+function walk(root: string, starts: string[], out: Set<string>, limit: number) {
+  const queue = [...starts];
+  for (let i = 0; i < queue.length && out.size < limit; i++) {
+    const rel = queue[i]!;
     let entries;
     try {
       entries = readdirSync(join(root, rel), { withFileTypes: true });
     } catch {
       continue;
     }
+    if (rel && !entries.length) out.add(`${rel}/`);
     for (const e of entries) {
-      if (SKIP_DIRS.has(e.name)) continue;
       const path = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) stack.push(path);
-      else out.push(path);
-      if (out.length >= WALK_LIMIT) break;
+      if (!e.isDirectory()) {
+        if (!JUNK_FILES.has(e.name)) out.add(path);
+      } else if (VCS_DIRS.has(e.name)) continue;
+      else if (SKIP_DIRS.has(e.name)) out.add(`${path}/`);
+      else queue.push(path);
+      if (out.size >= limit) break;
     }
   }
-  return out;
 }
 
-function withDirs(files: string[]): string[] {
+/** Files and folders ("a/"), plus every folder that holds one. */
+function withDirs(entries: string[]): string[] {
   const dirs = new Set<string>();
-  for (const f of files) {
-    for (let i = f.indexOf("/"); i !== -1; i = f.indexOf("/", i + 1)) dirs.add(f.slice(0, i + 1));
+  const files: string[] = [];
+  for (const e of entries) {
+    if (e.endsWith("/")) dirs.add(e);
+    else files.push(e);
+    for (let i = e.indexOf("/"); i !== -1 && i < e.length - 1; i = e.indexOf("/", i + 1)) dirs.add(e.slice(0, i + 1));
   }
   return [...dirs, ...files];
 }
 
+/**
+ * The folder a query is inside ("node_modules/react/" for "node_modules/react/in"), listed from
+ * disk, so folders the index skips or cut short can still be browsed one level at a time. Like
+ * the index it stays inside `root` (symlinks resolved, as attachMentions does) and out of
+ * VCS_DIRS, and leaves out JUNK_FILES.
+ */
+function browse(root: string, query: string): string[] {
+  const slash = query.lastIndexOf("/");
+  if (slash === -1) return [];
+  const dir = query.slice(0, slash + 1);
+  if (dir.split("/").some((seg) => VCS_DIRS.has(seg))) return [];
+  let abs: string;
+  try {
+    const real = realpathSync(resolve(root, dir));
+    const rel = relative(realpathSync(root), real);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return [];
+    abs = real;
+  } catch {
+    return [];
+  }
+  try {
+    return readdirSync(abs, { withFileTypes: true })
+      .filter((e) => (e.isDirectory() ? !VCS_DIRS.has(e.name) : !JUNK_FILES.has(e.name)))
+      .map((e) => `${dir}${e.name}${e.isDirectory() ? "/" : ""}`);
+  } catch {
+    return [];
+  }
+}
+
 /** The autocomplete: files and folders under `root` matching `query`, best first. */
 export async function searchPaths(root: string, query: string, limit = 50): Promise<FileMatch[]> {
-  const paths = await listPaths(root);
-  return rankPaths(paths, query.trim(), limit).map((path) => ({ path, kind: path.endsWith("/") ? "dir" : "file" }));
+  const q = query.trim();
+  const indexed = await listPaths(root);
+  const browsed = browse(root, q);
+  let paths = indexed;
+  if (browsed.length) {
+    const have = new Set(indexed);
+    paths = [...indexed, ...browsed.filter((p) => !have.has(p))];
+  }
+  return rankPaths(paths, q, limit).map((path) => ({ path, kind: path.endsWith("/") ? "dir" : "file" }));
 }
 
 export interface Attachments {
@@ -123,7 +201,7 @@ export async function attachMentions(prompt: string, cwd: string): Promise<Attac
     const shown = rel.split(sep).join("/") || ".";
     if (st.isDirectory()) {
       const entries = readdirSync(real, { withFileTypes: true })
-        .filter((e) => !SKIP_DIRS.has(e.name))
+        .filter((e) => !VCS_DIRS.has(e.name) && !JUNK_FILES.has(e.name))
         .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
         .sort();
       const listed = entries.slice(0, MAX_DIR_ENTRIES);

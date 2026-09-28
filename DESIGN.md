@@ -698,14 +698,25 @@ opening bracket or quote, so `mark@example.com` never is), `insertMention` compl
 a trailing space; folders end in `/` and keep the list open inside them), `parseMentions` pulls
 the paths out of a prompt, and `rankPaths` orders candidates: path prefix, then name prefix, then
 folder-name prefix, then substring, with in-order letters (`fmt` → `format.ts`) only when nothing
-matches outright. A folder the query already names lists its contents, not itself.
+matches outright. A folder the query already names (`src/`) lists its contents, not itself; a
+file typed in full (`.env`) stays in the list, first.
 
 - **Autocomplete.** `/projects/:id/files` searches the project folder (new session);
   `/tickets/:key/files` searches where the ticket's next run works: its worktree, else the
-  session's cwd, else the project folder. `service/src/orchestrator/files.ts` lists
-  `git ls-files --cached --others --exclude-standard` in a git repo, or walks the folder (skipping
-  `.git` and `node_modules`, at most 20,000 files) otherwise, adds every folder that holds a file,
-  and caches the list per folder for 5 seconds so typing doesn't re-run git on each key.
+  session's cwd, else the project folder. Gitignored files are included, since build output,
+  local specs and `.env` files are often exactly what someone wants to mention.
+  `service/src/orchestrator/files.ts` lists `git ls-files --cached --others --exclude-standard` in
+  a git repo, then `git ls-files --others --ignored --exclude-standard --directory`, which reports
+  each ignored folder once (`dist/`) instead of every file in it, and walks those folders itself.
+  Other folders are walked from the top. Walks are breadth first and stop at 20,000 files (in a
+  git repo, on top of git's own list), so shallow files make the cut in a huge tree. `.git`, `.hg`,
+  `.svn` and `.DS_Store` are left out; `node_modules` is listed as a folder but not walked. A query
+  inside a folder (`node_modules/react/`) also lists that folder straight from disk, so anything the
+  index skipped or cut short can still be reached one level at a time. Browsing resolves
+  symlinks and refuses a folder whose real path is outside the root, never enters or lists
+  `.git`/`.hg`/`.svn`, and drops `.DS_Store`.
+  Every folder that holds a file is added, and the list is cached per folder for 5 seconds so
+  typing doesn't re-run git on each key.
 - **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
   through `attachMentions` with the run's cwd before the driver sees them; review, complete and
   triage prompts are left alone (review and complete prompts quote the brief, whose files the

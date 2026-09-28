@@ -15,17 +15,43 @@ function tree(files: Record<string, string | Uint8Array>) {
 }
 
 describe("listPaths / searchPaths", () => {
-  test("a git repo lists tracked and untracked files but not ignored ones, plus their folders", async () => {
-    const root = tree({ ".gitignore": "dist/\n", "src/app.ts": "x", "src/lib/fmt.ts": "x", "dist/out.js": "x", "notes.md": "x" });
+  test("a git repo lists tracked, untracked and gitignored files, plus their folders", async () => {
+    const root = tree({
+      ".gitignore": "dist/\n.env\nspecs/\nnode_modules/\n",
+      "src/app.ts": "x",
+      "src/lib/fmt.ts": "x",
+      "dist/out.js": "x",
+      "dist/assets/app.css": "x",
+      ".env": "x",
+      "specs/login.md": "x",
+      "node_modules/pkg/index.js": "x",
+      "notes.md": "x",
+      ".DS_Store": "x",
+    });
     await git(["init", "-q"], root);
     await git(["add", "src/app.ts"], root);
     const paths = await listPaths(root);
-    expect(paths.sort()).toEqual([".gitignore", "notes.md", "src/", "src/app.ts", "src/lib/", "src/lib/fmt.ts"]);
+    expect(paths.sort()).toEqual([
+      ".env",
+      ".gitignore",
+      "dist/",
+      "dist/assets/",
+      "dist/assets/app.css",
+      "dist/out.js",
+      "node_modules/",
+      "notes.md",
+      "specs/",
+      "specs/login.md",
+      "src/",
+      "src/app.ts",
+      "src/lib/",
+      "src/lib/fmt.ts",
+    ]);
   });
 
-  test("a plain folder is walked, skipping node_modules and .git", async () => {
-    const root = tree({ "a/b.txt": "x", "node_modules/pkg/index.js": "x", "top.txt": "x" });
-    expect((await listPaths(root)).sort()).toEqual(["a/", "a/b.txt", "top.txt"]);
+  test("a plain folder is walked; node_modules is listed but not walked, VCS folders and .DS_Store left out", async () => {
+    const root = tree({ "a/b.txt": "x", "node_modules/pkg/index.js": "x", ".git/HEAD": "x", ".svn/entries": "x", "a/.DS_Store": "x", "top.txt": "x" });
+    expect((await listPaths(root)).sort()).toEqual(["a/", "a/b.txt", "node_modules/", "top.txt"]);
   });
 
   test("the listing is reused briefly, then refreshed", async () => {
@@ -44,6 +70,44 @@ describe("listPaths / searchPaths", () => {
       { path: "app/main.ts", kind: "file" },
       { path: "src/app.ts", kind: "file" },
     ]);
+  });
+
+  test("typing into a folder the index skips lists it from disk", async () => {
+    const root = tree({ "node_modules/react/index.js": "x", "node_modules/react/cjs/react.js": "x", "app.ts": "x" });
+    expect(await searchPaths(root, "node_modules/react/")).toEqual([
+      { path: "node_modules/react/cjs/", kind: "dir" },
+      { path: "node_modules/react/index.js", kind: "file" },
+    ]);
+    expect(await searchPaths(root, "node_modules/react/ind")).toEqual([{ path: "node_modules/react/index.js", kind: "file" }]);
+  });
+
+  test("typing a gitignored file's full name finds it", async () => {
+    const root = tree({ ".gitignore": ".env\n", ".env": "x", ".envrc": "x" });
+    await git(["init", "-q"], root);
+    expect(await searchPaths(root, ".env")).toEqual([
+      { path: ".env", kind: "file" },
+      { path: ".envrc", kind: "file" },
+    ]);
+  });
+
+  test("browsing never leaves the folder, through .. or a symlink", async () => {
+    const root = tree({ "in.txt": "x", "src/a.ts": "x" });
+    const outside = join(root, "..", "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "leak.txt"), "x");
+    symlinkSync(outside, join(root, "src", "link"));
+    expect(await searchPaths(root, "../out")).toEqual([]);
+    expect(await searchPaths(root, "src/link/")).toEqual([]);
+    expect(await searchPaths(root, "src/link/le")).toEqual([]);
+  });
+
+  test("browsing doesn't list VCS internals or junk files", async () => {
+    const root = tree({ "node_modules/pkg/index.js": "x", "node_modules/pkg/.DS_Store": "x", "node_modules/pkg/.git/HEAD": "x" });
+    await git(["init", "-q"], root);
+    expect(await searchPaths(root, ".git/")).toEqual([]);
+    expect(await searchPaths(root, ".git/HE")).toEqual([]);
+    expect(await searchPaths(root, "node_modules/pkg/.git/")).toEqual([]);
+    expect(await searchPaths(root, "node_modules/pkg/")).toEqual([{ path: "node_modules/pkg/index.js", kind: "file" }]);
   });
 
   test("a missing folder has no files", async () => {
