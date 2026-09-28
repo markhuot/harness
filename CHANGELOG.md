@@ -20,8 +20,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   edit a card's title, brief, agent, model or dependencies, drag it to another column or reorder
   it, start it, message its agent, stop its agent, and re-open a done ticket with notes. Agents
   can't touch their own ticket this way. They also can't move a ticket into or out of Review, mark
-  finished work done, answer a tool approval that's waiting on you, or relax a ticket's permission
-  mode. Only a ticket still in Planning can be moved straight to Done.
+  finished work done, answer or cancel a ticket that's waiting on your tool approval, or relax a
+  ticket's permission mode. Tickets an agent creates never run under a looser permission mode than
+  the agent's own, and an agent can't hand work to a ticket whose mode is looser than its own
+  (for example, a read-only agent messaging a ticket that runs in auto). Only a ticket still in
+  Planning can be moved straight to Done.
 
 ### Fixed
 

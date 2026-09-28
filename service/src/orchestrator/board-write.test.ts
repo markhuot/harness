@@ -150,7 +150,7 @@ describe("guard rails", () => {
     expect(h.get(child).status).toBe("in_progress");
   });
 
-  test("a pending tool approval can't be answered, moved past or restarted by another agent", async () => {
+  test("a pending tool approval can't be answered, moved past, restarted or cancelled by another agent", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
@@ -161,6 +161,7 @@ describe("guard rails", () => {
       await expect(h.orch.ops.messageTicket(ctx, waiting.key, "go ahead")).rejects.toThrow("waiting on a human to answer a tool approval (Bash)");
       await expect(h.orch.ops.moveTicket(ctx, waiting.key, "in_progress")).rejects.toThrow("tool approval");
       await expect(h.orch.ops.startTicket(ctx, waiting.key)).rejects.toThrow("tool approval");
+      await expect(h.orch.ops.cancelTicket(ctx, waiting.key)).rejects.toThrow("tool approval");
     }
     const cur = h.get(waiting);
     expect(cur.status).toBe("blocked");
@@ -181,6 +182,68 @@ describe("guard rails", () => {
     // Inheriting is fine when the project's mode is at least as strict.
     h.orch.updateProject(h.web.id, { permissionMode: "read_only" });
     expect((await h.orch.ops.updateTicket(c, t.key, { permissionMode: null })).permissionMode).toBeNull();
+  });
+});
+
+describe("permission modes across tickets", () => {
+  const mode = (h: Awaited<ReturnType<typeof setup>>, t: Ticket) => h.orch.permissionModeFor(h.get(t));
+
+  test("a read_only work run's new ticket runs read_only, even when started straight away", async () => {
+    const h = await setup(); // settings default: auto
+    const me = await h.make("me", { status: "in_progress" });
+    h.store.tickets.update(me.id, { permissionMode: "read_only" });
+    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "x", description: "rm the build dir", start: true });
+    expect(h.get(t).permissionMode).toBe("read_only");
+    expect(mode(h, t)).toBe("read_only");
+  });
+
+  test("an ask conductor in an auto project gets ask children; equal strictness keeps inheriting", async () => {
+    const h = await setup();
+    const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
+    h.store.tickets.update(c.id, { permissionMode: "ask" });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "part", autoStart: false });
+    expect([h.get(child).permissionMode, mode(h, child)]).toEqual(["ask", "ask"]);
+
+    h.orch.updateProject(h.web.id, { permissionMode: "ask" });
+    const same = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "same", description: "part", autoStart: false });
+    expect([h.get(same).permissionMode, mode(h, same)]).toEqual([null, "ask"]);
+
+    // A stricter target project wins over a looser caller, and still by inheritance.
+    const me = await h.make("me", { status: "in_progress" }); // ask via the project
+    h.orch.updateProject(h.api.id, { permissionMode: "read_only" });
+    const strict = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "api", description: "x", projectKey: "API" });
+    expect([h.get(strict).permissionMode, mode(h, strict)]).toEqual([null, "read_only"]);
+  });
+
+  test("a stricter agent can't drive a looser ticket: message, start, reopen or move it into a run", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    h.store.tickets.update(me.id, { permissionMode: "read_only" });
+    const c = h.ctx("work", h.get(me));
+    const planning = await h.make("planning");
+    const blocked = await h.make("blocked", { status: "blocked" });
+    const done = await h.make("done", { status: "done" });
+    const msg = "runs in auto, looser than your read_only; ask a human.";
+    await expect(h.orch.ops.messageTicket(c, blocked.key, "delete X")).rejects.toThrow(`${blocked.key} ${msg}`);
+    await expect(h.orch.ops.startTicket(c, planning.key)).rejects.toThrow(msg);
+    await expect(h.orch.ops.reopenTicket(c, done.key, "again")).rejects.toThrow(msg);
+    await expect(h.orch.ops.moveTicket(c, planning.key, "in_progress")).rejects.toThrow(msg);
+    await expect(h.orch.ops.moveTicket(c, blocked.key, "planning")).rejects.toThrow(msg);
+    expect([h.get(planning).status, h.get(blocked).status, h.get(done).status]).toEqual(["planning", "blocked", "done"]);
+    // Moves that start nothing, and tickets at least as strict, are still fine.
+    expect((await h.orch.ops.moveTicket(c, planning.key, "blocked")).status).toBe("blocked");
+    h.store.tickets.update(done.id, { permissionMode: "read_only" });
+    expect((await h.orch.ops.reopenTicket(c, done.key, "again")).status).toBe("in_progress");
+  });
+
+  test("an ask conductor still steers its ask children", async () => {
+    const h = await setup();
+    const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
+    h.store.tickets.update(c.id, { permissionMode: "ask" });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "part", autoStart: false });
+    h.store.tickets.update(child.id, { status: "blocked" });
+    await h.orch.ops.messageTicket(h.ctx("conductor", h.get(c)), child.key, "use postgres");
+    expect(h.get(child).status).toBe("in_progress");
   });
 });
 

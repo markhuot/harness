@@ -163,10 +163,13 @@ export function endsWithQuestion(text: string | null | undefined): boolean {
   return stripped.endsWith("?") || stripped.endsWith("？");
 }
 
-/** Validate a permission-mode field from a request body (null / "" → inherit). */
-/** Higher is stricter; agents may only raise a ticket's effective mode (updateTicket_). */
+/**
+ * Higher is stricter. An agent may only raise another ticket's effective mode, and may only
+ * create or drive tickets at least as strict as its own (DESIGN.md "Board changes by agents").
+ */
 const PERMISSION_STRICTNESS: Record<PermissionMode, number> = { auto: 0, ask: 1, read_only: 2 };
 
+/** Validate a permission-mode field from a request body (null / "" → inherit). */
 function validPermissionMode(value: unknown): PermissionMode | null {
   if (value === undefined || value === null || value === "") return null;
   if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")} or null`);
@@ -1242,6 +1245,18 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * Starting a run on a ticket with a looser permission mode than the caller's would let a strict
+   * agent get work done that its own mode forbids.
+   */
+  private notLooserThanCaller(actor: Ticket, target: Ticket) {
+    const mine = this.permissionModeFor(actor);
+    const theirs = this.permissionModeFor(target);
+    if (PERMISSION_STRICTNESS[theirs] < PERMISSION_STRICTNESS[mine]) {
+      throw new Error(`${target.key} runs in ${theirs}, looser than your ${mine}; ask a human.`);
+    }
+  }
+
   /** HarnessErrors (HTTP status codes) become plain tool errors with the same message. */
   private async asTool<T>(fn: () => Promise<T> | T): Promise<T> {
     try {
@@ -1264,6 +1279,10 @@ export class Orchestrator {
     const project = input.projectKey ? this.boardProject(input.projectKey) : this.store.projects.get(own.projectId);
     if (!project) throw new Error(`Unknown project for ${own.key}`);
     const kind = input.conductor ? "conductor" : "task";
+    // The new ticket runs no looser than its creator: it takes the caller's mode when the project's
+    // would be looser, and otherwise keeps inheriting.
+    const mine = this.permissionModeFor(own);
+    const permissionMode = PERMISSION_STRICTNESS[mine] > PERMISSION_STRICTNESS[this.permissionModeFor(null, project)] ? mine : undefined;
     if (ctx.runKind === "conductor" && own.kind === "conductor") {
       // A conductor's tickets are its children, on its driver/model unless it picks another.
       return this.asTool(() =>
@@ -1278,6 +1297,7 @@ export class Orchestrator {
           start: input.start ?? false,
           driver: input.driver ?? own.driver,
           model: input.model !== undefined ? input.model : input.driver ? null : own.model,
+          permissionMode,
         }),
       );
     }
@@ -1292,6 +1312,7 @@ export class Orchestrator {
         start: input.start ?? false,
         driver: input.driver,
         model: input.model,
+        permissionMode,
       }),
     );
   }
@@ -1324,7 +1345,7 @@ export class Orchestrator {
   }
 
   async moveTicket_(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket> {
-    const { target } = this.boardTarget(ctx, key, "move_ticket");
+    const { actor, target } = this.boardTarget(ctx, key, "move_ticket");
     if (!(TICKET_STATUSES as readonly string[]).includes(status)) throw new Error(`Unknown status: ${status}. Use one of ${TICKET_STATUSES.join(", ")}`);
     if (position !== undefined && (typeof position !== "number" || !Number.isInteger(position) || position < 0)) {
       throw new Error("position must be a whole number ≥ 0 (0 = top of the column)");
@@ -1340,6 +1361,7 @@ export class Orchestrator {
       if (status === "done" && target.status !== "planning") {
         throw new Error(`${target.key} is ${target.status}: only a ticket still in planning can be moved straight to done (to close one that isn't needed). Finished work goes through review.`);
       }
+      if (status === "in_progress" || status === "planning") this.notLooserThanCaller(actor, target);
     } else if (position === undefined) {
       throw new Error(`${target.key} is already ${status}; pass position to reorder it`);
     }
@@ -1353,8 +1375,9 @@ export class Orchestrator {
   }
 
   async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
-    const { target } = this.boardTarget(ctx, key, "start_ticket");
+    const { actor, target } = this.boardTarget(ctx, key, "start_ticket");
     this.noPendingApproval(target);
+    this.notLooserThanCaller(actor, target);
     return this.asTool(() => this.startTicket(target.key));
   }
 
@@ -1366,16 +1389,20 @@ export class Orchestrator {
     if (target.status === "review" && target.parentId !== actor.id) {
       throw new Error(`${target.key} is in review; messaging it would send it back to in progress. Only its reviewers can do that.`);
     }
+    this.notLooserThanCaller(actor, target);
     await this.asTool(() => this.sendMessage(target.key, text));
   }
 
   async cancelTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
     const { target } = this.boardTarget(ctx, key, "cancel_ticket");
+    // Nothing runs while an approval waits; cancelling would only strand it.
+    this.noPendingApproval(target);
     return this.asTool(() => this.cancelTicket(target.key));
   }
 
   async reopenTicket_(ctx: ToolContext, key: string, notes: string): Promise<Ticket> {
-    const { target } = this.boardTarget(ctx, key, "reopen_ticket");
+    const { actor, target } = this.boardTarget(ctx, key, "reopen_ticket");
+    this.notLooserThanCaller(actor, target);
     return this.asTool(() => this.reopenTicket(target.key, { notes }));
   }
 

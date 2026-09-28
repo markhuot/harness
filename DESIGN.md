@@ -209,10 +209,19 @@ hits them too:
 - **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
   (closing one that isn't needed). Anything that ran goes through review and a complete run.
 - **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a
-  message would deny it), moved to another column, or started. There is no tool to answer one.
+  message would deny it), moved to another column, started, or cancelled (nothing is running,
+  and cancelling would only strand the approval). There is no tool to answer one.
 - **Permission modes only tighten.** `update_ticket` compares the ticket's effective mode before
   and after (`resolvePermissionMode`, order auto < ask < read_only) and refuses a looser one,
   including `"inherit"` when the project's mode is looser.
+- **No escalation through other tickets.** A ticket an agent creates (work or conductor run)
+  runs no looser than the caller: when the caller's effective mode is stricter than what the new
+  ticket would inherit from its project, the ticket gets the caller's mode explicitly; otherwise
+  `permissionMode` stays null (inherit). And an agent can't put work into a ticket whose
+  effective mode is looser than its own: `message_ticket`, `start_ticket`, `reopen_ticket` and
+  `move_ticket` to in_progress or planning are refused ("<KEY> runs in auto, looser than your
+  read_only; ask a human"). Equal modes are fine, so a conductor steers children created under
+  its own mode.
 
 Deleting tickets isn't a tool.
 

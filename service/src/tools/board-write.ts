@@ -26,7 +26,7 @@ export const createTicket = defineTool<{
 }>({
   name: "create_ticket",
   description:
-    "Create a ticket. In a conductor run it is a child of this conductor (it starts on its own once its depends_on are done unless auto_start is false). In a work run it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. Returns the new ticket's key; pass keys from earlier create_ticket calls in depends_on to order work.",
+    "Create a ticket. In a conductor run it is a child of this conductor (it starts on its own once its depends_on are done unless auto_start is false). In a work run it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's key; pass keys from earlier create_ticket calls in depends_on to order work.",
   inputSchema: schema(
     {
       title: { type: "string", minLength: 1, description: "Short ticket title." },
@@ -97,7 +97,7 @@ export const updateTicket = defineTool<{
 export const moveTicket = defineTool<{ key: string; status: TicketStatus; position?: number }>({
   name: "move_ticket",
   description:
-    "Move another ticket to a column, or reorder it within one, exactly like dragging its card. Moving to in_progress starts its work (re-opens it when done); moving to planning or blocked pauses it for a human. You can't move a ticket into or out of review (its own agent submits it, reviewers decide), move one to done unless it's still in planning (closing a ticket that isn't needed), or move one waiting on a tool approval. position is the 0-based slot in the target column (0 = top); omit it to keep the card's place.",
+    "Move another ticket to a column, or reorder it within one, exactly like dragging its card. Moving to in_progress starts its work (re-opens it when done); moving to planning or blocked pauses it for a human. You can't move a ticket into or out of review, move one whose permission mode is looser than yours to in_progress or planning (its own agent submits it, reviewers decide), move one to done unless it's still in planning (closing a ticket that isn't needed), or move one waiting on a tool approval. position is the 0-based slot in the target column (0 = top); omit it to keep the card's place.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -126,7 +126,7 @@ export const startTicket = defineTool<{ key: string }>({
 export const messageTicket = defineTool<{ key: string; text: string }>({
   name: "message_ticket",
   description:
-    "Send a message to the agent working on another ticket, as if a human had written it: answer a blocked ticket's question, give extra direction, or correct course. A blocked ticket resumes work and a done one re-opens when messaged. Tickets waiting on a tool approval can't be messaged (only a human answers approvals), and neither can tickets in review unless you are their conductor.",
+    "Send a message to the agent working on another ticket, as if a human had written it: answer a blocked ticket's question, give extra direction, or correct course. A blocked ticket resumes work and a done one re-opens when messaged. Tickets waiting on a tool approval can't be messaged (only a human answers approvals), neither can tickets in review unless you are their conductor, nor tickets whose permission mode is looser than yours.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -142,7 +142,7 @@ export const messageTicket = defineTool<{ key: string; text: string }>({
 
 export const cancelTicket = defineTool<{ key: string }>({
   name: "cancel_ticket",
-  description: "Stop another ticket's agent: aborts its active run and drops its queued runs. The ticket stays in its column; message or start it to resume.",
+  description: "Stop another ticket's agent: aborts its active run and drops its queued runs. The ticket stays in its column; message or start it to resume. Refused for a ticket waiting on a tool approval.",
   inputSchema: schema({ key: keyProp }, ["key"]),
   async run({ key }, ctx) {
     const ticket = await ctx.ops.cancelTicket(ctx, key);
