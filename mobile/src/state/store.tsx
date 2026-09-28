@@ -59,17 +59,16 @@ export const useMaybeStore = () => useContext(Ctx);
 const legacyPage = (e: unknown) => (e instanceof HarnessApiError && e.status === 404 ? null : Promise.reject(e));
 
 async function loadSnapshot(client: HarnessClient, scope: string) {
-  const [projects, tickets, donePage, sessions, watchers, mappings, settings, drivers] = await Promise.all([
+  const [projects, tickets, donePage, sessions, watchers, settings, drivers] = await Promise.all([
     client.listProjects(),
     client.listTickets(undefined, { status: LIVE_STATUSES }),
     client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE }).catch(legacyPage) as Promise<TicketPage | null>,
     client.listSessions(),
     client.listWatchers().catch(() => []),
-    client.listMappings().catch(() => []),
     client.getSettings().catch(() => null),
     client.listDrivers().catch(() => []),
   ]);
-  return { projects, tickets, sessions, watchers, mappings, settings, drivers, ...(donePage ? { donePage: { scope, page: donePage } } : {}) };
+  return { projects, tickets, sessions, watchers, settings, drivers, ...(donePage ? { donePage: { scope, page: donePage } } : {}) };
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {

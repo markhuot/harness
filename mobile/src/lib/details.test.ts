@@ -17,7 +17,7 @@ function deferred<T>() {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function setup(open: Ticket[], concurrency = 2) {
-  let state: State = reducer(initialState, { type: "snapshot", snapshot: { projects: [], tickets: open, sessions: [], watchers: [], mappings: [], settings: null, drivers: [] } });
+  let state: State = reducer(initialState, { type: "snapshot", snapshot: { projects: [], tickets: open, sessions: [], watchers: [], settings: null, drivers: [] } });
   const dispatch = (a: Action) => (state = reducer(state, a));
   const calls: { key: string; d: ReturnType<typeof deferred<TicketDetail>> }[] = [];
   const f = new DetailFetcher({
