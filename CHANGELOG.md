@@ -34,7 +34,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   with controls). Use ← and → or the side arrows to move between a summary's attachments, and
   Esc or a click outside to close it. A file that can't be loaded shows its name instead of a
   broken image. A conductor's Tickets tab notes when a child's latest summary has attachments.
-
+- On the iPhone, a summary's screenshots and recordings show as a row of thumbnails under it.
+  Tap one to see it full screen: pinch or double-tap to zoom, swipe sideways to the summary's
+  other attachments, and videos play with the usual controls. Swipe down or tap ✕ to close. A
+  file that can't load shows a placeholder instead.
 - When the harness service is running older code than the Mac app, a banner under the board says
   so, and it stays until the service restarts. Actions the older service doesn't know about fail
   with a plain "Not found" until it restarts (re-opening a done ticket was one), so the banner

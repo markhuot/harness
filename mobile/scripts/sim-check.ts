@@ -28,7 +28,12 @@
 //      lists the project's files, tapping one completes it, and the run the prompt starts gets the
 //      file attached ("Attached @…" in the transcript); mentions-*.png in light and dark
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions]
+//  10. --attachments: only the summary attachment checks (needs ffmpeg): a summary with a tall and a
+//      wide PNG, an H.264 clip and a PNG that won't decode; checks every thumbnail shows, a tap opens
+//      the viewer on that attachment, swiping pages, Close and swipe-down close it;
+//      attachments-*.png (thumbnails in light and dark, the viewer on an image, the video, the failed file)
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,6 +55,7 @@ const pagingOnly = flag("paging");
 const stickOnly = flag("stick");
 const keyboardOnly = flag("keyboard");
 const mentionsOnly = flag("mentions");
+const attachmentsOnly = flag("attachments");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean } = {}) {
@@ -707,17 +713,128 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   return results.every((r) => r[1]);
 }
 
+/** --attachments: a ticket whose summary carries real images, a video and one file that won't decode. */
+async function seedAttachments() {
+  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+  const dir = join(scratch, "media");
+  mkdirSync(join(dir, "shots"), { recursive: true });
+  const ff = (...a: string[]) => sh(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", ...a], { cwd: dir });
+  // A tall phone screenshot, a wide one, a short H.264 clip, and a PNG that's only its header.
+  await ff("-f", "lavfi", "-i", "testsrc2=size=1179x2556:rate=1", "-frames:v", "1", "shots/phone.png");
+  await ff("-f", "lavfi", "-i", "smptehdbars=size=1600x900:rate=1", "-frames:v", "1", "shots/wide.png");
+  await ff("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "4", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-movflags", "+faststart", "shots/flow.mp4");
+  writeFileSync(join(dir, "shots/broken.png"), Buffer.concat([readFileSync(join(dir, "shots/wide.png")).subarray(0, 64)]));
+  const project = await api<Project>("POST", "/projects", { path: dir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
+  const files = ["phone.png", "wide.png", "flow.mp4", "broken.png"].map((f) => join(dir, "shots", f));
+  const call = { name: "post_summary", input: { summary: "Here's the new greeting screen, before and after, plus a recording of the flow.", attachments: files } };
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Show the greeting screen\n/tools ${JSON.stringify([call])}`, driver: "dummy", start: true });
+  await settle(ticket.key, (t) => t.status === "review" && !t.busy);
+  const summaries = await api<{ attachments: unknown[] }[]>("GET", `/tickets/${encodeURIComponent(ticket.key)}/summaries`);
+  if (!summaries.some((s) => s.attachments.length === files.length)) throw new Error(`no summary with ${files.length} attachments`);
+  return { project, ticket };
+}
+
+/** --attachments: thumbnails in the Summaries tab, then the viewer (open, page, close, swipe down). */
+async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>): Promise<boolean> {
+  const results: [string, boolean, string][] = [];
+  const check = async (name: string, fn: () => Promise<string | boolean>) => {
+    try {
+      const r = await fn();
+      results.push([name, r !== false, typeof r === "string" ? r : ""]);
+    } catch (e) {
+      results.push([name, false, (e as Error).message.split("\n")[0]!]);
+    }
+  };
+  const summaries = `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=summaries`;
+  const fresh = async () => {
+    await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
+    await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+    await Bun.sleep(2000);
+    await openUrl(udid, summaries);
+    await until("thumbnails", async () => (await labels(udid)).includes("Image phone.png"), 10000);
+    await Bun.sleep(1500); // let the images and the video's first frame load
+  };
+  const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
+  const counter = (n: number) => (l: string) => l.startsWith(`${n} of 4`);
+  const swipeLeft = () => axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
+  const swipeDown = () => axe("swipe", "--start-x", "200", "--start-y", "330", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
+
+  await check("every attachment has a thumbnail", async () => {
+    await fresh();
+    const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png"];
+    const l = await labels(udid);
+    const missing = want.filter((w) => !l.includes(w));
+    if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
+    return want.join(", ");
+  });
+  await check("tapping a thumbnail opens the viewer on it; swiping pages; Close closes", async () => {
+    await fresh();
+    await tapWhere(udid, "Image wide.png");
+    await until("viewer on 2 of 4", () => has(counter(2)), 5000);
+    await Bun.sleep(900); // the modal's fade-in swallows gestures
+    await swipeLeft();
+    await until("paged to 3 of 4", () => has(counter(3)), 5000);
+    await tapWhere(udid, "Close");
+    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    return "2 of 4 → 3 of 4 → closed";
+  });
+  await check("swiping down closes the viewer", async () => {
+    await fresh();
+    await tapWhere(udid, "Image phone.png");
+    await until("viewer open", () => has(counter(1)), 5000);
+    await Bun.sleep(900);
+    await swipeDown();
+    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    return "closed";
+  });
+  await check("the video page plays and swiping down closes it too", async () => {
+    await fresh();
+    await tapWhere(udid, "Image wide.png");
+    await until("viewer open", () => has(counter(2)), 5000);
+    await Bun.sleep(900);
+    await swipeLeft();
+    await until("on the video", () => has(counter(3)), 5000);
+    await Bun.sleep(1500);
+    await swipeDown();
+    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    return "closed";
+  });
+  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
+
+  // Screenshots: the thumbnails, an image in the viewer, the playing video, the failed file.
+  for (const theme of ["light", "dark"] as const) {
+    await simctl("ui", udid, "appearance", theme);
+    await fresh().catch(() => {});
+    await simctl("io", udid, "screenshot", join(shots, `attachments-thumbnails-${theme}.png`));
+    // The video and the broken file sit past the screen edge in the row, so page to them in the viewer.
+    await fresh().catch(() => {});
+    await tapWhere(udid, "Image wide.png").catch(() => {});
+    await Bun.sleep(1500);
+    await simctl("io", udid, "screenshot", join(shots, `attachments-viewer-image-${theme}.png`));
+    if (theme === "dark") continue; // the viewer is black in both themes
+    await swipeLeft();
+    await Bun.sleep(2500);
+    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-video-light.png"));
+    await swipeLeft();
+    await Bun.sleep(1500);
+    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-failed-light.png"));
+  }
+  await simctl("ui", udid, "appearance", "light");
+  return results.every((r) => r[1]);
+}
+
 // ---------------------------------------------------------------- main
 let failed: boolean = false;
 try {
   await until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000);
   token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded, paged, sticky, mentioned] = await Promise.all([
+  const [udid, seeded, paged, sticky, mentioned, media] = await Promise.all([
     pickDevice(),
-    pagingOnly || stickOnly || keyboardOnly || mentionsOnly ? null : seed(),
+    pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly ? null : seed(),
     pagingOnly ? seedPaging() : null,
     stickOnly || keyboardOnly ? seedStick() : null,
     mentionsOnly ? seedMentions() : null,
+    attachmentsOnly ? seedAttachments() : null,
   ]);
   if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
@@ -743,6 +860,7 @@ try {
   if (sticky && stickOnly) failed = !(await stickChecks(udid, sticky));
   if (sticky && keyboardOnly) failed = !(await keyboardChecks(udid, sticky));
   if (mentioned) failed = !(await mentionChecks(udid, mentioned));
+  if (media) failed = !(await attachmentChecks(udid, media));
   if (seeded) {
     const k = (t: Ticket) => encodeURIComponent(t.key);
     const screens: [string, string, number?][] = [

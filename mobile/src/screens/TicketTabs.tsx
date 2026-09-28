@@ -26,6 +26,7 @@ import { useAction, useStore } from "../state/store";
 import { MONO, RADIUS } from "../theme/tokens";
 import { Badge, Button, Card, Chip, DriverBadge, Empty, ReviewMark, SectionTitle, Spinner, StatusDot, StatusPill, useNow } from "../ui/kit";
 import { Icon } from "../ui/Icon";
+import { AttachmentRow } from "../ui/Attachments";
 import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
@@ -82,6 +83,7 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
                 <Text style={{ color: c.text3, fontSize: 12.5 }}>{relativeTime(s.createdAt, now)}</Text>
               </View>
               <Markdown text={s.body} />
+              {s.attachments?.length > 0 && <AttachmentRow attachments={s.attachments} />}
             </View>
           </View>
         ))
