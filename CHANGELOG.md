@@ -67,6 +67,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the Mac, a split layout saved in a wider window (or a window you've made narrower) no
+  longer squeezes a pane below its minimum width. Ticket panes stay at least 360 pixels wide and
+  the board at least 320 pixels, as long as the window has room for them.
 - A ticket that's finishing up (merging its branch and removing its worktree) no longer gets
   stuck in Blocked with "Working directory does not exist" when someone messages it or asks for
   changes mid-merge. Those now get an error that says to wait until it's done and re-open it, and

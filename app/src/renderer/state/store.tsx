@@ -21,7 +21,7 @@ import {
   type State,
 } from "@harness/shared/state";
 import { formatRoute, mirrorRoute, parseRoute, type Route } from "./route";
-import { focusedTicket, openTicket, updatePanes, usePanes } from "./panes";
+import { focusedTicket, getPanes, openTicket, updatePanes, usePanes } from "./panes";
 import type { HarnessBridge } from "../../main/types";
 
 declare global {
@@ -66,15 +66,22 @@ export function useStore(): Store {
 }
 
 /** Arriving at a board link to a ticket opens it in a pane (or focuses the pane it's already in). */
-function openFromRoute(r: Route): Route {
+function openFromRoute(r: Route) {
   if (r.view === "board" && r.ticketKey) updatePanes((s) => openTicket(s, r.ticketKey!, r.tab));
-  return r;
 }
 
 export function useRoute() {
-  const [route, setRoute] = useState(() => openFromRoute(parseRoute(location.hash)));
+  const [route, setRoute] = useState(() => parseRoute(location.hash));
+  // The route the app launched with opens its ticket once mounted (not during render: that would
+  // update the pane store mid-render). Later hash changes open theirs as they arrive.
+  const initial = useRef(route);
+  useEffect(() => openFromRoute(initial.current), []);
   useEffect(() => {
-    const on = () => setRoute(openFromRoute(parseRoute(location.hash)));
+    const on = () => {
+      const r = parseRoute(location.hash);
+      openFromRoute(r);
+      setRoute(r);
+    };
     addEventListener("hashchange", on);
     return () => removeEventListener("hashchange", on);
   }, []);
@@ -84,6 +91,9 @@ export function useRoute() {
   const mirror = route.view === "board" ? formatRoute(mirrorRoute(route, focused)) : null;
   useEffect(() => {
     if (!mirror || location.hash === mirror) return;
+    // The panes changed after this render (the initial open above runs in the same commit): the
+    // re-render that's coming mirrors them, so don't drop the ticket from the hash in between.
+    if (formatRoute(mirrorRoute(route, focusedTicket(getPanes()))) !== mirror) return;
     history.replaceState(history.state, "", mirror);
     setRoute(parseRoute(mirror));
   }, [mirror]);

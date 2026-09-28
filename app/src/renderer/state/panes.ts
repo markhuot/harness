@@ -476,6 +476,8 @@ export interface DividerBox {
   split: PaneSplit;
   /** Between child `index` and `index + 1`. */
   index: number;
+  /** The split's sizes as laid out (after clamping to the panes' minimums), which a drag starts from. */
+  sizes: number[];
   /** The split's own box (its length along the axis is what the divider resizes). */
   rect: Rect;
   /** Where the divider sits along the split's axis (x for "row", y for "column"). */
@@ -488,12 +490,20 @@ export interface PaneLayout {
   cornerId: string;
 }
 
+/** The workspace's size in px, which lets `layoutPanes` keep panes at their minimums. */
+export interface PaneArea {
+  width: number;
+  height: number;
+}
+
 /**
  * Where every pane and divider goes. Panes are laid out flat (absolutely positioned siblings, not
  * nested boxes) so reshaping the tree never remounts one. A zoomed pane fills the area and the rest
- * are hidden, with no dividers.
+ * are hidden, with no dividers. Given the workspace's `area`, each split's stored sizes are clamped
+ * (clampSizes) so no pane renders below its minimum while there's room, whatever was stored (a
+ * layout saved in a wider window, say); the stored sizes themselves don't change.
  */
-export function layoutPanes(state: PaneState): PaneLayout {
+export function layoutPanes(state: PaneState, area?: PaneArea): PaneLayout {
   const out: PaneLayout = { leaves: [], dividers: [], cornerId: "" };
   const zoomed = state.zoomedId;
   const walk = (node: PaneNode, rect: Rect) => {
@@ -503,18 +513,43 @@ export function layoutPanes(state: PaneState): PaneLayout {
       return;
     }
     const row = node.dir === "row";
+    const sizes = area ? clampSizes(node.sizes, node.children.map((c) => minSize(c, node.dir)), row ? rect.w * area.width : rect.h * area.height) : node.sizes;
     let offset = 0;
     node.children.forEach((c, i) => {
-      const share = node.sizes[i]!;
+      const share = sizes[i]!;
       const box = row ? { x: rect.x + rect.w * offset, y: rect.y, w: rect.w * share, h: rect.h } : { x: rect.x, y: rect.y + rect.h * offset, w: rect.w, h: rect.h * share };
       offset += share;
-      if (i < node.children.length - 1 && !zoomed) out.dividers.push({ split: node, index: i, rect, at: row ? rect.x + rect.w * offset : rect.y + rect.h * offset });
+      if (i < node.children.length - 1 && !zoomed) out.dividers.push({ split: node, index: i, sizes, rect, at: row ? rect.x + rect.w * offset : rect.y + rect.h * offset });
       walk(c, box);
     });
   };
   walk(state.root, { x: 0, y: 0, w: 1, h: 1 });
   out.cornerId = zoomed ?? leaves(state.root)[0]!.id;
   return out;
+}
+
+/**
+ * A split's `sizes` adjusted so each child gets at least `mins[i]` px of the split's `totalPx`:
+ * children below their minimum are raised to it, and the rest share what's left in proportion to
+ * their stored sizes (repeated until none is short). When the minimums don't all fit, the space is
+ * shared in proportion to them, as resizeSplit does. Sizes that already fit come back unchanged.
+ */
+export function clampSizes(sizes: readonly number[], mins: readonly number[], totalPx: number): number[] {
+  if (!(totalPx > 0) || sizes.length !== mins.length) return [...sizes];
+  const need = mins.reduce((a, b) => a + b, 0);
+  if (need >= totalPx) return need > 0 ? mins.map((m) => m / need) : [...sizes];
+  const fixed = new Set<number>();
+  const flexPx = () => {
+    const free = totalPx - [...fixed].reduce((a, i) => a + mins[i]!, 0);
+    const weight = sizes.reduce((a, s, i) => (fixed.has(i) ? a : a + s), 0);
+    return (i: number) => (weight > 0 ? (sizes[i]! / weight) * free : free / (sizes.length - fixed.size));
+  };
+  for (;;) {
+    const px = flexPx();
+    const short = sizes.map((_, i) => i).filter((i) => !fixed.has(i) && px(i) < mins[i]! - 1e-9);
+    if (!short.length) return sizes.map((_, i) => (fixed.has(i) ? mins[i]! : px(i)) / totalPx);
+    for (const i of short) fixed.add(i);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -571,10 +606,10 @@ export function applyDrop(state: PaneState, source: DragSource, targetLeafId: st
  * `applyDrop`, so the preview matches the result exactly (the board keeping 60%, a moved pane's old
  * space closing up). Null when the drop would do nothing.
  */
-export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone): Rect | null {
+export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone, area?: PaneArea): Rect | null {
   const next = applyDrop(state, source, targetLeafId, zone);
   if (next === state) return null;
-  return layoutPanes(next).leaves.find((b) => b.leaf.id === next.focusedId)?.rect ?? null;
+  return layoutPanes(next, area).leaves.find((b) => b.leaf.id === next.focusedId)?.rect ?? null;
 }
 
 /**
@@ -741,6 +776,9 @@ function subscribe(fn: () => void) {
   listeners.add(fn);
   return () => void listeners.delete(fn);
 }
+
+/** The current panes outside React (e.g. an effect checking that its render isn't already stale). */
+export const getPanes = (): PaneState => get();
 
 export function usePanes(): PaneState {
   return useSyncExternalStore(subscribe, get);

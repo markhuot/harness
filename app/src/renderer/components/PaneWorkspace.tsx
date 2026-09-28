@@ -12,7 +12,7 @@
 // under the pointer picks the drop (zoneAt); the preview shows where the dropped pane would land
 // (dropPreview), and drop applies it.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {
   applyDrop,
   closePane,
@@ -29,6 +29,7 @@ import {
   updatePanes,
   usePanes,
   type DividerBox,
+  type PaneArea,
   type DropZone,
   type PaneLayout,
   type PaneLeaf,
@@ -77,8 +78,19 @@ function escapePanes(s: PaneState): PaneState {
 
 export function PaneWorkspace() {
   const panes = usePanes();
-  const layout = useMemo(() => layoutPanes(panes), [panes]);
   const ref = useRef<HTMLDivElement>(null);
+  // The workspace's size, so stored sizes are clamped to the panes' minimums (layoutPanes).
+  const [area, setArea] = useState<PaneArea | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setArea((a) => (a && a.width === el.clientWidth && a.height === el.clientHeight ? a : { width: el.clientWidth, height: el.clientHeight }));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const layout = useMemo(() => layoutPanes(panes, area ?? undefined), [panes, area]);
   const multi = panes.root.type === "split";
   // DOM order by id, not tree order: existing panes never move in the DOM (moving an iframe
   // reloads it), new ones are simply added.
@@ -120,9 +132,9 @@ export function PaneWorkspace() {
         />
       ))}
       {layout.dividers.map((d) => (
-        <Divider key={dividerId(d)} box={d} panes={panes} workspace={ref} />
+        <Divider key={dividerId(d)} box={d} panes={panes} area={area} workspace={ref} />
       ))}
-      <DropLayer layout={layout} panes={panes} workspace={ref} />
+      <DropLayer layout={layout} panes={panes} area={area} workspace={ref} />
     </div>
   );
 }
@@ -164,8 +176,9 @@ function Pane({
 }
 
 /** The draggable boundary between two children of a split (role=separator). */
-function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState; workspace: RefObject<HTMLDivElement | null> }) {
-  const { split, index, rect } = box;
+function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: PaneState; area: PaneArea | null; workspace: RefObject<HTMLDivElement | null> }) {
+  // `sizes` is the split as rendered (clamped to minimums), so a drag or key starts from what's on screen.
+  const { split, index, rect, sizes: shown } = box;
   const row = split.dir === "row";
   const [dragging, setDragging] = useState(false);
   const overlay = useDragOverlay(dragging ? (row ? "x" : "y") : null);
@@ -183,7 +196,7 @@ function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState;
   const preview = (sizes: number[] | null) => {
     const el = workspace.current;
     const s = panesRef.current;
-    if (el) applyLayout(el, layoutPanes(sizes ? setSizes(s, split.id, sizes) : s));
+    if (el) applyLayout(el, layoutPanes(sizes ? setSizes(s, split.id, sizes) : s, area ?? undefined));
   };
   const commit = (sizes: number[]) => updatePanes((s) => setSizes(s, split.id, sizes));
   const end = (keep: boolean) => {
@@ -193,7 +206,7 @@ function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState;
     if (keep && d?.last) commit(d.last);
     else preview(null);
   };
-  const share = split.sizes.slice(0, index + 1).reduce((a, b) => a + b, 0);
+  const share = shown.slice(0, index + 1).reduce((a, b) => a + b, 0);
 
   return (
     <div
@@ -219,7 +232,7 @@ function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState;
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        d.last = resizeSplit(split.sizes, index, (row ? e.clientX : e.clientY) - d.start, d.total, d.mins);
+        d.last = resizeSplit(shown, index, (row ? e.clientX : e.clientY) - d.start, d.total, d.mins);
         preview(d.last);
       }}
       onPointerUp={() => end(true)}
@@ -228,7 +241,7 @@ function Divider({ box, panes, workspace }: { box: DividerBox; panes: PaneState;
       onDoubleClick={() => commit(split.sizes.map(() => 1))}
       onKeyDown={(e) => {
         const { total, mins } = measure();
-        const sizes = keySplit(e.key, e.shiftKey, split.dir, split.sizes, index, total, mins);
+        const sizes = keySplit(e.key, e.shiftKey, split.dir, shown, index, total, mins);
         if (!sizes) return;
         e.preventDefault();
         commit(sizes);
@@ -246,7 +259,7 @@ type DropHit = { leafId: string; zone: DropZone; landing: Rect };
  * the pointer and previews where the dropped pane would land, unless the drop would change nothing
  * (a pane over itself); drop applies it. Drags that aren't ours (files, text) pass through untouched.
  */
-function DropLayer({ layout, panes, workspace }: { layout: PaneLayout; panes: PaneState; workspace: RefObject<HTMLDivElement | null> }) {
+function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; panes: PaneState; area: PaneArea | null; workspace: RefObject<HTMLDivElement | null> }) {
   const source = useActiveDrag();
   const [hit, setHit] = useState<DropHit | null>(null);
   useEffect(() => {
@@ -259,7 +272,7 @@ function DropLayer({ layout, panes, workspace }: { layout: PaneLayout; panes: Pa
     const ws = workspace.current?.getBoundingClientRect();
     if (!ws || !ws.width || !ws.height) return null;
     const t = dropTargetAt(layout, (e.clientX - ws.left) / ws.width, (e.clientY - ws.top) / ws.height);
-    const landing = t && dropPreview(panes, source, t.leafId, t.zone);
+    const landing = t && dropPreview(panes, source, t.leafId, t.zone, area ?? undefined);
     return t && landing ? { leafId: t.leafId, zone: t.zone, landing } : null;
   };
   const over = (e: DragEvent) => {

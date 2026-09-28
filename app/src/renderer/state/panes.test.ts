@@ -3,6 +3,7 @@ import {
   applyDrop,
   boardLeaf,
   checkPanes,
+  clampSizes,
   closePane,
   defaultPanes,
   dropContent,
@@ -733,5 +734,62 @@ describe("splitTarget", () => {
     expect(splitTarget(start, null, "A-2")).toBe("B");
     expect(splitTarget(start, "A-1", "A-1")).toBe("A-2");
     expect(splitTarget(start, "A-1", "A-9")).toBe("A-1");
+  });
+});
+
+describe("clampSizes", () => {
+  const rs = (v: number[]) => v.map(r);
+
+  test("sizes that already fit come back unchanged", () => {
+    expect(clampSizes([0.6, 0.4], [320, 360], 1200)).toEqual([0.6, 0.4]);
+    // Exactly at a minimum is fine.
+    expect(rs(clampSizes([0.3, 0.7], [300, 360], 1000))).toEqual([0.3, 0.7]);
+  });
+
+  test("a pane below its minimum is raised to it; the others give up the room in proportion", () => {
+    // 1200px: 960 | 120 | 120 → the two tickets need 360 each, the board takes what's left.
+    expect(rs(clampSizes([0.8, 0.1, 0.1], [320, 360, 360], 1200))).toEqual([0.4, 0.3, 0.3]);
+    // Raising one can push another under its own minimum: repeated until none is short.
+    expect(rs(clampSizes([0.5, 0.45, 0.05], [320, 360, 360], 1100))).toEqual([0.345, 0.327, 0.327]);
+    // Just short of fitting leaves each pane exactly at its minimum.
+    expect(rs(clampSizes([0.9, 0.1], [320, 360], 680))).toEqual([0.471, 0.529]);
+  });
+
+  test("when the minimums don't fit, the space is shared in proportion to them", () => {
+    expect(rs(clampSizes([0.9, 0.1], [320, 360], 600))).toEqual([0.471, 0.529]);
+  });
+
+  test("a zero or unknown length (not measured yet) or mismatched mins leave the sizes alone", () => {
+    expect(clampSizes([0.9, 0.1], [320, 360], 0)).toEqual([0.9, 0.1]);
+    expect(clampSizes([0.9, 0.1], [320, 360], NaN)).toEqual([0.9, 0.1]);
+    expect(clampSizes([0.9, 0.1], [320], 1000)).toEqual([0.9, 0.1]);
+  });
+});
+
+describe("layoutPanes with the workspace size", () => {
+  const rr = (v: { x: number; y: number; w: number; h: number }) => [r(v.x), r(v.y), r(v.w), r(v.h)];
+
+  test("a stale stored layout never renders a pane below its minimum when there's room", () => {
+    // Saved in a wide window with a sliver of a ticket pane, then shown 1000 × 800.
+    const state = st(row("r", [B, col("c", [T("A"), T("C")], [0.9, 0.1])], [0.95, 0.05]));
+    const l = layoutPanes(state, { width: 1000, height: 800 });
+    const box = (id: string) => rr(l.leaves.find((b) => b.leaf.id === id)!.rect);
+    expect(box("B")).toEqual([0, 0, 0.64, 1]);
+    expect(box("A")).toEqual([0.64, 0, 0.36, 0.75]); // 600px tall: C keeps its 200
+    expect(box("C")).toEqual([0.64, 0.75, 0.36, 0.25]);
+    // The dividers sit on the clamped boundaries and carry the clamped sizes for dragging.
+    expect(l.dividers.map((d) => [r(d.at), ...d.sizes.map(r)])).toEqual([
+      [0.64, 0.64, 0.36],
+      [0.75, 0.75, 0.25],
+    ]);
+    // The stored sizes aren't touched.
+    expect(state.root.type === "split" && state.root.sizes).toEqual([0.95, 0.05]);
+  });
+
+  test("without a size (or when everything fits) the stored sizes are laid out as is", () => {
+    const state = st(row("r", [B, T("A")], [0.6, 0.4]));
+    expect(rr(layoutPanes(state).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
+    expect(rr(layoutPanes(state, { width: 1400, height: 900 }).leaves[1]!.rect)).toEqual([0.6, 0, 0.4, 1]);
+    expect(rr(layoutPanes(st(row("r", [B, T("A")], [0.95, 0.05]))).leaves[1]!.rect)).toEqual([0.95, 0, 0.05, 1]);
   });
 });

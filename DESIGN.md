@@ -914,6 +914,10 @@ Settings, project settings, or on the board route the pane workspace.
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
   taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, any pane 200 px tall.
+  They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
+  each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
+  never shows a pane below its minimum while there's room. The stored sizes stay as they were
+  until a divider moves, and a drag starts from the sizes on screen.
 - **Focus, close, zoom.** Clicking or tabbing into a pane focuses it (a faint header tint). ✕
   closes a ticket pane and its neighbours take its room; the board can't be closed. Maximize
   zooms a pane. Escape ends a zoom, or else closes the focused ticket pane (never while a text
@@ -921,7 +925,9 @@ Settings, project settings, or on the board route the pane workspace.
   rename.
 - **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
-  opens the ticket the way a card click does. After that the hash mirrors the focused ticket
+  opens the ticket the way a card click does. The route the app launches with opens its ticket
+  in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
+  hash alone. After that the hash mirrors the focused ticket
   pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
   board. Opening an already focused ticket is a no-op, so the two never fight. Leaving for Inbox
   or Settings and coming back restores the saved panes.

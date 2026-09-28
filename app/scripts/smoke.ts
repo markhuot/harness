@@ -1015,6 +1015,28 @@ try {
     await Bun.sleep(100);
     check("a real (native) card drag onto the board's right half opens the ticket there", realOk && !(await exists("[data-testid=pane-drop-layer]")), JSON.stringify({ intercepted: !!data, boxes: await boxes() }));
 
+    // Stored sizes are clamped to the panes' minimums when laid out: a sliver renders at 360px.
+    await setPanes({
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "leaf", id: "t1", content: { kind: "ticket", ticketKey: "NYTIMES-4", tab: "summaries" } }], sizes: [0.97, 0.03] },
+      focusedId: null,
+      zoomedId: null,
+    });
+    const sliver = await until("clamped ticket pane", async () => {
+      const b = await boxes();
+      return b.length === 2 && b;
+    }).catch(() => boxes());
+    check("a stored sliver of a ticket pane renders at its 360px minimum", near(sliver[1]?.w ?? 0, 360) && sliver[1]?.key === "NYTIMES-4", JSON.stringify(sliver));
+
+    // Launching (here: reloading) at a ticket link opens that ticket once mounted, and the hash keeps it.
+    await setPanes(boardOnly);
+    await js(`history.replaceState(null, "", "#/board/all/ticket/NYTIMES-3"); location.reload()`);
+    await Bun.sleep(300);
+    const launched = await until("ticket opened from the launch route", async () => {
+      const b = await js<Box[]>(`[...document.querySelectorAll(".pane")].map(p => ({ key: p.querySelector(".detail-key")?.textContent ?? "board" }))`).catch(() => []);
+      return b.some((x) => x.key === "NYTIMES-3") && b;
+    }, 10000).catch(() => [] as Box[]);
+    check("a launch at a ticket link opens it in a pane and the hash keeps the ticket", launched.length === 2 && (await js<string>("location.hash")) === "#/board/all/ticket/NYTIMES-3", JSON.stringify({ launched, hash: await js<string>("location.hash") }));
+
     await setPanes(boardOnly);
     await js(`location.hash = "#/board/all"`);
   }
