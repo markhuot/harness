@@ -9,6 +9,7 @@ import { NewSessionModal } from "./views/NewSession";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { PaneWorkspace } from "./components/PaneWorkspace";
+import { ServiceBanner } from "./components/ServiceBanner";
 import { sidebarBounds, toggleSidebar, updateLayout, useLayout } from "./state/layout";
 
 interface Toast {
@@ -232,6 +233,7 @@ function Shell() {
         ) : (
           <PaneWorkspace />
         )}
+        <ServiceBanner />
       </main>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}
     </div>

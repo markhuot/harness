@@ -23,6 +23,7 @@ import {
 import { formatRoute, mirrorRoute, parseRoute, type Route } from "./route";
 import { focusedTicket, getPanes, openTicket, updatePanes, usePanes } from "./panes";
 import type { HarnessBridge } from "../../main/types";
+import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
 
 declare global {
   interface Window {
@@ -55,6 +56,12 @@ export interface Store {
   setSearch: (q: string) => void;
   /** Next page of search results */
   loadMoreSearch: () => void;
+  /** The service's code, from /health and service.status events (null until known) */
+  serviceCode: ServiceCode;
+  /** The service runs older code than this app (see state/service.ts) */
+  serviceStale: boolean;
+  /** Restart the service now; running agents are stopped. Rejects with the reason it didn't. */
+  restartService: () => Promise<void>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -155,6 +162,7 @@ export function StoreProvider({
 }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [epoch, setEpoch] = useState(0);
+  const [serviceCode, setServiceCode] = useState<ServiceCode>(null);
   const [route, navigate] = useRoute();
   const listeners = useRef(new Set<EventListener>());
   const client = useMemo(() => new HarnessClient({ baseUrl, token }), [baseUrl, token]);
@@ -189,7 +197,8 @@ export function StoreProvider({
     let first = true;
     return client.connect({
       onEvent: (e) => {
-        if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
+        if (e.kind === "service.status") setServiceCode(serviceCodeOf(e.status));
+        else if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
         for (const fn of listeners.current) fn(e);
       },
       onStatus: (connected) => {
@@ -200,6 +209,8 @@ export function StoreProvider({
           // isn't overwritten by the snapshot that follows it.
           const again = !first;
           first = false;
+          // A reconnect may be a restarted service (new code): ask again every time.
+          client.health().then((h) => setServiceCode(serviceCodeOf(h)), () => {});
           void refresh().then(() => again && setEpoch((n) => n + 1));
         }
       },
@@ -320,14 +331,43 @@ export function StoreProvider({
     return () => void listeners.current.delete(fn);
   }, []);
 
+  const restartService = useCallback(async () => {
+    if (window.harness) {
+      const res = await window.harness.restartService();
+      if ("error" in res) throw new Error(res.output ? `${res.error} ${res.output}` : res.error);
+    } else {
+      await client.restartService();
+    }
+  }, [client]);
+  const serviceStale = isServiceStale(serviceCode);
+
   const reconnect = useCallback(async (rotated: string) => {
     if (!onTokenRotated) throw new Error("This window can't switch tokens; reload it.");
     await onTokenRotated(rotated);
   }, [onTokenRotated]);
 
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch],
+    () => ({
+      state,
+      dispatch,
+      client,
+      socket,
+      onEvent,
+      epoch,
+      route,
+      navigate,
+      refresh,
+      toast,
+      reconnect,
+      boardProjectId,
+      loadMoreDone,
+      setSearch,
+      loadMoreSearch,
+      serviceCode,
+      serviceStale,
+      restartService,
+    }),
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

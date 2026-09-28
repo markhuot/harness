@@ -8,6 +8,7 @@ const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
   retryService: () => ipcRenderer.invoke("harness:retryService"),
   reloadToken: (rotated) => ipcRenderer.invoke("harness:reloadToken", rotated),
+  restartService: () => ipcRenderer.invoke("harness:restartService"),
   pickDirectory: (opts) => ipcRenderer.invoke("harness:pickDirectory", opts),
   openExternal: (url) => ipcRenderer.invoke("harness:openExternal", url),
   revealInFinder: (path) => ipcRenderer.invoke("harness:revealInFinder", path),

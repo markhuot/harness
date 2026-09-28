@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureService, parseEnsureOutput, reloadToken } from "./service";
+import { ensureService, parseEnsureOutput, reloadToken, restartService } from "./service";
 
 describe("parseEnsureOutput", () => {
   test("takes the last JSON line after log noise", () => {
@@ -72,6 +72,67 @@ describe("ensureService", () => {
     const { app } = fixture("");
     const moved = await ensureService(app, { HARNESS_REPO_ROOT: "/nope" });
     expect("error" in moved && moved.output).toBe("Expected /nope/service/src/cli.ts");
+  });
+});
+
+describe("restartService", () => {
+  const dirs: string[] = [];
+  afterAll(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+
+  function fixture(cli: string) {
+    const root = mkdtempSync(join(tmpdir(), "harness-app-test-"));
+    dirs.push(root);
+    const repo = join(root, "repo");
+    mkdirSync(join(repo, "service/src"), { recursive: true });
+    writeFileSync(join(repo, "service/src/cli.ts"), cli);
+    const app = join(root, "app");
+    mkdirSync(join(app, "resources"), { recursive: true });
+    writeFileSync(join(app, "resources/harness.json"), JSON.stringify({ repoRoot: repo, bunPath: process.execPath }));
+    return { root, app };
+  }
+  const managed = { baseUrl: "http://127.0.0.1:7717", token: "t", source: "service" } as const;
+  const noFetch = (() => {
+    throw new Error("fetch shouldn't be called");
+  }) as unknown as typeof fetch;
+
+  test("the service the app started restarts through launchd: `service restart --json`", async () => {
+    const { root, app } = fixture(`
+      const args = process.argv.slice(2).join(" ");
+      await Bun.write(process.env.FIXTURE_ROOT + "/args", args);
+      if (args !== "service restart --json") process.exit(2);
+      console.log(JSON.stringify({ ok: true }));
+    `);
+    expect(await restartService(app, managed, { PATH: process.env.PATH, FIXTURE_ROOT: root }, noFetch)).toEqual({ ok: true });
+    expect(await Bun.file(join(root, "args")).text()).toBe("service restart --json");
+  });
+
+  test("a failing launchctl is an error carrying the CLI output", async () => {
+    const { app } = fixture(`console.error("kickstart: Operation not permitted"); process.exit(1);`);
+    const res = await restartService(app, managed, { PATH: process.env.PATH }, noFetch);
+    expect("error" in res && res.error).toBe("The harness service didn't restart.");
+    expect("error" in res && res.output).toContain("kickstart: Operation not permitted");
+  });
+
+  test("other connections ask the service itself, and report its refusal", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const answer = (status: number, body: unknown) =>
+      (async (url: string, init: RequestInit) => {
+        calls.push({ url, init });
+        return new Response(JSON.stringify(body), { status });
+      }) as unknown as typeof fetch;
+    const env = { baseUrl: "http://10.0.0.2:7717/", token: "tok", source: "env" } as const;
+    expect(await restartService("/definitely/missing", env, {}, answer(200, { data: { ok: true } }))).toEqual({ ok: true });
+    expect(calls[0]!.url).toBe("http://10.0.0.2:7717/service/restart");
+    expect(calls[0]!.init.method).toBe("POST");
+    expect((calls[0]!.init.headers as Record<string, string>).authorization).toBe("Bearer tok");
+    // A service from before the endpoint existed.
+    const old = await restartService("/definitely/missing", env, {}, answer(404, { error: "Not found" }));
+    expect(old).toEqual({ error: "The harness service didn't restart.", output: "Not found" });
+  });
+
+  test("no connection is an error, not a crash", async () => {
+    expect("error" in (await restartService("/x", null, {}, noFetch))).toBe(true);
+    expect("error" in (await restartService("/x", { error: "down", output: "" }, {}, noFetch))).toBe(true);
   });
 });
 
