@@ -89,7 +89,8 @@ async function axe(...a: string[]) {
   return out;
 }
 async function labels(udid: string): Promise<string[]> {
-  return [...(await axe("describe-ui", "--udid", udid)).matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!);
+  // AXe's JSON escapes "/" (src\/app.ts); labels are compared as they read on screen.
+  return [...(await axe("describe-ui", "--udid", udid)).matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
 }
 async function tapLabel(udid: string, label: string) {
   await axe("tap", "--label", label, "--udid", udid);
@@ -640,13 +641,13 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
 
   await check("New session: @READ lists README.md, a tap completes it, the run gets the file", async () => {
     await fresh(newSession);
-    await tapWhere(udid, "Prompt");
+    await tapWhere(udid, (l) => l.startsWith("Prompt"));
     await axe("type", "Summarize @READ", "--udid", udid);
     await until("README.md suggested", () => has("README.md"), 8000);
+    await Bun.sleep(400);
     await tapWhere(udid, "README.md");
     await until("list closed", async () => !(await has("README.md")), 4000);
-    // The header's Start: the sheet's own button can sit behind the keyboard.
-    await tapWhere(udid, "Start");
+    await tapWhere(udid, "Start session");
     const t = await until("ticket created", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key), 10000);
     if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
@@ -655,7 +656,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
 
   await check("New session: a folder keeps the list open inside it", async () => {
     await fresh(newSession);
-    await tapWhere(udid, "Prompt");
+    await tapWhere(udid, (l) => l.startsWith("Prompt"));
     await axe("type", "@sr", "--udid", udid);
     await until("src/ suggested", () => has("src/"), 8000);
     await tapWhere(udid, "src/");
@@ -666,12 +667,18 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
     await fresh(composer);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    // iOS may capitalize the first word, so the message is compared without case.
     await axe("type", "see @src/a", "--udid", udid);
     await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
-    await simctl("io", udid, "screenshot", join(shots, "mentions-composer-light.png"));
+    await Bun.sleep(400); // let the list settle before aiming at a row
     await tapWhere(udid, "src/app.ts");
+    // Picking closes the list and the composer shrinks, which moves Send.
+    await until("list closed", async () => !(await has("src/app.ts")), 4000);
+    await Bun.sleep(300);
     await tapWhere(udid, "Send");
-    await until("message with the mention", async () => (await texts(p.ticket.key)).includes("see @src/app.ts"), 10000);
+    await until("message with the mention", async () => (await texts(p.ticket.key)).some((t) => t.toLowerCase() === "see @src/app.ts"), 10000).catch(async (e) => {
+      throw new Error(`${(e as Error).message}; transcript ends ${JSON.stringify((await texts(p.ticket.key)).slice(-4))}`);
+    });
     await until("Attached status", async () => (await texts(p.ticket.key)).includes("Attached @src/app.ts"), 15000);
     return "see @src/app.ts";
   });
@@ -680,7 +687,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   for (const theme of ["light", "dark"] as const) {
     await simctl("ui", udid, "appearance", theme);
     await fresh(newSession);
-    await tapWhere(udid, "Prompt").catch(() => {});
+    await tapWhere(udid, (l) => l.startsWith("Prompt")).catch(() => {});
     await axe("type", "Read @", "--udid", udid);
     await until("suggestions", () => has("README.md"), 8000).catch(() => {});
     await Bun.sleep(600);
