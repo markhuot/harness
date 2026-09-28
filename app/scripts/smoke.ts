@@ -944,16 +944,23 @@ try {
     check("dragging a pane's header grip onto the board's left half moves the pane there", b5[0]!.key === "NYTIMES-3" && near(b5[0]!.x + b5[0]!.w, board5.x) && b5[0]!.h === board5.h, JSON.stringify(b5));
     check("the board has no grip (it can't be dragged)", !(await exists(".pane-board [data-testid=pane-grip]")));
 
-    // The keyboard route for re-docking: More → Move pane to the bottom spans the workspace's bottom edge.
+    // The keyboard route for re-docking: More → Move pane → Board ↓ puts the pane below the board (movePane).
+    const boardId = await js<string>(`document.querySelector(".pane-board").dataset.paneId`);
     await js(`(${paneOf("NYTIMES-4")}).querySelector(".detail-titlebar button[title=More]").click()`);
-    await until("move menu", () => exists("[data-testid=move-pane-bottom]"));
-    await js(`document.querySelector("[data-testid=move-pane-bottom]").click()`);
-    const wsBox = await js<Box>(`(() => { const r = document.querySelector(".pane-workspace").getBoundingClientRect(); return { key: "", x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; })()`);
-    const moved = await until("moved to the bottom edge", async () => {
-      const b = (await boxes()).find((x) => x.key === "NYTIMES-4");
-      return b && b.y > 0 && b && near(b.w, wsBox.w) && b;
+    await until("move menu", () => exists(`[data-testid="move-pane-bottom-${boardId}"]`));
+    const moveLabel = await js<string>(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').getAttribute("aria-label")`);
+    await js(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').click()`);
+    const underBoard = await until("moved below the board", async () => {
+      const b = await boxes();
+      const bd = b.find((x) => x.key === "board");
+      const four = b.find((x) => x.key === "NYTIMES-4");
+      return bd && four && four.y > bd.y && { bd, four };
     }).catch(() => null);
-    check("More → Move pane to the bottom docks the pane along the whole bottom edge", !!moved && near(moved.x, wsBox.x) && near(moved.y + moved.h, wsBox.y + wsBox.h), JSON.stringify(moved));
+    check(
+      "More → Move pane → below the board docks the pane under the board, sharing its width",
+      !!underBoard && moveLabel === "Move pane below the board" && near(underBoard.four.x, underBoard.bd.x) && near(underBoard.four.w, underBoard.bd.w) && near(underBoard.bd.y + underBoard.bd.h, underBoard.four.y) && !(await exists(".menu")),
+      JSON.stringify({ moveLabel, underBoard }),
+    );
 
     // Over a Browser tab's canvas the layer still takes the drag; other drags (text, files) are ignored.
     await setPanes(boardOnly);

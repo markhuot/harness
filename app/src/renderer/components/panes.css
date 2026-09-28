@@ -287,6 +287,37 @@
   cursor: grabbing;
 }
 
+/* The ticket header's More → Move pane rows: a target's name, then ← → ↑ ↓ buttons. */
+.menu .menu-caption {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.menu .menu-move {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 0 8px;
+}
+.menu .menu-move-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+.menu .menu-move button {
+  flex: none;
+  width: 26px;
+  justify-content: center;
+  padding: 4px 0;
+}
+.menu .menu-move button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
 /* A narrow board pane (≥320px) sheds header extras instead of wrapping or clipping. */
 .board-pane {
   container: board-pane / inline-size;

@@ -17,7 +17,7 @@ import { ProjectKey } from "../components/ProjectKey";
 import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket } from "../components/paneContext";
 import { dragProps } from "../components/paneDrag";
-import { closePane, movePaneToEdge, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes, type DropZone } from "../state/panes";
+import { closePane, leaves, movePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updatePanes, usePanes, type DropZone } from "../state/panes";
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
 export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
@@ -122,12 +122,46 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   );
 }
 
-const MOVE_EDGES: [DropZone, string][] = [
-  ["left", "Move pane to the left"],
-  ["right", "Move pane to the right"],
-  ["top", "Move pane to the top"],
-  ["bottom", "Move pane to the bottom"],
+const MOVES: [DropZone, string, string][] = [
+  ["left", "←", "left of"],
+  ["right", "→", "right of"],
+  ["top", "↑", "above"],
+  ["bottom", "↓", "below"],
 ];
+
+/**
+ * "Move pane" in the header's More menu: a row per other pane (the board, then each open ticket)
+ * with left/right/above/below buttons that re-dock this pane there (movePane), the keyboard way to
+ * do what dragging the header grip does. The board is always a target, so there's always a row.
+ */
+function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () => void }) {
+  const targets = leaves(usePanes().root).filter((l) => l.id !== paneId);
+  return (
+    <>
+      <div className="menu-caption">Move pane</div>
+      {targets.map((t) => {
+        const name = t.content.kind === "board" ? "the board" : t.content.ticketKey;
+        return (
+          <div key={t.id} className="menu-move" role="group" aria-label={`Move beside ${name}`}>
+            <span className="menu-move-label">{t.content.kind === "board" ? "Board" : name}</span>
+            {MOVES.map(([zone, glyph, word]) => (
+              <button
+                key={zone}
+                data-testid={`move-pane-${zone}-${t.id}`}
+                aria-label={`Move pane ${word} ${name}`}
+                title={`Move pane ${word} ${name}`}
+                onClick={() => (onDone(), updatePanes((s) => movePane(s, paneId, t.id, zone)))}
+              >
+                {glyph}
+              </button>
+            ))}
+          </div>
+        );
+      })}
+      <hr />
+    </>
+  );
+}
 
 /** Drag a ticket pane by this onto a half of another pane to move it there. */
 function PaneGrip({ paneId, ticketKey, title }: { paneId: string; ticketKey: string; title: string }) {
@@ -188,13 +222,7 @@ function DetailHeader({ paneId, ticket, onClose, zoomed, onToggleZoom }: { paneI
                 </button>
               )}
               <hr />
-              {/* The keyboard way to re-dock a pane (the header grip drags it). */}
-              {MOVE_EDGES.map(([zone, label]) => (
-                <button key={zone} data-testid={`move-pane-${zone}`} onClick={() => (close(), updatePanes((s) => movePaneToEdge(s, paneId, zone)))}>
-                  <Icon name="sidebar" /> {label}
-                </button>
-              ))}
-              <hr />
+              <MovePaneItems paneId={paneId} onDone={close} />
               <button className="danger" onClick={() => (close(), void remove())}>
                 <Icon name="trash" /> Delete ticket
               </button>

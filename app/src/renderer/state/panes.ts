@@ -375,19 +375,6 @@ export function movePane(state: PaneState, leafId: string, targetLeafId: string,
 }
 
 /**
- * Move a pane to the `zone` edge of the whole workspace, spanning it (the header menu's "Move
- * pane", the keyboard way to re-dock). It takes 40% when the rest is just the board, as a card
- * click would, and half otherwise. The board can't be moved this way. Ends any zoom.
- */
-export function movePaneToEdge(state: PaneState, leafId: string, zone: DropZone): PaneState {
-  const leaf = findLeaf(state.root, leafId);
-  if (!leaf || leaf.content.kind === "board") return state;
-  const rest = removeLeaf(state.root, leafId).root!; // the board remains
-  const share = rest.type === "leaf" ? 1 - BOARD_SHARE : 0.5;
-  return normalize({ root: insertLeaf(rest, rest.id, zone, leaf, share), focusedId: leaf.id, zoomedId: null });
-}
-
-/**
  * Close a pane; its neighbours take its space. The board can't be closed. Closing the focused pane
  * focuses its nearest neighbour; closing the zoomed pane ends the zoom.
  */
