@@ -203,12 +203,6 @@ code {
 .btn.spinning .icon {
   animation: spin 0.9s linear infinite;
 }
-.files-toggle {
-  display: none !important;
-}
-.narrow .files-toggle {
-  display: inline-grid !important;
-}
 
 /* --- commits + notices ---------------------------------------------------------------- */
 .commits {
@@ -278,6 +272,9 @@ code {
   overflow: auto;
   padding: 0 12px;
 }
+.files-collapsed .files {
+  display: none; /* the diffs column takes the freed width */
+}
 .narrow .files {
   position: absolute;
   z-index: 5;
@@ -293,7 +290,8 @@ code {
   transform: none;
 }
 .empty .files,
-.empty .diffs {
+.empty .diffs,
+.empty .files-toggle {
   display: none;
 }
 

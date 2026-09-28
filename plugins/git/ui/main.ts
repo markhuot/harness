@@ -5,16 +5,15 @@ import { FileTree, themeToTreeStyles, type GitStatusEntry } from "@pierre/trees"
 import { connect, type HarnessPlugin } from "@harness/plugin-sdk";
 import type { Ticket } from "@harness/shared";
 import type { ChangedFile, Changes, Commit } from "../git";
+import { readSidebarCollapsed, readStyle, saveSidebarCollapsed, saveStyle, type DiffStyle } from "./prefs";
 import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "./theme";
 
-type DiffStyle = "unified" | "split";
 interface Log {
   mode: Changes["mode"];
   base: string | null;
   commits: Commit[];
 }
 
-const STYLE_KEY = "harness.git.diffStyle";
 const NARROW = 720;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 
@@ -29,7 +28,7 @@ const ICONS = {
   branch: "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9",
   refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   chevron: "M6 9l6 6 6-6",
-  files: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  sidebar: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 4v16",
   commit: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1.05 12H8M16 12h6.95",
   alert: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
   check: "M20 6 9 17l-5-5",
@@ -59,15 +58,6 @@ function relTime(ms: number) {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const itemId = (path: string) => `diff:${path}`;
 
-function readStyle(): DiffStyle | null {
-  try {
-    const v = localStorage.getItem(STYLE_KEY);
-    return v === "split" || v === "unified" ? v : null;
-  } catch {
-    return null;
-  }
-}
-
 class ChangesView {
   private changes: Changes | null = null;
   private log: Log | null = null;
@@ -80,7 +70,10 @@ class ChangesView {
   private diffStyle: DiffStyle;
   private styleChosen: boolean;
   private showCommits = false;
+  /** Narrow widths: whether the file overlay is open. Wide widths: whether the docked sidebar is collapsed (persisted). */
   private showFiles = false;
+  private filesCollapsed = readSidebarCollapsed();
+  private wasNarrow: boolean | null = null;
   private busy = false;
   private poll: ReturnType<typeof setInterval> | null = null;
   private debounce: ReturnType<typeof setTimeout> | null = null;
@@ -187,8 +180,16 @@ class ChangesView {
   }
 
   private layout() {
-    this.root.classList.toggle("narrow", this.narrow);
-    this.root.classList.toggle("files-open", this.narrow && this.showFiles);
+    const narrow = this.narrow;
+    this.root.classList.toggle("narrow", narrow);
+    this.root.classList.toggle("files-open", narrow && this.showFiles);
+    this.root.classList.toggle("files-collapsed", !narrow && this.filesCollapsed);
+    if (narrow !== this.wasNarrow) {
+      // The files button's label and pressed state describe a different thing on each side of the breakpoint.
+      const first = this.wasNarrow === null;
+      this.wasNarrow = narrow;
+      if (!first) this.renderBar();
+    }
     if (!this.styleChosen) {
       const want: DiffStyle = this.root.clientWidth >= 1000 ? "split" : "unified";
       if (want !== this.diffStyle) {
@@ -202,9 +203,7 @@ class ChangesView {
   private setStyle(s: DiffStyle) {
     this.diffStyle = s;
     this.styleChosen = true;
-    try {
-      localStorage.setItem(STYLE_KEY, s);
-    } catch {}
+    saveStyle(s);
     this.viewer?.setOptions(this.viewerOptions());
     this.renderBar();
   }
@@ -281,7 +280,12 @@ class ChangesView {
         ? h("button", { class: `chip ${this.showCommits ? "on" : ""}`, title: "Show commits", "data-action": "commits", ...(commits.length ? {} : { disabled: "" }) }, icon("commit", 13), plural(commits.length, "commit"), commits.length ? icon("chevron", 12) : null)
         : null;
     const stat = c && c.files.length ? h("span", { class: "stat" }, h("span", { class: "add" }, `+${c.additions}`), h("span", { class: "del" }, `−${c.deletions}`), h("span", { class: "muted" }, `across ${plural(c.files.length, "file")}`)) : null;
-    const filesBtn = h("button", { class: `btn icon-only files-toggle ${this.showFiles ? "on" : ""}`, title: "Files", "data-action": "files" }, icon("files"));
+    const filesShown = this.narrow ? this.showFiles : !this.filesCollapsed;
+    const filesBtn = h(
+      "button",
+      { class: `btn icon-only files-toggle ${this.narrow && this.showFiles ? "on" : ""}`, title: filesShown ? "Hide files" : "Show files", "aria-label": "Files", "aria-expanded": String(filesShown), "data-action": "files" },
+      icon("sidebar"),
+    );
     const seg = h(
       "div",
       { class: "seg", role: "group" },
@@ -299,7 +303,8 @@ class ChangesView {
         this.renderBar();
         this.renderCommits();
       } else if (a === "files") {
-        this.showFiles = !this.showFiles;
+        if (this.narrow) this.showFiles = !this.showFiles;
+        else saveSidebarCollapsed((this.filesCollapsed = !this.filesCollapsed));
         this.layout();
         this.renderBar();
       }
