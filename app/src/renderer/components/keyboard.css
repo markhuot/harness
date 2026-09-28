@@ -1,0 +1,82 @@
+/* Focus rings for keyboard navigation. Elements ring on :focus-visible only, so a click never shows
+   one; the sidebar's area ring shows only in keyboard mode (html[data-input="keyboard"],
+   state/inputModality.ts). Rows in clipped lists (the inbox, a conductor's Tickets tab, menus) ring
+   inset, since a halo outside them would be cut off. Theme tokens only. */
+
+.tab:focus-visible,
+.nav-item:focus-visible,
+.nav-row button:focus-visible,
+.nav-gear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.tab:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+.inbox-item:focus-visible,
+.child-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+/* Keep the attention stripe (conductor.css) under the ring. */
+.child-row.attn:focus-visible {
+  box-shadow:
+    inset 2px 0 0 var(--c-blocked),
+    inset 0 0 0 2px var(--focus);
+}
+.child-row.attn-approval:focus-visible {
+  box-shadow:
+    inset 2px 0 0 var(--amber),
+    inset 0 0 0 2px var(--focus);
+}
+
+.menu button:focus-visible,
+.menu .menu-item:focus-visible,
+.menu [role^="menuitem"]:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+/* A project's gear is on Tab after the sidebar's list stop, so it can't be display: none (app.css)
+   while hidden: it's invisible and click-through instead, and shows while focused. */
+.nav-gear {
+  display: grid;
+  opacity: 0;
+  pointer-events: none;
+}
+.nav-row:hover .nav-gear,
+.nav-row.settings-open .nav-gear,
+.nav-gear:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.nav-row:has(.nav-gear:focus-visible) .nav-count {
+  visibility: hidden;
+}
+
+/* The sidebar holding the focus, from the keyboard: the same inset accent ring as the active pane
+   (panes.css, which hides the pane's while this shows), drawn over the sidebar's content so it
+   doesn't move anything. */
+#app-sidebar {
+  position: relative;
+}
+#app-sidebar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+html[data-input="keyboard"] #app-sidebar:focus-within::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  #app-sidebar::after {
+    transition: none;
+  }
+}
