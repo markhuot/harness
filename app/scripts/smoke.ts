@@ -209,6 +209,10 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const stayed = (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-2")).ticket.status === "planning";
   check("board cards aren't draggable and a drop on a column does nothing", dragged.draggable === 0 && !dragged.accepted && stayed, JSON.stringify({ ...dragged, stayed }));
+  await js(`[...document.querySelectorAll(".card")].find(c => c.dataset.key === "NYTIMES-2").click()`);
+  const cardOpened = await until("card click opens the ticket", () => js<string>("location.hash").then((h) => h.startsWith("#/board/all/ticket/NYTIMES-2") && h));
+  check("clicking a board card opens it", !!cardOpened, cardOpened);
+  await js(`location.hash = "#/board/all"`);
   await api("PATCH", "/tickets/NYTIMES-2", { status: "in_progress" });
   const inColumn = await until("card re-rendered in column", () =>
     js<boolean>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "In progress")?.textContent.includes("NYTIMES-2")`),
