@@ -126,18 +126,26 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
 
+// Whether iOS has asked "Open in “Harness”?" for a deep link this run. Some simulators never ask;
+// once a link opened without the prompt, later links check for it once instead of polling for 3 s
+// (each describe-ui is ~0.4 s, so a full poll cost ~8 s per link).
+let openPrompt: "unknown" | "shown" | "never" = "unknown";
+
 /** simctl openurl, then accept iOS's "Open in “Harness”?" confirmation. */
 async function openUrl(udid: string, url: string) {
   await simctl("openurl", udid, url);
   if (!hasAxe) return;
-  for (let i = 0; i < 12; i++) {
+  const polls = openPrompt === "never" ? 1 : 12;
+  for (let i = 0; i < polls; i++) {
     await Bun.sleep(250);
     const l = await labels(udid);
     if (l.some((x) => x.startsWith("Open in"))) {
       await tapLabel(udid, "Open");
+      openPrompt = "shown";
       return;
     }
   }
+  if (openPrompt === "unknown") openPrompt = "never";
 }
 async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000): Promise<T> {
   const end = Date.now() + ms;
@@ -919,11 +927,15 @@ try {
       await simctl("ui", udid, "appearance", theme);
       for (const [name, url, wait] of screens) {
         if (only && !only.includes(name)) continue;
-        // A fresh launch per screen, so a modal from the previous one never frames the next.
+        // A fresh launch per screen, so a modal from the previous one never frames the next. The deep
+        // link cold-launches the app straight onto its screen, skipping a launch and its 2 s settle.
         await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-        await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-        await Bun.sleep(2000);
-        if (url !== "harness://board") await openUrl(udid, url);
+        if (url === "harness://board") {
+          await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
+          await Bun.sleep(2000);
+        } else {
+          await openUrl(udid, url);
+        }
         await Bun.sleep(wait ?? 2200);
         const file = join(shots, `${name}-${theme}.png`);
         await simctl("io", udid, "screenshot", file);
