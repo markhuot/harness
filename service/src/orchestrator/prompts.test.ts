@@ -171,6 +171,20 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(sys("work")).toMatch(/exactly one[\s\S]*never both/);
   });
 
+  test("a chat about a planning ticket points plan changes at the Revise the plan switch", () => {
+    const text = sys("chat", ticket({ status: "planning" }));
+    expect(text).toContain('"Revise the plan" switch');
+    expect(text).not.toContain("moves the ticket to in progress");
+  });
+
+  test("a chat about a blocked or review ticket points changes at the Move to in progress switch", () => {
+    for (const status of ["blocked", "review"] as const) {
+      const text = sys("chat", ticket({ status }));
+      expect(text).toContain('"Move to in progress" switch');
+      expect(text).not.toContain("Revise the plan");
+    }
+  });
+
   test("plan runs are read-only", () => {
     expect(sys("plan")).toContain("Do not create, modify or delete files");
   });
