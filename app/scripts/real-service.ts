@@ -1,7 +1,7 @@
 // Integration against the REAL service: boots service/src/daemon.ts with a throwaway
 // HARNESS_HOME (never ~/.harness), launches the built app against it, and walks a dummy-driver
 // ticket through the whole lifecycle in the UI, plus a /browse ticket for the live browser tab and a
-// worktree ticket for the git plugin's Changes tab.
+// worktree ticket for the git plugin's Changes tab and a /agents ticket for the Agents tab.
 //
 //   bun run build && bun scripts/real-service.ts [screenshotDir] [--theme=dark]
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 import { checkChangesTab } from "./lib/changes-check";
+import { checkAgentsTab } from "./lib/agents-check";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "real"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -122,6 +123,9 @@ try {
 
   // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
   changesRepo = (await checkChangesTab({ api, app, check, shot })).repo;
+
+  // --- 7. Sub-agents: a /agents ticket's Agents tab, a sub-agent's transcript, the transcript links.
+  await checkAgentsTab({ api, app, check, shot, project });
 
   await go(`#/board/${project.id}`);
   await Bun.sleep(600);

@@ -1,7 +1,7 @@
-import { memo, useEffect, useMemo, useState } from "react";
-import type { ToolResultContent, TranscriptEntry } from "@harness/shared";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, liveDelta, shortToolName, toolIcon, toolPreview } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -9,24 +9,45 @@ import { useStickToBottom } from "../components/stickToBottom";
 
 export { groupTranscript, toolPreview } from "@harness/shared/state";
 
-export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyHint?: string }) {
+/**
+ * A session's conversation, or with `subagentId` one of its sub-agents'. `onOpenSubagent` turns
+ * the tool rows that started sub-agents into links to their transcripts.
+ */
+export function Transcript({
+  sessionId,
+  subagentId = null,
+  emptyHint,
+  header,
+  onOpenSubagent,
+}: {
+  sessionId: string;
+  subagentId?: string | null;
+  emptyHint?: string;
+  /** Rendered above the first entry, scrolling with the transcript */
+  header?: ReactNode;
+  onOpenSubagent?: (subagentId: string) => void;
+}) {
   const { state, client, dispatch, epoch } = useStore();
   const [error, setError] = useState<string | null>(null);
-  const transcript = state.transcripts[sessionId];
-  const deltas = liveDelta(state, sessionId);
+  const transcript = state.transcripts[transcriptKey(sessionId, subagentId)];
+  // Sub-agents don't stream; their blocks arrive whole.
+  const deltas = subagentId ? [] : liveDelta(state, sessionId);
   const session = state.sessions[sessionId];
+  const subagent = subagentId ? subagentById(state, sessionId, subagentId) : null;
+  const working = subagentId ? subagent?.status === "running" : session?.busy;
+  const subagents = subagentsOf(state, sessionId);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     client
-      .transcript(sessionId, 0)
-      .then((entries) => !cancelled && dispatch({ type: "transcript", sessionId, entries }))
+      .transcript(sessionId, 0, subagentId)
+      .then((entries) => !cancelled && dispatch({ type: "transcript", sessionId, subagentId, entries }))
       .catch((e) => !cancelled && setError((e as Error).message));
     return () => {
       cancelled = true;
     };
-  }, [client, dispatch, sessionId, epoch]);
+  }, [client, dispatch, sessionId, subagentId, epoch]);
 
   const items = useMemo(() => groupTranscript(transcript?.entries ?? []), [transcript?.entries]);
 
@@ -38,6 +59,7 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
   return (
     <div className="transcript" ref={scroller}>
       <div className="transcript-inner">
+        {header}
         {error && (
           <div className="t-error">
             <Icon name="alert" /> Couldn't load the transcript: {error}
@@ -56,7 +78,17 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
           </div>
         )}
         {items.map((item) =>
-          item.kind === "tool" ? <ToolRow key={item.call.id} call={item.call} result={item.result} /> : <EntryRow key={item.entry.id} entry={item.entry} />,
+          item.kind === "tool" ? (
+            <ToolRow
+              key={item.call.id}
+              call={item.call}
+              result={item.result}
+              agent={onOpenSubagent ? (subagents?.find((a) => a.id === item.call.content.callId) ?? null) : null}
+              onOpenAgent={onOpenSubagent}
+            />
+          ) : (
+            <EntryRow key={item.entry.id} entry={item.entry} who={subagentId ? "Sub-agent" : "Agent"} />
+          ),
         )}
         {deltas.map((d) => (
           <div key={d.runId} className="t-assistant streaming">
@@ -71,7 +103,7 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
             </div>
           </div>
         ))}
-        {session?.busy && deltas.length === 0 && (
+        {working && deltas.length === 0 && (
           <div className="t-working">
             <span className="spinner" /> Working…
           </div>
@@ -81,7 +113,7 @@ export function Transcript({ sessionId, emptyHint }: { sessionId: string; emptyH
   );
 }
 
-const EntryRow = memo(function EntryRow({ entry }: { entry: TranscriptEntry }) {
+const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry; who: string }) {
   const c = entry.content;
   const time = new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   switch (c.type) {
@@ -108,7 +140,7 @@ const EntryRow = memo(function EntryRow({ entry }: { entry: TranscriptEntry }) {
       return (
         <div className="t-assistant">
           <div className="t-who">
-            <Icon name="sparkle" size={12} /> Agent <span className="t-time">{time}</span>
+            <Icon name="sparkle" size={12} /> {who} <span className="t-time">{time}</span>
           </div>
           <Markdown text={c.text} />
         </div>
@@ -157,9 +189,14 @@ function Thinking({ text }: { text: string }) {
 const ToolRow = memo(function ToolRow({
   call,
   result,
+  agent = null,
+  onOpenAgent,
 }: {
   call: (TranscriptEntry & { content: { type: "tool_call" } }) | null;
   result?: TranscriptEntry & { content: { type: "tool_result" } };
+  /** The sub-agent this call started, when it started one */
+  agent?: Subagent | null;
+  onOpenAgent?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
@@ -174,6 +211,17 @@ const ToolRow = memo(function ToolRow({
         <span className="t-tool-preview truncate">{preview}</span>
         {!result ? <span className="spinner" /> : isError ? <Icon name="x" size={12} className="t-bad" /> : <Icon name="check" size={12} className="t-ok" />}
       </button>
+      {agent && onOpenAgent && (
+        <div className="t-tool-agent" data-agent={agent.id}>
+          <Icon name="bot" size={12} />
+          <span className="truncate">
+            {subagentTitle(agent)} · {SUBAGENT_STATUS_LABEL[agent.status]}
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => onOpenAgent(agent.id)}>
+            Open transcript <Icon name="chevronRight" size={11} />
+          </button>
+        </div>
+      )}
       {open && (
         <div className="t-tool-body selectable">
           {call && (

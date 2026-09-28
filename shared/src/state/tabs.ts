@@ -1,17 +1,22 @@
-// Ticket detail tabs, shared by every client: the built-in tabs and plugin tabs addressed as
-// "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins"). The desktop puts these in its hash route; the
-// phone keeps them in navigation params.
+// Ticket detail tabs, shared by every client: the built-in tabs, plugin tabs addressed as
+// "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins") and one sub-agent's transcript as
+// "agent:<subagentId>" (under the Agents tab, DESIGN.md "Sub-agents"). The desktop puts these in
+// its hash route; the phone keeps them in navigation params.
 
-/** "children" is the conductor-only Tickets tab (listed right after Summaries). */
-export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "browser" | "details";
-/** Built-in tabs, or a plugin tab as "plugin:<pluginId>:<tabId>". */
-export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}`;
-export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "children", "transcript", "browser", "details"];
+/**
+ * "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" lists the
+ * session's sub-agents; it shows once the session has any.
+ */
+export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "agents" | "browser" | "details";
+/** Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>". */
+export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}` | `agent:${string}`;
+export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "children", "transcript", "agents", "browser", "details"];
 
 export const TAB_LABEL: Record<BuiltinTicketTab, string> = {
   summaries: "Summaries",
   children: "Tickets",
   transcript: "Transcript",
+  agents: "Agents",
   browser: "Browser",
   details: "Details",
 };
@@ -28,16 +33,45 @@ export function parsePluginTab(tab: string): { pluginId: string; tabId: string }
   return m ? { pluginId: m[1]!, tabId: m[2]! } : null;
 }
 
+/** Tool call ids (the sub-agent ids Claude Code gives) are letters, digits, "_" and "-". */
+const AGENT_TAB = /^agent:([A-Za-z0-9_-]{1,128})$/;
+
+/** The tab showing one sub-agent's transcript. */
+export function subagentTabRoute(subagentId: string): TicketTab {
+  return `agent:${subagentId}`;
+}
+
+/** "agent:toolu_01" → "toolu_01"; null for every other tab. */
+export function parseSubagentTab(tab: string): string | null {
+  return AGENT_TAB.exec(tab)?.[1] ?? null;
+}
+
+/** The tab strip entry a tab belongs to: a sub-agent's transcript sits under Agents. */
+export function tabStripTab(tab: TicketTab): TicketTab {
+  return parseSubagentTab(tab) ? "agents" : tab;
+}
+
 export function isTicketTab(t: string | undefined | null): t is TicketTab {
-  return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t));
+  return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t) || AGENT_TAB.test(t));
+}
+
+/** Whether the tab strip shows Agents: the session has sub-agents, or one of its tabs is open. */
+export function showsAgentsTab(tab: TicketTab, subagents: { id: string }[] | null): boolean {
+  return (subagents?.length ?? 0) > 0 || tabStripTab(tab) === "agents";
 }
 
 /**
  * The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
  * tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to Summaries.
+ * A sub-agent that isn't among the session's (once they're known) falls back to the Agents list.
  */
-export function effectiveTab(requested: TicketTab, opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null }): TicketTab {
+export function effectiveTab(
+  requested: TicketTab,
+  opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null },
+): TicketTab {
   if (requested === "children" && !opts.conductor) return "summaries";
+  const agent = parseSubagentTab(requested);
+  if (agent && opts.subagents && !opts.subagents.some((s) => s.id === agent)) return "agents";
   const p = parsePluginTab(requested);
   if (p && opts.pluginTabs && !opts.pluginTabs.some((t) => t.pluginId === p.pluginId && t.id === p.tabId)) return "summaries";
   return requested;

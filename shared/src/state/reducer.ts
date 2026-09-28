@@ -8,6 +8,7 @@ import type {
   PublicSettings,
   Run,
   Session,
+  Subagent,
   Summary,
   Ticket,
   TicketDetail,
@@ -36,8 +37,13 @@ export interface State {
   runs: Record<string, Run>;
   /** Keyed by sessionId, sorted by createdAt, unique by id */
   summaries: Record<string, Summary[]>;
-  /** Keyed by sessionId, sorted by seq, unique by id */
+  /**
+   * Keyed by transcriptKey(sessionId, subagentId): the session agent's transcript under the
+   * session id, each sub-agent's under "<sessionId>/<subagentId>". Sorted by seq, unique by id.
+   */
   transcripts: Record<string, TranscriptState>;
+  /** Sub-agents per sessionId, oldest first (from the ticket detail + subagent.upserted) */
+  subagents: Record<string, Subagent[]>;
   /** In-flight streaming assistant text: deltas[sessionId][runId] */
   deltas: Record<string, Record<string, string>>;
   watchers: Record<string, Watcher>;
@@ -68,6 +74,7 @@ export const initialState: State = {
   runs: {},
   summaries: {},
   transcripts: {},
+  subagents: {},
   deltas: {},
   watchers: {},
   settings: null,
@@ -102,7 +109,9 @@ export type Action =
   | { type: "tickets"; tickets: Ticket[] }
   /** The service has no ticket with these keys (404) */
   | { type: "missingKeys"; keys: string[] }
-  | { type: "transcript"; sessionId: string; entries: TranscriptEntry[] }
+  /** A transcript backfill: the session agent's, or with `subagentId` one sub-agent's */
+  | { type: "transcript"; sessionId: string; subagentId?: string | null; entries: TranscriptEntry[] }
+  | { type: "subagents"; sessionId: string; subagents: Subagent[] }
   | { type: "summaries"; sessionId: string; summaries: Summary[] }
   | { type: "drivers"; drivers: DriverInfo[] }
   | PagingAction;
@@ -147,13 +156,31 @@ function preferNewer<T extends { id: string; updatedAt: number }>(snap: Record<s
 
 const entryOrder = (e: TranscriptEntry) => e.seq;
 const summaryOrder = (s: Summary) => s.createdAt;
+const subagentOrder = (s: Subagent) => s.startedAt;
 
-function mergeTranscript(state: State, sessionId: string, entries: TranscriptEntry[], loaded: boolean): State["transcripts"] {
-  const prev = state.transcripts[sessionId] ?? { entries: [], loaded: false };
+/** Where a transcript lives in State.transcripts: the session's own, or one sub-agent's. */
+export function transcriptKey(sessionId: string, subagentId?: string | null): string {
+  return subagentId ? `${sessionId}/${subagentId}` : sessionId;
+}
+
+function mergeTranscript(state: State, key: string, entries: TranscriptEntry[], loaded: boolean): State["transcripts"] {
+  const prev = state.transcripts[key] ?? { entries: [], loaded: false };
   return {
     ...state.transcripts,
-    [sessionId]: { entries: mergeById(prev.entries, entries, entryOrder), loaded: prev.loaded || loaded },
+    [key]: { entries: mergeById(prev.entries, entries, entryOrder), loaded: prev.loaded || loaded },
   };
+}
+
+/** Merge sub-agents by id; a stale copy (older updatedAt) never replaces a newer one. */
+function mergeSubagents(state: State, sessionId: string, incoming: Subagent[]): State["subagents"] {
+  const prev = state.subagents[sessionId] ?? [];
+  const current = new Map(prev.map((s) => [s.id, s]));
+  const fresh = incoming.filter((s) => {
+    const have = current.get(s.id);
+    return !have || have.updatedAt <= s.updatedAt;
+  });
+  if (!fresh.length && prev.length) return state.subagents;
+  return { ...state.subagents, [sessionId]: mergeById(prev, fresh, subagentOrder) };
 }
 
 function clearDelta(deltas: State["deltas"], sessionId: string, runId: string | null): State["deltas"] {
@@ -201,10 +228,11 @@ export function applyEvent(state: State, event: HarnessEvent): State {
     }
     case "transcript.appended": {
       const entry = event.entry;
-      const transcripts = mergeTranscript(state, entry.sessionId, [entry], false);
-      // The persisted assistant text block replaces the streamed preview of the same run.
+      const transcripts = mergeTranscript(state, transcriptKey(entry.sessionId, entry.subagentId), [entry], false);
+      // The persisted assistant text block replaces the streamed preview of the same run
+      // (sub-agents don't stream, so their text leaves the agent's preview alone).
       const deltas =
-        entry.role === "assistant" && entry.content.type === "text"
+        entry.role === "assistant" && entry.content.type === "text" && !entry.subagentId
           ? clearDelta(state.deltas, entry.sessionId, entry.runId)
           : state.deltas;
       return { ...state, transcripts, deltas };
@@ -219,6 +247,8 @@ export function applyEvent(state: State, event: HarnessEvent): State {
         },
       };
     }
+    case "subagent.upserted":
+      return { ...state, subagents: mergeSubagents(state, event.subagent.sessionId, [event.subagent]) };
     case "summary.added": {
       const s = event.summary;
       return {
@@ -290,6 +320,8 @@ export function reducer(state: State, action: Action): State {
         dependents: { ...state.dependents, [d.ticket.id]: d.dependents },
         runs,
         sessions: { ...state.sessions, [d.session.id]: d.session },
+        // Older services don't send sub-agents: leave the session's list unknown then.
+        subagents: d.subagents ? mergeSubagents(state, d.session.id, d.subagents) : state.subagents,
         summaries: {
           ...state.summaries,
           [d.session.id]: mergeById(state.summaries[d.session.id] ?? [], d.summaries, summaryOrder),
@@ -297,7 +329,9 @@ export function reducer(state: State, action: Action): State {
       };
     }
     case "transcript":
-      return { ...state, transcripts: mergeTranscript(state, action.sessionId, action.entries, true) };
+      return { ...state, transcripts: mergeTranscript(state, transcriptKey(action.sessionId, action.subagentId), action.entries, true) };
+    case "subagents":
+      return { ...state, subagents: mergeSubagents(state, action.sessionId, action.subagents) };
     case "summaries":
       return {
         ...state,
