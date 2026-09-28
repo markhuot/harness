@@ -143,6 +143,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const router = useRouter();
   const { height } = useWindowDimensions();
   const [changes, setChanges] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
@@ -199,9 +200,11 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
             <Button small title="Re-run agent review" icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
           </>
         )}
+        {ticket.status === "done" && <Button small title="Re-open" icon="refresh" onPress={() => setReopening(true)} />}
         {ticket.busy && <Button small title="Cancel run" icon="stop" variant="danger" hapticKind="warning" onPress={() => void act(() => client.cancelTicket(k), "Run cancelled")} />}
       </View>}
       {changes && <RequestChanges ticket={ticket} onClose={() => setChanges(false)} />}
+      {reopening && <RequestChanges reopen ticket={ticket} onClose={() => setReopening(false)} />}
       {completing && <Complete ticket={ticket} onClose={() => setCompleting(false)} />}
     </ScrollView>
   );
@@ -323,19 +326,26 @@ function SheetFrame({ title, subtitle, onClose, children, primary }: { title: st
   );
 }
 
-function RequestChanges({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+/** Notes for the agent that send the ticket back to In progress: request changes (review) or re-open (done). */
+function RequestChanges({ ticket, onClose, reopen = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean }) {
   const { client } = useStore();
   const act = useAction();
   const c = useColors();
   const [notes, setNotes] = useState("");
   const submit = async () => {
-    const ok = await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
+    const ok = reopen
+      ? await act(() => client.reopenTicket(ticket.key, { notes }), "Re-opened")
+      : await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
     if (ok) onClose();
   };
   return (
-    <SheetFrame title="Request changes" subtitle={ticket.key} onClose={onClose} primary={<Button title="Send" variant="primary" disabled={!notes.trim()} onPress={() => void submit()} />}>
-      <TextInput autoFocus multiline placeholder="What should the agent change?" placeholderTextColor={c.text3} value={notes} onChangeText={setNotes} style={{ minHeight: 160, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
-      <Text style={{ color: c.text3, fontSize: 13 }}>The ticket moves back to In progress and the agent gets your notes.</Text>
+    <SheetFrame title={reopen ? "Re-open" : "Request changes"} subtitle={ticket.key} onClose={onClose} primary={<Button title="Send" variant="primary" disabled={!notes.trim()} onPress={() => void submit()} />}>
+      <TextInput autoFocus multiline placeholder={reopen ? "What should the agent do now?" : "What should the agent change?"} placeholderTextColor={c.text3} value={notes} onChangeText={setNotes} style={{ minHeight: 160, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
+      <Text style={{ color: c.text3, fontSize: 13 }}>
+        {reopen
+          ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
+          : "The ticket moves back to In progress and the agent gets your notes."}
+      </Text>
     </SheetFrame>
   );
 }

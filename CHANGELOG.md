@@ -9,8 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Done tickets have a Re-open button (desktop and iPhone). Write what the agent should do next, and
+  the ticket goes back to In progress with your notes, the same way Request changes works for
+  tickets in review. If the ticket's worktree was cleaned up when it completed, it's recreated.
+
 ### Fixed
 
+- Messaging a done ticket, or dragging it back to In progress, no longer starts the agent in a
+  worktree that was removed when the ticket completed. The worktree is recreated first.
 - On iPhone, the keyboard no longer hides the bottom of the screen. The ticket composer now sits
   right on top of the keyboard, and you can scroll the New session, Watcher, Connect, Request
   changes and other sheets all the way to their last field while typing.

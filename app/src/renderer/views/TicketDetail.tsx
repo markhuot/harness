@@ -175,6 +175,7 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
   const { state, client, navigate, route } = useStore();
   const act = useAction();
   const [changes, setChanges] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [completing, setCompleting] = useState(false);
   const children = ticket.kind === "conductor" ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
@@ -293,6 +294,11 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
               </button>
             </>
           )}
+          {ticket.status === "done" && (
+            <button className="btn" onClick={() => setReopening(true)}>
+              <Icon name="refresh" /> Re-open
+            </button>
+          )}
           {ticket.busy && (
             <button className="btn btn-ghost btn-danger" onClick={() => act(() => client.cancelTicket(k), "Run cancelled")}>
               <Icon name="stop" /> Cancel run
@@ -302,23 +308,28 @@ function DetailHeader({ ticket, onClose, wide, onToggleWide }: { ticket: Ticket;
       </div>
 
       {changes && <RequestChangesModal ticket={ticket} onClose={() => setChanges(false)} />}
+      {reopening && <RequestChangesModal reopen ticket={ticket} onClose={() => setReopening(false)} />}
       {completing && <CompleteModal ticket={ticket} onClose={() => setCompleting(false)} />}
     </div>
   );
 }
 
-function RequestChangesModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+/** Notes for the agent that send the ticket back to In progress: request changes (review) or re-open (done). */
+function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean }) {
   const { client } = useStore();
   const act = useAction();
   const [notes, setNotes] = useState("");
   const submit = async () => {
-    const ok = await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
+    if (!notes.trim()) return;
+    const ok = reopen
+      ? await act(() => client.reopenTicket(ticket.key, { notes }), "Re-opened")
+      : await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
     if (ok) onClose();
   };
   return (
     <Modal onClose={onClose}>
       <div className="modal-head">
-        <strong>Request changes</strong>
+        <strong>{reopen ? "Re-open" : "Request changes"}</strong>
         <span className="muted mono">{ticket.key}</span>
       </div>
       <div className="modal-body">
@@ -326,13 +337,15 @@ function RequestChangesModal({ ticket, onClose }: { ticket: Ticket; onClose: () 
           autoFocus
           className="textarea"
           rows={6}
-          placeholder="What should the agent change?"
+          placeholder={reopen ? "What should the agent do now?" : "What should the agent change?"}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && void submit()}
         />
         <div className="field-hint" style={{ marginTop: 6 }}>
-          The ticket moves back to In progress and the agent gets your notes.
+          {reopen
+            ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
+            : "The ticket moves back to In progress and the agent gets your notes."}
         </div>
       </div>
       <div className="modal-foot">

@@ -1065,12 +1065,15 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
-          if (t.status === "done") throw new HttpError(409, "Ticket is done");
           if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             simulateRun(t, "plan", text, `Updated the plan to account for: "${text}"`, () => {});
           } else {
-            if (t.status === "blocked" || t.status === "review") {
+            if (t.status === "done") {
+              t.agentReview = "pending";
+              t.humanReview = "pending";
+            }
+            if (t.status === "blocked" || t.status === "review" || t.status === "done") {
               setStatus(t, "in_progress");
               t.blockedReason = null;
             }
@@ -1091,6 +1094,17 @@ async function route(req: Request, url: URL): Promise<Response> {
             addSummary(t.sessionId, t.id, "human", `Changes requested: ${body.notes ?? ""}`);
             workRun(t, body.notes ?? "Please address the review feedback.");
           }
+          return ok(t);
+        }
+        case "reopen": {
+          const notes = String(body.notes ?? "").trim();
+          if (t.status !== "done") throw new HttpError(409, `${t.key} is not done; only done tickets can be re-opened`);
+          if (!notes) throw new HttpError(400, "notes are required");
+          t.agentReview = "pending";
+          t.humanReview = "pending";
+          setStatus(t, "in_progress");
+          addSummary(t.sessionId, t.id, "human", `Re-opened: ${notes}`);
+          workRun(t, notes);
           return ok(t);
         }
         case "complete":
