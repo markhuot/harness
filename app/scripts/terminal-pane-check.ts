@@ -6,6 +6,7 @@
 // covers the bridge underneath.
 //
 //   bun run build && bun scripts/terminal-pane-check.ts [--shots=<dir>]
+//   bun run package && bun scripts/terminal-pane-check.ts --packaged   # out/Harness-darwin-<arch>/Harness.app
 import { mkdtempSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +42,7 @@ const alive = (pid: number) => {
 // A real folder, so `pwd` proves the shell started in the project (a missing one falls back to home).
 const projectDir = realpathSync(mkdtempSync(join(tmpdir(), "harness-termproj-")));
 const project = await api<{ id: string; name: string }>("POST", "/projects", { path: projectDir, key: "TRM", name: "Termproj" });
-const app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "terminal" } });
+const app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "terminal" }, packaged: process.argv.includes("--packaged") });
 const { js, cdp, go, screenshot } = app;
 
 try {
@@ -76,10 +77,12 @@ try {
       const o = await js<string>(`window.__out[${JSON.stringify(sid)}] ?? ""`);
       return (typeof needle === "string" ? o.includes(needle) : needle.test(o)) ? o : null;
     }, ms);
+  let menuShot = 0;
   const openFromSidebar = async () => {
     const before = new Set(await shown());
     await js(`document.querySelector('[data-testid="new-menu"]').click()`);
     await until("New ▾ menu", () => js<boolean>(`!!document.querySelector('[data-testid="new-terminal"]')`));
+    if (shots && !menuShot++) await screenshot(join(shots, "new-menu.png"));
     await js(`document.querySelector('[data-testid="new-terminal"]').click()`);
     return until("a new terminal pane", async () => (await shown()).find((id) => !before.has(id)));
   };

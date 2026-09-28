@@ -47,14 +47,16 @@ export async function waitHealthy(base: string, ms = 10000) {
   await until(`${base}/health`, async () => (await fetch(base + "/health")).ok, ms);
 }
 
-/** Launch the built app (dist/) against a service and attach over CDP. */
-export async function launchApp(opts: { baseUrl: string; token: string; theme?: "light" | "dark"; env?: Record<string, string> }) {
+/** Launch the built app (dist/, or with `packaged` the app `bun run package` made) against a service and attach over CDP. */
+export async function launchApp(opts: { baseUrl: string; token: string; theme?: "light" | "dark"; env?: Record<string, string>; packaged?: boolean }) {
   const cdpPort = 9300 + Math.floor(Math.random() * 600);
-  const electron = join(appDir, "..", "node_modules", ".bin", "electron");
+  const bin = opts.packaged
+    ? join(appDir, "out", `Harness-darwin-${process.arch}`, "Harness.app", "Contents", "MacOS", "Harness")
+    : join(appDir, "..", "node_modules", ".bin", "electron");
   // Keep rendering (transitions, rAF, timers) while the window is behind others or on another
   // Space: an occluded window otherwise freezes CSS transitions and the checks that wait on them.
   const keepRendering = ["--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"];
-  const proc = Bun.spawn([electron, appDir, `--remote-debugging-port=${cdpPort}`, ...keepRendering], {
+  const proc = Bun.spawn([bin, ...(opts.packaged ? [] : [appDir]), `--remote-debugging-port=${cdpPort}`, ...keepRendering], {
     env: {
       ...process.env,
       HARNESS_URL: opts.baseUrl,
