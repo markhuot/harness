@@ -168,9 +168,23 @@ Harness tools (always exposed, via MCP for claude-code):
 | `message_ticket` | conductor | `{ key, text }` |
 | `review_ticket` | conductor | `{ key, decision, notes }` |
 | `complete_ticket` | conductor | `{ key, instructions? }` |
-| `list_projects` | triage | `{}` |
+| `list_projects` | all | `{}` → each project's key, name, path and settings |
 | `dispatch_ticket` | triage | `{ project_key, key?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason }` |
+| `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
+| `list_mappings` | all | `{}` |
+| `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
+| `list_drivers` | all | `{}` → drivers with their models |
+| `create_watcher` | work, conductor (gated) | `{ name, command, args?, cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
+| `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
+| `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
+| `create_mapping` | ″ | `{ pattern, project_key, notes? }` |
+| `delete_mapping` | ″ | `{ id }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models? }` |
+| `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
+| `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
+| `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
 | `browser_click` | ″ | `{ selector }` |
@@ -178,6 +192,38 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_eval` | ″ | `{ expression }` |
 | `browser_screenshot` | ″ | `{}` → image |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
+
+### Config tools
+
+The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
+screens, so a ticket like "watch owner/name and file its issues here" can be done end to end.
+Reads go to every run kind. Every mutation is a **gated tool** (`defineGatedTool` in
+`tools/util.ts`), because a watcher's command runs as the user outside any ticket sandbox and
+settings like `permissionMode` or `listen` loosen the permission model or network exposure. A
+gated call:
+
+1. runs the op in dry-run mode first (`HarnessOps.*(…, dryRun = true)`: the same validation as
+   the HTTP API), so a bad call is a tool error and never reaches a human;
+2. calls `requestApproval` with `{ summary, reason, source: "policy", onceOnly: true }` whatever
+   the ticket's permission mode. Read-only tickets are denied outright; otherwise the ticket
+   blocks with a `pendingApproval` whose `summary` (e.g. `Create watcher "github" (every 300s):
+   /bin/zsh -lc '…'`) is the card's subtitle and blocked reason;
+3. after **Allow once**, the resumed agent repeats the identical call, which consumes the one-time
+   grant and runs the op.
+
+`onceOnly` approvals refuse `allow_tool` (400) and the cards hide "Always allow": each watcher
+command, settings change or delete is its own decision. `ticket.allowedTools` never unlocks a
+gated tool, and gated grants are consumed in-process, so `runGrants` doesn't pass them to the
+driver (claude-code would otherwise drop an auto run to acceptEdits for a grant it can't express
+as a CLI rule). The orchestrator ops also refuse anything but work and conductor runs, whichever
+tool reaches them. A conductor can't approve a child's config call either: a message to a ticket
+with a pending approval answers it with deny.
+
+Left out on purpose: setting `anthropicApiKey` (secrets don't pass through a model; the op
+refuses it and `list_watchers` hides env values), device pairing and token rotation (they
+hand out access to the service itself), driver login (interactive OAuth in the user's browser),
+the network status readout (`GET /network`; `get_settings` has the listen setting), and the
+appearance/theme settings (client-side preferences, not service state).
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`.
@@ -375,7 +421,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
