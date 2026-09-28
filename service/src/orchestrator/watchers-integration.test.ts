@@ -52,4 +52,30 @@ describe("watchers → triage", () => {
     await h.orch.stop();
     expect(runner).toBeDefined();
   }, 15_000);
+
+  test("watcher events and the list carry the process state, live as it changes", async () => {
+    const h = makeOrchestrator({
+      watchers: (handlers) => new WatcherRunner({ ...handlers, shell: "/bin/sh", timing: { backoffBaseMs: 60_000 } }),
+    });
+    const seen: string[] = [];
+    h.bus.on((e) => {
+      if (e.kind === "watcher.upserted") seen.push(`${e.watcher.live?.state ?? "none"}${e.watcher.lastError ? " (error)" : ""}`);
+    });
+    const w = h.orch.createWatcher({ name: "flaky", command: "sleep 0.2; echo nope >&2; exit 3", mode: "loop" });
+    // The create response already knows it is starting up.
+    expect(w.live?.state).toBe("waiting");
+    const deadline = Date.now() + 5000;
+    while (!h.orch.listWatchers()[0]!.lastError && Date.now() < deadline) await Bun.sleep(10);
+    const [listed] = h.orch.listWatchers();
+    expect(listed!.lastError).toBe("Command exited with code 3: nope");
+    expect(listed!.live).toMatchObject({ state: "waiting", failures: 1 });
+    expect(listed!.live!.nextRunAt).toBeGreaterThan(Date.now() + 50_000);
+    expect(seen).toContain("running");
+    expect(seen.at(-1)).toBe("waiting (error)");
+
+    h.orch.updateWatcher(w.id, { enabled: false });
+    expect(h.orch.listWatchers()[0]!.live?.state).toBe("stopped");
+    expect(seen.at(-1)).toBe("stopped (error)");
+    await h.orch.stop();
+  }, 15_000);
 });

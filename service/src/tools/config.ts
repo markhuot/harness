@@ -20,7 +20,7 @@ const WATCHER_GUIDE = [
   `mode: "loop" for a command that runs for a long time or loops by itself; it's restarted when it exits, and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10), and each run's output becomes one Inbox item. Output identical to an earlier item from the same watcher is skipped, so a loop that re-prints unchanged data doesn't fill the Inbox.`,
   `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
   `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "watch-jira --project=PLAYR --assigned=@me --once", "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
-  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run.`,
+  `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run; process.state says whether its process is running now, waiting for its next run (next_run_at), or stopped.`,
 ].join(" ");
 
 const watcherRefProp = { type: "string", minLength: 1, description: "The watcher's id (from list_watchers) or its exact name." };
@@ -94,6 +94,16 @@ function watcherView(w: Watcher) {
     driver: w.driver,
     last_run_at: w.lastRunAt ? new Date(w.lastRunAt).toISOString() : null,
     last_error: w.lastError,
+    ...(w.live
+      ? {
+          process: {
+            state: w.live.state,
+            since: new Date(w.live.since).toISOString(),
+            next_run_at: w.live.nextRunAt ? new Date(w.live.nextRunAt).toISOString() : null,
+            consecutive_failures: w.live.failures,
+          },
+        }
+      : {}),
   };
 }
 
