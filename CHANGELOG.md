@@ -61,6 +61,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- In the New session window on the Mac, "Add project…" is now the last choice in the project
+  dropdown instead of a separate button, and the "New session" label in the corner is gone.
 - The watcher form on Mac and iPhone has a single Command field and a new Prompt field in
   place of the separate command and arguments fields. Watchers you already have keep running
   as they are. Saving one from the form turns its command and arguments into one command line,

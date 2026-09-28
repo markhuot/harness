@@ -285,6 +285,10 @@ try {
   await Bun.sleep(100);
   await js(`location.hash = "#/compose"`);
   await until("composer", () => exists(".new-session-prompt"));
+  const projectOpts = await js<string[]>(`[...document.querySelectorAll(".project-picker select option")].map(o => o.textContent)`);
+  check("composer's project dropdown ends with Add project…", projectOpts.length > 1 && projectOpts.at(-1) === "Add project…", projectOpts.join(","));
+  const headText = await js<string>(`document.querySelector(".new-session-head")?.textContent ?? ""`);
+  check("composer header has no separate Add project button or New session label", !(await exists(".new-session-head button")) && !headText.includes("New session"), headText);
   // 5a. Model dropdown: lists the selected driver's models (default first), refetches on driver change.
   const pick = (sel: string, value: string) =>
     js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);

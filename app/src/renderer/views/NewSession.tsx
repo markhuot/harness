@@ -3,12 +3,12 @@ import type { PermissionMode, TicketKind } from "@harness/shared";
 import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
-import { Icon } from "../components/Icon";
 import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 
 const LAST_PROJECT = "harness.lastProject";
+const ADD_PROJECT = "__add";
 
 function readLast(): string | null {
   try {
@@ -73,22 +73,24 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
       <div className="modal-head new-session-head">
         <div className="project-picker">
           {project && <span className="project-key">{project.key.slice(0, 3)}</span>}
-          <select className="select bare" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <select
+            className="select bare"
+            value={projectId}
+            onChange={(e) => {
+              // The last option adds a project; the select stays controlled, so it snaps back until one is added.
+              if (e.target.value === ADD_PROJECT) void addProject();
+              else setProjectId(e.target.value);
+            }}
+          >
             {projects.length === 0 && <option value="">No projects</option>}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.key})
               </option>
             ))}
+            <option value={ADD_PROJECT}>Add project…</option>
           </select>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={addProject}>
-          <Icon name="folder" /> Add project…
-        </button>
-        <div className="grow" />
-        <span className="muted" style={{ fontSize: 12 }}>
-          New session
-        </span>
       </div>
       <div className="modal-body">
         <textarea
