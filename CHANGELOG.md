@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The iPhone app now carries each release's build number (for example 202609281418) instead of
+  1, so the install page and the release notes show which build you're installing, and each
+  new release installs as a newer build than the last.
+
 ## [app-20260928.1418](https://github.com/markhuot/harness/releases/tag/app-20260928.1418) - 2026-09-28
 
 ### Added

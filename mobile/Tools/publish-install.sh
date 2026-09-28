@@ -91,6 +91,10 @@ if [[ $SKIP_IOS -eq 0 ]]; then
     (cd ios && "$MOBILE/Tools/pod.sh" install)
   fi
 
+  # Prebuild writes a literal CFBundleVersion ("1"), which CURRENT_PROJECT_VERSION can't override;
+  # point it at the build setting so the archive carries the tag's digits.
+  /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion $(CURRENT_PROJECT_VERSION)' ios/Harness/Info.plist
+
   echo "==> Archiving (Release, JS bundle embedded, build $BUILD_NUMBER)"
   rm -rf build/Harness.xcarchive
   xcodebuild -workspace ios/Harness.xcworkspace -scheme Harness \
@@ -123,6 +127,7 @@ if [[ $SKIP_IOS -eq 0 ]]; then
   [[ -s "$APP/main.jsbundle" ]] || { echo "error: main.jsbundle is not embedded; this build would try to load from Metro" >&2; exit 1; }
   IOS_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
   IOS_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
+  [[ "$IOS_BUILD" == "$BUILD_NUMBER" ]] || { echo "error: CFBundleVersion is '$IOS_BUILD', expected '$BUILD_NUMBER'" >&2; exit 1; }
   check_no_token "$CHECK"
   rm -rf "$CHECK"
   cp "$IPA" "$OUT/Harness.ipa"
