@@ -50,6 +50,18 @@ const board = { type: "leaf", id: "b", content: { kind: "board" } };
 const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
 const panes = (children: object[], sizes: number[], focusedId: string) =>
   `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
+// Starts dragging a card and holds it over a pane (fx/fy of the way across it) so the drop preview
+// shows. executeJavaScript waits for the returned promise.
+const holdDrag = (cardKey: string, paneId: string, fx: number, fy: number) => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  await wait(300);
+  const dt = new DataTransfer();
+  document.querySelector('.card[data-key="${cardKey}"]')?.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  await wait(100);
+  const r = document.querySelector('[data-pane-id="${paneId}"]')?.getBoundingClientRect();
+  if (r) document.querySelector("[data-testid=pane-drop-layer]")?.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + r.width * ${fx}, clientY: r.top + r.height * ${fy} }));
+  await wait(300);
+})()`;
 // Opens the first watcher's edit form and keeps the Watchers section in view.
 const editWatcher = `document.querySelector("#settings-watchers .settings-row button[title=Edit]")?.click(); setTimeout(() => document.getElementById("settings-watchers")?.scrollIntoView({ block: "start" }), 50)`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
@@ -92,6 +104,12 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
     route: "#/board/all/ticket/NYTIMES-3",
     delay: 3000,
     setup: panes([board, ticketPane("t1", "NYTIMES-4"), ticketPane("t2", "NYTIMES-3", "details")], [0.4, 0.3, 0.3], "t2"),
+  },
+  {
+    // Mid-drag: a card held over the lower half of an open ticket, previewing a stacked split.
+    name: "split-drop",
+    route: "#/board/all/ticket/NYTIMES-4",
+    setup: `${panes([board, ticketPane("t1", "NYTIMES-4")], [0.6, 0.4], "t1")}; ${holdDrag("NYTIMES-3", "t1", 0.5, 0.85)}`,
   },
 ];
 
