@@ -225,7 +225,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
@@ -357,7 +357,7 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, human review, auto-complete, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, human review, auto-complete, color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode | `update_settings` (gated), `get_settings` | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |

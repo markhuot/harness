@@ -285,6 +285,8 @@ export interface ProjectView {
   autoComplete: boolean;
   /** null → the settings default */
   permissionMode: PermissionMode | null;
+  /** Key badge color: a preset id or "#rrggbb"; null → the theme's accent */
+  color: string | null;
 }
 
 export interface ApprovalMeta {

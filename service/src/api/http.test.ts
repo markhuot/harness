@@ -276,6 +276,20 @@ describe("http api", () => {
     await expect(client.updateProject(p.id, { defaultModels: { nope: "x" } })).rejects.toMatchObject({ status: 400 });
   });
 
+  test("project color over HTTP: presets and hex are normalized, junk is refused, empty clears", async () => {
+    const { client, dir } = await boot();
+    const p = await client.createProject({ path: dir, color: "Blue" });
+    expect(p.color).toBe("blue");
+    expect((await client.updateProject(p.id, { color: "#ABC" })).color).toBe("#aabbcc");
+    expect((await client.updateProject(p.id, { name: "renamed" })).color).toBe("#aabbcc");
+    await expect(client.updateProject(p.id, { color: "chartreuse" })).rejects.toMatchObject({ status: 400 });
+    await expect(client.updateProject(p.id, { color: "#12345" })).rejects.toMatchObject({ status: 400 });
+    await expect(client.updateProject(p.id, { color: 7 as unknown as string })).rejects.toMatchObject({ status: 400 });
+    expect((await client.listProjects()).find((x) => x.id === p.id)!.color).toBe("#aabbcc");
+    expect((await client.updateProject(p.id, { color: "" })).color).toBeNull();
+    await expect(client.createProject({ path: dir, key: "OTHER", color: "nope" })).rejects.toMatchObject({ status: 400 });
+  });
+
   test("MCP endpoint serves the run's tools only while the run is active", async () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir });

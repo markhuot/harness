@@ -60,6 +60,7 @@ const project: Project = {
   autoComplete: true,
   defaultModels: {},
   permissionMode: null,
+  color: null,
   createdAt: 0,
   updatedAt: 0,
 };

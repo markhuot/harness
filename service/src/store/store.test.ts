@@ -84,7 +84,7 @@ describe("db", () => {
     db.exec(`INSERT INTO watchers (id, name, command, prompt, created_at, updated_at) VALUES ('w1', 'jira', 'node', 'Dispatch to FOO', 0, 0)`);
     db.exec(`INSERT INTO mappings (id, pattern, project_id, notes, created_at) VALUES ('m1', 'FOO', 'p1', 'foo team', 0), ('m2', '/^BAR-/', 'p1', '', 0)`);
     migrate(db);
-    expect((db.query("PRAGMA user_version").get() as any).user_version).toBe(9);
+    expect((db.query("PRAGMA user_version").get() as any).user_version).toBe(SCHEMA_VERSION);
     expect(db.query("SELECT name FROM sqlite_master WHERE name = 'mappings'").get()).toBeNull();
     const store = new Store(db);
     expect(store.projects.get("p1")!.key).toBe("FOO");
@@ -92,6 +92,22 @@ describe("db", () => {
     // The rows that pointed at p1 are gone with the table, so the project still deletes cleanly.
     store.projects.delete("p1");
     expect(store.projects.get("p1")).toBeNull();
+  });
+
+  test("migration 10 leaves existing projects without a color; update sets, keeps and clears it", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 9).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 0, 0)`);
+    migrate(db);
+    const store = new Store(db);
+    expect(store.projects.get("p1")!.color).toBeNull();
+    expect(store.projects.update("p1", { color: "teal" })!.color).toBe("teal");
+    expect(store.projects.update("p1", { name: "renamed" })!.color).toBe("teal");
+    expect(store.projects.update("p1", { color: null })!.color).toBeNull();
+    expect(store.projects.create({ path: "/new", name: "new", color: "#12ab34" }).color).toBe("#12ab34");
   });
 
   test("refuses a database from a newer schema", () => {

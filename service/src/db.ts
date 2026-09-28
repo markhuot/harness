@@ -295,6 +295,11 @@ export const MIGRATIONS: string[] = [
   `
   DROP TABLE mappings;
   `,
+  // 10: projects.color: the key badge's color, a preset id ("blue") or "#rrggbb". NULL (every
+  //     existing project) keeps the theme's accent.
+  `
+  ALTER TABLE projects ADD COLUMN color TEXT;
+  `,
 ];
 
 /**

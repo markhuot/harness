@@ -11,6 +11,7 @@ import { CSS_VAR, TOKEN_KEYS, type Theme, type ThemeAppearance, type ThemeTokens
 export * from "./types";
 export { alpha, contrast, distance, mix, over, parseColor, isColor } from "./color";
 export { harnessDark, harnessLight } from "./harness";
+export { projectKeyColors, type ProjectKeyColors } from "./projectColor";
 
 /** Every bundled theme, grouped light-then-dark in picker order. */
 export const THEMES: readonly Theme[] = [

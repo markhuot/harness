@@ -14,6 +14,7 @@ interface ProjectRow {
   require_human_review: number;
   auto_complete?: number;
   permission_mode?: string | null;
+  color?: string | null;
   default_models: string;
   created_at: number;
   updated_at: number;
@@ -30,6 +31,7 @@ const toProject = (r: ProjectRow): Project => ({
   requireHumanReview: bool(r.require_human_review),
   autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
   permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
+  color: r.color ?? null,
   defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -48,6 +50,7 @@ export interface NewProject {
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
   autoComplete?: boolean;
+  color?: string | null;
   defaultModels?: Record<string, string>;
 }
 
@@ -90,8 +93,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, color, default_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $color, $defaultModels, $t, $t)`,
         )
         .run({
           id,
@@ -102,6 +105,7 @@ export class ProjectRepo {
           useWorktrees: int(input.useWorktrees ?? true),
           requireHumanReview: int(input.requireHumanReview ?? true),
           autoComplete: int(input.autoComplete ?? true),
+          color: input.color ?? null,
           defaultModels: toJson(input.defaultModels ?? {}),
           t,
         });
@@ -116,7 +120,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, color = $color, default_models = $defaultModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -127,6 +131,7 @@ export class ProjectRepo {
         useWorktrees: int(patch.useWorktrees ?? existing.useWorktrees),
         requireHumanReview: int(patch.requireHumanReview ?? existing.requireHumanReview),
         autoComplete: int(patch.autoComplete ?? existing.autoComplete),
+        color: patch.color !== undefined ? patch.color : existing.color,
         defaultModels: toJson(patch.defaultModels ?? existing.defaultModels),
         t: now(),
       });

@@ -35,6 +35,11 @@ export interface Project {
   autoComplete: boolean;
   /** Permission mode for this project's tickets (null → settings.permissionMode) */
   permissionMode: PermissionMode | null;
+  /**
+   * Color of the project's key badge: a preset id from PROJECT_COLORS ("blue") or a custom
+   * "#rrggbb". null → the theme's accent.
+   */
+  color: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -453,6 +458,8 @@ export interface CreateProjectBody {
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
   autoComplete?: boolean;
+  /** Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent */
+  color?: string | null;
   /** null → settings.permissionMode */
   permissionMode?: PermissionMode | null;
   /** Per-driver default models; PATCH merges per driver, null clears one */

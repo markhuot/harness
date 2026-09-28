@@ -2,7 +2,7 @@
 // settings), plus deleting projects and tickets. Reads are open to every ticket run
 // and triage; every mutation is a gated tool (defineGatedTool): a human approves each call.
 
-import { commandLine, PERMISSION_MODES, type Watcher } from "@harness/shared";
+import { commandLine, PERMISSION_MODES, PROJECT_COLORS, type Watcher } from "@harness/shared";
 import type { WatcherFields } from "./types";
 import { defineGatedTool, defineTool, json, schema } from "./util";
 
@@ -270,6 +270,10 @@ const projectProps = {
   auto_complete: { type: "boolean", description: "Complete (merge) tickets as soon as both reviews approve. Default false." },
   permission_mode: permissionModeProp,
   default_models: modelMapProp,
+  color: {
+    type: "string",
+    description: `Key badge color: ${PROJECT_COLORS.map((c) => c.id).join(", ")}, or a custom "#rrggbb". Empty for the theme's accent.`,
+  },
 };
 
 type ProjectToolInput = {
@@ -280,6 +284,7 @@ type ProjectToolInput = {
   auto_complete?: boolean;
   permission_mode?: string;
   default_models?: Record<string, string | null>;
+  color?: string;
 };
 
 function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
@@ -293,6 +298,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.auto_complete !== undefined) body.autoComplete = i.auto_complete;
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;
+  if (i.color !== undefined) body.color = i.color || null;
   return body;
 }
 
