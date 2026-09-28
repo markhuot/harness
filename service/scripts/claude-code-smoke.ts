@@ -1,10 +1,8 @@
 // One-off manual verification of ClaudeCodeDriver against the real `claude` CLI (haiku).
 // Needs a logged-in claude and network; not part of `bun test`.
 //   bun service/scripts/claude-code-smoke.ts
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Settings } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { handleMcpRequest } from "../src/api/mcp";
 import { ClaudeCodeDriver } from "../src/drivers/claude-code";
 import type { DriverEvent, RunRequest } from "../src/drivers/types";
@@ -21,7 +19,7 @@ const settings: Settings = {
   anthropicApiKey: null,
 };
 const driver = new ClaudeCodeDriver({ settings: () => settings });
-const cwd = mkdtempSync(join(tmpdir(), "harness-smoke-"));
+const cwd = tempDir("harness-smoke-") // removed at exit;
 const ops = fakeOps();
 const ctx = fakeContext({ cwd, ops, browser: fakeBrowser() });
 const tools = toolsForRun("work", driver);

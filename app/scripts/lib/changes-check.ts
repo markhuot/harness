@@ -1,10 +1,10 @@
 // Git plugin end-to-end: a dummy ticket edits files in its worktree via `/bash`, then the app's
 // Changes tab (plugin iframe) must show them, follow the theme, and refresh live.
 // Used by scripts/real-service.ts and scripts/changes.ts.
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import { tempDir } from "@harness/shared/testing";
 import { until, type launchApp } from "./drive";
 
 type App = Awaited<ReturnType<typeof launchApp>>;
@@ -17,9 +17,12 @@ async function git(cwd: string, ...args: string[]) {
   if (code !== 0) throw new Error(`git ${args.join(" ")}: ${err}`);
 }
 
-/** A small repo on main with a few files the agent will add to, edit, rename and delete. */
+/**
+ * A small repo on main with a few files the agent will add to, edit, rename and delete. It's a
+ * tempDir(): the caller removes it with cleanupTempDirs() once the daemon using it has stopped.
+ */
 export async function seedRepo(): Promise<string> {
-  const dir = mkdtempSync(join(tmpdir(), "harness-changes-repo-"));
+  const dir = tempDir("harness-changes-repo-");
   const files: Record<string, string> = {
     "README.md": "# Greeter\n\nSays hello.\n\n## Usage\n\n```sh\nbun src/app.ts\n```\n",
     "src/app.ts": [
