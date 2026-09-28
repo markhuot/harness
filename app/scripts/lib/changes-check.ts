@@ -173,6 +173,43 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   check("files button expands the sidebar again", (await sidebar()).expanded === "true");
   await Bun.sleep(600);
 
+  // Viewed: checking it collapses the file's diff, the arrow peeks without unchecking, and marks survive a reload.
+  const viewed = (path: string) =>
+    frame.js<{ found: boolean; checked: boolean; expanded: string | null; height: number; bar: string; tree: string }>(`(() => {
+      const box = document.querySelector('.viewed[data-path=${JSON.stringify(path)}] input');
+      const arrow = document.querySelector('.disclosure[data-path=${JSON.stringify(path)}]');
+      const host = [...document.querySelectorAll(".files *")].find((e) => e.shadowRoot);
+      const row = [...(host?.shadowRoot?.querySelectorAll("[data-item-path]") ?? [])].find((e) => e.getAttribute("data-item-path") === ${JSON.stringify(path)});
+      return { found: !!box && !!arrow, checked: !!box?.checked, expanded: arrow?.getAttribute("aria-expanded") ?? null,
+        height: Math.round(box?.closest("diffs-container")?.getBoundingClientRect().height ?? 0),
+        bar: document.querySelector(".bar .viewed-count")?.textContent ?? "", tree: row?.textContent ?? "" };
+    })()`);
+  const headers = await frame.js<{ boxes: number; arrows: number; items: number }>(`({ boxes: document.querySelectorAll(".diffs .viewed input[type=checkbox]").length, arrows: document.querySelectorAll(".diffs .disclosure[aria-expanded]").length, items: document.querySelectorAll(".diffs diffs-container").length })`);
+  check("every rendered diff header has a Viewed checkbox and a disclosure arrow", headers.items > 0 && headers.boxes === headers.items && headers.arrows === headers.items, JSON.stringify(headers));
+  const before = await viewed("src/app.ts");
+  check("files start unviewed and expanded", before.found && !before.checked && before.expanded === "true" && before.bar === "0 / 6 viewed", JSON.stringify(before));
+  await frame.js(`document.querySelector('.viewed[data-path="src/app.ts"] input').click()`);
+  await Bun.sleep(400);
+  const marked = await viewed("src/app.ts");
+  check("checking Viewed collapses the diff", marked.checked && marked.expanded === "false" && marked.height < before.height / 2, JSON.stringify({ before, marked }));
+  check("viewed count and tree check follow", marked.bar === "1 / 6 viewed" && marked.tree.includes("✓"), JSON.stringify(marked));
+  await shot("8-changes-viewed");
+  await frame.js(`document.querySelector('.disclosure[data-path="src/app.ts"]').click()`);
+  await Bun.sleep(400);
+  const peek = await viewed("src/app.ts");
+  check("the disclosure arrow expands a viewed file without unchecking it", peek.checked && peek.expanded === "true" && peek.height > marked.height * 2, JSON.stringify(peek));
+  await frame.js(`document.querySelector('.viewed[data-path="CHANGELOG.md"] input').click(); document.querySelector('.viewed[data-path="config.json"] input').click()`);
+  await Bun.sleep(300);
+  await frame.js(`window.__stale = true; location.reload()`);
+  await until("plugin reloaded with marks", () => frame.js<boolean>(`!window.__stale && !!document.querySelector('.viewed[data-path="src/app.ts"]')`), 20000).catch(() => false);
+  await Bun.sleep(400);
+  const reloaded = await viewed("src/app.ts");
+  check("viewed marks persist across a reload (collapsed again; the peek isn't kept)", reloaded.checked && reloaded.expanded === "false" && reloaded.bar === "3 / 6 viewed", JSON.stringify(reloaded));
+  await frame.js(`document.querySelector('.viewed[data-path="src/app.ts"] input').click()`);
+  await Bun.sleep(400);
+  const unmarked = await viewed("src/app.ts");
+  check("unchecking Viewed expands the file", !unmarked.checked && unmarked.expanded === "true" && unmarked.bar === "2 / 6 viewed", JSON.stringify(unmarked));
+
   if (opts.setTheme) {
     await opts.setTheme("dark");
     const t = await until("plugin theme follows", () => frame.js<string>(`document.documentElement.dataset.theme === "dark" ? "dark" : ""`), 5000).catch(() => "");
@@ -215,9 +252,15 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   await shot("9-changes-split");
 
   // Live refresh: a follow-up run writes another file; the ticket.upserted events reach the plugin.
-  await api("POST", `/tickets/${ticket.key}/messages`, { text: "/bash printf 'late\\n' > LATE.md" });
+  // It also edits CHANGELOG.md, which was marked viewed: that file's mark resets, config.json's stays.
+  await api("POST", `/tickets/${ticket.key}/messages`, { text: "/bash printf 'late\\n' > LATE.md && printf -- '- Later entry\\n' >> CHANGELOG.md" });
   const late = await until("live refresh shows LATE.md", () => frame.js<boolean>(`document.querySelector(".bar .stat")?.textContent.includes("across 7 files")`), 30000).catch(() => false);
   check("plugin refreshes live as the agent works", !!late);
+  await Bun.sleep(400);
+  const [changelog, config] = [await viewed("CHANGELOG.md"), await viewed("config.json")];
+  const changelogText = await frame.js<string>(`document.querySelector('.viewed[data-path="CHANGELOG.md"]')?.closest("diffs-container")?.shadowRoot?.textContent ?? ""`);
+  check("a viewed file the agent changes again goes back to unviewed and expanded", !changelog.checked && changelog.expanded === "true" && config.checked && config.expanded === "false" && config.bar === "1 / 7 viewed", JSON.stringify({ changelog, config }));
+  check("the re-edited file's diff shows the new lines", changelogText.includes("Later entry"), changelogText.slice(0, 300));
   frame.close();
   return { project, ticket: settled, repo };
 }
