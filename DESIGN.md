@@ -93,7 +93,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
 | Human message in planning | enqueue plan run with the message |
-| `POST /start` (or drag to in_progress) | status `in_progress`; prepare workdir (worktree if enabled); enqueue work run: "The plan is approved. Begin work." + plan |
+| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (worktree if enabled); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
@@ -106,8 +106,8 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Human `POST /review {approve}` | `humanReview=approved` |
 | Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
 | `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately |
-| Drag to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a drag back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
+| Move to done | `done` without an agent run |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -205,7 +205,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, driver?, model? }`. Conductor run: a child (`parentId` = conductor, `auto_start` default true, the conductor's driver/model by default). Work run: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
-| `move_ticket` | work, conductor | `{ key, status, position? }`: a drag on the board (`updateTicket` with status/position). `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the app; the same status with a position reorders |
+| `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: conductor → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries; with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
@@ -250,7 +250,7 @@ and say that every config call waits for a human and is then repeated exactly.
 The write tools (`service/src/tools/board-write.ts`, the `// --- board (write) ---` section of
 `HarnessOps`) let work and conductor runs do to other cards what a person does on the board.
 They call the same `Orchestrator` methods as the HTTP API, so validation and side effects
-(moving to in_progress starts a work run, a drag back from done re-opens, and so on) are shared.
+(moving to in_progress starts a work run, a move back from done re-opens, and so on) are shared.
 The guard rails live in the orchestrator ops, not in tool text, so a driver calling ops directly
 hits them too:
 
@@ -350,7 +350,7 @@ client state, not service state.
 | Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan) | `create_ticket` | |
 | Board | edit title, brief, dependencies, driver, model, permission mode | `update_ticket` | permission modes only tighten |
-| Board | drag to another column, reorder | `move_ticket` | not into or out of review; done only from planning |
+| Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
 | Board | approve a review, request changes, re-run the agent review, complete or mark done | conductors only, for their children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |

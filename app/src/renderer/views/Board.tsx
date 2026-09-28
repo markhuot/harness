@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
-import { useAction, useStore } from "../state/store";
+import { TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { useStore } from "../state/store";
 import {
   boardColumns,
   canLoadMoreSearch,
@@ -16,7 +16,6 @@ import {
   isReady,
   latestSummary,
   plainText,
-  positionForDrop,
   progressOf,
   scopeOf,
   searchColumns,
@@ -32,21 +31,8 @@ import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import "./board.css";
 
-const DRAG_MIME = "application/x-harness-ticket";
-
-/** Insertion index for a drag at clientY: before the first card whose middle is below it. */
-function dropIndex(body: Element, clientY: number, draggingKey: string | null): number {
-  const cards = [...body.querySelectorAll<HTMLElement>(".card[data-key]")].filter((c) => c.dataset.key !== draggingKey);
-  const i = cards.findIndex((c) => {
-    const r = c.getBoundingClientRect();
-    return clientY < r.top + r.height / 2;
-  });
-  return i === -1 ? cards.length : i;
-}
-
 export function BoardView({ onNewSession }: { onNewSession: () => void }) {
-  const { state, route, navigate, client, dispatch, refresh, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
-  const act = useAction();
+  const { state, route, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
@@ -54,8 +40,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   useEffect(() => () => setSearch(""), [setSearch]);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<{ status: TicketStatus; index: number } | null>(null);
-  const dragging = useRef<string | null>(null);
   if (route.view !== "board") return null;
 
   const projectId = boardProjectId;
@@ -71,24 +55,6 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
   const paging = searching ? undefined : state.donePaging[scopeOf(projectId)];
 
   const open = (key: string) => navigate({ view: "board", projectId, ticketKey: key, tab: "summaries" });
-
-  const move = async (key: string, status: TicketStatus, index: number) => {
-    const t = Object.values(state.tickets).find((x) => x.key === key);
-    if (!t) return;
-    // Done is ordered by completion time, so only the status matters there.
-    const others = columns[status].filter(visible).filter((x) => x.id !== t.id);
-    const position = status === "done" ? undefined : positionForDrop(others, index);
-    if (t.status === status) {
-      // Dropped back where it already sits (the column is in display order without it).
-      const current = columns[status].filter(visible).findIndex((x) => x.id === t.id);
-      if (status === "done" || current === index) return;
-    }
-    const body = { ...(t.status !== status ? { status } : {}), ...(position !== undefined ? { position } : {}) };
-    // Optimistic: the service's ticket.upserted will confirm (or refresh corrects it).
-    dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: { ...t, ...body, updatedAt: t.updatedAt } } });
-    const res = await act(() => client.updateTicket(key, body));
-    if (!res) void refresh();
-  };
 
   const total = searching
     ? (search?.ids ? search.total : Object.values(columns).reduce((n, c) => n + c.length, 0))
@@ -183,46 +149,16 @@ export function BoardView({ onNewSession }: { onNewSession: () => void }) {
           {TICKET_STATUSES.map((status) => {
             const tickets = columns[status].filter(visible);
             return (
-              <section
-                key={status}
-                className={`column ${dragOver?.status === status ? "drag-over" : ""}`}
-                onDragOver={(e) => {
-                  if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  const body = e.currentTarget.querySelector(".column-body");
-                  const index = body ? dropIndex(body, e.clientY, dragging.current) : 0;
-                  if (dragOver?.status !== status || dragOver.index !== index) setDragOver({ status, index });
-                }}
-                onDragLeave={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(null);
-                  const key = e.dataTransfer.getData(DRAG_MIME);
-                  const body = e.currentTarget.querySelector(".column-body");
-                  const index = body ? dropIndex(body, e.clientY, key) : 0;
-                  dragging.current = null;
-                  if (key) void move(key, status, index);
-                }}
-              >
+              <section key={status} className="column">
                 <div className="column-head">
                   <StatusDot status={status} />
                   <span className="column-title">{STATUS_LABEL[status]}</span>
                   <span className="column-count" data-testid={`count-${status}`}>{status === "done" && !searching ? doneTotal : tickets.length}</span>
                 </div>
-                <div className={`column-body ${dragOver?.status === status && status !== "done" && dragOver.index >= tickets.filter((t) => t.key !== dragging.current).length ? "drop-end" : ""}`}>
+                <div className="column-body">
                   {tickets.map((t) => (
                     <TicketCard
                       key={t.id}
-                      dropBefore={
-                        dragOver?.status === status &&
-                        status !== "done" &&
-                        t.key !== dragging.current &&
-                        tickets.filter((x) => x.key !== dragging.current).indexOf(t) === dragOver.index
-                      }
-                      onDragStart={(key) => (dragging.current = key)}
                       ticket={t}
                       state={state}
                       selected={route.ticketKey === t.key}
@@ -290,8 +226,6 @@ const TicketCard = memo(function TicketCard({
   selected,
   showProject,
   onOpen,
-  onDragStart,
-  dropBefore,
   related,
   onHoverConductor,
 }: {
@@ -300,8 +234,6 @@ const TicketCard = memo(function TicketCard({
   selected: boolean;
   showProject: boolean;
   onOpen: (key: string) => void;
-  onDragStart: (key: string) => void;
-  dropBefore: boolean;
   related: boolean;
   onHoverConductor: (id: string | null) => void;
 }) {
@@ -316,19 +248,11 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dropBefore ? "drop-before" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
+      className={`card ${selected ? "selected" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={t.kind === "conductor" ? () => onHoverConductor(t.id) : undefined}
       onMouseLeave={t.kind === "conductor" ? () => onHoverConductor(null) : undefined}
-      draggable
-      onDragStart={(e) => {
-        onDragStart(t.key);
-        e.dataTransfer.setData(DRAG_MIME, t.key);
-        e.dataTransfer.effectAllowed = "move";
-        e.currentTarget.classList.add("dragging");
-      }}
-      onDragEnd={(e) => e.currentTarget.classList.remove("dragging")}
       onClick={() => onOpen(t.key)}
     >
       <div className="card-top">
@@ -400,9 +324,9 @@ const TicketCard = memo(function TicketCard({
   );
 }, cardPropsEqual);
 
-type CardProps = { ticket: Ticket; state: State; selected: boolean; showProject: boolean; dropBefore: boolean; related: boolean };
+type CardProps = { ticket: Ticket; state: State; selected: boolean; showProject: boolean; related: boolean };
 function cardPropsEqual(a: CardProps, b: CardProps) {
-  if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.dropBefore !== b.dropBefore || a.related !== b.related) return false;
+  if (a.ticket !== b.ticket || a.selected !== b.selected || a.showProject !== b.showProject || a.related !== b.related) return false;
   const s1 = a.state;
   const s2 = b.state;
   if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;

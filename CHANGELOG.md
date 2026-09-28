@@ -90,6 +90,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Removed
 
+- On the Mac, cards on the board can no longer be dragged between columns or reordered. Agents
+  move them as work progresses. Clicking a card still opens it.
 - Mappings are gone from Settings on Mac and iPhone, and agents can no longer add or delete
   them. A watcher's prompt now says which project its work goes to, for example "When an
   actionable ticket assigned to me comes in, dispatch it to the PLAYR project." Updating deletes
