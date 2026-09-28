@@ -216,6 +216,19 @@ try {
   check("transcript shows permission decisions as a shield row", audit.startsWith("Allowed") && audit.includes("read-only command") && audit.includes("policy"), audit);
   await js(`location.hash = "#/board/all"`);
 
+  // On the all-projects board a card reads "[NYT] NYTIMES-2": the project key leads the top row,
+  // and the foot no longer repeats it.
+  const cardTop = await until("all-projects card", () =>
+    js<{ first: string; firstText: string; next: string; footKeys: number } | null>(`(() => { const card = document.querySelector('.card[data-key="NYTIMES-2"]'); if (!card) return null;
+      const top = card.querySelector(".card-top");
+      return { first: top.children[0]?.className ?? "", firstText: top.children[0]?.textContent ?? "", next: top.children[1]?.className ?? "", footKeys: card.querySelectorAll(".card-foot .project-key").length }; })()`),
+  );
+  check(
+    "all-projects card top reads [project key] ticket key",
+    cardTop.first.startsWith("project-key") && cardTop.firstText === "NYT" && cardTop.next === "card-key" && cardTop.footKeys === 0,
+    JSON.stringify(cardTop),
+  );
+
   // 2. Cards drag onto panes (6e), not between columns (agents move them): a drop on a column is a no-op.
   // Then move NYTIMES-2 (planning) to In progress through the API and watch the board follow.
   const dragged = await js<{ draggable: number; accepted: boolean }>(`(() => {
@@ -604,7 +617,11 @@ try {
     check("conductor card rolls up progress and what needs you", rollup === "2/8 done2 need you", rollup);
     const parentChip = await js<string>(`document.querySelector('.card[data-key="HARNESS-6"] .card-parent-chip')?.textContent ?? ""`);
     check("child card carries a parent chip", parentChip === "↳ HARNESS-1", parentChip);
-    // The Conductor badge and rollup carry it; the card has no accent edge.
+    // The rollup says it's a conductor: no Conductor badge, and no accent edge.
+    const kindBadges = await js<number>(`document.querySelectorAll('.card[data-key="HARNESS-1"] .badge-violet').length`);
+    check("conductor card has no Conductor badge", kindBadges === 0, String(kindBadges));
+    const ownTop = await js<string>(`document.querySelector('.card[data-key="HARNESS-1"] .card-top')?.firstElementChild?.className ?? ""`);
+    check("a single project's board shows no project key on cards", ownTop === "card-key", ownTop);
     const edge = await js<{ left: string; top: string; lc: string; tc: string }>(`(() => { const cs = getComputedStyle(document.querySelector('.card[data-key="HARNESS-1"]'));
       return { left: cs.borderLeftWidth, top: cs.borderTopWidth, lc: cs.borderLeftColor, tc: cs.borderTopColor }; })()`);
     check("conductor card has no left accent border", edge.left === edge.top && edge.lc === edge.tc, JSON.stringify(edge));
