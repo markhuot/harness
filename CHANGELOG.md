@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260928.1943](https://github.com/markhuot/harness/releases/tag/app-20260928.1943) - 2026-09-28
+
 ### Added
 
 - You can drive the Mac app from the keyboard. On the board, h j k l (or the arrows) move between
