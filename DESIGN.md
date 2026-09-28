@@ -353,6 +353,7 @@ client state, not service state.
 | Board | edit title, brief, dependencies, driver, model, permission mode | `update_ticket` | permission modes only tighten |
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
+| Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
 | Board | approve a review, request changes, re-run the agent review, complete or mark done | conductors only, for their children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
@@ -639,6 +640,7 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 ```
 GET    /health
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
+GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
@@ -687,6 +689,34 @@ completed, moved or deleted between fetches never duplicate or skip a row.
   punctuation-only terms are dropped. `ticket_fts` is derived data, created and rebuilt on open
   when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
   ranking.
+
+**File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
+mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path
+with spaces). `shared/src/mentions.ts` holds the pure parts both apps share: `activeMention`
+finds the mention at the caret (an `@` counts only at the start, after whitespace, or after an
+opening bracket or quote, so `mark@example.com` never is), `insertMention` completes it (files get
+a trailing space; folders end in `/` and keep the list open inside them), `parseMentions` pulls
+the paths out of a prompt, and `rankPaths` orders candidates: path prefix, then name prefix, then
+folder-name prefix, then substring, with in-order letters (`fmt` → `format.ts`) only when nothing
+matches outright. A folder the query already names lists its contents, not itself.
+
+- **Autocomplete.** `/projects/:id/files` searches the project folder (new session);
+  `/tickets/:key/files` searches where the ticket's next run works: its worktree, else the
+  session's cwd, else the project folder. `service/src/orchestrator/files.ts` lists
+  `git ls-files --cached --others --exclude-standard` in a git repo, or walks the folder (skipping
+  `.git` and `node_modules`, at most 20,000 files) otherwise, adds every folder that holds a file,
+  and caches the list per folder for 5 seconds so typing doesn't re-run git on each key.
+- **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
+  through `attachMentions` with the run's cwd before the driver sees them; review, complete and
+  triage prompts are left alone (review and complete prompts quote the brief, whose files the
+  earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
+  `<mentioned-files>` block: `<file path="…">` with the contents, or `<directory path="…/">` with
+  a one-level listing. Mentions that aren't paths (`@someone`) are ignored. Paths that resolve
+  outside the cwd, symlinks included, are refused; binary files (a NUL in the first 8 KB) are
+  skipped; a file is cut at 256 KB (the tag says so) and the whole attachment at 1 MB. The
+  transcript keeps the prompt as typed plus a status line, `Attached @README.md, @src/app.ts`,
+  and one `Didn't attach @…: <reason>` line per skipped path. Contents are read when the run
+  starts, so a message queued behind a run gets the files as they are when it runs.
 
 ## Network
 

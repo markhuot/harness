@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, statSync } from "node:fs";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type HarnessEvent } from "@harness/shared";
 import { onTempCleanup } from "@harness/shared/testing";
@@ -477,5 +477,21 @@ describe("ticket paging + search over http", () => {
     await expect(client.request("GET", "/tickets/search")).rejects.toMatchObject({ status: 400 });
     // /tickets/:key still works alongside the new routes.
     expect((await client.getTicket(planning.key)).ticket.id).toBe(planning.id);
+  });
+
+  test("file autocomplete: /projects/:id/files and /tickets/:key/files", async () => {
+    const { client, dir } = await boot();
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "app.ts"), "x");
+    const p = await client.createProject({ path: dir });
+    expect(await client.projectFiles(p.id, "app")).toEqual([{ path: "src/app.ts", kind: "file" }]);
+    expect(await client.projectFiles(p.id, "", 1)).toEqual([{ path: "src/", kind: "dir" }]);
+    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    expect(await client.ticketFiles(t.key, "sr")).toEqual([
+      { path: "src/", kind: "dir" },
+      { path: "src/app.ts", kind: "file" },
+    ]);
+    await expect(client.projectFiles("nope", "a")).rejects.toMatchObject({ status: 404 });
+    await expect(client.ticketFiles("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
   });
 });

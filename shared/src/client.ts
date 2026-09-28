@@ -33,6 +33,7 @@ import type {
   NetworkStatus,
   PairingInfo,
 } from "./protocol";
+import type { FileMatch } from "./mentions";
 
 export class HarnessApiError extends Error {
   constructor(
@@ -100,6 +101,10 @@ export class HarnessClient {
   deleteProject(id: string) {
     return this.request<{ ok: true }>("DELETE", `/projects/${id}`);
   }
+  /** Files and folders in the project folder matching `q`, for @-mentions in a new session. */
+  projectFiles(id: string, q: string, limit?: number) {
+    return this.request<FileMatch[]>("GET", `/projects/${id}/files${query({ q, limit })}`);
+  }
 
   // Tickets
   /** Every ticket (optionally one project's), or only those in `opts.status` (e.g. all but done). */
@@ -160,6 +165,10 @@ export class HarnessClient {
   }
   cancelTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/cancel`);
+  }
+  /** Files and folders where the ticket's agent works matching `q`, for @-mentions in a message. */
+  ticketFiles(key: string, q: string, limit?: number) {
+    return this.request<FileMatch[]>("GET", `/tickets/${key}/files${query({ q, limit })}`);
   }
   listSummaries(key: string) {
     return this.request<Summary[]>("GET", `/tickets/${key}/summaries`);

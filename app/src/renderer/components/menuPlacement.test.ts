@@ -40,4 +40,9 @@ describe("placeMenu", () => {
   test("a menu wider than the window starts at the left margin", () => {
     expect(placeMenu({ ...base, width: 1400, anchor: btn(600, 10), align: "right" }).left).toBe(8);
   });
+
+  test("prefer above opens above when it fits there, and falls back to below when it doesn't", () => {
+    expect(placeMenu({ ...base, anchor: btn(600, 400), align: "left", prefer: "above" })).toEqual({ left: 600, top: 246, maxHeight: null, above: true });
+    expect(placeMenu({ ...base, anchor: btn(600, 60), align: "left", prefer: "above" })).toEqual({ left: 600, top: 92, maxHeight: null, above: false });
+  });
 });

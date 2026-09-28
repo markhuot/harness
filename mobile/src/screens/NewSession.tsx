@@ -1,5 +1,5 @@
 // New session: project, prompt, Task/Conductor, driver, model, permission mode, Start immediately, Use worktree.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { resolvePermissionMode, type PermissionMode, type TicketKind } from "@harness/shared";
@@ -12,6 +12,7 @@ import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
 import { haptic } from "../ui/haptics";
 import { buttonItem, primaryItemStyle } from "../ui/header";
+import { MentionList, useFileMentions } from "../ui/mentions";
 
 export function NewSessionScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
@@ -25,6 +26,8 @@ export function NewSessionScreen() {
   const projectId = composerProject(state, chosen, [prefs.boardProject, prefs.lastProject]);
   const project = state.projects[projectId];
   const [prompt, setPrompt] = useState("");
+  const searchFiles = useCallback((q: string) => (projectId ? client.projectFiles(projectId, q) : Promise.resolve([])), [client, projectId]);
+  const mentions = useFileMentions(prompt, setPrompt, searchFiles);
   const [start, setStart] = useState(true);
   const [kind, setKind] = useState<TicketKind>("task");
   const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? state.drivers[0]?.id ?? "";
@@ -103,7 +106,9 @@ export function NewSessionScreen() {
           placeholderTextColor={c.text3}
           style={{ minHeight: 170, textAlignVertical: "top", borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 13, fontSize: 17, lineHeight: 23 }}
           accessibilityLabel="Prompt"
+          {...mentions.inputProps}
         />
+        <MentionList mentions={mentions} />
         <Segmented
           value={kind}
           onChange={setKind}

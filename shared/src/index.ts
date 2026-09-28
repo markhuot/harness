@@ -6,3 +6,4 @@ export * from "./pairing";
 export * from "./watchers";
 export * from "./commandLine";
 export * from "./projectColors";
+export * from "./mentions";

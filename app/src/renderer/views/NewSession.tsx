@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PermissionMode, TicketKind } from "@harness/shared";
 import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
@@ -7,6 +7,7 @@ import { MOD, Modal, Switch } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { ProjectKey } from "../components/ProjectKey";
+import { MentionTextarea } from "../components/MentionTextarea";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -41,6 +42,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback((q: string) => (projectId ? client.projectFiles(projectId, q) : Promise.resolve([])), [client, projectId]);
 
   // Driver follows the project default until the user picks one explicitly.
   const touchedDriver = useRef(false);
@@ -104,13 +106,14 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
         </div>
       </div>
       <div className="modal-body">
-        <textarea
+        <MentionTextarea
           ref={ref}
           autoFocus
           className="new-session-prompt"
           placeholder={newSessionPlaceholder(kind, start)}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onValueChange={setPrompt}
+          search={searchFiles}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();

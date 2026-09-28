@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, existsSync } from "node:fs";
+import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, Ticket } from "@harness/shared";
 import { FakeDriver, makeOrchestrator, tempHome } from "../testing/fakes";
@@ -1062,5 +1062,69 @@ describe("worktrees", () => {
     await h.orch.idle();
     const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect([last.prompt, last.cwd]).toEqual(["tweak it", done.workdir!]);
+  });
+});
+
+describe("@-mentioned files", () => {
+  test("the brief's and a message's mentioned files go to the agent; the transcript keeps what was typed", async () => {
+    const h = setup();
+    writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
+    mkdirSync(join(h.project.path, "src"));
+    writeFileSync(join(h.project.path, "src", "app.ts"), "export {}\n");
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md first", start: false });
+    await h.orch.idle();
+    const plan = h.driver.calls[0]!;
+    expect(plan.prompt).toStartWith("Read @notes.md first\n\n<mentioned-files>");
+    expect(plan.prompt).toContain('<file path="notes.md">\nremember the milk\n</file>');
+    const entries = h.store.transcript.list(t.sessionId);
+    expect(entries.find((e) => e.role === "user")!.content).toEqual({ type: "text", text: "Read @notes.md first" });
+    expect(statuses(h, t.sessionId)).toContain("Attached @notes.md");
+
+    await h.orch.sendMessage(t.key, "and @src/app.ts, not @../escape");
+    await h.orch.idle();
+    expect(h.driver.calls[1]!.prompt).toContain('<file path="src/app.ts">\nexport {}\n</file>');
+    expect(h.driver.calls[1]!.prompt).not.toContain("notes.md");
+  });
+
+  test("a chat question gets its files; review and complete runs don't re-attach the brief's", async () => {
+    const h = setup({ autoComplete: false });
+    writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "what does @notes.md say?", { chat: true });
+    await h.orch.idle();
+    const chat = h.driver.calls.find((c) => c.kind === "chat")!;
+    expect(chat.prompt).toContain('<file path="notes.md">');
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.completeTicket(t.key, {});
+    await h.orch.idle();
+    for (const kind of ["review", "complete"]) {
+      const call = h.driver.calls.find((c) => c.kind === kind)!;
+      expect(call.prompt).toContain("@notes.md");
+      expect(call.prompt).not.toContain("<mentioned-files>");
+    }
+  });
+
+  test("a prompt without mentions reaches the agent as typed, with no status line", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "email a@b.com", start: false });
+    await h.orch.idle();
+    expect(h.driver.calls[0]!.prompt).toBe("email a@b.com");
+    expect(statuses(h, t.sessionId).some((s) => s.startsWith("Attached"))).toBe(false);
+  });
+
+  test("projectFiles and ticketFiles search the project folder, and the ticket's worktree once it has one", async () => {
+    const h = setup();
+    writeFileSync(join(h.project.path, "readme.md"), "x");
+    expect(await h.orch.projectFiles(h.project.id, "read")).toEqual([{ path: "readme.md", kind: "file" }]);
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    expect(await h.orch.ticketFiles(t.key, "read")).toEqual([{ path: "readme.md", kind: "file" }]);
+    const wt = join(h.home, "elsewhere");
+    mkdirSync(wt);
+    writeFileSync(join(wt, "readme-wt.md"), "x");
+    h.store.tickets.update(t.id, { workdir: wt });
+    expect(await h.orch.ticketFiles(t.key, "readme")).toEqual([{ path: "readme-wt.md", kind: "file" }]);
+    expect(() => h.orch.projectFiles("nope", "")).toThrow(HarnessError);
+    expect(() => h.orch.ticketFiles("NOPE-1", "")).toThrow(HarnessError);
   });
 });

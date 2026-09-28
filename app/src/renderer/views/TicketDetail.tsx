@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
@@ -43,6 +43,7 @@ import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
+import { MentionTextarea } from "../components/MentionTextarea";
 import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket, usePaneScope } from "../components/paneContext";
 import { MovePaneItems, PaneGrip } from "../components/paneHeader";
@@ -468,6 +469,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
   // Closing the ticket starts the chat mode's TTL; re-opening within it picks the chat back up.
   useEffect(() => {
@@ -504,13 +506,15 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
 
   return (
     <div className={`composer ${ticket.status === "blocked" && !chat ? "attention" : ""}`}>
-      <textarea
+      <MentionTextarea
         ref={ref}
         rows={1}
         className="composer-input"
         placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onValueChange={setText}
+        search={searchFiles}
+        placement="above"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
