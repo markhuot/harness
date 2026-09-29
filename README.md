@@ -77,10 +77,15 @@ you answer.
 **Planning → In progress → Blocked → Review → Done.**
 
 - Humans own Planning and Blocked, agents own In progress, and Review is shared.
-- Leave "Start immediately" on to skip planning.
+- **New session** (⌘N) opens a draft next to the board. **Start session** (⌘↩) skips planning,
+  and **Plan first** (⇧⌘↩) has an agent draft a plan for you to approve. A draft is saved as you
+  type and waits in Planning until you start it, and closing it asks whether to keep it.
+- New session's **Options** hold the same settings as a ticket's Details tab. To have the agent
+  work right in the project folder instead of a worktree, pick the branch the folder already has
+  checked out.
 - A ticket moves to Review when the agent submits it. An independent agent reviewer
   then runs, and you give your own review.
-- Tick **Skip agent review** in New session (or on the ticket's Details tab) for tickets that
+- Tick **Skip agent review** in New session's Options (or on the ticket's Details tab) for tickets that
   don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
   only on you. The agent can also skip its own review when you ask it to, or when it only
   answered a question, as long as the project requires your review.
