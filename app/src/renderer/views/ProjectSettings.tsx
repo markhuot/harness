@@ -2,8 +2,8 @@
 // identifier (ticket key prefix), color, folder, default driver, worktrees, human review, delete.
 
 import { useEffect, useMemo, useState } from "react";
-import type { DriverInfo, Project } from "@harness/shared";
-import { resolveBaseBranch } from "@harness/shared";
+import type { CompletionAction, DriverInfo, Project } from "@harness/shared";
+import { offeredCompletionActions, projectCompletionDefault, resolveBaseBranch } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { inheritedBaseLabel, previewProjectKey, tildify } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -146,6 +146,7 @@ function ProjectSettings({ project }: { project: Project }) {
               <Row title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done.">
                 <Switch ariaLabel="Complete when approved" checked={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
               </Row>
+              {project.isGit && <CompletionActionRow project={project} onChange={(completionAction) => void save({ completionAction })} />}
             </div>
           </Section>
 
@@ -165,6 +166,30 @@ function ProjectSettings({ project }: { project: Project }) {
         </div>
       </div>
     </div>
+  );
+}
+
+const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = { merge: "Merge", pr: "Open PR", custom: "Custom" };
+
+/**
+ * The Approve button's preselected action for the project's tickets. Only for a git checkout:
+ * outside git, custom is the only choice.
+ */
+function CompletionActionRow({ project, onChange }: { project: Project; onChange: (v: CompletionAction) => void }) {
+  const offered = offeredCompletionActions(project);
+  const sub = project.pullRequestHost
+    ? "What Approve does by default: merge the branch, open a pull request, or follow instructions you give. The Approve menu offers the others."
+    : "What Approve does by default: merge the branch, or follow instructions you give. Open PR needs a remote on a host the gh CLI is logged into (gh auth login).";
+  return (
+    <Row title="When approved" sub={sub}>
+      <select className="select" data-testid="completion-action" aria-label="When approved" value={projectCompletionDefault(project)} onChange={(e) => onChange(e.target.value as CompletionAction)}>
+        {offered.map((a) => (
+          <option key={a} value={a}>
+            {COMPLETION_ACTION_NAMES[a]}
+          </option>
+        ))}
+      </select>
+    </Row>
   );
 }
 

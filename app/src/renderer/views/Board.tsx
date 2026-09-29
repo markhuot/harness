@@ -33,6 +33,7 @@ import { keysArea, runCommand, useCommands } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
 import { modality } from "../state/inputModality";
 import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
+import { pullRequestLabel } from "../state/approveMenu";
 import "./board.css";
 
 /** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
@@ -371,6 +372,12 @@ const TicketCard = memo(function TicketCard({
           </span>
         )}
         {t.busy && <span className="spinner" title="Agent working" />}
+        {t.status === "done" && t.pullRequestUrl && (
+          <span className="badge badge-outline card-pr" data-testid="card-pr" title={t.pullRequestUrl}>
+            <Icon name="branch" />
+            {pullRequestLabel(t.pullRequestUrl)}
+          </span>
+        )}
         {t.externalRef && (
           <span className="badge" title={`Mirrored from ${t.externalRef.source}`}>
             <Icon name="link" />

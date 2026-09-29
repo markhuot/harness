@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { isConductor, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, type CompletionAction, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   CHAT_PLACEHOLDER,
@@ -38,6 +38,8 @@ import { Markdown } from "../components/Markdown";
 import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
+import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
+import { landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
@@ -283,7 +285,7 @@ function DetailHeader({
   const act = useAction();
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
-  const [completing, setCompleting] = useState(false);
+  const [sheet, setSheet] = useState<LandSheetState | null>(null);
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
@@ -298,7 +300,19 @@ function DetailHeader({
   // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
   // ⌘K palette (these are its "Actions" commands) run the same functions.
   const start = () => act(() => client.startTicket(k));
-  const approve = () => act(() => client.humanReview(k, { decision: "approve" }), "Approved");
+  // How the approved work lands: the Approve split button while the human review is open, the
+  // Complete one once both reviews passed (state/approveMenu.ts).
+  const landMode: LandMode = ticket.humanReview === "approved" ? "complete" : "approve";
+  const land = landMenu(landMode, ticket, project, parent);
+  const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
+  const completeWith = (action: CompletionAction, instructions?: string) => act(() => client.completeTicket(k, { action, ...(instructions ? { instructions } : {}) }), "Completion run queued");
+  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} approved, no action taken`);
+  const choose = (mode: LandMode) => (c: LandChoice) => {
+    if (c.kind === "none") return void approveNoAction();
+    if (c.kind === "sheet") return setSheet({ mode, action: c.action, required: c.required });
+    void (mode === "approve" ? approveWith(c.action) : completeWith(c.action));
+  };
+  const approve = () => choose("approve")(landMenu("approve", ticket, project, parent).primary);
   const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
   const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
   const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`);
@@ -310,7 +324,8 @@ function DetailHeader({
     "ticket.start": ticket.status === "planning" && start,
     "ticket.approve": canApprove && approve,
     "ticket.requestChanges": canApprove && (() => setChanges(true)),
-    "ticket.complete": reviewing && ready && !ticket.busy && (() => setCompleting(true)),
+    "ticket.approveNoAction": reviewing && approveNoAction,
+    "ticket.complete": reviewing && ready && !ticket.busy && (() => choose("complete")(land.primary)),
     "ticket.rerunReview": reviewing && !ticket.busy && rerunReview,
     "ticket.cancelRun": ticket.busy && cancelRun,
     "ticket.markDone": ticket.status !== "done" && markDone,
@@ -345,7 +360,7 @@ function DetailHeader({
                   <Icon name="external" /> Open {ticket.externalRef.key}
                 </button>
               )}
-              {ticket.status !== "done" && (
+              {ticket.status !== "done" && ticket.status !== "review" && (
                 <button onClick={() => (close(), void markDone())}>
                   <Icon name="check" /> Mark done
                 </button>
@@ -386,6 +401,17 @@ function DetailHeader({
               {ticket.branch}
             </span>
           )}
+          {ticket.pullRequestUrl && (
+            <button
+              className="badge badge-outline pr-badge"
+              data-testid="pr-link"
+              title={`Open ${ticket.pullRequestUrl}`}
+              onClick={() => void window.harness?.openExternal(ticket.pullRequestUrl!)}
+            >
+              <Icon name="external" />
+              {pullRequestLabel(ticket.pullRequestUrl)}
+            </button>
+          )}
           {ticket.status === "review" && (
             <>
               <ReviewMark who="agent" state={ticket.agentReview} />
@@ -404,9 +430,7 @@ function DetailHeader({
           )}
           {ticket.status === "review" && ticket.humanReview !== "approved" && (
             <>
-              <button className="btn btn-primary" onClick={approve}>
-                <Icon name="check" strokeWidth={2.25} /> Approve
-              </button>
+              <LandButton mode="approve" icon="check" menu={land} onChoose={choose("approve")} />
               <button className="btn" onClick={() => setChanges(true)}>
                 <Icon name="edit" /> Request changes
               </button>
@@ -414,14 +438,17 @@ function DetailHeader({
           )}
           {ticket.status === "review" && (
             <>
-              <button
-                className={`btn ${ready ? "btn-primary" : ""}`}
-                disabled={!ready || ticket.busy}
-                title={!ready ? "Needs both agent and human approval" : ticket.busy ? "An agent run is in progress" : "Finalize: merge, clean up, mark done"}
-                onClick={() => setCompleting(true)}
-              >
-                <Icon name="checkCircle" /> Complete
-              </button>
+              {ticket.humanReview === "approved" && (
+                <LandButton
+                  mode="complete"
+                  icon="checkCircle"
+                  menu={land}
+                  primaryClass={ready ? "btn-primary" : ""}
+                  disabled={!ready || ticket.busy}
+                  title={!ready ? "Needs both agent and human approval" : ticket.busy ? "An agent run is in progress" : "Finalize: land the work, clean up, mark done"}
+                  onChoose={choose("complete")}
+                />
+              )}
               <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
                 <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
               </button>
@@ -442,7 +469,16 @@ function DetailHeader({
 
       {changes && <RequestChangesModal ticket={ticket} onClose={() => setChanges(false)} />}
       {reopening && <RequestChangesModal reopen ticket={ticket} onClose={() => setReopening(false)} />}
-      {completing && <CompleteModal ticket={ticket} onClose={() => setCompleting(false)} />}
+      {sheet && (
+        <LandSheet
+          key={`${sheet.mode}:${sheet.action}`}
+          ticket={ticket}
+          sheet={sheet}
+          parentBranch={land.opts.parentBranch}
+          onSubmit={(instructions) => (sheet.mode === "approve" ? approveWith(sheet.action, instructions) : completeWith(sheet.action, instructions))}
+          onClose={() => setSheet(null)}
+        />
+      )}
     </div>
   );
 }
@@ -488,54 +524,6 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
         </button>
         <button className="btn btn-primary" disabled={!notes.trim()} onClick={submit}>
           Send to agent <span className="kbd">{MOD}↩</span>
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-function CompleteModal({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
-  const { client } = useStore();
-  const act = useAction();
-  const [instructions, setInstructions] = useState("");
-  const [skip, setSkip] = useState(false);
-  const submit = async () => {
-    const ok = await act(
-      () => client.completeTicket(ticket.key, skip ? { skipAgent: true } : { instructions: instructions.trim() || undefined }),
-      skip ? `${ticket.key} marked done` : "Completion run queued",
-    );
-    if (ok) onClose();
-  };
-  return (
-    <Modal onClose={onClose}>
-      <div className="modal-head">
-        <strong>Complete {ticket.key}</strong>
-      </div>
-      <div className="modal-body">
-        <p className="dim" style={{ marginTop: 0 }}>
-          The agent finalizes the work: merges the worktree branch, cleans up, and marks the ticket done.
-        </p>
-        <textarea
-          autoFocus
-          className="textarea"
-          rows={4}
-          disabled={skip}
-          placeholder="Optional instructions, e.g. “squash-merge into main and delete the branch”"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && void submit()}
-        />
-        <div style={{ marginTop: 10 }}>
-          <Switch checked={skip} onChange={setSkip} label="Just mark it done (no agent run)" />
-        </div>
-      </div>
-      <div className="modal-foot">
-        <div className="grow" />
-        <button className="btn btn-ghost" onClick={onClose}>
-          Cancel
-        </button>
-        <button className="btn btn-primary" onClick={submit}>
-          {skip ? "Mark done" : "Complete"} <span className="kbd">{MOD}↩</span>
         </button>
       </div>
     </Modal>

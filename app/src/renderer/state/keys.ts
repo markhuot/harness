@@ -102,6 +102,7 @@ export const COMMANDS: CommandSpec[] = [
     [
       ["ticket.start", "Start work"],
       ["ticket.approve", "Approve"],
+      ["ticket.approveNoAction", "Approve and take no action"],
       ["ticket.requestChanges", "Request changes…"],
       ["ticket.complete", "Complete…"],
       ["ticket.rerunReview", "Re-run agent review"],

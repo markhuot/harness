@@ -1536,3 +1536,54 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text-3);
   font-size: 11.5px;
 }
+
+/* A split button (the ticket's Approve / Complete): the main half and its chevron read as one button. */
+.split-btn {
+  display: inline-flex;
+}
+.split-btn-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-btn-more {
+  display: flex;
+}
+.split-btn-chevron {
+  width: 24px;
+  padding: 0;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.split-btn-chevron:hover:not(:disabled),
+.split-btn-chevron:focus-visible,
+.split-btn-chevron[aria-expanded="true"] {
+  z-index: 1;
+}
+/* On an accent button, a hairline between the halves (the borders are the fill's color). */
+.split-btn-chevron.btn-primary {
+  border-left-color: rgb(from var(--on-accent) r g b / 0.28);
+}
+.split-btn-chevron:not(.btn-primary) {
+  color: var(--text-3);
+}
+.split-btn-chevron:not(.btn-primary):hover,
+.split-btn-chevron:not(.btn-primary)[aria-expanded="true"] {
+  color: var(--text);
+}
+.menu button:disabled {
+  opacity: 0.45;
+}
+.menu button:disabled:hover {
+  background: none;
+}
+/* The ticket's pull request link, next to its branch badge. */
+.pr-badge {
+  cursor: pointer;
+  color: var(--text-2);
+  font-family: inherit;
+}
+.pr-badge:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
