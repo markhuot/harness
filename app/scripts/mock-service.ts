@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
 import type {
+  BranchInfo,
   BrowserInput,
   BrowserState,
   ClientMessage,
@@ -78,7 +79,27 @@ let settings: PublicSettings = {
   watcherModels: {},
   anthropicApiKeySet: false,
   listen: { mode: "localhost" },
+  baseBranch: "main",
 };
+
+// Local branches for GET /projects/:id/branches (the same list for every git project), newest first.
+const MOCK_BRANCHES: BranchInfo[] = [
+  { name: "main", lastCommitAt: Date.now() - 20 * 60_000, checkedOutAt: null },
+  { name: "medl-1223-ai-app", lastCommitAt: Date.now() - 2 * 3600_000, checkedOutAt: "/Users/markhuot/Sites/medl-worktrees/medl-1223-ai-app" },
+  { name: "develop", lastCommitAt: Date.now() - 26 * 3600_000, checkedOutAt: null },
+  { name: "harness/nytimes-4", lastCommitAt: Date.now() - 3 * 86400_000, checkedOutAt: "/Users/markhuot/.harness/worktrees/NYTIMES-4" },
+  { name: "feature/dark-mode", lastCommitAt: Date.now() - 9 * 86400_000, checkedOutAt: null },
+  { name: "release/2026-09", lastCommitAt: Date.now() - 21 * 86400_000, checkedOutAt: null },
+];
+
+/** The service's branch filter: case-insensitive substring matches first, then in-order letters. */
+function filterBranches(q: string, limit: number): BranchInfo[] {
+  const needle = q.toLowerCase();
+  if (!needle) return MOCK_BRANCHES.slice(0, limit);
+  const sub = MOCK_BRANCHES.filter((b) => b.name.toLowerCase().includes(needle));
+  const fuzzy = MOCK_BRANCHES.filter((b) => !sub.includes(b) && new RegExp([...needle].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")).test(b.name.toLowerCase()));
+  return [...sub, ...fuzzy].slice(0, limit);
+}
 
 // Network (mirrors service/src/api/network.ts): a fake Tailscale and a fake LAN address.
 const MOCK_TAILSCALE = { ip: "100.101.102.103", dnsName: "mock.tail.ts.net." };
@@ -999,7 +1020,9 @@ function createTicket(body: Record<string, any>): Ticket {
     humanReview: "pending",
     externalRef: body.externalRef ?? null,
     workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
-    branch: start && worktree ? `harness/${key.toLowerCase()}` : null,
+    branch: start && worktree ? body.branch || `harness/${key.toLowerCase()}` : null,
+    requestedBranch: worktree ? body.branch || null : null,
+    baseBranch: body.baseBranch || null,
     useWorktree: body.useWorktree ?? null,
     blockedReason: null,
     permissionMode: body.permissionMode ?? null,
@@ -1086,6 +1109,10 @@ async function route(req: Request, url: URL): Promise<Response> {
     }
     const p = b ? projects.get(b) : undefined;
     if (!p) throw new HttpError(404, "Project not found");
+    if (c === "branches" && method === "GET") {
+      if (p.isGit === false) return ok([]);
+      return ok(filterBranches(url.searchParams.get("q") ?? "", Math.min(200, Number(url.searchParams.get("limit")) || 50)));
+    }
     if (method === "PATCH") {
       const { key: rawKey, nextSeq: _n, ...body } = await readBody(req);
       if (rawKey !== undefined) {
@@ -1149,6 +1176,11 @@ async function route(req: Request, url: URL): Promise<Response> {
         }
         if (body.model !== undefined) t.model = body.model || null;
         if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
+        if (body.baseBranch !== undefined) t.baseBranch = body.baseBranch || null;
+        if (body.branch !== undefined) {
+          if (t.branch) throw new HttpError(409, `${t.key} already has a worktree on ${t.branch}; ask its agent to move it with update_branch`);
+          t.requestedBranch = body.branch || null;
+        }
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;
           if (to === "in_progress" && t.status === "planning") {
