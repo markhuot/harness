@@ -265,6 +265,30 @@ describe("update_branch", () => {
     expect(await h.gitIn(harnessDir, "symbolic-ref", "--short", "HEAD")).toBe("medl-1223-ai-app");
   });
 
+  test("when the ticket's branch can't go back into the leftover harness worktree, the ticket blocks saying why", async () => {
+    const h = await setup({ autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /block which branch?" });
+    await h.orch.idle();
+    const harnessDir = h.get(t).workdir!;
+    const herdr = join(h.home, "herdr-medl");
+    await h.git("worktree", "add", "-q", "-b", "medl-1223-ai-app", herdr);
+    await h.orch.ops.updateBranch(h.ctx("work", t), { branch: "medl-1223-ai-app" });
+    // The herdr worktree goes away, and the branch is checked out somewhere else instead.
+    await h.git("worktree", "remove", herdr);
+    const elsewhere = join(h.home, "elsewhere");
+    await h.git("worktree", "add", "-q", elsewhere, "medl-1223-ai-app");
+    await h.orch.sendMessage(t.key, "carry on");
+    await h.orch.idle();
+    const cur = h.get(t);
+    expect(cur.status).toBe("blocked");
+    expect(cur.blockedReason).toContain("Could not create worktree: branch medl-1223-ai-app is already checked out in the worktree at");
+    expect(cur.blockedReason).toContain("elsewhere");
+    expect(cur.blockedReason).toContain(`this ticket's worktree at ${harnessDir} is on harness/repo-1`);
+    // Nothing quietly went back to the harness branch.
+    expect(cur.requestedBranch).toBe("medl-1223-ai-app");
+    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt).not.toBe("carry on");
+  });
+
   test("the commit count leaves out what the base branch already has", async () => {
     const h = await setup();
     await h.git("branch", "old-feature"); // made before main moved on
