@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { nextTab, visibleTabs, type TicketTab } from "./tabs";
+import { nextTab, openingTab, visibleTabs, type TicketTab } from "./tabs";
+
+describe("openingTab", () => {
+  test("waits until the summaries are loaded", () => {
+    expect(openingTab(undefined)).toBeNull();
+  });
+  test("opens on the Transcript when there are no summaries, Summaries once there are", () => {
+    expect(openingTab([])).toBe("transcript");
+    expect(openingTab([{ id: "s1" }])).toBe("summaries");
+  });
+});
 
 describe("visibleTabs", () => {
   test("a plain ticket has no Tickets or Agents tab", () => {

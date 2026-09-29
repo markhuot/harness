@@ -597,6 +597,17 @@ try {
     );
     check("plain tickets have no Tickets tab (the route falls back to Summaries)", plainTab === "summaries" && !(await exists(".tab[data-tab=children]")), plainTab);
 
+    // With no tab asked for, a ticket opens on Summaries when it has some, and on the Transcript when not.
+    const openedTab = (key: string) => until(`${key} opening tab`, () => js<string>(`document.querySelector(".detail-key")?.textContent === "${key}" && document.querySelector(".tab.on")?.dataset.tab`));
+    await js(`location.hash = "#/board/all/ticket/HARNESS-4"`);
+    check("a ticket with summaries opens on Summaries", (await openedTab("HARNESS-4")) === "summaries");
+    await js(`location.hash = "#/board/all/ticket/HARNESS-3"`);
+    const emptyTab = await until("HARNESS-3 on Transcript", () => js<string>(`document.querySelector(".detail-key")?.textContent === "HARNESS-3" && document.querySelector(".tab.on")?.dataset.tab === "transcript" && "transcript"`)).catch(() => null);
+    check("a ticket without summaries opens on the Transcript", emptyTab === "transcript", String(emptyTab));
+    await js(`document.querySelector(".tab[data-tab=summaries]").click()`);
+    await Bun.sleep(300);
+    check("clicking Summaries on it stays there", (await js<string>(`document.querySelector(".tab.on")?.dataset.tab`)) === "summaries");
+
     // Empty conductor.
     const empty = await api<CT>("POST", "/tickets", { projectId: hxId, kind: "conductor", prompt: "Plan the 1.0 launch", start: false });
     await js(`location.hash = "#/board/all/ticket/${empty.key}/children"`);
@@ -1272,12 +1283,14 @@ try {
 
     // ⇧⌘] / ⇧⌘[ walk the tabs and wrap; a digit jumps to that tab.
     const tabs = await js<string[]>(`[...document.querySelectorAll(".pane.active .tabs [role=tab]")].map(t => t.dataset.tab ?? t.dataset.pluginTab)`);
+    // Settle the opening tab first: a ticket without summaries moves on to its Transcript.
+    await until("opening tab", async () => (await active()).tab !== "summaries" || (await exists(".pane.active .tab[data-tab=summaries] .count")));
     const t0 = (await active()).tab;
     await press.nextTab();
     const t1 = await until("next tab", async () => ((await active()).tab !== t0 ? (await active()).tab : null)).catch(() => null);
     check("⇧⌘] goes to the next tab", t1 === tabs[tabs.indexOf(t0!) + 1], `${t0} → ${t1}`);
-    await press.prevTab();
-    await press.prevTab();
+    // Back to the first tab, then one more.
+    for (let i = 0; i <= tabs.indexOf(t1!); i++) await press.prevTab();
     const wrapped = await until("wrapped", async () => ((await active()).tab === tabs.at(-1) ? true : null)).catch(() => false);
     check("⇧⌘[ wraps from the first tab to the last", wrapped === true, `${(await active()).tab} (tabs: ${tabs.join(",")})`);
     await press.two();

@@ -18,6 +18,7 @@ import {
   isChatMode,
   moveSwitchLabel,
   openChatMode,
+  openingTab,
   setChatMode,
   ticketByKey,
   COMPOSER_PLACEHOLDER,
@@ -69,10 +70,23 @@ export function TicketDetailScreen() {
   // A snapshot clears the dependents / children the detail brought; fetch it again then.
   const hasDetail = !!ticket && state.dependents[ticket.id] !== undefined;
   const pluginTabs = usePluginTabs(ticket);
-  const [tab, setTab] = useState<TicketTab>(isTicketTab(params.tab) ? params.tab : "summaries");
+  const [tab, setTabState] = useState<TicketTab>(isTicketTab(params.tab) ? params.tab : "summaries");
+  // Without a tab in the link, a ticket with no summaries opens on the Transcript instead. Decided
+  // once, when its summaries first load; picking a tab before then (or a linked one) settles it.
+  const opened = useRef(isTicketTab(params.tab));
+  const setTab = useCallback((t: TicketTab) => {
+    opened.current = true;
+    setTabState(t);
+  }, []);
   useEffect(() => {
     if (isTicketTab(params.tab)) setTab(params.tab);
-  }, [params.tab]);
+  }, [params.tab, setTab]);
+  const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
+  useEffect(() => {
+    if (opened.current) return;
+    const t = openingTab(summaries);
+    if (t) setTab(t);
+  }, [summaries, setTab]);
 
   useEffect(() => {
     if (hasDetail) return;

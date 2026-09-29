@@ -18,6 +18,7 @@ import {
   moveSwitchLabel,
   nextTab,
   openChatMode,
+  openingTab,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
@@ -119,6 +120,22 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
   const tab = ticket ? effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents }) : paneTab;
+  // A ticket opened on the default Summaries tab moves to the Transcript when it has no summaries.
+  // Decided once per ticket the pane shows, when its summaries first load, so a later click on
+  // Summaries stays there.
+  const openedOn = useRef<string | null>(paneTab !== "summaries" ? ticketKey : null);
+  const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
+  useEffect(() => {
+    if (openedOn.current === ticketKey) return;
+    if (paneTab !== "summaries") {
+      openedOn.current = ticketKey;
+      return;
+    }
+    const t = openingTab(summaries);
+    if (!t) return;
+    openedOn.current = ticketKey;
+    if (t !== "summaries") updatePanes(scope, (s) => setPaneTab(s, paneId, t));
+  }, [ticketKey, paneTab, summaries, scope, paneId]);
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {

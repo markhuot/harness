@@ -83,6 +83,16 @@ export function effectiveTab(
 }
 
 /**
+ * The tab a ticket opens on when nothing asked for a particular one: Summaries once it has any,
+ * otherwise the Transcript (a fresh ticket's Summaries tab is just an empty state). Null while the
+ * summaries aren't loaded yet, so the caller waits instead of guessing.
+ */
+export function openingTab(summaries: readonly unknown[] | undefined): TicketTab | null {
+  if (!summaries) return null;
+  return summaries.length ? "summaries" : "transcript";
+}
+
+/**
  * The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents
  * only once there are sub-agents), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
  */
