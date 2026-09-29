@@ -1130,7 +1130,23 @@ function screens(s: Seeded): Screen[] {
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
     // Planning with the seeded draft's dashed card (Draft badge, no run).
-    { name: "board-draft", url: BOARD, seconds: 6, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Planning,")).then(() => until("draft card", () => findElement(udid, (l) => l.startsWith(`${s.draft.key} `) && l.endsWith(", draft")), 8000)).then(() => Bun.sleep(700)) },
+    {
+      name: "board-draft",
+      url: BOARD,
+      seconds: 8,
+      // Planning is the first column; its chip may sit off the strip's left edge, so page back to it.
+      prepare: async (udid) => {
+        const card = (l: string) => l.startsWith(`${s.draft.key} `) && l.endsWith(", draft");
+        await until("draft card on screen", async () => {
+          const el = await findElement(udid, card);
+          if (el && el.frame.x >= 0 && el.frame.x < 100) return el;
+          await axe("swipe", "--start-x", "40", "--start-y", "600", "--end-x", "380", "--end-y", "600", "--duration", "0.25", "--udid", udid);
+          await Bun.sleep(500);
+          return null;
+        }, 12000, 0);
+        await Bun.sleep(500);
+      },
+    },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
   ];
 }
@@ -1367,18 +1383,19 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
     chain(8, async (udid) => {
+      // branchPlan stays in Planning: s.quick is approved into Done by another chain meanwhile, which locks its picker.
       const openModels = async () => {
-        await goto(udid, `harness://ticket/${k(s.quick)}?tab=details`, (l) => l.some((x) => x.startsWith("Model, ")));
+        await goto(udid, `harness://ticket/${k(s.branchPlan)}?tab=details`, (l) => l.some((x) => x.startsWith("Model, ")));
         await tapWhere(udid, (l) => l.startsWith("Model, "));
         await until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000);
       };
       await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
         await openModels();
         await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
-        const picked = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
         await openModels();
         await tapWhere(udid, (l) => l.startsWith("Default"));
-        const cleared = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === null, 8000);
+        const cleared = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === null, 8000);
         moved(udid);
         return `${picked.driver}/${picked.model} → ${cleared.driver}/${cleared.model ?? "default"}`;
       });

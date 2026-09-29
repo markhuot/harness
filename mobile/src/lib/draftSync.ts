@@ -170,6 +170,9 @@ export class DraftSync {
   /** Save what's left, then launch it: start work now, or plan first. */
   async submit(start: boolean): Promise<Ticket> {
     if (this.isClosed) throw new Error("This draft is closed.");
+    // The brief launches trimmed (a picked @mention leaves a trailing space).
+    const brief = this.local.description.trim();
+    if (brief !== this.local.description) this.edit({ ...this.local, description: brief });
     await this.settle();
     if (!this.saved) throw new Error("Write a prompt first.");
     const t = await this.o.api.submit(this.saved.key, start);

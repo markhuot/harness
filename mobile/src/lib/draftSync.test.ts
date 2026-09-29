@@ -153,6 +153,16 @@ describe("DraftSync", () => {
     expect(f.calls.length).toBe(3);
   });
 
+  test("submit launches the brief trimmed", async () => {
+    const f = fakeApi();
+    const { sync, edit } = setup(f.api);
+    edit({ description: "Summarize @README.md " });
+    await tick();
+    await sync.submit(true);
+    expect(f.calls.map((c) => c.op)).toEqual(["create", "update", "start"]);
+    expect(f.calls[1]!.body).toEqual({ description: "Summarize @README.md" });
+  });
+
   test("submit refuses when a save failed instead of launching stale settings", async () => {
     const f = fakeApi({ fail: true });
     const { sync, edit, errors } = setup(f.api);
