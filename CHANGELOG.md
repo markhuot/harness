@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Mac, the sidebar button beside the window's traffic lights collapses and expands the
+  sidebar again. Clicking it used to grab the window as if you were dragging the title bar, so the
+  sidebar stayed put. ⌃⌘S and View → Show Sidebar weren't affected.
+
 ## [app-20260929.0234](https://github.com/markhuot/harness/releases/tag/app-20260929.0234) - 2026-09-29
 
 ### Fixed

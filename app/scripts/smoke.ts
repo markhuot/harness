@@ -692,11 +692,37 @@ try {
       await Bun.sleep(300);
     };
     const shortcut = () => app!.key("s", "KeyS", 83, 2 | 4); // ⌃⌘S (Ctrl=2, Meta=4)
+    // Visible controls whose centre ends up in the window's drag area, which swallows real clicks
+    // there (CDP clicks don't go through it, so the other checks can't see this). Electron builds the
+    // area from -webkit-app-region boxes in document order, drag adding and no-drag subtracting, so
+    // a drag box later in the document re-covers an earlier no-drag control.
+    const draggableControls = () =>
+      js<string[]>(`(() => {
+        const regions = [...document.querySelectorAll("*")].flatMap((e) => {
+          const v = getComputedStyle(e).getPropertyValue("-webkit-app-region");
+          const r = e.getBoundingClientRect();
+          return (v === "drag" || v === "no-drag") && r.width && r.height ? [{ drag: v === "drag", r }] : [];
+        });
+        return [...document.querySelectorAll("button, a[href], input, select, textarea, [role=separator]")].flatMap((el) => {
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height || el.closest("[inert]")) return [];
+          const x = r.x + r.width / 2, y = r.y + r.height / 2, top = document.elementFromPoint(x, y);
+          if (!top || !el.contains(top)) return []; // covered or off screen
+          let drag = false;
+          for (const g of regions) if (x >= g.r.left && x < g.r.right && y >= g.r.top && y < g.r.bottom) drag = g.drag;
+          return drag ? [el.dataset.testid || el.getAttribute("aria-label") || el.textContent.trim().slice(0, 30) || el.className] : [];
+        });
+      })()`);
 
     // Sidebar: collapse with the button; the board header clears the traffic lights and stays a drag region.
     const open = await width(".sidebar");
+    const dragOpen = await draggableControls();
+    check("no control sits under a window drag region (sidebar open)", dragOpen.length === 0, dragOpen.join(", "));
     await js(`document.querySelector("[data-testid=sidebar-toggle]").click()`);
     const collapsed = await until("sidebar collapsed", async () => (await width(".sidebar")) === 0 && (await js<boolean>(`document.querySelector(".sidebar").inert`)));
+    await Bun.sleep(250);
+    const dragShut = await draggableControls();
+    check("no control sits under a window drag region (sidebar collapsed)", dragShut.length === 0, dragShut.join(", "));
     const head = await js<{ region: string; expanded: string | null }>(`(() => { const cs = getComputedStyle(document.querySelector(".board-pane > .view-header"));
       return { region: cs.getPropertyValue("-webkit-app-region"), expanded: document.querySelector("[data-testid=sidebar-toggle]").getAttribute("aria-expanded") }; })()`);
     await Bun.sleep(250);
