@@ -988,10 +988,17 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       // Before Approve below, which moves the ticket to Done.
       await check("a reply's list items show their text in the transcript", async () => {
         await goto(udid, `harness://ticket/${k(s.hello)}?tab=transcript`, (l) => l.includes(REPLY_ITEMS[0]!));
+        // The review run's rows follow the reply: scroll back up until the reply is in view.
+        const first = (l: string) => l === REPLY_ITEMS[0];
+        for (let i = 0; i < 8 && ((await findElement(udid, first))?.frame.y ?? 0) < 380; i++) {
+          await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "620", "--duration", "0.3", "--udid", udid);
+          await Bun.sleep(400);
+        }
         const widths: string[] = [];
         for (const item of REPLY_ITEMS) {
           const el = await until(`list item "${item}"`, () => findElement(udid, (l) => l === item), 8000);
-          if (el.frame.width < 40) throw new Error(`"${item}" is ${el.frame.width}pt wide`);
+          // Collapsed, an item is 0pt wide with only its bullet showing.
+          if (el.frame.width < 10) throw new Error(`"${item}" is ${el.frame.width}pt wide`);
           widths.push(`${Math.round(el.frame.width)}pt`);
         }
         await shot(udid, "reply-list-light");
