@@ -197,6 +197,8 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
 const ticketOf = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
 const settle = (key: string, pred: (t: Ticket) => boolean, ms = 60000) => until(`${key} settles`, async () => ((t) => (pred(t) ? t : null))(await ticketOf(key)), ms);
 
+const REPLY_ITEMS = ["Keep plain main", "Ship it"];
+
 async function seed() {
   await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
@@ -228,7 +230,10 @@ async function seed() {
   const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
 
   await settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
-  const ch = await settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir);
+  // A reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
+  await api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") });
+  await settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+  const ch =await settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
   const wd = ch.workdir!;
   mkdirSync(join(wd, "src/lib"), { recursive: true });
@@ -985,6 +990,17 @@ try {
         await until("back on the board", async () => ((l) => l.some(card) && !l.includes("Approve"))(await labels(udid)), 8000);
         await simctl("io", udid, "screenshot", join(shots, "card-tap-back-light.png"));
         return `${seeded.hello.key} → detail → board`;
+      });
+      await check("a reply's list items show their text in the transcript", async () => {
+        await fresh(`harness://ticket/${k(seeded.hello)}?tab=transcript`);
+        const widths: string[] = [];
+        for (const item of REPLY_ITEMS) {
+          const el = await until(`list item "${item}"`, () => findElement(udid, (l) => l === item), 8000);
+          if (el.frame.width < 40) throw new Error(`"${item}" is ${el.frame.width}pt wide`);
+          widths.push(`${Math.round(el.frame.width)}pt`);
+        }
+        await simctl("io", udid, "screenshot", join(shots, "reply-list-light.png"));
+        return widths.join(", ");
       });
       await check("approval card: Allow once resumes the agent", async () => {
         await fresh(`harness://ticket/${k(seeded.approval)}`);

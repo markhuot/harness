@@ -73,7 +73,9 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
                 {b.items.map((it, j) => (
                   <View key={j} style={{ flexDirection: "row", gap: 8, paddingRight: 4 }}>
                     <Text style={[base, { color: c.text3, minWidth: b.t === "ol" ? 18 : 10, textAlign: "right" }]}>{b.t === "ol" ? `${j + 1}.` : "•"}</Text>
-                    <Text style={[base, { flex: 1 }]} selectable>
+                    {/* flexShrink, not flex: 1. A zero flex-basis collapses the text to nothing
+                        inside a shrink-wrapped parent such as the user's reply bubble. */}
+                    <Text style={[base, { flexShrink: 1 }]} selectable>
                       <Inline tokens={inlineTokens(it)} base={base} />
                     </Text>
                   </View>
