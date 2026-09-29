@@ -201,7 +201,8 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
           gestureEnabled: !cancellable,
           headerBackVisible: !cancellable,
           unstable_headerLeftItems: cancellable ? () => [buttonItem("Cancel", "xmark", cancel)] : undefined,
-          unstable_headerRightItems: editing ? () => [buttonItem("Save", "checkmark", submit, { ...primaryItemStyle(c), disabled: !canSave })] : undefined,
+          // Disabled, a prominent glass button still reads as enabled in dark mode, so it goes plain and dim.
+          unstable_headerRightItems: editing ? () => [buttonItem("Save", "checkmark", submit, canSave ? primaryItemStyle(c) : { variant: "plain", tintColor: c.text3, disabled: true })] : undefined,
         }}
       />
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">

@@ -27,7 +27,8 @@
 //      follows new content at the bottom, stays put once scrolled up, and follows again after
 //      scrolling back down; the Summaries tab opens at the bottom and follows
 //
-//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it and the
+//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
+//      prompt editor keeps its cursor above it as the text grows, and the
 //      New session sheet scrolls to its last button above it. Needs the simulator's software
 //      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
 //
@@ -792,6 +793,30 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
     return `"${button.AXLabel}" ends ${gap}pt above the keyboard`;
   });
+
+  // The editor is a growing multiline field inside a scroll view; typing at its end has to keep
+  // scrolling the view so the cursor (the field's last line) stays above the keyboard.
+  await check("prompt editor follows the cursor above the keyboard as the text grows", async () => {
+    const isField = (l: string) => l === "Agent review prompt";
+    await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
+    const start = await until("editor field", () => findElement(udid, isField), 5000);
+    // Near its last line puts the cursor at the end of the text.
+    await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
+    const top = await until("keyboard up", keyboardTop, 8000);
+    for (let i = 0; i < 16; i++) await axe("key", "40", "--udid", udid); // return
+    await axe("type", "End of the prompt.", "--udid", udid);
+    await Bun.sleep(900);
+    await shot(udid, "keyboard-prompt");
+    const field = await findElement(udid, isField);
+    if (!field) throw new Error("the editor field is gone from the screen");
+    const gap = Math.round(top - bottomOf(field));
+    if (gap < 0) throw new Error(`the field's last line ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
+    if (gap > 120) throw new Error(`the field ends ${gap}pt above the keyboard: the view didn't follow the cursor down`);
+    // Drop the edit: Cancel sits where Back does.
+    await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+    moved(udid);
+    return `grew to ${Math.round(field.frame.height)}pt; its end is ${gap}pt above the keyboard`;
+  });
 }
 
 /** --mentions: a project with a few files, and a ticket in review to message. */
@@ -1280,7 +1305,7 @@ try {
     walkThrough ? timed("seed", seed) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
     stickOnly ? timed("seed stick", seedStick) : null,
-    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up")) : null,
+    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
     mentionsOnly ? timed("seed mentions", seedMentions) : null,
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
   ]);
