@@ -1,9 +1,12 @@
 // A board card with everything the desktop card shows. Long-press opens the native context menu
-// (move between columns, reorder, copy key); VoiceOver gets the moves as custom actions.
+// (move between columns, reorder, copy key); VoiceOver gets the moves as custom actions. A draft
+// (a New session saved before launch) is dashed and dimmed with a Draft badge; it opens in the New
+// session editor, and its menu offers Discard instead of the moves.
 
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import { useRouter } from "expo-router";
 import { isConductor, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
@@ -22,10 +25,14 @@ export interface CardProps {
   showProject: boolean;
   onMove: (t: Ticket, status: TicketStatus, where?: "top" | "bottom") => void;
   onOpenKey: (key: string) => void;
+  /** Delete a draft (its menu's Discard draft) */
+  onDiscard?: (t: Ticket) => void;
 }
 
-export const TicketCard = memo(function TicketCard({ ticket: t, state, showProject, onMove, onOpenKey }: CardProps) {
+export const TicketCard = memo(function TicketCard({ ticket: t, state, showProject, onMove, onOpenKey, onDiscard }: CardProps) {
   const c = useColors();
+  const router = useRouter();
+  const draft = !!t.draft;
   const deps = dependencyStates(state, t);
   const children = isConductor(t) ? childrenOf(state, t.id) : [];
   const progress = isConductor(t) ? progressOf(children) : null;
@@ -41,6 +48,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         styles.card,
         { backgroundColor: c.bgElev, borderColor: c.border },
         dim && { backgroundColor: c.bgColumn, paddingVertical: 9, gap: 5 },
+        draft && { borderStyle: "dashed", borderWidth: 1, borderColor: c.text3, backgroundColor: c.bgColumn, opacity: 0.75 },
       ]}
     >
       <View style={styles.top}>
@@ -54,6 +62,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
           </View>
         )}
         <View style={{ flex: 1 }} />
+        {draft && <Badge icon="edit">Draft</Badge>}
         {t.status === "review" && (
           <View style={{ flexDirection: "row", gap: 3 }}>
             <ReviewMark who="agent" state={t.agentReview} />
@@ -65,7 +74,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         {t.status === "done" && t.pullRequestUrl && <Badge tone="violet" icon="external">PR</Badge>}
       </View>
       <Text style={[styles.title, { color: dim ? c.text2 : c.text, fontSize: dim ? 14.5 : 15.5 }]} numberOfLines={dim ? 2 : 3}>
-        {t.title || "Untitled"}
+        {t.title || (draft ? t.description.split("\n")[0] || "Empty draft" : "Untitled")}
       </Text>
 
       {t.pendingApproval ? (
@@ -113,6 +122,18 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
 
   const menu = async () => {
     haptic("heavy");
+    if (draft) {
+      const v = await pick<string>({
+        title: `${t.key} · Draft`,
+        choices: [
+          { value: "discard", label: "Discard draft", destructive: true },
+          { value: "copy", label: "Copy key" },
+        ],
+      });
+      if (v === "discard") onDiscard?.(t);
+      else if (v === "copy") void Clipboard.setStringAsync(t.key);
+      return;
+    }
     const v = await pick<string>({
       title: `${t.key} · ${t.title}`.slice(0, 90),
       choices: [
@@ -133,13 +154,13 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
 
   return (
     <Pressable
-      onPress={() => onOpenKey(t.key)}
+      onPress={() => (draft ? router.push({ pathname: "/new", params: { key: t.key } }) : onOpenKey(t.key))}
       onLongPress={() => void menu()}
       delayLongPress={350}
       accessibilityRole="button"
-      accessibilityLabel={`${t.key} ${t.title}${t.pendingApproval ? ", needs approval" : t.status === "blocked" ? ", blocked" : ""}`}
-      accessibilityHint="Opens the ticket. Touch and hold to move it."
-      accessibilityActions={TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ name: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` }))}
+      accessibilityLabel={`${t.key} ${t.title}${draft ? ", draft" : t.pendingApproval ? ", needs approval" : t.status === "blocked" ? ", blocked" : ""}`}
+      accessibilityHint={draft ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it."}
+      accessibilityActions={draft ? [] : TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ name: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` }))}
       onAccessibilityAction={(e) => e.nativeEvent.actionName.startsWith("move:") && onMove(t, e.nativeEvent.actionName.slice(5) as TicketStatus)}
       style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] })}
     >

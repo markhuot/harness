@@ -1,22 +1,17 @@
 // Ticket detail tab bodies: Summaries, Tickets (conductor children) and Details.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { branchNameError, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type Ticket } from "@harness/shared";
+import type { Ticket } from "@harness/shared";
 import {
   attentionOf,
-  canChangeBranch,
-  inheritedBaseLabel,
-  newTicketBranchLabel,
-  ticketHasBranch,
   childrenOfTicket,
   dependencyStates,
   dependentsOf,
   driverLabel,
   groupChildren,
   hasCustomDriver,
-  inheritedModel,
   latestSummary,
   plainText,
   progressLabel,
@@ -24,24 +19,18 @@ import {
   relativeTime,
   shortToolName,
   STATUS_LABEL,
-  ticketChoice,
-  ticketChoicePatch,
-  ticketResolvedChoice,
 } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
-import { MONO, RADIUS } from "../theme/tokens";
-import { Badge, Button, Card, Chip, DriverBadge, Empty, ReviewMark, SectionTitle, Spinner, StatusDot, StatusPill, useNow } from "../ui/kit";
+import { MONO } from "../theme/tokens";
+import { Badge, Button, Card, Chip, DriverBadge, Empty, ReviewMark, SectionTitle, Spinner, StatusDot, useNow } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { AttachmentRow } from "../ui/Attachments";
 import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
-import { PermissionPicker } from "../ui/selects";
-import { DriverModelPicker } from "../ui/DriverModelPicker";
-import { skipReviewHint } from "../lib/newSession";
 import { useStickToBottom } from "../ui/stickToBottom";
-import { BranchPicker } from "../ui/BranchPicker";
-import { DraftField } from "../ui/settings";
+import { Prop } from "../ui/Prop";
+import { TicketSettings } from "../ui/TicketSettings";
 
 export function useOpenTicket() {
   const router = useRouter();
@@ -249,33 +238,18 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
   const open = useOpenTicket();
   const [title, setTitle] = useState(ticket.title);
   const [description, setDescription] = useState(ticket.description);
-  const [deps, setDeps] = useState(ticket.dependsOn.join(", "));
   useEffect(() => setTitle(ticket.title), [ticket.title]);
   useEffect(() => setDescription(ticket.description), [ticket.description]);
-  const depKey = ticket.dependsOn.join(",");
-  useEffect(() => setDeps(ticket.dependsOn.join(", ")), [depKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The detail's list covers done dependents that aren't loaded; the live scan covers new ones.
   const dependents = useMemo(() => dependentsOf(state, ticket), [state.tickets, state.dependents, state.keyAliases, ticket]); // eslint-disable-line react-hooks/exhaustive-deps
-  const depList = dependencyStates(state, ticket);
   const runs = useMemo(() => Object.values(state.runs).filter((r) => r.sessionId === ticket.sessionId).sort((a, b) => b.createdAt - a.createdAt), [state.runs, ticket.sessionId]);
   const editable = ticket.status !== "done";
-  const project = state.projects[ticket.projectId];
 
   const saveTitle = () => {
     if (title.trim() && title !== ticket.title) void act(() => client.updateTicket(ticket.key, { title: title.trim() }));
   };
   const descDirty = description !== ticket.description;
-  const parsedDeps = deps
-    .split(/[\s,]+/)
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-  const badDeps = parsedDeps.filter((d) => !isTicketKey(d));
-  const depsDirty = parsedDeps.join(",") !== ticket.dependsOn.join(",");
-  const saveDeps = () => {
-    if (!depsDirty || badDeps.length) return;
-    void act(() => client.updateTicket(ticket.key, { dependsOn: parsedDeps }));
-  };
 
   const input = { borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 15.5 } as const;
 
@@ -294,38 +268,8 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
           </View>
         )}
       </Field>
-      <Field label="Depends on">
-        <TextInput style={[input, { fontFamily: MONO, fontSize: 14 }]} autoCapitalize="characters" autoCorrect={false} placeholder="e.g. NYTIMES-3, NYTIMES-4" placeholderTextColor={c.text3} value={deps} editable={editable} onChangeText={setDeps} onBlur={saveDeps} onSubmitEditing={saveDeps} returnKeyType="done" />
-        {badDeps.length > 0 ? (
-          <Text style={{ color: c.red, fontSize: 13 }}>Not a ticket key: {badDeps.join(", ")}</Text>
-        ) : (
-          depList.length > 0 && (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-              {depList.map((d) => (
-                <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
-              ))}
-            </View>
-          )
-        )}
-      </Field>
-
       <Card>
-        <Prop label="Model" hint={ticket.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run"}>
-          <DriverModelPicker
-            value={ticketChoice(ticket, project, state.settings)}
-            resolved={ticketResolvedChoice(project, state.settings)}
-            disabled={!editable}
-            onlyDriver={ticket.busy ? ticket.driver : undefined}
-            inheritedModel={(d) => inheritedModel(d, "ticket", project, state.settings)}
-            onChange={(choice) => void act(() => client.updateTicket(ticket.key, ticketChoicePatch(choice, project, state.settings)))}
-          />
-        </Prop>
-        <Prop label="Permissions" hint="Applies from the next tool call">
-          <PermissionPicker value={ticket.permissionMode} disabled={!editable} inherited={resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode} onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))} />
-        </Prop>
-        <Prop label="Skip agent review" hint={editable ? skipReviewHint(ticket) : undefined}>
-          <Switch value={!!ticket.skipAgentReview} disabled={!editable} onValueChange={(v) => void act(() => client.updateTicket(ticket.key, { skipAgentReview: v }))} trackColor={{ true: c.accent }} accessibilityLabel="Skip agent review" />
-        </Prop>
+        <TicketSettings ticket={ticket} onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))} />
         {dependents.length > 0 && (
           <Prop label="Blocks">
             <View style={{ gap: 6, alignItems: "flex-end" }}>
@@ -343,24 +287,6 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
             {ticket.workdir ?? "Not prepared yet"}
           </Text>
         </Prop>
-        {ticketHasBranch(ticket, project) && (
-          <Prop label="Branch" hint={canChangeBranch(ticket, project) ? "Until work starts" : ticket.branch ? undefined : "When work starts"}>
-            {canChangeBranch(ticket, project) ? (
-              <BranchPicker
-                projectId={ticket.projectId}
-                value={ticket.requestedBranch ?? null}
-                defaultLabel={newTicketBranchLabel(ticket.key)}
-                newLabel={(name) => `Create ${name} from ${resolveBaseBranch(ticket, project, state.settings).branch}`}
-                onChange={(branch) => void act(() => client.updateTicket(ticket.key, { branch }))}
-              />
-            ) : (
-              <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: c.text }}>
-                {plannedBranch(ticket)}
-              </Text>
-            )}
-          </Prop>
-        )}
-        {project?.isGit && <BaseBranchProp ticket={ticket} editable={editable} />}
         {ticket.pullRequestUrl && (
           <Prop label="Pull request">
             <Text style={{ color: c.accentText, fontSize: 14, flexShrink: 1, textAlign: "right" }} numberOfLines={1} ellipsizeMode="middle" accessibilityRole="link" onPress={() => void Linking.openURL(ticket.pullRequestUrl!)}>
@@ -424,32 +350,6 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
   );
 }
 
-/** The ticket's base branch override; empty shows (and follows) what the project or app gives. */
-function BaseBranchProp({ ticket, editable }: { ticket: Ticket; editable: boolean }) {
-  const { state, client, toast } = useStore();
-  const act = useAction();
-  const c = useColors();
-  const project = state.projects[ticket.projectId];
-  const inherited = resolveBaseBranch(null, project, state.settings);
-  const save = (v: string) => {
-    const name = v.trim();
-    const error = name ? branchNameError(name) : null;
-    if (error) toast(`Not a valid branch name: ${error}`, "error");
-    else void act(() => client.updateTicket(ticket.key, { baseBranch: name || null }));
-  };
-  return (
-    <Prop label="Base branch" hint={ticket.baseBranch ? "Applies from the next run" : "Inherited"}>
-      {editable ? (
-        <DraftField value={ticket.baseBranch ?? ""} mono placeholder={inheritedBaseLabel(inherited)} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Base branch" onCommit={save} style={{ fontSize: 12.5 }} />
-      ) : (
-        <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: ticket.baseBranch ? c.text : c.text3 }}>
-          {ticket.baseBranch || inheritedBaseLabel(inherited)}
-        </Text>
-      )}
-    </Prop>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const c = useColors();
   return (
@@ -459,17 +359,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </View>
   );
 }
-
-function Prop({ label, hint, children, last }: { label: string; hint?: string; children: React.ReactNode; last?: boolean }) {
-  const c = useColors();
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 13, paddingVertical: 11, borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth, borderBottomColor: c.border, minHeight: 48 }}>
-      <View style={{ minWidth: 90 }}>
-        <Text style={{ color: c.text2, fontSize: 14 }}>{label}</Text>
-        {hint && <Text style={{ color: c.text3, fontSize: 11.5 }}>{hint}</Text>}
-      </View>
-      <View style={{ flex: 1, alignItems: "flex-end" }}>{children}</View>
-    </View>
-  );
-}
-

@@ -131,6 +131,7 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
   };
 
   const openKey = useCallback((key: string) => router.push({ pathname: "/ticket/[key]", params: { key } }), [router]);
+  const discard = useCallback((t: Ticket) => void act(() => client.deleteTicket(t.key), "Draft discarded"), [act, client]);
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -217,7 +218,7 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
               ListFooterComponent={<ColumnFooter status={status} searching={searching} />}
               contentContainerStyle={{ padding: 14, paddingBottom: 110, gap: 10 }}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text3} />}
-              renderItem={({ item }) => <TicketCard ticket={item} state={state} showProject={!projectId} onMove={move} onOpenKey={openKey} />}
+              renderItem={({ item }) => <TicketCard ticket={item} state={state} showProject={!projectId} onMove={move} onOpenKey={openKey} onDiscard={discard} />}
               ListEmptyComponent={
                 <View style={[styles.emptyCol, { borderColor: c.borderStrong }]}>
                   {total === 0 && status === "planning" && !searchTab ? (
