@@ -32,8 +32,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The "Use worktree" switch is gone. Pick the branch your project folder already has checked out
   (usually `main`) to have the agent work right in the project folder, or any other branch to
   give the ticket a worktree of its own.
-- On iPhone, New session's base branch is now picked from the project's branches, like on the
-  ticket's Details tab, instead of typed.
+- On iPhone, you now pick the base branch from the project's branches instead of typing it, in
+  New session and on a ticket's Details tab. Details shows it only when the ticket has a
+  worktree of its own.
 
 ## [app-20260929.2219](https://github.com/markhuot/harness/releases/tag/app-20260929.2219) - 2026-09-29
 
