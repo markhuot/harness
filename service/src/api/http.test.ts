@@ -255,6 +255,28 @@ describe("http api", () => {
     await expect(client.updateSettings({ defaultDriver: "nope" })).rejects.toMatchObject({ status: 400 });
   });
 
+  test("GET /prompts lists every prompt; PATCH /settings { prompts } overrides, refuses typos, and resets", async () => {
+    const { client } = await boot();
+    const before = await client.listPrompts();
+    const work = before.find((p) => p.id === "system.work")!;
+    expect(work).toMatchObject({ group: "system", override: null, overrideError: null, variables: [{ name: "branch" }] });
+    expect(work.builtin).toContain("{{#if branch}}");
+    expect((await client.getSettings()).prompts?.["system.work"]).toBeNull();
+
+    await expect(client.updateSettings({ prompts: { "system.work": "On {{brnch}}" } })).rejects.toMatchObject({
+      status: 400,
+      message: "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}",
+    });
+    await expect(client.updateSettings({ prompts: { "system.nope": "x" } as never })).rejects.toMatchObject({ status: 400 });
+
+    const after = await client.updateSettings({ prompts: { "system.work": "On {{branch}}" } });
+    expect(after.prompts?.["system.work"]).toBe("On {{branch}}");
+    expect((await client.listPrompts()).find((p) => p.id === "system.work")!.override).toBe("On {{branch}}");
+    // echoing the whole settings object back is fine
+    await client.updateSettings({ ...after, maxConcurrentRuns: 3 });
+    expect((await client.updateSettings({ prompts: { "system.work": null } })).prompts?.["system.work"]).toBeNull();
+  });
+
   test("drivers list and login", async () => {
     const { client } = await boot();
     const drivers = await client.listDrivers();

@@ -484,6 +484,85 @@ export interface Settings {
    * (default { mode: "localhost" }); optional so clients tolerate an older service without it.
    */
   listen?: ListenSetting;
+  /**
+   * The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null
+   * for the built-in prompt that ships with the service. The service sends every id; unset ones
+   * are null, so they pick up the built-in text as it improves. PATCH merges per id; null or ""
+   * resets one. Unknown ids and templates that don't parse or name variables the prompt doesn't
+   * have are refused with a 400. Optional so clients tolerate an older service without it.
+   */
+  prompts?: Partial<Record<PromptId, string | null>>;
+}
+
+// ---------------------------------------------------------------------------
+// Prompts (DESIGN.md "Prompt overrides")
+// ---------------------------------------------------------------------------
+
+/**
+ * Every prompt the user can override. `system.*` are sections of a run's system prompt (the
+ * service decides which sections a run gets and their order); `run.*` are the message that
+ * starts a run. GET /prompts describes each one.
+ */
+export const PROMPT_IDS = [
+  "system.intro",
+  "system.context",
+  "system.lifecycle",
+  "system.plan",
+  "system.work",
+  "system.review",
+  "system.complete",
+  "system.conductor",
+  "system.chat",
+  "system.triage",
+  "system.children",
+  "system.branches",
+  "system.files",
+  "system.summaries",
+  "system.board",
+  "system.board_changes",
+  "system.config",
+  "system.approvals",
+  "system.browser",
+  "run.work_start",
+  "run.conductor_start",
+  "run.review",
+  "run.complete",
+  "run.conductor_update",
+  "run.changes_requested",
+  "run.reopen",
+  "run.triage",
+] as const;
+export type PromptId = (typeof PROMPT_IDS)[number];
+export type PromptGroup = "system" | "run";
+
+export interface PromptVariable {
+  name: string;
+  description: string;
+}
+
+/**
+ * GET /prompts: one entry per PromptId, in PROMPT_IDS order. Templates use `{{name}}` and
+ * `{{#if name}} … {{else if other}} … {{else}} … {{/if}}` (shared/src/templates.ts); text outside
+ * tags is kept exactly.
+ */
+export interface PromptEntry {
+  id: PromptId;
+  group: PromptGroup;
+  /** Short name for a settings list, e.g. "Work run instructions" */
+  label: string;
+  /** One line: where the prompt is used */
+  description: string;
+  /** The variables the template may use; anything else is refused on save */
+  variables: PromptVariable[];
+  /** The built-in template (the starting point for an edit) */
+  builtin: string;
+  /** The user's template, or null when the built-in is used */
+  override: string | null;
+  /**
+   * Why a stored override is no longer used (it names a variable this version of the prompt
+   * doesn't have, for example), or null. Runs fall back to the built-in while it's set.
+   */
+  overrideError: string | null;
 }
 
 // ---------------------------------------------------------------------------

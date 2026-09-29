@@ -264,11 +264,12 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/drivers/:id/login", ({ params }) => o.loginDriver(params.id!));
   add("GET", "/drivers/:id/models", ({ params, url }) => o.listModels(params.id!, { refresh: /^(1|true)$/.test(url.searchParams.get("refresh") ?? "") }));
   add("GET", "/settings", () => o.publicSettings());
+  add("GET", "/prompts", () => o.promptCatalog());
   add("PATCH", "/settings", async ({ body }) => {
     const b = await body();
     if (b && typeof b === "object" && !Array.isArray(b) && "listen" in b) {
       // Validate everything first, then rebind (409 keeps the old listeners), then persist.
-      validateSettingsPatch(b, o.driverList().map((d) => d.id));
+      validateSettingsPatch(b, o.driverList().map((d) => d.id), o.settings());
       const listen = validateListen(b.listen);
       if (network) await network.apply(listen);
       return o.updateSettings({ ...b, listen });

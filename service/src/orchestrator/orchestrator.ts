@@ -36,7 +36,7 @@ import type {
   WatcherBody,
   WatcherLive,
 } from "@harness/shared";
-import type { BaseBranchSource, BranchInfo } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, PromptEntry } from "@harness/shared";
 import {
   checkProjectKey,
   isConductor,
@@ -47,6 +47,7 @@ import {
   PROJECT_COLORS,
   resolveBaseBranch,
   resolvePermissionMode,
+  PROMPT_IDS,
   TICKET_STATUSES,
   watcherDriver,
   watcherModel,
@@ -77,6 +78,7 @@ import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
 import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
+import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import {
@@ -496,9 +498,34 @@ export class Orchestrator {
     return toPublicSettings(this.settings());
   }
 
+  /** The prompt builders with the user's overrides from settings.prompts. */
+  private prompts() {
+    return prompts.promptsWith(this.settings().prompts);
+  }
+
+  /** GET /prompts: every overridable prompt with its built-in text and the user's override. */
+  promptCatalog(): PromptEntry[] {
+    const overrides = this.settings().prompts ?? {};
+    return PROMPT_IDS.map((id) => {
+      const def = PROMPTS[id];
+      const override = overrides[id] ?? null;
+      return {
+        id,
+        group: def.group,
+        label: def.label,
+        description: def.description,
+        variables: Object.entries(def.variables).map(([name, description]) => ({ name, description })),
+        builtin: def.template,
+        override,
+        overrideError: override ? promptTemplateError(id, override) : null,
+      };
+    });
+  }
+
   updateSettings(body: unknown): PublicSettings {
-    const patch = validateSettingsPatch(body, [...this.drivers.keys()]);
-    this.store.settings.set(applySettingsPatch(this.settings(), patch));
+    const current = this.settings();
+    const patch = validateSettingsPatch(body, [...this.drivers.keys()], current);
+    this.store.settings.set(applySettingsPatch(current, patch));
     if (patch.anthropicApiKey !== undefined) this.modelCatalog.invalidate("anthropic-api");
     const pub = this.publicSettings();
     this.bus.emit({ kind: "settings.updated", settings: pub });
@@ -909,8 +936,8 @@ export class Orchestrator {
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
         case "in_progress":
-          if (ticket.status === "done") await this.reopen(ticket, prompts.workStartPrompt(ticket), "Re-opened: moved to in progress");
-          else await this.begin(ticket, prompts.workStartPrompt(ticket));
+          if (ticket.status === "done") await this.reopen(ticket, this.prompts().workStartPrompt(ticket), "Re-opened: moved to in progress");
+          else await this.begin(ticket, this.prompts().workStartPrompt(ticket));
           break;
         case "done":
           this.transition(ticket, "done", { blockedReason: null }, "Moved to done");
@@ -956,7 +983,7 @@ export class Orchestrator {
     const ticket = this.requireTicket(key);
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
     if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
-    await this.begin(ticket, prompts.workStartPrompt(ticket));
+    await this.begin(ticket, this.prompts().workStartPrompt(ticket));
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1018,7 +1045,7 @@ export class Orchestrator {
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
     this.addSummary(ticket.sessionId, ticket.id, "human", `Re-opened: ${notes}`);
-    return this.reopen(ticket, prompts.reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
+    return this.reopen(ticket, this.prompts().reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
   }
 
   /**
@@ -1331,7 +1358,7 @@ export class Orchestrator {
     this.enqueueRun(
       session.id,
       "triage",
-      prompts.triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, projects, existingTickets }),
+      this.prompts().triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, projects, existingTickets }),
     );
     return this.store.sessions.get(session.id)!;
   }
@@ -1967,7 +1994,7 @@ export class Orchestrator {
       if (patch && k in patch) throw new Error(`${k} can't be changed with a tool${k === "anthropicApiKey" ? ": ask the human to enter it in Settings" : ""}.`);
     }
     return this.asToolError(() => {
-      if (dryRun) return (validateSettingsPatch(patch, [...this.drivers.keys()]), this.publicSettings());
+      if (dryRun) return (validateSettingsPatch(patch, [...this.drivers.keys()], this.settings()), this.publicSettings());
       return this.updateSettings(patch);
     });
   }
@@ -2172,7 +2199,7 @@ export class Orchestrator {
 
   private completePromptFor(t: Ticket, instructions?: string): string {
     const project = this.store.projects.get(t.projectId) ?? null;
-    return prompts.completePrompt(t, instructions, this.branchContext(t, project), project);
+    return this.prompts().completePrompt(t, instructions, this.branchContext(t, project), project);
   }
 
   /**
@@ -2438,7 +2465,7 @@ export class Orchestrator {
       `Changes requested by ${by}`,
       notes,
     );
-    this.enqueueRun(t.sessionId, this.workKind(t), prompts.changesRequestedPrompt(notes, by));
+    this.enqueueRun(t.sessionId, this.workKind(t), this.prompts().changesRequestedPrompt(notes, by));
     return this.store.tickets.get(t.id)!;
   }
 
@@ -2475,7 +2502,7 @@ export class Orchestrator {
   }
 
   private enqueueReview(t: Ticket) {
-    this.enqueueRun(t.sessionId, "review", prompts.reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
+    this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
   }
 
   private allChildrenDone(t: Ticket): boolean {
@@ -2502,7 +2529,7 @@ export class Orchestrator {
       if (!this.depsDone(t)) continue;
       const fresh = this.store.tickets.get(t.id); // an earlier await may have started it already
       if (!fresh || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
-      await this.begin(fresh, prompts.workStartPrompt(fresh));
+      await this.begin(fresh, this.prompts().workStartPrompt(fresh));
     }
   }
 
@@ -2526,7 +2553,7 @@ export class Orchestrator {
     // Busy conductors are flushed from afterRun (which runs after the run left `active`).
     if ([...this.active.values()].some((a) => a.run.sessionId === c.sessionId) || this.queue.pendingFor(c.sessionId).length) return;
     this.conductorBuffer.delete(conductorId);
-    this.enqueueRun(c.sessionId, this.workKind(c), prompts.conductorUpdatePrompt(buf));
+    this.enqueueRun(c.sessionId, this.workKind(c), this.prompts().conductorUpdatePrompt(buf));
   }
 
   // =========================================================================
@@ -2660,7 +2687,7 @@ export class Orchestrator {
           runId: run.id,
           kind: run.kind,
           prompt,
-          systemPrompt: prompts.systemPrompt({
+          systemPrompt: this.prompts().systemPrompt({
             kind: run.kind,
             project,
             ticket,
@@ -2904,6 +2931,7 @@ export class Orchestrator {
       fileOutputScope: (c) => this.fileOutputScope(c),
       listWatchers: (c) => this.listWatchers_(c),
       getSettings: (c) => this.getSettings_(c),
+      listPrompts: async () => this.promptCatalog(),
       listDrivers: (c) => this.listDrivers_(c),
       createWatcher: (c, i, d) => this.createWatcher_(c, i, d),
       updateWatcher: (c, r, i, d) => this.updateWatcher_(c, r, i, d),

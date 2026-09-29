@@ -136,6 +136,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     fileOutputScope: async (ctx: ToolContext) => ({ scratchDir: join(tmpdir(), "harness-fake-scratch", ctx.session.id), readOnly: false }),
     listWatchers: async () => [],
     getSettings: async () => ({}),
+    listPrompts: async () => [],
     listDrivers: async () => [],
     createWatcher: async (_ctx: ToolContext, input: Record<string, unknown>, dryRun?: boolean) =>
       dryRun ? null : { id: "w_1", args: [], cwd: null, env: {}, mode: "loop", intervalSec: 60, enabled: true, driver: null, lastRunAt: null, lastError: null, ...input },

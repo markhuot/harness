@@ -17,6 +17,7 @@ import type {
   BranchInfo,
   Project,
   Subagent,
+  PromptEntry,
   PublicSettings,
   ServerMessage,
   Session,
@@ -246,6 +247,10 @@ export class HarnessClient {
   }
   updateSettings(body: Partial<Settings>) {
     return this.request<PublicSettings>("PATCH", "/settings", body);
+  }
+  /** Every overridable prompt with its built-in text and the user's override; change them with updateSettings({ prompts }). */
+  listPrompts() {
+    return this.request<PromptEntry[]>("GET", "/prompts");
   }
 
   // Network & pairing
