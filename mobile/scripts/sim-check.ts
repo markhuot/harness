@@ -975,6 +975,8 @@ interface Screen {
   browse?: boolean;
   /** Taps to make before the shot. */
   prepare?: (udid: string) => Promise<unknown>;
+  /** Taps after the shot, to close what prepare opened (a sheet a deep link doesn't dismiss). */
+  after?: (udid: string) => Promise<unknown>;
   /** Waits out the redraw after the appearance flips, for a screen slower than FLIP_MS (a plugin's WebView reloads). */
   redrawn?: (udid: string) => Promise<unknown>;
 }
@@ -1034,6 +1036,8 @@ function screens(s: Seeded): Screen[] {
       url: `harness://ticket/${k(s.quick)}?tab=details`,
       seconds: 7,
       prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Model, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
+      // The sheet is a Modal, which the next screen's deep link would leave on top.
+      after: (udid) => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
     },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
@@ -1100,6 +1104,7 @@ async function shootScreens(udid: string, list: Screen[], browsed: Promise<unkno
       if (s.wait) await Bun.sleep(s.wait);
       if (s.prepare) await s.prepare(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
       const [, alive] = await Promise.all([timed(`  shoot: ${s.name}`, () => shootBoth(udid, s.name, s.redrawn && (() => s.redrawn!(udid)))), shown ? true : running(udid)]);
+      if (s.after) await s.after(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
       if (alive) console.log(`  ${join(shots, s.name)}-{light,dark}.png`);
       else {
         console.log(`✗ ${s.name}: the app crashed opening ${s.url}`);
