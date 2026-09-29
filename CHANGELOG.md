@@ -39,6 +39,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone, a ticket's Details tab shows its branch and base branch, and marks the base branch
   as inherited when the ticket doesn't set its own. You can change the base branch until the
   ticket is done, and you can pick a different branch until work starts.
+- On the Mac, Settings → General has a Base branch field, and a git project's settings have a
+  Base branch picker that inherits the app's value when left on its default.
+- The Mac's New session window has a Branch picker for git projects. It starts on a new
+  `harness/<key>` branch, and you can type to search the project's branches, pick an existing one,
+  or type a new name that gets created from the base branch. A second picker next to it overrides
+  the base branch for this ticket. If you pick a branch that's already checked out in another
+  worktree, the window warns you that the ticket will block when it starts.
+- A ticket's Details tab on the Mac shows its branch and its base branch (marked when the base is
+  inherited). You can change the base branch until the ticket is done, and the branch until its
+  worktree exists.
 
 ### Changed
 

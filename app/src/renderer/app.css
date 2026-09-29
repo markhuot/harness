@@ -1288,6 +1288,25 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   gap: 8px;
   flex-basis: 100%;
 }
+/* Own row under the pickers: the ticket's branch, its base branch, and a hint about the pick. */
+.new-session-branches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+.new-session-branch-hint {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.new-session-branch-hint.warn {
+  color: var(--amber, var(--red));
+}
 .new-session-options {
   display: flex;
   align-items: center;
