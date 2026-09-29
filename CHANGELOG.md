@@ -11,13 +11,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- Each watcher can now pick the model its triage agent runs on, next to the driver it already
-  had. The model list follows whichever driver is selected, so choosing Anthropic API shows the
-  models that driver offers. New and existing watchers stay on Default for both.
-- Settings has a default triage driver and model for every watcher that doesn't pick its own
-  (on the Mac, at the top of Watchers; on iPhone, in a Triage group above Watchers). You can set
-  all watchers to Claude Code with Sonnet, then switch one watcher to Opus when its output needs
-  more reasoning.
+- Each watcher can now pick the model its triage agent runs on. The watcher form's driver menu
+  is now a single Model menu that lists every signed-in driver's models under that driver's name,
+  so picking Opus under Claude Code sets both at once. With only one driver signed in, the menu is
+  a plain list of that driver's models. New and existing watchers stay on Default.
+- Settings has a default model for every watcher that doesn't pick its own (on the Mac, at the
+  top of Watchers; on iPhone, in a Triage group above Watchers). You can set all watchers to
+  Claude Code with Sonnet, then switch one watcher to Opus when its output needs more reasoning.
 
 ### Changed
 
