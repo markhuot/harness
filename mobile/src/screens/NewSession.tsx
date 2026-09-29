@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { branchNameError, DEFAULT_TRIAGE_CHOICE, resolveBaseBranch, resolvePermissionMode, type BranchInfo, type PermissionMode, type TicketKind, type TriageChoice } from "@harness/shared";
-import { branchChoice, branchChoiceHint, composerProject, inheritedBaseLabel, inheritedModel, newSessionPlaceholder, predictedBranch, sortedProjects } from "@harness/shared/state";
+import { branchNameError, DEFAULT_TRIAGE_CHOICE, harnessBranch, resolveBaseBranch, resolvePermissionMode, type BranchInfo, type PermissionMode, type TicketKind, type TriageChoice } from "@harness/shared";
+import { branchChoice, branchChoiceHint, composerProject, inheritedBaseLabel, inheritedModel, newSessionPlaceholder, newTicketBranchLabel, predictedTicketKey, sortedProjects } from "@harness/shared/state";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { Button, ProjectKey, Segmented } from "../ui/kit";
@@ -54,11 +54,12 @@ export function NewSessionScreen() {
   }, [projectId]);
   const isGit = !!project?.isGit;
   const showBranch = isGit && canWorktree && worktree;
-  const defaultBranch = project ? predictedBranch(project, Object.keys(state.tickets)) : "";
+  const nextKey = project ? predictedTicketKey(project, (k) => !!state.tickets[k]) : "";
   const inheritedBase = resolveBaseBranch(null, project, state.settings);
   const baseError = base.trim() ? branchNameError(base.trim()) : null;
-  const picked = branchChoice(branch?.name, defaultBranch, branch?.info ? [branch.info] : []);
-  const branchHint = branchChoiceHint(picked, base.trim() || inheritedBase.branch);
+  const effectiveBase = base.trim() || inheritedBase.branch;
+  const picked = branchChoice(branch?.name, harnessBranch(nextKey), branch?.info ? [branch.info] : []);
+  const branchHint = branchChoiceHint(picked, effectiveBase);
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
@@ -152,9 +153,15 @@ export function NewSessionScreen() {
           {showBranch && project && (
             <View>
               <Line label="Branch">
-                <BranchPicker projectId={project.id} value={branch?.name ?? null} defaultName={defaultBranch} onChange={(name, info) => setBranch(name ? { name, info } : null)} />
+                <BranchPicker
+                  projectId={project.id}
+                  value={branch?.name ?? null}
+                  defaultLabel={newTicketBranchLabel(nextKey)}
+                  newLabel={(name) => `Create ${name} from ${effectiveBase}`}
+                  onChange={(name, info) => setBranch(name ? { name, info } : null)}
+                />
               </Line>
-              <Text style={{ color: picked.kind === "existing" && picked.checkedOutAt ? c.amber : picked.kind === "invalid" ? c.red : c.text3, fontSize: 13, lineHeight: 18 }}>{branchHint}</Text>
+              <Text style={{ color: branchHint.tone === "warn" ? c.amber : branchHint.tone === "error" ? c.red : c.text3, fontSize: 13, lineHeight: 18 }}>{branchHint.text}</Text>
             </View>
           )}
           {isGit && (

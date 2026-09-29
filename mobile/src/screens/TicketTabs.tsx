@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { branchNameError, harnessBranch, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type Ticket } from "@harness/shared";
+import { branchNameError, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type Ticket } from "@harness/shared";
 import {
   attentionOf,
   canChangeBranch,
   inheritedBaseLabel,
+  newTicketBranchLabel,
   ticketHasBranch,
   childrenOfTicket,
   dependencyStates,
@@ -342,7 +343,13 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         {ticketHasBranch(ticket, project) && (
           <Prop label="Branch" hint={canChangeBranch(ticket, project) ? "Until work starts" : ticket.branch ? undefined : "When work starts"}>
             {canChangeBranch(ticket, project) ? (
-              <BranchPicker projectId={ticket.projectId} value={ticket.requestedBranch ?? null} defaultName={harnessBranch(ticket.key)} onChange={(branch) => void act(() => client.updateTicket(ticket.key, { branch }))} />
+              <BranchPicker
+                projectId={ticket.projectId}
+                value={ticket.requestedBranch ?? null}
+                defaultLabel={newTicketBranchLabel(ticket.key)}
+                newLabel={(name) => `Create ${name} from ${resolveBaseBranch(ticket, project, state.settings).branch}`}
+                onChange={(branch) => void act(() => client.updateTicket(ticket.key, { branch }))}
+              />
             ) : (
               <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: c.text }}>
                 {plannedBranch(ticket)}

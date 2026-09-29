@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BranchInfo, PermissionMode, TicketKind, TriageChoice } from "@harness/shared";
-import { resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
+import { harnessBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects, tildify } from "@harness/shared/state";
+import { branchChoice, branchChoiceHint, composerProject, inheritedBaseLabel, inheritedModel, newSessionPlaceholder, newTicketBranchLabel, predictedTicketKey, sortedProjects } from "@harness/shared/state";
 import { MOD, Modal, Switch } from "../components/bits";
 import { DriverModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
@@ -10,7 +10,6 @@ import { ProjectKey } from "../components/ProjectKey";
 import { Icon } from "../components/Icon";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { BranchSelect } from "../components/BranchSelect";
-import { inheritedBaseLabel, newTicketBranchLabel, predictedTicketKey, ticketBranchHint } from "../components/branchPicker";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -67,7 +66,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const nextKey = project ? predictedTicketKey(project, (k) => !!state.tickets[k]) : "";
   const inheritedBase = resolveBaseBranch(null, project, state.settings);
   const base = baseBranch ?? inheritedBase.branch;
-  const branchHint = ticketBranchHint(branch?.name ?? null, branch?.info, base, tildify);
+  const branchHint = branchChoiceHint(branchChoice(branch?.name, harnessBranch(nextKey), branch?.info ? [branch.info] : []), base);
+  const warn = branchHint.tone !== "plain";
 
   const addProject = async () => {
     const path = await window.harness?.pickDirectory();
@@ -171,8 +171,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
               defaultLabel={inheritedBaseLabel(inheritedBase)}
               newLabel={(name) => `Use ${name}`}
             />
-            <span className={`field-hint new-session-branch-hint ${branchHint.warn ? "warn" : ""}`}>
-              {branchHint.warn && <Icon name="alert" size={11} />}
+            <span className={`field-hint new-session-branch-hint ${warn ? "warn" : ""}`}>
+              {warn && <Icon name="alert" size={11} />}
               {branchHint.text}
             </span>
           </div>

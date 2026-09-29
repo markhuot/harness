@@ -7,12 +7,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BranchInfo } from "@harness/shared";
+import { branchRows, pickableIds, rowId, type BranchRow } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { relativeTime, useNow } from "./bits";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
 import { isTypeaheadKey, moveActive, settleActive } from "./modelCombobox";
-import { branchRows, pickableIds, rowId, type BranchRow } from "./branchPicker";
 import "./model-combobox.css";
 
 const DEBOUNCE_MS = 80;
