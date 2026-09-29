@@ -35,7 +35,10 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle } from "@harness/shared";
+import type { PromptEntry, PromptId } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle, PROMPT_IDS } from "@harness/shared";
+// The real catalog, so the Prompts screen shows the text runs get.
+import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -80,7 +83,50 @@ let settings: PublicSettings = {
   anthropicApiKeySet: false,
   listen: { mode: "localhost" },
   baseBranch: "main",
+  // One working override and one that names a variable the prompt doesn't have (as after an app
+  // update renamed it): GET /prompts reports its overrideError.
+  prompts: {
+    ...Object.fromEntries(PROMPT_IDS.map((id) => [id, null])),
+    "run.review": `Review {{ticket}} carefully.\n\n## Brief\n{{brief}}\n\n{{#if summaries}}## Summaries\n{{summaries}}{{/if}}\n\nCheck the tests first, then the diff.`,
+    "system.files": "## Files\nRead with {{readTool}}. Never use {{shellTool}} to edit files.",
+  },
 };
+
+/** GET /prompts (mirrors Orchestrator.promptCatalog). */
+function promptCatalog(): PromptEntry[] {
+  return PROMPT_IDS.map((id) => {
+    const def = PROMPTS[id];
+    const override = settings.prompts?.[id] ?? null;
+    return {
+      id,
+      group: def.group,
+      label: def.label,
+      description: def.description,
+      variables: Object.entries(def.variables).map(([name, description]) => ({ name, description })),
+      builtin: def.template,
+      override,
+      overrideError: override ? promptTemplateError(id, override) : null,
+    };
+  });
+}
+
+/** PATCH /settings { prompts } (mirrors service validatePrompts): 400 on unknown ids and bad templates. */
+function mergePrompts(value: Record<string, unknown>): Partial<Record<PromptId, string | null>> {
+  const current = settings.prompts ?? {};
+  const out = { ...current };
+  for (const [id, text] of Object.entries(value)) {
+    if (!isPromptId(id)) throw new HttpError(400, `Unknown prompt: ${id} (GET /prompts lists them)`);
+    if (text === null || (typeof text === "string" && !text.trim())) {
+      out[id] = null;
+      continue;
+    }
+    if (typeof text !== "string") throw new HttpError(400, `prompts.${id} must be template text or null`);
+    const error = current[id] === text ? null : promptTemplateError(id, text);
+    if (error) throw new HttpError(400, `prompts.${id}: ${error}`);
+    out[id] = text;
+  }
+  return out;
+}
 
 // Local branches for GET /projects/:id/branches (the same list for every git project), newest first.
 const MOCK_BRANCHES: BranchInfo[] = [
@@ -1422,7 +1468,8 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, defaultModels, reviewModels, watcherModels, listen, ...rest } = body;
+      const { anthropicApiKey, defaultModels, reviewModels, watcherModels, listen, prompts, ...rest } = body;
+      if (prompts !== undefined) settings.prompts = mergePrompts(prompts);
       if (listen !== undefined) {
         settings.listen = applyListen(listen);
         networkError = null;
@@ -1438,6 +1485,8 @@ async function route(req: Request, url: URL): Promise<Response> {
       return ok(settings);
     }
   }
+
+  if (a === "prompts" && !b && method === "GET") return ok(promptCatalog());
 
   // Network & pairing
   if (a === "network" && !b && method === "GET") return ok(networkStatus());
