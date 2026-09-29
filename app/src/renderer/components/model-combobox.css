@@ -1,0 +1,94 @@
+/* The driver + model combobox (ModelSelect.tsx DriverModelSelect): a .select-looking trigger and a
+   portaled popover with a search field over a grouped list. */
+
+.model-combo-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+.model-combo-trigger:disabled {
+  opacity: 0.6;
+}
+.model-combo-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.model-combo {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.model-combo-search {
+  flex: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 8px 10px;
+  outline: none;
+}
+.model-combo-search::placeholder {
+  color: var(--text-3);
+}
+
+.model-combo-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.model-combo-heading {
+  padding: 8px 8px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  user-select: none;
+}
+.model-combo-heading:first-child {
+  padding-top: 4px;
+}
+
+.model-combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: default;
+}
+.model-combo-option.active {
+  background: var(--bg-hover);
+}
+.model-combo-option[aria-selected="true"] {
+  font-weight: 500;
+}
+.model-combo-option svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.model-combo-empty {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}

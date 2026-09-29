@@ -357,6 +357,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX summary_attachments_summary ON summary_attachments(summary_id, ord);
   `,
+  // 15: watchers.models: model per driver id for the watcher's triage sessions (like
+  //     projects.default_models). Existing watchers get {} and follow settings.watcherModels.
+  `
+  ALTER TABLE watchers ADD COLUMN models TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
 
 /**

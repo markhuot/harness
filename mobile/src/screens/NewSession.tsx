@@ -1,15 +1,15 @@
-// New session: project, prompt, Task/Conductor, driver, model, permission mode, Start immediately, Use worktree.
+// New session: project, prompt, Task/Conductor, driver + model (one picker), permission mode, Start immediately, Use worktree.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { resolvePermissionMode, type PermissionMode, type TicketKind } from "@harness/shared";
+import { DEFAULT_TRIAGE_CHOICE, resolvePermissionMode, type PermissionMode, type TicketKind, type TriageChoice } from "@harness/shared";
 import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { Button, ProjectKey, Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
-import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
-import { driverOptions } from "../lib/selectOptions";
+import { PermissionPicker, Select } from "../ui/selects";
+import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { haptic } from "../ui/haptics";
 import { buttonItem, primaryItemStyle } from "../ui/header";
 import { MentionList, useFileMentions } from "../ui/mentions";
@@ -31,11 +31,9 @@ export function NewSessionScreen() {
   const [start, setStart] = useState(true);
   const [kind, setKind] = useState<TicketKind>("task");
   const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? state.drivers[0]?.id ?? "";
-  const [driver, setDriver] = useState(defaultDriver);
-  const touchedDriver = useRef(false);
-  useEffect(() => {
-    if (!touchedDriver.current) setDriver(defaultDriver);
-  }, [defaultDriver]);
+  // Driver + model from the combined picker; Default follows the project (so it tracks a project switch).
+  const [choice, setChoice] = useState<TriageChoice>(DEFAULT_TRIAGE_CHOICE);
+  const resolved = { driver: defaultDriver || null, model: defaultDriver ? inheritedModel(defaultDriver, "ticket", project, state.settings) : null };
   // Follows the project's worktree setting until flipped; only shown for git projects.
   const projectWorktrees = project?.useWorktrees ?? true;
   const [worktree, setWorktree] = useState(projectWorktrees);
@@ -44,8 +42,6 @@ export function NewSessionScreen() {
     if (!touchedWorktree.current) setWorktree(projectWorktrees);
   }, [projectWorktrees]);
   const canWorktree = project?.isGit !== false;
-  const [model, setModel] = useState<string | null>(null);
-  useEffect(() => setModel(null), [driver]);
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
@@ -55,7 +51,7 @@ export function NewSessionScreen() {
     if (!canSubmit) return;
     setBusy(true);
     const useWorktree = canWorktree ? worktree : null;
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode, useWorktree }));
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree }));
     setBusy(false);
     if (!t) return;
     haptic("success");
@@ -70,10 +66,6 @@ export function NewSessionScreen() {
       const p = await act(() => client.createProject({ path: path.trim() }), "Project added");
       if (p) setChosen(p.id);
     });
-  const chooseDriver = (d: string) => {
-    touchedDriver.current = true;
-    setDriver(d);
-  };
 
   return (
     <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
@@ -119,11 +111,8 @@ export function NewSessionScreen() {
         />
         {kind === "conductor" && <Text style={{ color: c.text3, fontSize: 13 }}>Orchestrates child tickets.</Text>}
         <View style={{ gap: 10 }}>
-          <Line label="Driver">
-            <Select value={driver} options={driverOptions(state.drivers, { unavailable: "disable" })} onChange={chooseDriver} placeholder={driver || "Default"} title="Driver" accessibilityName="Driver" />
-          </Line>
           <Line label="Model">
-            <ModelPicker driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />
+            <DriverModelPicker value={choice} resolved={resolved} onChange={setChoice} />
           </Line>
           <Line label="Permissions">
             <PermissionPicker value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />

@@ -351,8 +351,14 @@ export interface Watcher {
   mode: "loop" | "interval";
   intervalSec: number;
   enabled: boolean;
-  /** Driver used for triage sessions spawned from this watcher (null → settings default) */
+  /** Driver used for triage sessions spawned from this watcher (null → settings.watcherDriver, then settings.defaultDriver) */
   driver: string | null;
+  /**
+   * Model per driver id for this watcher's triage sessions. Missing → settings.watcherModels, then
+   * settings.defaultModels, then the driver's own default. PATCH merges per driver; null clears.
+   * Optional so clients tolerate an older service without it.
+   */
+  models?: Record<string, string>;
   lastRunAt: number | null;
   lastError: string | null;
   createdAt: number;
@@ -363,6 +369,12 @@ export interface Watcher {
    */
   live?: WatcherLive;
 }
+
+/**
+ * POST /watchers and PATCH /watchers/:id bodies: Watcher fields, with `models` as a per-driver
+ * patch (merged over the stored map; null clears a driver's entry).
+ */
+export type WatcherBody = Partial<Omit<Watcher, "models">> & { models?: Record<string, string | null> };
 
 /**
  * A watcher's process state. `running`: a process is alive (since `since`). `waiting`: between
@@ -424,6 +436,16 @@ export interface Settings {
   defaultModels: Record<string, string | null>;
   /** Model per driver id for agent review runs. Missing / null → the same model as the work runs. */
   reviewModels: Record<string, string | null>;
+  /**
+   * Driver for triage sessions of watchers that don't pick one (null → defaultDriver). Optional so
+   * clients tolerate an older service without it.
+   */
+  watcherDriver?: string | null;
+  /**
+   * Model per driver id for triage sessions of watchers that don't pick one. Missing / null →
+   * defaultModels. PATCH merges per driver; null clears. Optional like watcherDriver.
+   */
+  watcherModels?: Record<string, string | null>;
   /** Stored API key for the anthropic-api driver (never sent back to clients in full) */
   anthropicApiKey: string | null;
   /**

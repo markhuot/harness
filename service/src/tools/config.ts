@@ -18,7 +18,7 @@ const WATCHER_GUIDE = [
   `command: the user's shell command line, exactly as they'd type it in a terminal. It runs through their login shell, so their PATH, pipes, quoting and loops work. Leave args out: args are only for older watchers whose command is an executable run directly, without a shell.`,
   `prompt: the user's instructions to the triage agent for this output, in their words, e.g. "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR; otherwise decline it." The prompt is where routing lives: it names the project (by key) that matching output goes to, and triage declines output whose project it can't tell. When the user names a project, put its key in the prompt; when several projects are involved, say in the prompt which output goes where.`,
   `mode: "loop" for a command that runs for a long time or loops by itself; it's restarted when it exits, and each burst of output becomes one Inbox item. "interval" for a command that prints once and exits; it runs every interval_sec seconds (at least 10), and each run's output becomes one Inbox item. Output identical to an earlier item from the same watcher is skipped, so a loop that re-prints unchanged data doesn't fill the Inbox.`,
-  `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default.`,
+  `A non-zero exit is shown as the watcher's error (last_error, from the end of stderr). env: extra environment variables merged over the service's (e.g. an API token the user gives you). cwd: its working directory (~ allowed), if it needs one. driver: the driver for this watcher's triage sessions (list_drivers); omit for the settings default. models: {driver id: model id} for its triage sessions, e.g. {"claude-code": "opus"} for a watcher whose output needs more reasoning; omit to use the settings' watcher models.`,
   `Examples. A looping watcher that polls a REST API for new events: {"name": "events", "command": "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", "env": {"EVENTS_TOKEN": "<token>"}, "mode": "loop", "prompt": "If this event is assigned to me and has actionable next steps, dispatch it to an agent in PLAYR."}. An interval watcher around a tool the user has installed: {"name": "jira", "command": "watch-jira --project=PLAYR --assigned=@me --once", "mode": "interval", "interval_sec": 600, "prompt": "Dispatch new tickets to an agent in PLAYR."}.`,
   `After it's created, check list_watchers for last_run_at and last_error once it has had a chance to run; process.state says whether its process is running now, waiting for its next run (next_run_at), or stopped.`,
 ].join(" ");
@@ -45,7 +45,8 @@ const watcherProps = {
   mode: { type: "string", enum: ["loop", "interval"], description: "\"loop\" for long-running or self-looping commands (restarted when they exit), \"interval\" for commands that print once and exit. Default \"loop\"." },
   interval_sec: { type: "integer", minimum: 10, description: "Seconds between runs in interval mode. Default 60." },
   enabled: { type: "boolean", description: "Whether the service runs it. Default true." },
-  driver: { type: "string", description: "Driver id for this watcher's triage sessions (see list_drivers); empty for the settings default." },
+  driver: { type: "string", description: "Driver id for this watcher's triage sessions (see list_drivers); empty for the settings default (watcherDriver, then defaultDriver)." },
+  models: { ...modelMapProp, description: "Driver id → model id for this watcher's triage sessions (see list_drivers), e.g. {\"claude-code\": \"opus\"}. Merged per driver; a null value clears one. Drivers without an entry use the settings' watcherModels, then defaultModels." },
 };
 
 type WatcherToolInput = {
@@ -59,6 +60,7 @@ type WatcherToolInput = {
   interval_sec?: number;
   enabled?: boolean;
   driver?: string;
+  models?: Record<string, string | null>;
 };
 
 function watcherFields(input: WatcherToolInput): WatcherFields {
@@ -74,6 +76,7 @@ function watcherFields(input: WatcherToolInput): WatcherFields {
   if (input.interval_sec !== undefined) out.intervalSec = input.interval_sec;
   if (input.enabled !== undefined) out.enabled = input.enabled;
   if (input.driver !== undefined) out.driver = input.driver || null;
+  if (input.models !== undefined) out.models = input.models;
   return out;
 }
 
@@ -92,6 +95,7 @@ function watcherView(w: Watcher) {
     interval_sec: w.intervalSec,
     enabled: w.enabled,
     driver: w.driver,
+    models: w.models ?? {},
     last_run_at: w.lastRunAt ? new Date(w.lastRunAt).toISOString() : null,
     last_error: w.lastError,
     ...(w.live
@@ -105,6 +109,12 @@ function watcherView(w: Watcher) {
         }
       : {}),
   };
+}
+
+/** A driver or model the watcher's triage runs on, when the call picks one. */
+function triageSuffix(i: Pick<WatcherToolInput, "driver" | "models">): string {
+  const parts = [i.driver ? `driver: ${i.driver}` : null, i.models && Object.keys(i.models).length ? `models: ${JSON.stringify(i.models)}` : null];
+  return parts.filter(Boolean).map((p) => `; ${p}`).join("");
 }
 
 /** The triage prompt is part of what the human approves: it decides what happens to the output. */
@@ -168,7 +178,7 @@ export const listWatchers = defineTool<Record<string, never>>({
 export const getSettings = defineTool<Record<string, never>>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, and the network listen mode. The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, and the network listen mode. The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
   inputSchema: schema({}),
   async run(_input, ctx) {
     return json(await ctx.ops.getSettings(ctx));
@@ -207,7 +217,7 @@ export const createWatcher = defineGatedTool<CreateWatcherInput>({
   description: `Create a watcher. A human must approve the call: the ticket blocks until they answer, and you are resumed when they do; then repeat exactly the same call to create it. ${WATCHER_GUIDE}`,
   inputSchema: schema(watcherProps, ["name", "command"]),
   describe: (i) => ({
-    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}${promptSuffix(i.prompt)}${watcherEnvSuffix(i, false)}`,
+    summary: `Create watcher "${i.name}" (${schedule(i.mode, i.interval_sec)}): ${commandLine(i.command, i.args)}${promptSuffix(i.prompt)}${watcherEnvSuffix(i, false)}${triageSuffix(i)}`,
     reason: WATCHER_REASON,
   }),
   check: (i, ctx) => ctx.ops.createWatcher(ctx, watcherFields(i) as NewWatcher, true),
@@ -387,6 +397,8 @@ type SettingsInput = {
   classifier?: string;
   default_models?: Record<string, string | null>;
   review_models?: Record<string, string | null>;
+  watcher_driver?: string | null;
+  watcher_models?: Record<string, string | null>;
   listen?: { mode: string; host?: string };
 };
 
@@ -398,6 +410,8 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
     classifier: "classifier",
     defaultModels: "default_models",
     reviewModels: "review_models",
+    watcherDriver: "watcher_driver",
+    watcherModels: "watcher_models",
     listen: "listen",
   };
   const out: Record<string, unknown> = {};
@@ -416,6 +430,8 @@ export const updateSettings = defineGatedTool<SettingsInput>({
     classifier: { type: "string", enum: ["claude-cli", "anthropic-api", "off"], description: "Who judges actions in auto mode for drivers without built-in permissions (\"off\" asks a human)." },
     default_models: modelMapProp,
     review_models: { ...modelMapProp, description: "Driver id → model id for review runs. Merged per driver; null clears one." },
+    watcher_driver: { type: "string", description: "Driver for triage sessions of watchers that don't pick one (see list_drivers); an empty string follows default_driver." },
+    watcher_models: { ...modelMapProp, description: "Driver id → model id for triage sessions of watchers that don't pick one. Merged per driver; null clears one (falls back to default_models)." },
     listen: {
       type: "object",
       description: `Which networks can reach the service: {"mode": "localhost"} (this Mac only), "tailscale", "any" (every interface), or {"mode": "custom", "host": "<ip or hostname>"}.`,

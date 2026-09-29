@@ -365,4 +365,36 @@ describe("config tools behind human approval", () => {
     expect(prompt()).toBe("Only major outages.");
     expect(JSON.parse(out.at(-1)!)[0]).toMatchObject({ prompt: "Only major outages.", command_line: "curl -s https://status.test/api" });
   });
+
+  test("watcher models and the watcher defaults go through the tools, merged per driver", async () => {
+    const out: string[] = [];
+    let next = 0;
+    const h = scripted(async (req) => {
+      if (req.kind !== "work") return;
+      const calls = [
+        ["create_watcher", { name: "status", command: "true", models: { fake: "opus" } }],
+        ["update_settings", { watcher_driver: "fake", watcher_models: { fake: "sonnet" } }],
+        ["update_watcher", { watcher: "status", models: { fake: null } }],
+        ["list_watchers", {}],
+      ] as const;
+      for (; next < calls.length; next++) {
+        const r = await executeTool(req.tools, calls[next]![0], calls[next]![1], req.toolContext);
+        out.push(text(r));
+        if (r.isError) return;
+      }
+    });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe('Create watcher "status" (loop): true; models: {"fake":"opus"}');
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.orch.listWatchers()[0]!.models).toEqual({ fake: "opus" });
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.orch.settings()).toMatchObject({ watcherDriver: "fake", watcherModels: { fake: "sonnet" } });
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.orch.listWatchers()[0]!.models).toEqual({});
+    expect(JSON.parse(out.at(-1)!)[0]).toMatchObject({ name: "status", models: {} });
+  });
 });

@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
   classifier: "claude-cli",
   defaultModels: {},
   reviewModels: {},
+  watcherDriver: null,
+  watcherModels: {},
   anthropicApiKey: null,
   listen: { mode: "localhost" },
 };
@@ -42,6 +44,7 @@ export function resolveSettings(stored: Record<string, unknown>): Settings {
   }
   out.defaultModels = mergeModelMap({}, out.defaultModels);
   out.reviewModels = mergeModelMap({}, out.reviewModels);
+  out.watcherModels = mergeModelMap({}, out.watcherModels ?? {});
   return out;
 }
 
@@ -77,8 +80,15 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
         if (!(CLASSIFIER_BACKENDS as readonly unknown[]).includes(value)) throw badRequest(`classifier must be one of ${CLASSIFIER_BACKENDS.join(", ")}`);
         out.classifier = value as Settings["classifier"];
         break;
+      case "watcherDriver":
+        // null / "" → follow defaultDriver
+        if (value !== null && value !== "" && typeof value !== "string") throw badRequest("watcherDriver must be a driver id or null");
+        if (value && knownDrivers && !knownDrivers.includes(value as string)) throw badRequest(`Unknown driver: ${value}`);
+        out.watcherDriver = (value as string) || null;
+        break;
       case "defaultModels":
       case "reviewModels":
+      case "watcherModels":
         out[key] = validateModelMap(key, value, knownDrivers);
         break;
       case "anthropicApiKey":
@@ -128,7 +138,8 @@ export function validateModelMap(field: string, value: unknown, knownDrivers?: s
   if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest(`${field} must be an object of driver id → model id`);
   const out: Record<string, string | null> = {};
   for (const [driver, model] of Object.entries(value as Record<string, unknown>)) {
-    if (knownDrivers && !knownDrivers.includes(driver)) throw badRequest(`Unknown driver in ${field}: ${driver}`);
+    // Clearing (null / "") is fine for any key, so an entry left by a removed driver can be dropped.
+    if (knownDrivers && !knownDrivers.includes(driver) && model !== null && model !== "") throw badRequest(`Unknown driver in ${field}: ${driver}`);
     out[driver] = validateModelId(`${field}.${driver}`, model);
   }
   return out;
@@ -146,5 +157,6 @@ export function applySettingsPatch(current: Settings, patch: Partial<Settings>):
   const out: Partial<Settings> = { ...patch };
   if (patch.defaultModels) out.defaultModels = mergeModelMap(current.defaultModels, patch.defaultModels);
   if (patch.reviewModels) out.reviewModels = mergeModelMap(current.reviewModels, patch.reviewModels);
+  if (patch.watcherModels) out.watcherModels = mergeModelMap(current.watcherModels ?? {}, patch.watcherModels);
   return out;
 }

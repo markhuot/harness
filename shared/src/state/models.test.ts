@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DriverModels, ModelInfo } from "../index";
-import { inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
+import { decodeChoice, driverModelChoices, encodeChoice, filterChoiceGroups, inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
 
 const MODELS: ModelInfo[] = [
   { id: "opus", name: "Opus 5.5", default: true },
@@ -102,5 +102,88 @@ describe("ModelListCache", () => {
     });
     await cache.load("");
     expect(cache.get("")).toEqual({ data: null, loading: false, error: null });
+  });
+});
+
+describe("driverModelChoices (combined driver + model select)", () => {
+  const drivers = [
+    { id: "claude-code", name: "Claude Code", available: true, authenticated: true },
+    { id: "anthropic-api", name: "Anthropic API", available: true, authenticated: true },
+    { id: "codex", name: "Codex", available: true, authenticated: false },
+  ];
+  const models: Record<string, ModelInfo[]> = {
+    "claude-code": [
+      { id: "opus", name: "Opus" },
+      { id: "sonnet", name: "Sonnet", default: true },
+    ],
+    "anthropic-api": [{ id: "claude-sonnet-5", name: "Sonnet 5", default: true }],
+    codex: [{ id: "luna", name: "Luna" }],
+  };
+  const none = { driver: null, model: null };
+  const resolved = { driver: "claude-code", model: null };
+
+  test("signed-in drivers become groups of their models; others are left out", () => {
+    const c = driverModelChoices(drivers, models, none, resolved);
+    expect(c.groups.map((g) => [g.label, g.options.map((o) => o.label)])).toEqual([
+      ["Claude Code", ["Opus", "Sonnet"]],
+      ["Anthropic API", ["Sonnet 5"]],
+    ]);
+    expect(decodeChoice(c.groups[0]!.options[0]!.value)).toEqual({ driver: "claude-code", model: "opus" });
+    expect(c.default).toEqual({ value: "", label: "Default (Claude Code · Sonnet)" });
+    expect(c.selectedLabel).toBe("Default (Claude Code · Sonnet)");
+  });
+
+  test("one signed-in driver collapses to a flat list without the driver name", () => {
+    const one = drivers.map((d) => (d.id === "anthropic-api" ? { ...d, authenticated: false } : d));
+    const c = driverModelChoices(one, models, { driver: "claude-code", model: "opus" }, { driver: "claude-code", model: "opus" });
+    expect(c.groups).toHaveLength(1);
+    expect(c.groups[0]!.label).toBeNull();
+    expect(c.default.label).toBe("Default (Opus)");
+    expect(c.selectedLabel).toBe("Opus");
+  });
+
+  test("a picked driver that isn't signed in stays listed, so the value never disappears", () => {
+    const c = driverModelChoices(drivers, models, { driver: "codex", model: "luna" }, resolved);
+    expect(c.groups.map((g) => g.driver)).toEqual(["claude-code", "anthropic-api", "codex"]);
+    expect(c.selectedLabel).toBe("Codex · Luna");
+  });
+
+  test("a driver picked without a model gets its default entry; unknown models are kept as custom", () => {
+    const a = driverModelChoices(drivers, models, { driver: "claude-code", model: null }, resolved);
+    expect(a.groups[0]!.options[0]).toEqual({ value: encodeChoice({ driver: "claude-code", model: null }), label: "Claude Code default (Sonnet)" });
+    expect(a.selectedLabel).toBe("Claude Code default (Sonnet)");
+    const b = driverModelChoices(drivers, models, { driver: "claude-code", model: "claude-x-1" }, resolved);
+    expect(b.groups[0]!.options.at(-1)!.label).toBe("claude-x-1 (custom)");
+    expect(b.groups[1]!.options.some((o) => o.label.includes("custom"))).toBe(false);
+  });
+
+  test("encode/decode round-trip; Default is the empty value", () => {
+    expect(encodeChoice(none)).toBe("");
+    expect(decodeChoice("")).toEqual(none);
+    expect(decodeChoice(encodeChoice({ driver: "a", model: "m:1" }))).toEqual({ driver: "a", model: "m:1" });
+    expect(decodeChoice(encodeChoice({ driver: "a", model: null }))).toEqual({ driver: "a", model: null });
+  });
+});
+
+describe("filterChoiceGroups (type-ahead)", () => {
+  const groups = [
+    { driver: "claude-code", label: "Claude Code", options: [{ value: encodeChoice({ driver: "claude-code", model: "opus" }), label: "Opus 5.5" }, { value: encodeChoice({ driver: "claude-code", model: "sonnet" }), label: "Sonnet 5" }] },
+    { driver: "openrouter", label: "OpenRouter", options: [{ value: encodeChoice({ driver: "openrouter", model: "openai/gpt-4o" }), label: "GPT-4o" }] },
+  ];
+
+  test("an empty query keeps everything", () => {
+    expect(filterChoiceGroups(groups, "  ")).toBe(groups);
+  });
+
+  test("words match label, model id or driver name; groups without matches drop out", () => {
+    expect(filterChoiceGroups(groups, "claude op").map((g) => g.options.map((o) => o.label))).toEqual([["Opus 5.5"]]);
+    expect(filterChoiceGroups(groups, "openai").map((g) => g.driver)).toEqual(["openrouter"]); // by model id
+    expect(filterChoiceGroups(groups, "SONNET")[0]!.options.map((o) => o.label)).toEqual(["Sonnet 5"]);
+    expect(filterChoiceGroups(groups, "opus router")).toEqual([]);
+  });
+
+  test("a flat group (no label) still matches its driver through driverNames", () => {
+    const flat = [{ ...groups[0]!, label: null }];
+    expect(filterChoiceGroups(flat, "claude", { "claude-code": "Claude Code" })[0]!.options).toHaveLength(2);
   });
 });

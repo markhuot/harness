@@ -151,3 +151,89 @@ describe("model reaches the driver", () => {
     expect((await h.orch.listModels("fake", { refresh: true })).models[0]!.id).toBe("fresh");
   });
 });
+
+describe("watcher driver and model", () => {
+  /** Feed output as the watcher's supervisor does (onOutput → ingest) and wait for the triage run. */
+  async function fire(h: ReturnType<typeof setup>, watcherId: string, text: string) {
+    const w = h.store.watchers.get(watcherId)!;
+    await h.orch.ingest({ sourceId: w.id, source: w.name, output: { text, truncated: false }, prompt: w.prompt, driver: w.driver, watcherId: w.id });
+    await h.orch.idle();
+  }
+  const triageCalls = (d: FakeDriver) => d.calls.filter((c) => c.kind === "triage");
+
+  test("triage runs on the watcher's driver, else settings.watcherDriver, else defaultDriver", async () => {
+    const h = setup();
+    const w = h.orch.createWatcher({ name: "w", command: "true", enabled: false });
+    await fire(h, w.id, "one");
+    expect(triageCalls(h.driver)).toHaveLength(1);
+
+    h.orch.updateSettings({ watcherDriver: "other" });
+    await fire(h, w.id, "two");
+    expect(triageCalls(h.other)).toHaveLength(1);
+
+    h.orch.updateSettings({ watcherDriver: "" }); // back to following defaultDriver
+    expect(h.orch.settings().watcherDriver).toBeNull();
+    h.orch.updateWatcher(w.id, { driver: "other" });
+    await fire(h, w.id, "three");
+    expect(triageCalls(h.other)).toHaveLength(2);
+    expect(triageCalls(h.driver)).toHaveLength(1);
+  });
+
+  test("triage model: watcher.models → settings.watcherModels → settings.defaultModels → null", async () => {
+    const h = setup();
+    const w = h.orch.createWatcher({ name: "w", command: "true", enabled: false });
+    const lastModel = () => triageCalls(h.driver).at(-1)!.model;
+
+    await fire(h, w.id, "a");
+    expect(lastModel()).toBeNull();
+
+    h.orch.updateSettings({ defaultModels: { fake: "global" } });
+    await fire(h, w.id, "b");
+    expect(lastModel()).toBe("global");
+
+    h.orch.updateSettings({ watcherModels: { fake: "sonnet" } });
+    await fire(h, w.id, "c");
+    expect(lastModel()).toBe("sonnet");
+
+    h.orch.updateWatcher(w.id, { models: { fake: "opus" } });
+    await fire(h, w.id, "d");
+    expect(lastModel()).toBe("opus");
+    const s = h.orch.listSessions("triage").find((x) => h.store.transcript.list(x.id).some((e) => (e.content as { text?: string }).text === "Run started (triage · opus)"));
+    expect(s).toBeDefined();
+
+    // A model for another driver doesn't leak onto this one.
+    h.orch.updateWatcher(w.id, { models: { fake: null, other: "other-model" } });
+    await fire(h, w.id, "e");
+    expect(lastModel()).toBe("sonnet");
+
+    // Injected output has no watcher: the watcher default applies.
+    await h.orch.injectOutput("manual", "f");
+    await h.orch.idle();
+    expect(lastModel()).toBe("sonnet");
+  });
+
+  test("watcher models validate driver ids and merge per driver", () => {
+    const h = setup();
+    expect(() => h.orch.createWatcher({ name: "w", command: "true", models: { nope: "x" } })).toThrow(/Unknown driver/);
+    const w = h.orch.createWatcher({ name: "w", command: "true", enabled: false, models: { fake: "a" } });
+    expect(w.models).toEqual({ fake: "a" });
+    expect(h.orch.updateWatcher(w.id, { models: { other: "b" } }).models).toEqual({ fake: "a", other: "b" });
+    expect(h.orch.updateWatcher(w.id, { models: { fake: null } }).models).toEqual({ other: "b" });
+    expect(h.orch.updateWatcher(w.id, { name: "renamed" }).models).toEqual({ other: "b" }); // untouched when omitted
+    expect(() => h.orch.updateWatcher(w.id, { models: { fake: "two words" } })).toThrow(/without spaces/);
+    // A stale entry for a driver that's gone can still be cleared.
+    h.store.watchers.update(w.id, { models: { other: "b", gone: "x" } });
+    expect(h.orch.updateWatcher(w.id, { models: { gone: null } }).models).toEqual({ other: "b" });
+  });
+
+  test("settings: watcherDriver must be a known driver; watcherModels merge like the other maps", () => {
+    const h = setup();
+    expect(() => h.orch.updateSettings({ watcherDriver: "nope" })).toThrow(/Unknown driver/);
+    expect(() => h.orch.updateSettings({ watcherDriver: 3 })).toThrow(/watcherDriver/);
+    h.orch.updateSettings({ watcherModels: { fake: "m1" } });
+    h.orch.updateSettings({ watcherModels: { other: "o1" } });
+    expect(h.orch.publicSettings().watcherModels).toEqual({ fake: "m1", other: "o1" });
+    expect(h.orch.updateSettings({ watcherModels: { fake: null } }).watcherModels).toEqual({ other: "o1" });
+    expect(resolveSettings({}).watcherDriver).toBeNull();
+  });
+});

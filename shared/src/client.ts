@@ -28,6 +28,7 @@ import type {
   TranscriptEntry,
   UpdateTicketBody,
   Watcher,
+  WatcherBody,
   BrowserState,
   PluginInfo,
   PluginTab,
@@ -203,10 +204,10 @@ export class HarnessClient {
   listWatchers() {
     return this.request<Watcher[]>("GET", "/watchers");
   }
-  createWatcher(body: Partial<Watcher> & { name: string; command: string }) {
+  createWatcher(body: WatcherBody & { name: string; command: string }) {
     return this.request<Watcher>("POST", "/watchers", body);
   }
-  updateWatcher(id: string, body: Partial<Watcher>) {
+  updateWatcher(id: string, body: WatcherBody) {
     return this.request<Watcher>("PATCH", `/watchers/${id}`, body);
   }
   deleteWatcher(id: string) {

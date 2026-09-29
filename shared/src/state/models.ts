@@ -2,7 +2,8 @@
 // shared by every select on screen) and pure option/label derivations. No React here: each client
 // wraps ModelListCache in its own hook (useSyncExternalStore).
 
-import type { DriverModels, ModelInfo, Project, PublicSettings } from "../protocol";
+import type { DriverInfo, DriverModels, ModelInfo, Project, PublicSettings } from "../protocol";
+import type { TriageChoice } from "../watchers";
 import type { HarnessClient } from "../client";
 
 export interface ModelOption {
@@ -53,6 +54,112 @@ export function modelOptions(
 /** A model badge is only worth showing when the ticket picked a model itself. */
 export function ticketModelBadge(model: string | null, models: ModelInfo[] | undefined): string | null {
   return model ? modelName(models, model) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Combined driver + model select (watchers): models grouped under their driver
+// ---------------------------------------------------------------------------
+
+const SEP = "\u0001";
+
+/** A TriageChoice as a <select> value: "" for Default, else "driver\u0001model" ("driver\u0001" → the driver's default). */
+export function encodeChoice(c: TriageChoice): string {
+  return c.driver ? `${c.driver}${SEP}${c.model ?? ""}` : "";
+}
+
+export function decodeChoice(v: string): TriageChoice {
+  if (!v) return { driver: null, model: null };
+  const i = v.indexOf(SEP);
+  if (i < 0) return { driver: v, model: null };
+  return { driver: v.slice(0, i), model: v.slice(i + 1) || null };
+}
+
+export interface ChoiceGroup {
+  driver: string;
+  /** The driver's name, or null when the list collapses to one driver (no group heading) */
+  label: string | null;
+  options: ModelOption[];
+}
+
+export interface ChoiceOptions {
+  /** The Default option (value ""), naming what it resolves to */
+  default: ModelOption;
+  groups: ChoiceGroup[];
+  /** Label of the picked option (for triggers that show text, like the iOS menu) */
+  selectedLabel: string;
+}
+
+type ChoiceDriver = Pick<DriverInfo, "id" | "name" | "available" | "authenticated">;
+
+/**
+ * Options for the combined Model select. Drivers that are installed and signed in each get a
+ * group of their models; the picked driver is kept even when it isn't signed in, so the select
+ * never hides the current value. With a single group the heading is dropped and the models show as
+ * a flat list. `resolved` is what Default falls back to (driver + model; model null → the driver's
+ * listed default). A driver picked without a model gets a "<driver> default" entry, and a model the
+ * list doesn't have is kept as "(custom)".
+ */
+export function driverModelChoices(
+  drivers: ChoiceDriver[],
+  models: Record<string, ModelInfo[] | undefined>,
+  value: TriageChoice,
+  resolved: TriageChoice,
+  opts: { defaultLabel?: string } = {},
+): ChoiceOptions {
+  const shown = drivers.filter((d) => (d.available && d.authenticated) || d.id === value.driver);
+  if (value.driver && !shown.some((d) => d.id === value.driver)) shown.push({ id: value.driver, name: value.driver, available: false, authenticated: false });
+  const flat = shown.length <= 1;
+  const name = (id: string) => drivers.find((d) => d.id === id)?.name ?? id;
+  const defaultModelName = (driver: string, model: string | null) => {
+    const list = models[driver];
+    return model ? modelName(list, model) : list?.find((m) => m.default)?.name;
+  };
+
+  const groups: ChoiceGroup[] = shown.map((d) => {
+    const list = models[d.id] ?? [];
+    const options: ModelOption[] = [];
+    if (value.driver === d.id && !value.model) {
+      const fallback = defaultModelName(d.id, null);
+      options.push({ value: encodeChoice({ driver: d.id, model: null }), label: fallback ? `${d.name} default (${fallback})` : `${d.name} default` });
+    }
+    for (const m of list) options.push({ value: encodeChoice({ driver: d.id, model: m.id }), label: m.name });
+    if (value.driver === d.id && value.model && !list.some((m) => m.id === value.model)) options.push({ value: encodeChoice(value), label: `${value.model} (custom)` });
+    return { driver: d.id, label: flat ? null : d.name, options };
+  });
+
+  const label = opts.defaultLabel ?? "Default";
+  const parts = resolved.driver ? [flat && shown[0]?.id === resolved.driver ? null : name(resolved.driver), defaultModelName(resolved.driver, resolved.model)].filter(Boolean) : [];
+  const def: ModelOption = { value: "", label: parts.length ? `${label} (${parts.join(" · ")})` : label };
+
+  const picked = encodeChoice(value);
+  const all = [def, ...groups.flatMap((g) => g.options)];
+  const pickedOption = all.find((o) => o.value === picked);
+  const selectedLabel = !pickedOption
+    ? def.label
+    : pickedOption === def || flat || !value.model
+      ? pickedOption.label
+      : `${name(value.driver!)} · ${pickedOption.label}`;
+  return { default: def, groups, selectedLabel };
+}
+
+/**
+ * The groups a type-ahead query leaves: every word of the query must appear (case-insensitive) in
+ * the option's label, its model id, or its driver's name, so "claude op" finds Opus under Claude
+ * Code and "gpt" finds gpt-4o by id. Groups with no match are dropped; an empty query keeps all.
+ */
+export function filterChoiceGroups(groups: ChoiceGroup[], query: string, driverNames: Record<string, string> = {}): ChoiceGroup[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return groups;
+  return groups
+    .map((g) => {
+      const driver = `${g.label ?? ""} ${driverNames[g.driver] ?? ""} ${g.driver}`;
+      const options = g.options.filter((o) => {
+        const hay = `${o.label} ${decodeChoice(o.value).model ?? ""} ${driver}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      });
+      return { ...g, options };
+    })
+    .filter((g) => g.options.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +221,11 @@ export class ModelListCache {
     this.emit();
   }
 
+  /** Bumped on every change; a stable snapshot for hooks that read several drivers at once. */
+  version = 0;
+
   private emit() {
+    this.version++;
     for (const fn of this.listeners) fn();
   }
 }

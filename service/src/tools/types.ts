@@ -285,7 +285,10 @@ export interface HarnessOps {
 }
 
 /** Watcher fields a tool may set (Watcher without ids, timestamps and run status). */
-export type WatcherFields = Partial<Pick<Watcher, "name" | "command" | "args" | "prompt" | "cwd" | "env" | "mode" | "intervalSec" | "enabled" | "driver">>;
+export type WatcherFields = Partial<Pick<Watcher, "name" | "command" | "args" | "prompt" | "cwd" | "env" | "mode" | "intervalSec" | "enabled" | "driver">> & {
+  /** Per-driver patch: null clears a driver's entry */
+  models?: Record<string, string | null>;
+};
 
 /** A project as tools see it. */
 export interface ProjectView {
