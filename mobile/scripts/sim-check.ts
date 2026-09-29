@@ -586,16 +586,17 @@ async function seedStick() {
 async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>) {
   const key = p.ticket.key;
   const H = (await tree(udid))[0]!.frame.height;
-  // The list's viewport: below the tab strip, above the composer.
+  // The list's viewport: below the tab strip, above the composer and the switch over it ("Move to
+  // in progress", moveSwitchLabel in shared/state/chatMode).
   async function listView() {
     const all = await nodes(udid);
     const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Summaries"));
-    const composer = all.find((n) => n.AXLabel?.startsWith("Message the agent"));
+    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Move to in progress" || n.AXLabel === "Revise the plan");
     const top = tab ? tab.frame.y + tab.frame.height : 100;
-    const bottom = composer ? composer.frame.y : H - 60;
+    const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
     // viewport). Starting below it leaves out the app window and the header.
-    const rows = all.filter((n) => n.AXLabel && n !== composer && n.AXLabel !== "Send" && n.frame.y >= top);
+    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && n.frame.y >= top);
     return { rows, top, bottom };
   }
   /** At the bottom: the lowest rendered row is the list's last row and ends just above the composer. */
@@ -618,14 +619,14 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const n = (await listView()).rows.find((r) => r.AXLabel === label);
     return n ? Math.round(n.frame.y) : null;
   };
-  const swipe = async (dir: "up" | "down", times = 4) => {
-    // Finger moving down scrolls toward the top.
+  /** Drags (or with `flick`, flings with momentum) the list; finger moving down scrolls toward the top. */
+  const swipe = async (dir: "up" | "down", times = 4, flick = false) => {
     const [from, to] = dir === "down" ? [H * 0.45, H * 0.8] : [H * 0.8, H * 0.45];
     for (let i = 0; i < times; i++) {
-      await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(from)), "--end-x", "200", "--end-y", String(Math.round(to)), "--duration", "0.25", "--udid", udid);
+      await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(from)), "--end-x", "200", "--end-y", String(Math.round(to)), "--duration", flick ? "0.08" : "0.25", "--udid", udid);
       await Bun.sleep(500);
     }
-    await Bun.sleep(600);
+    await Bun.sleep(flick ? 900 : 600); // a fling's momentum runs on after the finger lifts
   };
   /** New content lands (another message and its runs) and the list has laid it out. */
   const say = async (n: number, last: (l: string) => boolean) => {
@@ -653,7 +654,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
     if (!all) continue;
     await check(`${tab} stays put after the user scrolls up`, async () => {
-      await swipe("down");
+      await swipe("down", 2);
       const ref = await until("a row to watch", anchor, 5000);
       await say(++n, () => true);
       const y = await yOf(ref.label);
@@ -663,10 +664,11 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
     await check(`${tab} follows again after scrolling back to the bottom`, async () => {
       // Swipe back down until the user has reached the end (the list grew a lot meanwhile).
-      for (let i = 0; i < 25 && !(await atBottom(last)); i++) await swipe("up", 1);
+      let flicks = 0;
+      for (; flicks < 24 && !(await atBottom(last)); flicks += 2) await swipe("up", 2, true);
       if (!(await atBottom(last))) throw new Error("couldn't swipe back to the bottom");
       await say(++n, last);
-      return until("at the bottom", () => atBottom(last), 10000);
+      return `${await until("at the bottom", () => atBottom(last), 10000)} (back down in ${flicks} flicks)`;
     });
   }
   await shot(udid, "stick-summaries");
