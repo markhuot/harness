@@ -13,7 +13,7 @@ describe("permission_prompt", () => {
   test("passes tool_name and input to requestApproval and returns allow with updatedInput", async () => {
     const ops = fakeOps({ requestApproval: async (_c: unknown, _t: string, input: any) => ({ behavior: "allow", updatedInput: { ...input, command: "git init -q" } }) });
     const r = await permissionPrompt.execute({ tool_name: "Bash", input: { command: "git init" }, tool_use_id: "toolu_1" }, fakeContext({ ops }));
-    expect(ops.calls).toEqual([{ method: "requestApproval", args: ["Bash", { command: "git init" }] }]);
+    expect(ops.calls).toEqual([{ method: "requestApproval", args: ["Bash", { command: "git init" }, { viaPromptTool: true }] }]);
     expect(decision(r)).toEqual({ behavior: "allow", updatedInput: { command: "git init -q" } });
   });
 
@@ -41,6 +41,6 @@ describe("permission_prompt", () => {
   test("missing input is sent as {}", async () => {
     const ops = fakeOps();
     await permissionPrompt.execute({ tool_name: "WebFetch" }, fakeContext({ ops }));
-    expect(ops.calls[0]!.args).toEqual(["WebFetch", {}]);
+    expect(ops.calls[0]!.args).toEqual(["WebFetch", {}, { viaPromptTool: true }]);
   });
 });

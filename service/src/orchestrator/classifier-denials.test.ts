@@ -114,14 +114,15 @@ describe("classifier denials → approval cards", () => {
     expect([resumed.status, resumed.blockedReason, resumed.pendingApproval]).toEqual(["in_progress", null, null]);
   });
 
-  test("an agent that submits after the denial (what it usually does) is blocked with the card instead of reviewed", async () => {
+  test("an agent that found another way and submitted is reviewed, with the denied call on record", async () => {
     const h = setup({ after: "submit" });
     const t = await denied(h);
     const cur = ticket(h, t.key);
-    expect(cur.status).toBe("blocked");
-    expect(cur.pendingApproval).toMatchObject({ toolName: "Bash", source: "classifier", reason: REASON });
-    expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]); // no review run
-    expect(h.orch.summaries(t.key).some((s) => s.author === "agent" && s.body === "Done without scaffolding.")).toBe(true);
+    expect([cur.status, cur.pendingApproval]).toEqual(["review", null]);
+    expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work", "review"]);
+    const bodies = h.orch.summaries(t.key).map((s) => `${s.author}: ${s.body}`);
+    expect(bodies).toContain("agent: Done without scaffolding.");
+    expect(bodies).toContain(`system: The classifier denied a call during this run, and the agent submitted without it:\n- Bash (npx -y harness-check-pkg init): ${REASON}`);
   });
 
   test("no card when the denied call went through later in the same run", async () => {

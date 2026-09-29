@@ -9,6 +9,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- When auto mode's classifier turns down one of an agent's commands, the agent now looks for a
+  safer way to do the same thing and keeps going. It only stops to ask you when there's truly
+  no other way. If it finishes another way, the ticket goes to review as usual, with a note
+  listing what was turned down.
+
+### Fixed
+
+- Choosing "Allow once" on an auto-mode ticket no longer makes you approve every command for
+  the rest of that turn. Before, allowing a command with a pipe or `2>/dev/null` in it sent even
+  plain file reads to you for approval until the agent finished.
+
 ## [app-20260929.0234](https://github.com/markhuot/harness/releases/tag/app-20260929.0234) - 2026-09-29
 
 ### Fixed

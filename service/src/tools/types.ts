@@ -308,4 +308,10 @@ export interface ApprovalMeta {
   source?: "classifier" | "policy";
   summary?: string;
   onceOnly?: boolean;
+  /**
+   * Asked by Claude Code's --permission-prompt-tool (permission_prompt), not by a harness tool.
+   * In an auto-mode ticket the CLI only asks while a run is in ask mode to deliver a grant
+   * (planGrants), so the harness classifier judges the call first, as auto mode would.
+   */
+  viaPromptTool?: boolean;
 }

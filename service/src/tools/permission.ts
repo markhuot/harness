@@ -30,7 +30,7 @@ export const permissionPrompt = defineTool<{ tool_name?: string; input?: Record<
     if (!tool_name) return answer({ behavior: "deny", message: "permission_prompt was called without a tool_name." });
     const toolInput = input ?? {};
     try {
-      const decision = await ctx.ops.requestApproval(ctx, tool_name, toolInput);
+      const decision = await ctx.ops.requestApproval(ctx, tool_name, toolInput, { viaPromptTool: true });
       if (decision.behavior === "allow") {
         const updated = decision.updatedInput;
         return answer({

@@ -4,7 +4,8 @@
 //   1. static policy: hard-deny patterns → deny; reads/edits inside the workdir and read-only
 //      commands (allowlist) → allow; read_only mode → deny everything else
 //   2. human grants (ticket.allowedTools, one-time grants) → allow
-//   3. ask mode → a human; auto mode → the classifier (allow → run, soft_deny → a human,
+//   3. ask mode → a human; auto mode → the classifier (allow → run, soft_deny → denied to the
+//      agent so it can find another way, and a card only if the run ends stuck on it (env.defer),
 //      hard_deny → deny with its reason). Classifier failure or timeout → a human, never allow.
 // Every decision on a gated call is logged (PermissionDecisionLog) so the human can audit it.
 
@@ -27,6 +28,12 @@ export interface GateEnv {
   isGranted(tool: string, input: unknown): boolean;
   /** Send the call to a human (HarnessOps.requestApproval) */
   requestApproval(tool: string, input: unknown, meta: { reason: string; source: "classifier" | "policy" }): Promise<ApprovalAnswer>;
+  /**
+   * A classifier soft_deny the agent gets to work around first: the call is denied with the
+   * reason, and the run remembers it (it becomes an approval card only if the run ends stuck on
+   * it). Without it, a soft_deny goes to requestApproval right away.
+   */
+  defer?(tool: string, input: unknown, reason: string): void;
   log(entry: PermissionDecisionLog): void;
   /** Context for the classifier (lazy: only built when the classifier is consulted) */
   context(): Pick<ClassifierRequest, "ticket" | "transcript">;
@@ -41,6 +48,14 @@ export interface PermissionGateOptions {
 }
 
 export const CLASSIFIER_TIMEOUT_MS = 60_000;
+
+/** A classifier reason ending in a full stop, so the instructions after it read as a new sentence. */
+const sentence = (reason: string) => reason.trim().replace(/[.!?]?$/, (end) => end || ".");
+
+/** A deferred soft_deny, as the model sees it: `${CLASSIFIER_DENIED}<reason>.${CLASSIFIER_DENIED_NEXT}` */
+export const CLASSIFIER_DENIED = "Permission denied by the auto-mode classifier: ";
+export const CLASSIFIER_DENIED_NEXT =
+  " Don't retry this call or rephrase it to get it through. Rethink the step: if a safer command or approach gets you to the same goal, take it and keep working. If there's no other way, ask the human as your instructions say; they can approve this call.";
 
 /** Tools the gate checks. Anything else (harness tools) is not a native side effect. */
 export const GATED_TOOLS = new Set(["bash", "write_file", "edit_file", "read_file", "list_files"]);
@@ -116,6 +131,21 @@ function assess(tool: string, input: Record<string, unknown>, cwd: string): Asse
   return { kind: "allow", reason: "not a gated tool", quiet: true };
 }
 
+const deny = (message: string): GateDecision => ({ behavior: "deny", message });
+
+/** Per-call logging and human-approval helpers shared by check() and judge(). */
+function helpers(tool: string, rawInput: unknown, env: GateEnv) {
+  const summary = summarizeCall(tool, rawInput);
+  const log = (decision: PermissionDecisionLog["decision"], reason: string, source: PermissionDecisionLog["source"], extra: Partial<PermissionDecisionLog> = {}) =>
+    env.log({ tool, summary, decision, reason, source, mode: env.mode, ...extra });
+  const ask = async (reason: string, source: "classifier" | "policy"): Promise<GateDecision> => {
+    log("ask", reason, source);
+    const answer = await env.requestApproval(tool, rawInput ?? {}, { reason, source });
+    return answer.behavior === "allow" ? { behavior: "allow" } : deny(answer.message);
+  };
+  return { summary, log, ask };
+}
+
 export class PermissionGate {
   constructor(private readonly opts: PermissionGateOptions) {}
 
@@ -126,15 +156,7 @@ export class PermissionGate {
   async check(tool: string, rawInput: unknown, env: GateEnv): Promise<GateDecision> {
     if (!GATED_TOOLS.has(tool)) return { behavior: "allow" };
     const input = (rawInput && typeof rawInput === "object" ? rawInput : {}) as Record<string, unknown>;
-    const summary = summarizeCall(tool, input);
-    const log = (decision: PermissionDecisionLog["decision"], reason: string, source: PermissionDecisionLog["source"], extra: Partial<PermissionDecisionLog> = {}) =>
-      env.log({ tool, summary, decision, reason, source, mode: env.mode, ...extra });
-    const deny = (message: string): GateDecision => ({ behavior: "deny", message });
-    const ask = async (reason: string, source: "classifier" | "policy"): Promise<GateDecision> => {
-      log("ask", reason, source);
-      const answer = await env.requestApproval(tool, rawInput ?? {}, { reason, source });
-      return answer.behavior === "allow" ? { behavior: "allow" } : deny(answer.message);
-    };
+    const { log, ask } = helpers(tool, rawInput, env);
 
     const a = assess(tool, input, env.cwd);
     if (a.kind === "deny") {
@@ -160,10 +182,19 @@ export class PermissionGate {
       return { behavior: "allow" };
     }
     if (env.mode === "ask") return ask(`Ask mode: ${a.what} needs your approval.`, "policy");
+    return this.judge(tool, rawInput, env, a.what);
+  }
 
-    // auto mode: ask the classifier
+  /**
+   * Auto mode's classifier step for a call no policy or grant settled: allow → run; soft_deny →
+   * deferred to the agent (env.defer) or a human; hard_deny → deny. Failure, timeout or no
+   * classifier → a human, never allow. Also used for Claude Code calls that reach the prompt tool
+   * while an auto-mode ticket's run is in ask mode (planGrants).
+   */
+  async judge(tool: string, rawInput: unknown, env: GateEnv, what = "this call"): Promise<GateDecision> {
+    const { summary, log, ask } = helpers(tool, rawInput, env);
     const classifier = this.opts.classifier();
-    if (!classifier) return ask(`Auto mode without a classifier: ${a.what} needs your approval.`, "policy");
+    if (!classifier) return ask(`Auto mode without a classifier: ${what} needs your approval.`, "policy");
     const started = this.now();
     const controller = new AbortController();
     const onAbort = () => controller.abort();
@@ -188,7 +219,12 @@ export class PermissionGate {
       }
       if (verdict.decision === "hard_deny") {
         log("deny", verdict.reason, "classifier", meta);
-        return deny(`Permission denied by the auto-mode classifier: ${verdict.reason} Don't retry this or work around it; continue without it or call block to ask the human.`);
+        return deny(`${CLASSIFIER_DENIED}${sentence(verdict.reason)} This action is never allowed, so don't retry it or rephrase it to get it through. Find another way to do the task without it and keep working; if there is none, ask the human as your instructions say.`);
+      }
+      if (env.defer) {
+        log("deny", verdict.reason, "classifier", meta);
+        env.defer(tool, rawInput ?? {}, verdict.reason);
+        return deny(`${CLASSIFIER_DENIED}${sentence(verdict.reason)}${CLASSIFIER_DENIED_NEXT}`);
       }
       env.log({ tool, summary, decision: "ask", reason: verdict.reason, source: "classifier", mode: env.mode, ...meta });
       const answer = await env.requestApproval(tool, rawInput ?? {}, { reason: verdict.reason, source: "classifier" });
@@ -196,7 +232,7 @@ export class PermissionGate {
     } catch (err) {
       if (env.signal?.aborted) return deny("The run was cancelled.");
       const why = err instanceof Error ? err.message : String(err);
-      return ask(`The classifier couldn't decide (${why}), so ${a.what} needs your approval.`, "policy");
+      return ask(`The classifier couldn't decide (${why}), so ${what} needs your approval.`, "policy");
     } finally {
       clearTimeout(timer);
       env.signal?.removeEventListener("abort", onAbort);
