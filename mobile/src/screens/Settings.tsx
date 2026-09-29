@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
+import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
 import { CLASSIFIER_LABELS, inheritedModel, modelName, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -14,7 +14,7 @@ import { MONO } from "../theme/tokens";
 import { Badge, Button, ProjectKey, Segmented, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { DriverModelPicker, ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
@@ -382,30 +382,17 @@ function PermissionsSection({ settings }: { settings: PublicSettings }) {
 }
 
 function TriageSection({ settings }: { settings: PublicSettings }) {
-  const { state, client } = useStore();
+  const { client } = useStore();
   const act = useAction();
-  const driverName = (id: string) => state.drivers.find((d) => d.id === id)?.name ?? id;
-  const driver = watcherDriver(null, settings);
   return (
     <Group title="Triage" footer="Used by watchers that don't pick their own.">
-      <SRow title="Default triage driver">
-        <Select
-          value={settings.watcherDriver ?? ""}
-          options={driverOptions(state.drivers, { none: `Same as default driver (${driverName(settings.defaultDriver)})` })}
-          onChange={(v) => void act(() => client.updateSettings({ watcherDriver: v || null }))}
-          placeholder={settings.watcherDriver || driverName(settings.defaultDriver)}
-          title="Default triage driver"
-          accessibilityName="Default triage driver"
-        />
-      </SRow>
-      <SRow title="Default triage model" sub={driverName(driver)} last>
-        <ModelPicker
-          key={driver}
-          driver={driver}
-          value={settings.watcherModels?.[driver] ?? null}
-          inherited={settings.defaultModels[driver] ?? null}
-          onChange={(m) => void act(() => client.updateSettings({ watcherModels: { [driver]: m } }))}
-          title="Default triage model"
+      <SRow title="Default model" last>
+        <DriverModelPicker
+          value={settingsWatcherChoice(settings)}
+          resolved={{ driver: settings.defaultDriver, model: settings.defaultModels[settings.defaultDriver] ?? null }}
+          defaultLabel="Same as default"
+          onChange={(choice) => void act(() => client.updateSettings(settingsWatcherChoicePatch(choice, settings)))}
+          title="Default model"
         />
       </SRow>
     </Group>

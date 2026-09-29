@@ -9,10 +9,9 @@ import { MONO } from "../theme/tokens";
 import { Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, Select } from "../ui/selects";
-import { driverOptions } from "../lib/selectOptions";
+import { DriverModelPicker } from "../ui/selects";
 import { buttonItem, primaryItemStyle } from "../ui/header";
-import { draftDriver, toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
+import { toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
 
 export function WatcherFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -22,7 +21,7 @@ export function WatcherFormScreen() {
   const router = useRouter();
   const input = useInputStyle();
   const existing = id ? state.watchers[String(id)] : undefined;
-  const [d, setD] = useState<Draft>(() => toDraft(existing));
+  const [d, setD] = useState<Draft>(() => toDraft(existing, state.settings));
   const [busy, setBusy] = useState(false);
   const edited = useRef(false);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
@@ -32,19 +31,17 @@ export function WatcherFormScreen() {
   // A cold start through a deep link renders before the snapshot has the watcher: fill the form
   // once it arrives, unless the user has already started typing.
   useEffect(() => {
-    if (existing && !edited.current) setD(toDraft(existing));
-  }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (existing && !edited.current) setD(toDraft(existing, state.settings));
+  }, [existing?.id, !!state.settings]); // eslint-disable-line react-hooks/exhaustive-deps
   const valid = !!d.name.trim() && !!d.command.trim();
   const settings = state.settings;
-  const driverName = (id: string) => state.drivers.find((x) => x.id === id)?.name ?? id;
-  // What "Default" resolves to, and the driver the model picker lists models for.
-  const defaultDriver = settings ? watcherDriver(null, settings) : "";
-  const driver = draftDriver(d, settings);
-  const defaultDriverLabel = defaultDriver ? `Default (${driverName(defaultDriver)})` : "Default";
+  // What the Default pick falls back to: the app-wide watcher driver and its model.
+  const resolvedDriver = settings ? watcherDriver(null, settings) : null;
+  const resolved = { driver: resolvedDriver, model: resolvedDriver ? watcherModel(resolvedDriver, null, settings) : null };
   const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
-    const ok = existing ? await act(() => client.updateWatcher(existing.id, watcherBody(d, settings)), "Watcher saved") : await act(() => client.createWatcher(watcherBody(d, settings)), "Watcher created");
+    const ok = existing ? await act(() => client.updateWatcher(existing.id, watcherBody(d, existing)), "Watcher saved") : await act(() => client.createWatcher(watcherBody(d)), "Watcher created");
     setBusy(false);
     if (ok) router.dismiss();
   };
@@ -70,21 +67,9 @@ export function WatcherFormScreen() {
         <FormField label="Working directory">
           <TextInput style={[input, { fontFamily: MONO, fontSize: 15 }]} value={d.cwd} placeholder="Optional" placeholderTextColor={c.text3} onChangeText={(v) => set("cwd", v)} autoCapitalize="none" autoCorrect={false} />
         </FormField>
-        <FormField label="Triage driver">
+        <FormField label="Model" hint="The driver and model this watcher's triage sessions use.">
           <View style={{ alignItems: "flex-start" }}>
-            <Select value={d.driver} options={driverOptions(state.drivers, { none: defaultDriverLabel })} onChange={(v) => set("driver", v)} placeholder={d.driver || defaultDriverLabel} title="Triage driver" accessibilityName="Triage driver" />
-          </View>
-        </FormField>
-        <FormField label="Triage model">
-          <View style={{ alignItems: "flex-start" }}>
-            <ModelPicker
-              key={driver}
-              driver={driver}
-              value={d.models[driver] || null}
-              inherited={watcherModel(driver, null, settings)}
-              onChange={(m) => set("models", { ...d.models, [driver]: m ?? "" })}
-              title="Triage model"
-            />
+            <DriverModelPicker value={d.choice} resolved={resolved} onChange={(v) => set("choice", v)} />
           </View>
         </FormField>
         <FormField label="Mode" hint={d.mode === "loop" ? "Re-runs as soon as the command exits." : "Runs on a fixed schedule."}>
