@@ -412,6 +412,10 @@ const REPLY_ITEMS = ["Keep plain main", "Ship it"];
 /** The Approve button's menu trigger, and the primary label in the git project (no gh remote, so merge). */
 const APPROVE_MORE = "More ways to approve";
 const APPROVE_MERGE = "Approve and merge";
+/** The "Approve and…" sheet's field (its label runs on into the placeholder). */
+const instructionsField = (l: string) => l.startsWith("Completion instructions");
+/** The Approve action sheet has finished sliding up: a tap before that is lost. */
+const approveMenuUp = (udid: string) => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000).then(() => Bun.sleep(400));
 
 /**
  * A brief like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
@@ -1039,7 +1043,8 @@ function screens(s: Seeded): Screen[] {
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
     // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
-    { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved").then(() => Bun.sleep(500)) },
+    // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
+    { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
     // A git ticket in review: the Approve button's menu (merge, Approve and…, take no action), then
     // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
     {
@@ -1047,7 +1052,7 @@ function screens(s: Seeded): Screen[] {
       url: `harness://ticket/${k(s.agents)}`,
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
-      prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000)).then(() => Bun.sleep(500)),
+      prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
       cleanup: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(400)),
     },
     {
@@ -1057,8 +1062,9 @@ function screens(s: Seeded): Screen[] {
       seconds: 7,
       prepare: (udid) =>
         tapWhere(udid, APPROVE_MORE)
+          .then(() => approveMenuUp(udid))
           .then(() => tapWhere(udid, "Approve and…"))
-          .then(() => until("instructions sheet", async () => (await labels(udid)).includes("Completion instructions"), 5000))
+          .then(() => until("instructions sheet", async () => (await labels(udid)).some(instructionsField), 5000))
           .then(() => Bun.sleep(800)),
       cleanup: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(600)),
     },
@@ -1227,8 +1233,9 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const text = "Tag it v2 then clean up";
         await goto(udid, `harness://ticket/${k(s.agents)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
+        await approveMenuUp(udid);
         await tapWhere(udid, "Approve and…");
-        await tapWhere(udid, "Completion instructions");
+        await tapWhere(udid, instructionsField);
         await Bun.sleep(600);
         await axe("type", text, "--udid", udid);
         await Bun.sleep(300);
@@ -1239,7 +1246,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
       await check("project settings: When approved saves the project's default", async () => {
         await goto(udid, `harness://project/${s.project.id}`, (l) => l.includes("When approved"));
-        await scrollTo(udid, (l) => l === "When approved");
+        await scrollTo(udid, (l) => l === "When approved", 3).catch(() => {});
         await tapWhere(udid, (l) => l.startsWith("When approved, "));
         await tapWhere(udid, "Custom");
         const p = await until("default saved", async () => ((x) => (x?.completionAction === "custom" ? x : null))((await api<Project[]>("GET", "/projects")).find((x) => x.id === s.project.id)), 8000);
