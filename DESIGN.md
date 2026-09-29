@@ -607,6 +607,13 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
   `ExitPlanMode` through the prompt tool.
 - `cleanClaudeEnv` strips what a parent Claude Code session leaks (`CLAUDECODE`, `CLAUDE_PID`,
   `CLAUDE_EFFORT`, `AI_AGENT`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_*` except user config).
+- Agent runs also get `MCP_CONNECTION_NONBLOCKING=0` (`claudeRunEnv`, unless the user set it).
+  With stream-json input, claude 2.1.284 starts the first turn while claude.ai connectors are
+  still `pending`, so the model sees none of their tools until a later turn. A plugin that ships
+  its own copy of a connector (the `jira` plugin's `hc-jira`) is listed as needing auth until the
+  connector list dedupes it. A one-turn triage run then declined with "the Jira MCP isn't
+  available". With `0` the first turn waits for the connectors (about a second, capped at
+  `MCP_CONNECT_TIMEOUT_MS`).
 
 **Classifier denials → approval cards.** A classifier denial doesn't stop the run. The
 system prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer

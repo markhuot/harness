@@ -106,7 +106,7 @@ const untilStdinClosed = async (limitMs: number) => {
 };
 
 if (env.FAKE_CLAUDE_RECORD) {
-  const passEnv = Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith("CLAUDE") || k === "HARNESS_MARKER"));
+  const passEnv = Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith("CLAUDE") || k.startsWith("MCP_") || k === "HARNESS_MARKER"));
   appendFileSync(env.FAKE_CLAUDE_RECORD, JSON.stringify({ argv, stdin, cwd: process.cwd(), env: passEnv }) + "\n");
 }
 

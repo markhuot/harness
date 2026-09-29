@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Agents using the Claude Code driver can use your claude.ai connectors (Jira, Atlassian, Google
+  Drive and others) from their first reply. Before this, triage often declined work with "the
+  Jira MCP isn't available" or "needs re-authorization", because the connectors were still
+  connecting when the agent answered.
+
 ## [app-20260929.2219](https://github.com/markhuot/harness/releases/tag/app-20260929.2219) - 2026-09-29
 
 ### Added
