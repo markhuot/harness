@@ -509,6 +509,8 @@ async function seed() {
   const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
   // A quick ask that skips the agent review: in review with the muted "skipped" mark.
   const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
+  // Another one, approved by the human while the project doesn't complete on its own: waiting on Complete.
+  const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -537,6 +539,7 @@ async function seed() {
     settle(plan.key, (t) => t.status === "planning" && !t.busy),
     settle(branchPlan.key, (t) => t.status === "planning" && !t.busy),
     settle(quick.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
+    settle(waiting.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
     settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
@@ -552,7 +555,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1316,7 +1319,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `ends ${JSON.stringify(saved.slice(-24))}`;
       });
     }),
-    chain(12, async (udid) => {
+    chain(18, async (udid) => {
       await check("board context menu moves a card to Done", async () => {
         await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
@@ -1333,6 +1336,23 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
         if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
         return `${t.key} human=${t.humanReview} → ${t.status}`;
+      });
+      await check("Complete menu → Complete and take no action finishes a human-approved ticket without a run", async () => {
+        // With auto-complete off, the approval leaves it in review, ready, waiting on Complete.
+        await api("PATCH", `/projects/${s.other.id}`, { autoComplete: false });
+        try {
+          await api("POST", `/tickets/${s.waiting.key}/review`, { decision: "approve" });
+          await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("More ways to complete"));
+          await tapWhere(udid, "More ways to complete");
+          await until("complete menu", async () => (await labels(udid)).includes("Complete and take no action"), 5000).then(() => Bun.sleep(400));
+          await tapWhere(udid, "Complete and take no action");
+          const t = await settle(s.waiting.key, (x) => x.status === "done", 15000);
+          const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
+          if (runs.some((r) => r.kind === "complete")) throw new Error("a completion run started");
+          return `${t.key} → ${t.status}, no completion run`;
+        } finally {
+          await api("PATCH", `/projects/${s.other.id}`, { autoComplete: true });
+        }
       });
       await check("approval card: Allow once resumes the agent", async () => {
         await goto(udid, `harness://ticket/${k(s.approval)}`, (l) => l.includes("Allow once"));

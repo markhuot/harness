@@ -10,8 +10,21 @@ export type BaseBranchSource = "ticket" | "parent" | "project" | "settings";
 export const DEFAULT_BASE_BRANCH = "main";
 
 /**
+ * The branch a child lands on: its parent's, when the parent works in a worktree of its own and
+ * isn't done, and the child doesn't set its own base branch. null otherwise. The service and the
+ * apps both decide with this, so the Approve menu matches what the service accepts.
+ */
+export function parentLandingBranch(
+  ticket: { baseBranch?: string | null } | null | undefined,
+  parent: { branch?: string | null; status?: string } | null | undefined,
+): string | null {
+  if (ticket?.baseBranch || !parent?.branch || parent.status === "done") return null;
+  return parent.branch;
+}
+
+/**
  * Resolve the base branch: ticket override → the parent ticket's branch (a child of a parent
- * working in a worktree of its own lands on that branch, so a conductor stays on one branch) →
+ * working in a worktree of its own and not done lands on that branch, so a conductor stays on one branch) →
  * project override → the global setting (default "main"). null and "" inherit. Same shape as
  * resolvePermissionMode.
  */
@@ -19,10 +32,10 @@ export function resolveBaseBranch(
   ticket: { baseBranch?: string | null } | null | undefined,
   project: { baseBranch?: string | null } | null | undefined,
   settings: { baseBranch?: string | null } | null | undefined,
-  parent?: { branch?: string | null } | null,
+  parent?: { branch?: string | null; status?: string } | null,
 ): { branch: string; source: BaseBranchSource } {
   if (ticket?.baseBranch) return { branch: ticket.baseBranch, source: "ticket" };
-  if (parent?.branch) return { branch: parent.branch, source: "parent" };
+  if (parent?.branch && parent.status !== "done") return { branch: parent.branch, source: "parent" };
   if (project?.baseBranch) return { branch: project.baseBranch, source: "project" };
   return { branch: settings?.baseBranch || DEFAULT_BASE_BRANCH, source: "settings" };
 }

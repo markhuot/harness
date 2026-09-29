@@ -46,6 +46,7 @@ import {
   normalizeProjectColor,
   offeredCompletionActions,
   outputTitle,
+  parentLandingBranch,
   PERMISSION_MODES,
   PROJECT_COLORS,
   resolveBaseBranch,
@@ -1106,11 +1107,15 @@ export class Orchestrator {
     return this.applyReview(ticket, body.decision, body.notes ?? "", "human", body);
   }
 
-  /** The parent whose branch a child lands on: one working in a worktree of its own, not done yet. */
-  private branchParent(t: Pick<Ticket, "parentId"> | null): Ticket | null {
+  /**
+   * The parent whose branch a child lands on (`parentLandingBranch`): one working in a worktree of
+   * its own and not done yet, for a child that sets no base branch of its own. Decides the child's
+   * base, its merge-only choice and its merge lock.
+   */
+  private branchParent(t: Pick<Ticket, "parentId" | "baseBranch"> | null): Ticket | null {
     if (!t?.parentId) return null;
     const parent = this.store.tickets.get(t.parentId);
-    return parent?.branch && parent.status !== "done" ? parent : null;
+    return parent && parentLandingBranch(t, parent) ? parent : null;
   }
 
   /**

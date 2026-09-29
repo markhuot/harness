@@ -42,6 +42,27 @@ export function primaryApproveRequest(opts: CompletionOptions, ticket: Pick<Tick
   return approveRequest(opts.defaultAction, earlier);
 }
 
+/** "Approve and merge" → "Complete and merge", for the Complete button's menu. */
+function asComplete(label: string): string {
+  return label.replace(/^Approve/, "Complete");
+}
+
+/**
+ * The Complete button's menu, once the human review is approved: the offered actions while the
+ * ticket is ready to complete (`canRun`: both reviews passed, no run in progress), then "Complete and
+ * take no action", which is always there: it's how an approved ticket waiting on its agent review,
+ * or on a project that doesn't complete on its own, gets done without an agent run.
+ */
+export function completeMenuChoices(opts: CompletionOptions, canRun: boolean): { value: ApproveChoice; label: string }[] {
+  const actions = canRun ? approveMenuActions(opts).map((a) => ({ value: a as ApproveChoice, label: asComplete(COMPLETION_ACTION_LABELS[a]) })) : [];
+  return [...actions, { value: "none", label: asComplete(APPROVE_NO_ACTION_LABEL) }];
+}
+
+/** What a Complete menu row sends: an action completes with it; "none" marks the ticket done without a run. */
+export function completeMenuRequest(choice: ApproveChoice): CompleteBody {
+  return choice === "none" ? { skipAgent: true } : { action: choice };
+}
+
 /** Toast after an approval. */
 export function approveToast(choice: ApproveChoice, key: string): string {
   return choice === "none" ? `${key} approved and marked done` : "Approved";

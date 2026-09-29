@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { completionOptions } from "@harness/shared";
-import { approveMenuChoices, approveRequest, completeBody, completionActionOptions, primaryApproveRequest } from "./approve";
+import { approveMenuChoices, approveRequest, completeBody, completeMenuChoices, completeMenuRequest, completionActionOptions, primaryApproveRequest } from "./approve";
 
 const git = { isGit: true, pullRequestHost: "github.com" };
 const plain = { isGit: false };
@@ -69,5 +69,25 @@ describe("completeBody", () => {
   test("sends the action only when the sheet offered the choice", () => {
     expect(completeBody(true, "pr", "")).toEqual({ action: "pr" });
     expect(completeBody(false, "pr", " note ")).toEqual({ instructions: "note" });
+  });
+});
+
+describe("completeMenuChoices", () => {
+  test("a ready ticket completes with any offered action, then takes no action", () => {
+    expect(completeMenuChoices(completionOptions({}, git), true).map((c) => c.label)).toEqual([
+      "Complete and merge",
+      "Complete and open PR",
+      "Complete and…",
+      "Complete and take no action",
+    ]);
+  });
+
+  test("while the ticket can't complete yet (agent review pending, a run going), taking no action is still there", () => {
+    expect(completeMenuChoices(completionOptions({}, git), false).map((c) => c.value)).toEqual(["none"]);
+  });
+
+  test("take no action marks it done without a run; an action completes with it", () => {
+    expect(completeMenuRequest("none")).toEqual({ skipAgent: true });
+    expect(completeMenuRequest("pr")).toEqual({ action: "pr" });
   });
 });

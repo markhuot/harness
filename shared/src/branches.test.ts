@@ -30,3 +30,7 @@ test("base branch: a child lands on its parent's branch unless it sets its own",
   // A parent without a worktree branch is skipped.
   expect(resolveBaseBranch({ baseBranch: null }, { baseBranch: "develop" }, {}, { branch: null })).toEqual({ branch: "develop", source: "project" });
 });
+
+test("base branch: a done parent's branch is no longer inherited", () => {
+  expect(resolveBaseBranch({ baseBranch: null }, { baseBranch: "develop" }, {}, { branch: "harness/web-1", status: "done" })).toEqual({ branch: "develop", source: "project" });
+});

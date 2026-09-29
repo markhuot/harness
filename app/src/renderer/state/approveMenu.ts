@@ -44,7 +44,7 @@ const asComplete = (label: string) => label.replace(/^Approve\b/, "Complete");
  * "Approve and…" asks for them. Completing: the primary opens the sheet (optional instructions for
  * the preselected action), as the Complete button always did.
  */
-export function landMenu(mode: LandMode, ticket: Pick<Ticket, "completionAction" | "pullRequestUrl">, project: Parameters<typeof completionOptions>[1], parent?: { branch?: string | null } | null): LandMenu {
+export function landMenu(mode: LandMode, ticket: Parameters<typeof completionOptions>[0], project: Parameters<typeof completionOptions>[1], parent?: Parameters<typeof completionOptions>[2]): LandMenu {
   const opts = completionOptions(ticket, project, parent);
   const label = (l: string) => (mode === "complete" ? asComplete(l) : l);
   const primaryLabel = mode === "complete" && opts.defaultAction === "custom" && !opts.parentBranch ? "Complete" : label(approveLabel(opts));

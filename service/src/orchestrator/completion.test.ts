@@ -279,6 +279,23 @@ describe("children land on their parent's branch", () => {
     expectStatus(() => h.orch.humanReview(child.key, { decision: "approve", action: "custom" }), 400, /merges into its parent's branch/);
     expect(h.orch.humanReview(child.key, { decision: "approve", action: "merge" }).completionAction).toBe("merge");
   });
+
+  test("a child with its own base branch, or under a finished parent, gets the project's choices again", async () => {
+    const h = await setup();
+    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "goal", start: false });
+    h.store.tickets.update(parent.id, { branch: "harness/web-1", workdir: h.repo, status: "in_progress" });
+    const mk = async () => {
+      const child = await h.orch.createTicket({ projectId: h.project.id, prompt: "part", start: false });
+      h.store.db.query("UPDATE tickets SET parent_id = $p WHERE id = $id").run({ p: parent.id, id: child.id });
+      return h.store.tickets.update(child.id, { status: "review", agentReview: "approved" })!;
+    };
+    const own = h.store.tickets.update((await mk()).id, { baseBranch: "release" })!;
+    expect(h.orch.humanReview(own.key, { decision: "approve", action: "pr" }).completionAction).toBe("pr");
+    expect(await h.orch.refreshBaseBranch(h.get(own))).toEqual({ branch: "release", source: "ticket" });
+    const late = await mk();
+    h.store.tickets.update(parent.id, { status: "done" });
+    expect(h.orch.humanReview(late.key, { decision: "approve", action: "custom" }).completionAction).toBe("custom");
+  });
 });
 
 describe("merge locks", () => {

@@ -53,3 +53,10 @@ test("labels: plain Approve when custom is the primary choice, the action's labe
   expect(approveLabel(completionOptions(null, { ...gh, completionAction: "pr" }))).toBe("Approve and open PR");
   expect(approveMenuActions(completionOptions(null, git))).toEqual(["merge", "custom"]);
 });
+
+test("a finished parent, or a child with its own base branch, no longer keeps the child on the parent's branch", () => {
+  const project = { ...gh, completionAction: "pr" } as const;
+  expect(completionOptions(null, project, { branch: "harness/web-1", status: "done" })).toMatchObject({ parentBranch: null, actions: ["merge", "pr", "custom"], defaultAction: "pr" });
+  expect(completionOptions({ baseBranch: "release" }, project, { branch: "harness/web-1", status: "in_progress" })).toMatchObject({ parentBranch: null, defaultAction: "pr" });
+  expect(completionOptions({ baseBranch: null }, project, { branch: "harness/web-1", status: "in_progress" }).parentBranch).toBe("harness/web-1");
+});

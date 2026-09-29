@@ -1,11 +1,12 @@
 // How an approved ticket's work lands (DESIGN.md "Completion"), shared by the service (which
 // validates a choice and picks the completion prompts) and the apps (which build the Approve menu).
 
+import { parentLandingBranch } from "./branches";
 import { COMPLETION_ACTIONS, type CompletionAction, type Project, type Ticket } from "./protocol";
 
 type ProjectLike = Pick<Project, "isGit" | "completionAction" | "completionActions" | "pullRequestHost">;
-type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl">;
-type ParentLike = { branch?: string | null } | null | undefined;
+type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl"> & { baseBranch?: string | null };
+type ParentLike = { branch?: string | null; status?: string } | null | undefined;
 
 /**
  * The actions a project offers from what its checkout supports: custom only outside git; merge and
@@ -40,8 +41,10 @@ export interface CompletionOptions {
   /** The one preselected (the Approve button's primary action) */
   defaultAction: CompletionAction;
   /**
-   * Set when the ticket is a child of a parent working on a branch of its own: it always merges
-   * into that branch (so a conductor stays on one branch), and this is the branch's name.
+   * Set when the ticket is a child that lands on its parent's branch (`parentLandingBranch`: the
+   * parent works on a branch of its own and isn't done, and the child sets no base branch of its
+   * own): it always merges into that branch (so a conductor stays on one branch), and this is the
+   * branch's name.
    */
   parentBranch: string | null;
 }
@@ -52,7 +55,8 @@ export interface CompletionOptions {
  * already opened a pull request (so a re-approval updates it), then the project default.
  */
 export function completionOptions(ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, parent?: ParentLike): CompletionOptions {
-  if (parent?.branch) return { actions: ["merge"], defaultAction: "merge", parentBranch: parent.branch };
+  const parentBranch = parentLandingBranch(ticket, parent);
+  if (parentBranch) return { actions: ["merge"], defaultAction: "merge", parentBranch };
   const actions = offeredCompletionActions(project);
   const earlier = ticket?.completionAction;
   let defaultAction = projectCompletionDefault(project);
