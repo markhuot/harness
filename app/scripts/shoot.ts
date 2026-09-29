@@ -84,6 +84,17 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "appearance", route: "#/settings/appearance" },
   { name: "watchers", route: "#/settings/watchers" },
   { name: "watcher-edit", route: "#/settings/watchers", setup: editWatcher },
+  // The combined Model select drawn as a listbox, so its driver <optgroup>s show in the capture.
+  {
+    name: "watcher-model-groups",
+    route: "#/settings/watchers",
+    setup: `(async () => {
+      ${editWatcher};
+      await new Promise((r) => setTimeout(r, 1000));
+      const s = document.querySelector("[data-testid=watcher-model] select");
+      if (s) Object.assign(s, { size: s.options.length + s.querySelectorAll("optgroup").length }), Object.assign(s.style, { height: "auto", backgroundImage: "none" });
+    })()`,
+  },
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },

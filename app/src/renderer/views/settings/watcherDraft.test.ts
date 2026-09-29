@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Watcher } from "@harness/shared";
-import { draftDriver, emptyWatcher, fromDraft, toDraft, type TriageSettings } from "./watcherDraft";
+import { emptyWatcher, fromDraft, toDraft, watcherDefaultChoice, type TriageSettings } from "./watcherDraft";
 
 const settings: TriageSettings = { defaultDriver: "claude-code", defaultModels: {}, watcherDriver: null, watcherModels: {} };
 
@@ -16,7 +16,7 @@ const watcher: Watcher = {
   intervalSec: 60,
   enabled: true,
   driver: "claude-code",
-  models: { "claude-code": "opus", "anthropic-api": "claude-sonnet-5" },
+  models: { "claude-code": "sonnet", "anthropic-api": "claude-sonnet-5" },
   lastRunAt: null,
   lastError: null,
   createdAt: 0,
@@ -24,35 +24,37 @@ const watcher: Watcher = {
 };
 
 describe("watcher draft", () => {
-  test("the Default driver resolves to the watcher default before the app default", () => {
-    expect(draftDriver({ driver: "" }, settings)).toBe("claude-code");
-    expect(draftDriver({ driver: "" }, { ...settings, watcherDriver: "anthropic-api" })).toBe("anthropic-api");
-    expect(draftDriver({ driver: "dummy" }, { ...settings, watcherDriver: "anthropic-api" })).toBe("dummy");
+  test("a stored driver + model loads as that pick", () => {
+    expect(toDraft(watcher, settings).choice).toEqual({ driver: "claude-code", model: "sonnet" });
+    expect(toDraft({ ...watcher, driver: null, models: {} }, settings).choice).toEqual({ driver: null, model: null });
   });
 
-  test("saves only the effective driver's model, leaving other drivers' picks alone", () => {
-    const d = { ...toDraft(watcher), driver: "anthropic-api", models: { "claude-code": "haiku", "anthropic-api": "claude-opus-5" } };
-    expect(fromDraft(d, settings).models).toEqual({ "anthropic-api": "claude-opus-5" });
+  test("picking Opus under Claude Code saves that driver and model and clears other drivers' models", () => {
+    const d = { ...toDraft(watcher, settings), choice: { driver: "claude-code", model: "opus" } };
+    const body = fromDraft(d);
+    expect(body.driver).toBe("claude-code");
+    expect(body.models).toEqual({ "claude-code": "opus", "anthropic-api": null });
   });
 
-  test("a model set back to Default is sent as null so the service clears it", () => {
-    const d = { ...toDraft(watcher), models: { ...toDraft(watcher).models, "claude-code": null } };
-    expect(fromDraft(d, settings).models).toEqual({ "claude-code": null });
-  });
-
-  test("a new watcher on the Default driver saves driver null and clears the resolved driver's model", () => {
-    const body = fromDraft({ ...emptyWatcher, name: "x", command: "y" }, { ...settings, watcherDriver: "dummy" });
+  test("Default clears the driver and every stored model", () => {
+    const d = { ...toDraft(watcher, settings), choice: { driver: null, model: null } };
+    const body = fromDraft(d);
     expect(body.driver).toBeNull();
-    expect(body.models).toEqual({ dummy: null });
+    expect(body.models).toEqual({ "claude-code": null, "anthropic-api": null });
   });
 
-  test("editing a draft doesn't mutate the stored watcher's models", () => {
-    const d = toDraft(watcher);
-    d.models["claude-code"] = "haiku";
-    expect(watcher.models?.["claude-code"]).toBe("opus");
+  test("a new watcher on Default sends no model entries", () => {
+    const body = fromDraft({ ...emptyWatcher, name: "x", command: "y" });
+    expect(body.driver).toBeNull();
+    expect(body.models).toEqual({});
   });
 
-  test("with no driver known yet (settings not loaded), no models are sent", () => {
-    expect(fromDraft({ ...emptyWatcher, name: "x", command: "y" }, { defaultDriver: "", defaultModels: {} }).models).toBeUndefined();
+  test("Default resolves to the watcher default driver and its model before the app defaults", () => {
+    expect(watcherDefaultChoice({ ...settings, defaultModels: { "claude-code": "opus" } })).toEqual({ driver: "claude-code", model: "opus" });
+    expect(watcherDefaultChoice({ ...settings, watcherDriver: "anthropic-api", watcherModels: { "anthropic-api": "claude-opus-5" }, defaultModels: { "anthropic-api": "claude-sonnet-5" } })).toEqual({
+      driver: "anthropic-api",
+      model: "claude-opus-5",
+    });
+    expect(watcherDefaultChoice({ defaultDriver: "", defaultModels: {} })).toEqual({ driver: null, model: null });
   });
 });

@@ -1,8 +1,9 @@
 // Model dropdown for one driver. "" (the first option) means "inherit / driver default" → null.
 
-import type { ModelInfo } from "@harness/shared";
+import { useEffect, useSyncExternalStore } from "react";
+import type { ModelInfo, TriageChoice } from "@harness/shared";
 import { useStore } from "../state/store";
-import { modelName, modelOptions } from "@harness/shared/state";
+import { decodeChoice, driverModelChoices, encodeChoice, modelCacheFor, modelName, modelOptions } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
 import { Icon } from "./Icon";
 
@@ -81,6 +82,89 @@ export function ModelBadgeView({ name, model }: { name: string; model: string })
     <span className="badge badge-outline model-badge" title={`Model: ${model}`}>
       <Icon name="layers" size={10} />
       {name}
+    </span>
+  );
+}
+
+/**
+ * One select for a driver + model pick (watchers): each signed-in driver is an <optgroup> of its
+ * models, or a flat list when only one driver shows. "" (the first option) is Default.
+ */
+export function DriverModelSelect({
+  value,
+  onChange,
+  resolved,
+  defaultLabel,
+  disabled,
+  autoWidth,
+}: {
+  value: TriageChoice;
+  onChange: (choice: TriageChoice) => void;
+  /** What Default falls back to, named in the first option */
+  resolved: TriageChoice;
+  defaultLabel?: string;
+  disabled?: boolean;
+  /** Size to the picked label instead of filling the row (settings rows) */
+  autoWidth?: boolean;
+}) {
+  const { state, client, epoch } = useStore();
+  const cache = modelCacheFor(client);
+  useSyncExternalStore(cache.subscribe, () => cache.version);
+  const ids = [...new Set([...state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id), ...(value.driver ? [value.driver] : [])])];
+  const key = ids.join(",");
+  useEffect(() => {
+    cache.syncEpoch(epoch);
+    for (const id of ids) void cache.load(id);
+    // ids is derived from key
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cache, key, epoch]);
+
+  const lists = Object.fromEntries(ids.map((id) => [id, cache.get(id)]));
+  const models = Object.fromEntries(ids.map((id) => [id, lists[id]!.data?.models as ModelInfo[] | undefined]));
+  const choices = driverModelChoices(state.drivers, models, value, resolved, { defaultLabel });
+  const loading = ids.some((id) => lists[id]!.loading && !lists[id]!.data);
+  const problems = ids.flatMap((id) => {
+    const p = lists[id]!.error ?? lists[id]!.data?.error;
+    return p ? [`${state.drivers.find((d) => d.id === id)?.name ?? id}: ${p}`] : [];
+  });
+  const problem = problems.length ? problems.join("\n") : null;
+
+  return (
+    <span className="model-select row" style={{ gap: 4, alignItems: "center" }} data-testid="driver-model-select">
+      <select
+        className="select"
+        aria-label="Model"
+        title={problem ? `Couldn't list models: ${problem}` : choices.selectedLabel}
+        style={autoWidth ? { width: "auto", maxWidth: 360 } : undefined}
+        value={encodeChoice(value)}
+        disabled={disabled}
+        onChange={(e) => onChange(decodeChoice(e.target.value))}
+      >
+        <option value="">{choices.default.label}</option>
+        {choices.groups.map((g) =>
+          g.label === null ? (
+            g.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))
+          ) : (
+            <optgroup key={g.driver} label={g.label}>
+              {g.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ),
+        )}
+      </select>
+      {loading && <span className="spinner" title="Loading models…" />}
+      {problem && !loading && (
+        <span className="model-select-error" title={problem} style={{ color: "var(--amber, var(--red))", display: "inline-flex" }}>
+          <Icon name="alert" size={12} />
+        </span>
+      )}
     </span>
   );
 }

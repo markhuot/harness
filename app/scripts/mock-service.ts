@@ -163,8 +163,9 @@ const drivers: DriverInfo[] = [
     name: "Dummy",
     description: "Deterministic scripted driver for testing",
     available: true,
-    authenticated: true,
-    detail: "Always ready",
+    // MOCK_ONE_DRIVER=1 leaves Claude Code as the only signed-in driver (flat model lists)
+    authenticated: !process.env.MOCK_ONE_DRIVER,
+    detail: process.env.MOCK_ONE_DRIVER ? "Signed out" : "Always ready",
     supportsLogin: false,
   },
 ];

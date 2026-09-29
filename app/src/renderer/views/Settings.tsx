@@ -3,12 +3,12 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, ModelInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { watcherCommandLine, watcherDriver, watcherModel } from "@harness/shared";
+import { settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
-import { ModelSelect } from "../components/ModelSelect";
-import { draftDriver, emptyWatcher, fromDraft, noSettings, toDraft, type TriageSettings, type WatcherDraft } from "./settings/watcherDraft";
+import { DriverModelSelect } from "../components/ModelSelect";
+import { emptyWatcher, fromDraft, noSettings, toDraft, watcherDefaultChoice, type TriageSettings, type WatcherDraft } from "./settings/watcherDraft";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime, Switch } from "../components/bits";
@@ -318,14 +318,12 @@ function driverLabel(drivers: DriverInfo[], id: string): string {
 
 function WatcherForm({
   initial,
-  drivers,
   settings,
   onCancel,
   onSubmit,
   submitLabel,
 }: {
   initial: WatcherDraft;
-  drivers: DriverInfo[];
   settings: TriageSettings;
   onCancel: () => void;
   onSubmit: (d: WatcherDraft) => Promise<boolean>;
@@ -335,8 +333,7 @@ function WatcherForm({
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof WatcherDraft>(k: K, v: WatcherDraft[K]) => setD((p) => ({ ...p, [k]: v }));
   const valid = d.name.trim() && d.command.trim();
-  const defaultDriver = watcherDriver(null, settings);
-  const effectiveDriver = draftDriver(d, settings);
+  const resolved = watcherDefaultChoice(settings);
 
   return (
     <form
@@ -378,28 +375,13 @@ function WatcherForm({
           <div className="field-hint">Optional. Tells triage what to do with this watcher's output, including which project to dispatch it to.</div>
         </div>
         <div className="field">
-          <label>Triage driver</label>
-          <select className="select" aria-label="Triage driver" value={d.driver} onChange={(e) => set("driver", e.target.value)}>
-            <option value="">{defaultDriver ? `Default (${driverLabel(drivers, defaultDriver)})` : "Default"}</option>
-            {drivers.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field" data-testid="watcher-model">
-          <label>Triage model</label>
-          <ModelSelect
-            driver={effectiveDriver}
-            value={d.models[effectiveDriver] ?? null}
-            inherited={watcherModel(effectiveDriver, null, settings)}
-            onChange={(m) => setD((p) => ({ ...p, models: { ...p.models, [effectiveDriver]: m } }))}
-          />
-        </div>
-        <div className="field">
           <label>Working directory</label>
           <input className="input mono" value={d.cwd} placeholder="Optional" onChange={(e) => set("cwd", e.target.value)} />
+        </div>
+        <div className="field" data-testid="watcher-model">
+          <label>Model</label>
+          <DriverModelSelect value={d.choice} resolved={resolved} onChange={(c) => set("choice", c)} />
+          <div className="field-hint">Driver and model for this watcher's triage sessions.</div>
         </div>
         <div className="field">
           <label>Mode</label>
@@ -461,16 +443,15 @@ function WatchersSection() {
         )
       }
     >
-      {state.settings && <WatcherDefaults settings={state.settings} drivers={state.drivers} />}
+      {state.settings && <WatcherDefaults settings={state.settings} />}
       <div className="card-surface settings-card">
         {editing === "new" && (
           <WatcherForm
             initial={emptyWatcher}
-            drivers={state.drivers}
             settings={settings}
             submitLabel="Create watcher"
             onCancel={() => setEditing(null)}
-            onSubmit={async (d) => !!(await act(() => client.createWatcher(fromDraft(d, settings)), "Watcher created"))}
+            onSubmit={async (d) => !!(await act(() => client.createWatcher(fromDraft(d)), "Watcher created"))}
           />
         )}
         {watchers.length === 0 && editing !== "new" && (
@@ -484,12 +465,11 @@ function WatchersSection() {
           editing === w.id ? (
             <WatcherForm
               key={w.id}
-              initial={toDraft(w)}
-              drivers={state.drivers}
+              initial={toDraft(w, settings)}
               settings={settings}
               submitLabel="Save"
               onCancel={() => setEditing(null)}
-              onSubmit={async (d) => !!(await act(() => client.updateWatcher(w.id, fromDraft(d, settings)), "Watcher saved"))}
+              onSubmit={async (d) => !!(await act(() => client.updateWatcher(w.id, fromDraft(d)), "Watcher saved"))}
             />
           ) : (
             <div className="settings-row" key={w.id}>
@@ -554,36 +534,19 @@ function WatcherTriageLabel({ watcher, settings, drivers }: { watcher: Watcher; 
   );
 }
 
-/** Driver and model for every watcher that doesn't pick its own. */
-function WatcherDefaults({ settings, drivers }: { settings: PublicSettings; drivers: DriverInfo[] }) {
+/** Driver + model for every watcher that doesn't pick its own. */
+function WatcherDefaults({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
-  const driver = watcherDriver(null, settings);
-  const known = settings.watcherDriver && !drivers.some((d) => d.id === settings.watcherDriver) ? [...drivers, { id: settings.watcherDriver, name: settings.watcherDriver } as DriverInfo] : drivers;
   return (
     <div className="card-surface settings-card" style={{ marginBottom: 12 }} data-testid="watcher-defaults">
-      <Row title="Default triage driver" sub="Used by watchers that don't pick their own.">
-        <select
-          className="select"
-          aria-label="Default triage driver"
-          style={{ width: "auto", maxWidth: 320 }}
-          value={settings.watcherDriver ?? ""}
-          onChange={(e) => void act(() => client.updateSettings({ watcherDriver: e.target.value || null }))}
-        >
-          <option value="">Same as default driver ({driverLabel(drivers, settings.defaultDriver)})</option>
-          {known.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-      </Row>
-      <Row title="Default triage model" sub={`For ${driverLabel(drivers, driver)}, used by watchers that don't pick their own.`}>
-        <ModelSelect
-          driver={driver}
-          value={settings.watcherModels?.[driver] ?? null}
-          inherited={settings.defaultModels[driver] ?? null}
-          onChange={(m) => void act(() => client.updateSettings({ watcherModels: { [driver]: m } }))}
+      <Row title="Default model" sub="Used by watchers that don't pick their own.">
+        <DriverModelSelect
+          value={settingsWatcherChoice(settings)}
+          resolved={{ driver: settings.defaultDriver, model: settings.defaultModels[settings.defaultDriver] ?? null }}
+          defaultLabel="Same as default"
+          autoWidth
+          onChange={(c) => void act(() => client.updateSettings(settingsWatcherChoicePatch(c, settings)))}
         />
       </Row>
     </div>

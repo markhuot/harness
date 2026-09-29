@@ -1,7 +1,7 @@
 // The watcher form's draft: conversion from a stored watcher and back to a save body.
 
-import type { PublicSettings, Watcher, WatcherBody } from "@harness/shared";
-import { watcherCommandLine, watcherDriver } from "@harness/shared";
+import type { PublicSettings, TriageChoice, Watcher, WatcherBody } from "@harness/shared";
+import { DEFAULT_TRIAGE_CHOICE, watcherChoice, watcherChoiceBody, watcherCommandLine, watcherDriver, watcherModel } from "@harness/shared";
 
 export interface WatcherDraft {
   name: string;
@@ -11,18 +11,18 @@ export interface WatcherDraft {
   mode: Watcher["mode"];
   intervalSec: number;
   enabled: boolean;
-  /** "" → the watcher default (settings.watcherDriver, then settings.defaultDriver) */
-  driver: string;
-  /** Model picks per driver, kept while the form is open so switching drivers doesn't lose them; null → inherit */
-  models: Record<string, string | null>;
+  /** The combined Model select's pick (driver null → Default) */
+  choice: TriageChoice;
+  /** The stored models map, so saving can clear entries the new pick replaces */
+  originalModels: Watcher["models"];
 }
 
 export type TriageSettings = Pick<PublicSettings, "defaultDriver" | "defaultModels" | "watcherDriver" | "watcherModels">;
 export const noSettings: TriageSettings = { defaultDriver: "", defaultModels: {} };
 
-export const emptyWatcher: WatcherDraft = { name: "", command: "", prompt: "", cwd: "", mode: "loop", intervalSec: 300, enabled: true, driver: "", models: {} };
+export const emptyWatcher: WatcherDraft = { name: "", command: "", prompt: "", cwd: "", mode: "loop", intervalSec: 300, enabled: true, choice: DEFAULT_TRIAGE_CHOICE, originalModels: {} };
 
-export function toDraft(w: Watcher): WatcherDraft {
+export function toDraft(w: Watcher, settings: TriageSettings): WatcherDraft {
   return {
     name: w.name,
     command: watcherCommandLine(w),
@@ -31,19 +31,19 @@ export function toDraft(w: Watcher): WatcherDraft {
     mode: w.mode,
     intervalSec: w.intervalSec,
     enabled: w.enabled,
-    driver: w.driver ?? "",
-    models: { ...(w.models ?? {}) },
+    choice: watcherChoice(w, settings),
+    originalModels: { ...(w.models ?? {}) },
   };
 }
 
-/** The driver the draft's triage sessions would run on. */
-export function draftDriver(d: Pick<WatcherDraft, "driver">, settings: TriageSettings): string {
-  return d.driver || watcherDriver(null, settings);
+/** What the watcher form's Default option falls back to: the watcher default driver and its model. */
+export function watcherDefaultChoice(settings: TriageSettings): TriageChoice {
+  const driver = watcherDriver(null, settings);
+  return { driver: driver || null, model: driver ? watcherModel(driver, null, settings) : null };
 }
 
-/** The save body. Only the effective driver's model is sent (null clears it); other drivers' stored picks are left alone. */
-export function fromDraft(d: WatcherDraft, settings: TriageSettings): WatcherBody & { name: string; command: string } {
-  const driver = draftDriver(d, settings);
+/** The save body. The pick replaces the watcher's driver and every stored model (watcherChoiceBody). */
+export function fromDraft(d: WatcherDraft): WatcherBody & { name: string; command: string } {
   return {
     name: d.name.trim(),
     // Always saved as a shell command line, which converts legacy direct-exec watchers
@@ -54,8 +54,6 @@ export function fromDraft(d: WatcherDraft, settings: TriageSettings): WatcherBod
     mode: d.mode,
     intervalSec: Math.max(1, Math.round(d.intervalSec) || 60),
     enabled: d.enabled,
-    driver: d.driver || null,
-    ...(driver ? { models: { [driver]: d.models[driver] ?? null } } : {}),
+    ...watcherChoiceBody(d.choice, { models: d.originalModels }),
   };
 }
-
