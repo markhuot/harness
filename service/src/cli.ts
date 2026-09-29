@@ -372,7 +372,7 @@ export class Cli {
         return 0;
       } else if (cmd === "tickets") {
         const tickets = await this.client().listTickets();
-        print(tickets.map((t) => `${t.key.padEnd(14)} ${t.status.padEnd(12)} ${t.busy ? "●" : " "} ${t.title}`).join("\n") || "(no tickets)", tickets);
+        print(tickets.map((t) => `${t.key.padEnd(14)} ${(t.draft ? "draft" : t.status).padEnd(12)} ${t.busy ? "●" : " "} ${t.title}`).join("\n") || "(no tickets)", tickets);
         return 0;
       }
       return this.usage();

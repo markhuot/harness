@@ -398,6 +398,12 @@ export const MIGRATIONS: string[] = [
       '$."run.complete"')
     WHERE key = 'prompts' AND json_valid(value) AND json_type(value, '$."run.complete"') IS NOT NULL;
   `,
+  // 19: drafts (DESIGN.md "Drafts"). tickets.draft: a New session saved before it was launched; it
+  //     stays in planning, never runs and isn't shown to agents until POST /tickets/:key/submit
+  //     clears it. Every existing ticket was launched, so they all start at 0.
+  `
+  ALTER TABLE tickets ADD COLUMN draft INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /**

@@ -38,6 +38,7 @@ interface TicketRow {
   completion_action?: string | null;
   completion_instructions?: string | null;
   pull_request_url?: string | null;
+  draft?: number;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -103,6 +104,8 @@ export interface NewTicket {
   baseBranch?: string | null;
   requestedBranch?: string | null;
   skipAgentReview?: boolean;
+  /** A draft (Ticket.draft): never runs until submitted */
+  draft?: boolean;
 }
 
 export type TicketPatch = Partial<{
@@ -129,6 +132,9 @@ export type TicketPatch = Partial<{
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
   pullRequestUrl: string | null;
+  draft: boolean;
+  kind: TicketKind;
+  useWorktree: boolean | null;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -154,6 +160,9 @@ const COLUMNS: Record<string, string> = {
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
   pullRequestUrl: "pull_request_url",
+  draft: "draft",
+  kind: "kind",
+  useWorktree: "use_worktree",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
@@ -209,6 +218,7 @@ export class TicketRepo {
       completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
       completionInstructions: r.completion_instructions ?? null,
       pullRequestUrl: r.pull_request_url ?? null,
+      draft: bool(r.draft ?? 0),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
@@ -216,8 +226,10 @@ export class TicketRepo {
     }));
   }
 
-  list(filter: { projectId?: string; parentId?: string; statuses?: TicketStatus[] } = {}): Ticket[] {
+  /** `drafts: false` leaves drafts out (what agents see). */
+  list(filter: { projectId?: string; parentId?: string; statuses?: TicketStatus[]; drafts?: boolean } = {}): Ticket[] {
     const where: string[] = [];
+    if (filter.drafts === false) where.push("t.draft = 0");
     const params: Record<string, string> = {};
     if (filter.statuses) {
       if (!filter.statuses.length) return [];
@@ -342,11 +354,12 @@ export class TicketRepo {
    * Search every status (see hitsCte for matching and ranks): rank first, newest first within a
    * rank, keyset-paged. The caller rejects an empty `q`. Throws CursorError for a bad cursor.
    */
-  search(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null }): TicketPage {
+  search(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT);
     const params: SqlParams = {};
     const cte = this.hitsCte(opts.q, params);
     const where = ["1"];
+    if (opts.drafts === false) where.push("t.draft = 0");
     if (opts.projectId) {
       where.push("t.project_id = $projectId");
       params.projectId = opts.projectId;
@@ -440,9 +453,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, created_at, updated_at)
+           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, draft, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $t, $t)`,
+           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $draft, $t, $t)`,
       )
       .run({
         id,
@@ -464,6 +477,7 @@ export class TicketRepo {
         baseBranch: input.baseBranch ?? null,
         requestedBranch: input.requestedBranch ?? null,
         skipAgentReview: int(input.skipAgentReview ?? false),
+        draft: int(input.draft ?? false),
         t,
       });
     this.setDeps(id, input.dependsOn);
@@ -490,6 +504,32 @@ export class TicketRepo {
       if (patch.dependsOn) this.setDeps(id, patch.dependsOn);
     })();
     return this.get(id);
+  }
+
+  /**
+   * Move a ticket to another project under `newKey` (a draft changing project): the ticket and its
+   * session take the new key, it goes to the end of the new project's board, its branch choices
+   * reset (they were the old project's), and the old key becomes an alias (as with a project
+   * rename, see ProjectRepo.rekey) so anything that learned it keeps resolving. Dependencies that
+   * named the old key follow. Runs inside the caller's transaction.
+   */
+  moveToProject(id: string, projectId: string, newKey: string): { from: string; to: string } {
+    const t = now();
+    const row = this.db.query("SELECT key FROM tickets WHERE id = $id").get({ id }) as { key: string } | null;
+    if (!row) throw new Error(`Unknown ticket ${id}`);
+    const from = row.key;
+    const to = newKey.toUpperCase();
+    this.db.query("DELETE FROM ticket_key_aliases WHERE key = $to").run({ to });
+    this.db
+      .query(
+        `UPDATE tickets SET key = $to, project_id = $projectId, position = $position, requested_branch = NULL, base_branch = NULL,
+           use_worktree = NULL, updated_at = $t WHERE id = $id`,
+      )
+      .run({ id, to, projectId, position: this.nextPosition(projectId), t });
+    this.db.query("UPDATE sessions SET key = $to, updated_at = $t WHERE id = (SELECT session_id FROM tickets WHERE id = $id)").run({ id, to, t });
+    this.db.query("INSERT OR REPLACE INTO ticket_key_aliases (key, ticket_id, created_at) VALUES ($from, $id, $t)").run({ from, id, t });
+    this.db.query("UPDATE ticket_deps SET depends_on_key = $to WHERE depends_on_key = $from").run({ from, to });
+    return { from, to };
   }
 
   delete(id: string) {
