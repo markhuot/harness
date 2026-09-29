@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, watcherCommandLine, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings } from "@harness/shared";
-import { CLASSIFIER_LABELS, inheritedModel, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
+import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
+import { CLASSIFIER_LABELS, inheritedModel, modelName, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
+import { useDriverModels } from "../state/models";
 import { displayHost } from "../lib/pair";
 import { MONO } from "../theme/tokens";
 import { Badge, Button, ProjectKey, Segmented, Spinner } from "../ui/kit";
@@ -52,6 +53,7 @@ export function SettingsScreen() {
       {state.settings && <GeneralSection settings={state.settings} />}
       {state.settings && <ModelsSection settings={state.settings} />}
       {state.settings && <PermissionsSection settings={state.settings} />}
+      {state.settings && <TriageSection settings={state.settings} />}
       <WatchersSection />
       <ProjectsSection />
     </ScrollView>
@@ -379,13 +381,53 @@ function PermissionsSection({ settings }: { settings: PublicSettings }) {
   );
 }
 
+function TriageSection({ settings }: { settings: PublicSettings }) {
+  const { state, client } = useStore();
+  const act = useAction();
+  const driverName = (id: string) => state.drivers.find((d) => d.id === id)?.name ?? id;
+  const driver = watcherDriver(null, settings);
+  return (
+    <Group title="Triage" footer="Used by watchers that don't pick their own.">
+      <SRow title="Default triage driver">
+        <Select
+          value={settings.watcherDriver ?? ""}
+          options={driverOptions(state.drivers, { none: `Same as default driver (${driverName(settings.defaultDriver)})` })}
+          onChange={(v) => void act(() => client.updateSettings({ watcherDriver: v || null }))}
+          placeholder={settings.watcherDriver || driverName(settings.defaultDriver)}
+          title="Default triage driver"
+          accessibilityName="Default triage driver"
+        />
+      </SRow>
+      <SRow title="Default triage model" sub={driverName(driver)} last>
+        <ModelPicker
+          key={driver}
+          driver={driver}
+          value={settings.watcherModels?.[driver] ?? null}
+          inherited={settings.defaultModels[driver] ?? null}
+          onChange={(m) => void act(() => client.updateSettings({ watcherModels: { [driver]: m } }))}
+          title="Default triage model"
+        />
+      </SRow>
+    </Group>
+  );
+}
+
+/** "Claude Code · Opus": the driver a watcher's triage runs on, plus its model when one applies. */
+function WatcherTriageLabel({ watcher, settings }: { watcher: Watcher; settings: PublicSettings | null }) {
+  const { state, client, epoch } = useStore();
+  const driver = settings ? watcherDriver(watcher, settings) : (watcher.driver ?? "");
+  const model = driver ? watcherModel(driver, watcher, settings) : null;
+  const { data } = useDriverModels(client, model ? driver : "", epoch);
+  const name = driver ? (state.drivers.find((d) => d.id === driver)?.name ?? driver) : "Default driver";
+  return <>{model ? `${name} · ${modelName(data?.models, model)}` : name}</>;
+}
+
 function WatchersSection() {
   const { state, client } = useStore();
   const act = useAction();
   const c = useColors();
   const router = useRouter();
   const watchers = Object.values(state.watchers).sort((a, b) => a.name.localeCompare(b.name));
-  const driverName = (id: string | null) => (id ? (state.drivers.find((d) => d.id === id)?.name ?? id) : "Default driver");
   const menu = async (id: string) => {
     const w = state.watchers[id]!;
     const v = await pick({ title: w.name, choices: [{ value: "run", label: "Run now" }, { value: "edit", label: "Edit…" }, { value: "delete", label: "Delete", destructive: true }] });
@@ -427,7 +469,7 @@ function WatchersSection() {
                 </Text>
               ) : null}
               <Text style={{ color: c.text3, fontSize: 12.5 }}>
-                {driverName(w.driver)} · last run {relativeTime(w.lastRunAt)}
+                <WatcherTriageLabel watcher={w} settings={state.settings} /> · last run {relativeTime(w.lastRunAt)}
                 {w.cwd ? ` · in ${w.cwd}` : ""}
               </Text>
               {w.lastError && <Text style={{ color: c.red, fontSize: 12.5 }}>{w.lastError}</Text>}

@@ -2,16 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { watcherDriver, watcherModel } from "@harness/shared";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
 import { Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
-import { Select } from "../ui/selects";
+import { ModelPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
 import { buttonItem, primaryItemStyle } from "../ui/header";
-import { toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
+import { draftDriver, toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
 
 export function WatcherFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -34,10 +35,16 @@ export function WatcherFormScreen() {
     if (existing && !edited.current) setD(toDraft(existing));
   }, [existing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const valid = !!d.name.trim() && !!d.command.trim();
+  const settings = state.settings;
+  const driverName = (id: string) => state.drivers.find((x) => x.id === id)?.name ?? id;
+  // What "Default" resolves to, and the driver the model picker lists models for.
+  const defaultDriver = settings ? watcherDriver(null, settings) : "";
+  const driver = draftDriver(d, settings);
+  const defaultDriverLabel = defaultDriver ? `Default (${driverName(defaultDriver)})` : "Default";
   const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
-    const ok = existing ? await act(() => client.updateWatcher(existing.id, watcherBody(d)), "Watcher saved") : await act(() => client.createWatcher(watcherBody(d)), "Watcher created");
+    const ok = existing ? await act(() => client.updateWatcher(existing.id, watcherBody(d, settings)), "Watcher saved") : await act(() => client.createWatcher(watcherBody(d, settings)), "Watcher created");
     setBusy(false);
     if (ok) router.dismiss();
   };
@@ -65,7 +72,19 @@ export function WatcherFormScreen() {
         </FormField>
         <FormField label="Triage driver">
           <View style={{ alignItems: "flex-start" }}>
-            <Select value={d.driver} options={driverOptions(state.drivers, { none: "Default" })} onChange={(v) => set("driver", v)} placeholder={d.driver || "Default"} title="Triage driver" accessibilityName="Triage driver" />
+            <Select value={d.driver} options={driverOptions(state.drivers, { none: defaultDriverLabel })} onChange={(v) => set("driver", v)} placeholder={d.driver || defaultDriverLabel} title="Triage driver" accessibilityName="Triage driver" />
+          </View>
+        </FormField>
+        <FormField label="Triage model">
+          <View style={{ alignItems: "flex-start" }}>
+            <ModelPicker
+              key={driver}
+              driver={driver}
+              value={d.models[driver] || null}
+              inherited={watcherModel(driver, null, settings)}
+              onChange={(m) => set("models", { ...d.models, [driver]: m ?? "" })}
+              title="Triage model"
+            />
           </View>
         </FormField>
         <FormField label="Mode" hint={d.mode === "loop" ? "Re-runs as soon as the command exits." : "Runs on a fixed schedule."}>
