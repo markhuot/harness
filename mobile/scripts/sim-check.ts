@@ -391,6 +391,8 @@ const settings = () => api("PATCH", "/settings", { defaultDriver: "dummy", class
 let ticketsCreated!: () => void;
 const ticketsUp = new Promise<void>((r) => (ticketsCreated = r));
 
+const REPLY_ITEMS = ["Keep plain main", "Ship it"];
+
 async function seed() {
   await settings();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
@@ -442,7 +444,10 @@ async function seed() {
   ]);
 
   const [, ch] = await Promise.all([
-    settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved"),
+    // Then a reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
+    settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved")
+      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
+      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved")),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
     settle(configApproval.key, (t) => !!t.pendingApproval),
@@ -978,8 +983,27 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${t.key} → ${t.status}`;
       });
     }),
-    chain(7.5, async (udid) => {
+    chain(9, async (udid) => {
       const card = (l: string) => l.startsWith(`${s.hello.key} `);
+      // Before Approve below, which moves the ticket to Done.
+      await check("a reply's list items show their text in the transcript", async () => {
+        await goto(udid, `harness://ticket/${k(s.hello)}?tab=transcript`, (l) => l.includes(REPLY_ITEMS[0]!));
+        // The review run's rows follow the reply: scroll back up until the reply is in view.
+        const first = (l: string) => l === REPLY_ITEMS[0];
+        for (let i = 0; i < 8 && ((await findElement(udid, first))?.frame.y ?? 0) < 380; i++) {
+          await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "620", "--duration", "0.3", "--udid", udid);
+          await Bun.sleep(400);
+        }
+        const widths: string[] = [];
+        for (const item of REPLY_ITEMS) {
+          const el = await until(`list item "${item}"`, () => findElement(udid, (l) => l === item), 8000);
+          // Collapsed, an item is 0pt wide with only its bullet showing.
+          if (el.frame.width < 10) throw new Error(`"${item}" is ${el.frame.width}pt wide`);
+          widths.push(`${Math.round(el.frame.width)}pt`);
+        }
+        await shot(udid, "reply-list-light");
+        return widths.join(", ");
+      });
       await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
         await goto(udid, BOARD);
         // The card is in the tree before its column scrolls in (x≈416, off the right edge).
