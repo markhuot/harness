@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PermissionMode, TicketKind, TriageChoice } from "@harness/shared";
-import { resolvePermissionMode } from "@harness/shared";
+import type { BranchInfo, PermissionMode, TicketKind, TriageChoice } from "@harness/shared";
+import { resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
+import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects, tildify } from "@harness/shared/state";
 import { MOD, Modal, Switch } from "../components/bits";
 import { DriverModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { ProjectKey } from "../components/ProjectKey";
+import { Icon } from "../components/Icon";
 import { MentionTextarea } from "../components/MentionTextarea";
+import { BranchSelect } from "../components/BranchSelect";
+import { inheritedBaseLabel, newTicketBranchLabel, predictedTicketKey, ticketBranchHint } from "../components/branchPicker";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -52,6 +55,20 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   }, [projectWorktrees]);
   const canWorktree = project?.isGit !== false;
 
+  // Branch and base branch, for a git project whose ticket gets a worktree. null = the default
+  // (harness/<key>; the project's / app's base). They reset when the project changes.
+  const [branch, setBranch] = useState<{ name: string; info?: BranchInfo } | null>(null);
+  const [baseBranch, setBaseBranch] = useState<string | null>(null);
+  useEffect(() => {
+    setBranch(null);
+    setBaseBranch(null);
+  }, [projectId]);
+  const showBranches = !!project?.isGit && worktree;
+  const nextKey = project ? predictedTicketKey(project, (k) => !!state.tickets[k]) : "";
+  const inheritedBase = resolveBaseBranch(null, project, state.settings);
+  const base = baseBranch ?? inheritedBase.branch;
+  const branchHint = ticketBranchHint(branch?.name ?? null, branch?.info, base, tildify);
+
   const addProject = async () => {
     const path = await window.harness?.pickDirectory();
     if (!path) return;
@@ -64,7 +81,10 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
     const useWorktree = canWorktree ? worktree : null;
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree }));
+    const branches = showBranches ? { branch: branch?.name ?? null, baseBranch } : {};
+    const t = await act(() =>
+      client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree, ...branches }),
+    );
     setBusy(false);
     if (!t) return;
     try {
@@ -131,6 +151,32 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
           resolved={{ driver: defaultDriver || null, model: defaultDriver ? inheritedModel(defaultDriver, "ticket", project, state.settings) : null }}
         />
         <PermissionModeSelect compact value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />
+        {showBranches && (
+          <div className="new-session-branches">
+            <BranchSelect
+              compact
+              projectId={projectId}
+              value={branch?.name ?? null}
+              onChange={(name, info) => setBranch(name === null ? null : { name, info })}
+              defaultLabel={newTicketBranchLabel(nextKey)}
+              newLabel={(name) => `Create ${name} from ${base}`}
+            />
+            <span className="muted" title="The base branch: a new branch starts from it, and the work merges into it when the ticket completes">based on</span>
+            <BranchSelect
+              compact
+              label="Base branch"
+              projectId={projectId}
+              value={baseBranch}
+              onChange={(name) => setBaseBranch(name)}
+              defaultLabel={inheritedBaseLabel(inheritedBase)}
+              newLabel={(name) => `Use ${name}`}
+            />
+            <span className={`field-hint new-session-branch-hint ${branchHint.warn ? "warn" : ""}`}>
+              {branchHint.warn && <Icon name="alert" size={11} />}
+              {branchHint.text}
+            </span>
+          </div>
+        )}
         <div className="new-session-actions">
           <div className="new-session-options">
             <Switch checked={start} onChange={setStart} label="Start immediately" />

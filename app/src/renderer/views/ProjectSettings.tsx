@@ -3,10 +3,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { DriverInfo, Project } from "@harness/shared";
+import { resolveBaseBranch } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { previewProjectKey, tildify } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
+import { BranchSelect } from "../components/BranchSelect";
+import { inheritedBaseLabel } from "../components/branchPicker";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
@@ -126,6 +129,18 @@ function ProjectSettings({ project }: { project: Project }) {
               <Row title="Worktree per ticket" sub={<>Each ticket works on its own branch (harness/&lt;key&gt;) when the folder is a git repo.</>}>
                 <Switch ariaLabel="Worktree per ticket" checked={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
               </Row>
+              {project.isGit && (
+                <Row title="Base branch" sub="New ticket branches start from it, and completed tickets merge into it. Tickets can override it.">
+                  <BranchSelect
+                    label="Base branch"
+                    projectId={project.id}
+                    value={project.baseBranch ?? null}
+                    onChange={(v) => void save({ baseBranch: v })}
+                    defaultLabel={inheritedBaseLabel(resolveBaseBranch(null, null, state.settings))}
+                    newLabel={(name) => `Use ${name}`}
+                  />
+                </Row>
+              )}
               <Row title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
                 <Switch ariaLabel="Require human review" checked={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
               </Row>

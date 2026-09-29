@@ -7,8 +7,10 @@ import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
-import { resolvePermissionMode } from "@harness/shared";
+import { plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import { useOpenTicket } from "../components/paneContext";
+import { BranchSelect } from "../components/BranchSelect";
+import { inheritedBaseLabel, newTicketBranchLabel } from "../components/branchPicker";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const { state, client } = useStore();
@@ -38,6 +40,13 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
     [state.runs, ticket.sessionId],
   );
   const editable = ticket.status !== "done";
+  // Branch fields for a ticket that gets (or has) a worktree of its own. The branch can change
+  // only until the worktree exists; after that its agent re-points it (update_branch).
+  const project = state.projects[ticket.projectId];
+  const usesWorktree = !!ticket.branch || (!!project?.isGit && (ticket.useWorktree ?? project.useWorktrees));
+  const branchEditable = editable && !ticket.branch;
+  const inheritedBase = resolveBaseBranch(null, project, state.settings);
+  const base = resolveBaseBranch(ticket, project, state.settings);
 
   const open = (key: string) => openTicket(key);
 
@@ -177,10 +186,43 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
         )}
         <dt>Workdir</dt>
         <dd className="mono selectable">{ticket.workdir ?? <span className="muted">Not prepared yet</span>}</dd>
-        {ticket.branch && (
+        {usesWorktree && (
           <>
             <dt>Branch</dt>
-            <dd className="mono selectable">{ticket.branch}</dd>
+            {branchEditable ? (
+              <dd title="The branch the ticket's worktree checks out when work starts">
+                <BranchSelect
+                  projectId={ticket.projectId}
+                  value={ticket.requestedBranch ?? null}
+                  onChange={(v) => void act(() => client.updateTicket(ticket.key, { branch: v }))}
+                  defaultLabel={newTicketBranchLabel(ticket.key)}
+                  newLabel={(name) => `Create ${name} from ${base.branch}`}
+                />
+              </dd>
+            ) : (
+              <dd className="mono selectable">
+                {plannedBranch(ticket)}
+                {!ticket.branch && <span className="muted"> · when work starts</span>}
+              </dd>
+            )}
+            <dt>Base branch</dt>
+            {editable ? (
+              <dd title="What the ticket's work merges into when it completes. Applies from the next run.">
+                <BranchSelect
+                  label="Base branch"
+                  projectId={ticket.projectId}
+                  value={ticket.baseBranch ?? null}
+                  onChange={(v) => void act(() => client.updateTicket(ticket.key, { baseBranch: v }))}
+                  defaultLabel={inheritedBaseLabel(inheritedBase)}
+                  newLabel={(name) => `Use ${name}`}
+                />
+              </dd>
+            ) : (
+              <dd className="mono selectable">
+                {base.branch}
+                {base.source !== "ticket" && <span className="muted"> · inherited</span>}
+              </dd>
+            )}
           </>
         )}
         {ticket.externalRef && (

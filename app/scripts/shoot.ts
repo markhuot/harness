@@ -84,6 +84,25 @@ const openModelCombo = (q: string) => `(async () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 })()`;
+// Opens the composer's first branch combobox (the ticket's branch), typing `q` into its search;
+// with `pick`, then picks the first branch row.
+const openBranchCombo = (q: string, pick = false) => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let trigger = null;
+  for (let i = 0; i < 40 && !trigger; i++) {
+    await wait(100);
+    trigger = document.querySelector(".new-session-branches [data-testid=branch-select] .model-combo-trigger");
+  }
+  trigger?.click();
+  await wait(200);
+  const input = document.querySelector(".branch-combo .model-combo-search");
+  if (input && ${JSON.stringify(q)}) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, ${JSON.stringify(q)});
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  await wait(400);
+  if (${pick}) [...document.querySelectorAll(".branch-combo .model-combo-option")].find((o) => o.querySelector(".mono"))?.click();
+})()`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -93,10 +112,13 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },
   { name: "reopen", route: "#/board/all/ticket/NYTIMES-5", setup: `[...document.querySelectorAll(".actions button")].find((b) => b.textContent?.includes("Re-open"))?.click()` },
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
+  // A ticket in planning: its branch can still change (no worktree yet).
+  { name: "details-planning", route: "#/board/all/ticket/NYTIMES-2/details" },
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
   { name: "inbox-watcher-error", route: "#/inbox", setup: `document.querySelector(".watcher-error")?.click()` },
   { name: "settings", route: "#/settings" },
+  { name: "settings-general", route: "#/settings/general" },
   { name: "appearance", route: "#/settings/appearance" },
   { name: "watchers", route: "#/settings/watchers" },
   { name: "watcher-edit", route: "#/settings/watchers", setup: editWatcher },
@@ -109,6 +131,10 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "compose", route: "#/compose" },
   { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
   { name: "new-session", route: "#/compose", setup: `(async () => { let t = null; for (let i = 0; i < 40 && !t; i++) { await new Promise((r) => setTimeout(r, 100)); t = document.querySelector(".new-session-foot .model-combo-trigger"); } t?.click(); })()` },
+  // The composer's branch picker with type-ahead open, then a branch checked out elsewhere picked.
+  { name: "branch-picker", route: "#/compose", setup: openBranchCombo("de") },
+  { name: "branch-picked", route: "#/compose", setup: openBranchCombo("medl", true) },
+  { name: "branch-picker-new", route: "#/compose", setup: openBranchCombo("feature/new-login") },
   { name: "permissions", route: "#/settings/permissions" },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },
