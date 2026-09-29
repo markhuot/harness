@@ -515,3 +515,43 @@ describe("migration 18: completion actions", () => {
     expect(new Store(db2).settings.all().prompts).toEqual({ "system.complete_merge": "new" });
   });
 });
+
+describe("migration 19: drafts", () => {
+  test("existing tickets migrate as launched (draft false); new ones can be drafts and stop being one", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 18).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 2, 0, 0)`);
+    db.exec(`INSERT INTO sessions (id, key, kind, ticket_id, driver, cwd, created_at, updated_at) VALUES ('s1', 'OLD-1', 'ticket', 't1', 'dummy', '/old', 0, 0)`);
+    db.exec(
+      `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, created_at, updated_at) VALUES ('t1', 'OLD-1', 'p1', 'task', 'old', '', 'planning', 's1', 'dummy', 0, 0)`,
+    );
+    migrate(db);
+    expect((db.query("PRAGMA user_version").get() as any).user_version).toBe(SCHEMA_VERSION);
+    const s = new Store(db);
+    expect(s.tickets.get("t1")!.draft).toBe(false);
+    const session = s.sessions.create({ key: "OLD-2", kind: "ticket", ticketId: null, driver: "dummy", cwd: "/old", title: "d" });
+    const d = s.tickets.create({
+      key: "OLD-2",
+      projectId: "p1",
+      kind: "task",
+      title: "d",
+      description: "",
+      status: "planning",
+      sessionId: session.id,
+      driver: "dummy",
+      parentId: null,
+      dependsOn: [],
+      autoStart: false,
+      externalRef: null,
+      workdir: null,
+      draft: true,
+    });
+    expect(d.draft).toBe(true);
+    expect(s.tickets.list({ drafts: false }).map((t) => t.key)).toEqual(["OLD-1"]);
+    expect(s.tickets.list().map((t) => t.key)).toEqual(["OLD-1", "OLD-2"]);
+    expect(s.tickets.update(d.id, { draft: false })!.draft).toBe(false);
+  });
+});

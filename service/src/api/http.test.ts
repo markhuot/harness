@@ -467,6 +467,36 @@ describe("http api", () => {
   });
 });
 
+describe("drafts over http", () => {
+  test("POST /tickets draft, PATCH a draft-only field, POST /tickets/:key/submit; the socket sees each step", async () => {
+    const { client, dir } = await boot();
+    const p = await client.createProject({ path: dir });
+    const other = join(dir, "..", "other");
+    mkdirSync(other, { recursive: true });
+    const q = await client.createProject({ path: other, key: "OTHER" });
+    const { events, ready } = collect(client);
+    await ready;
+    const d = await client.createTicket({ projectId: p.id, prompt: "", draft: true });
+    expect([d.draft, d.status, d.title, d.busy]).toEqual([true, "planning", "Untitled draft", false]);
+    expect((await client.listTickets()).map((t) => [t.key, t.draft])).toEqual([[d.key, true]]);
+    await expect(client.submitTicket(d.key, { start: true })).rejects.toMatchObject({ status: 400 });
+    await client.updateTicket(d.key, { description: "Make the header blue" });
+    await expect(client.request("POST", `/tickets/${d.key}/submit`, { start: "yes" })).rejects.toMatchObject({ status: 400 });
+    // Moving projects re-keys it; the old key keeps resolving (resolvedFrom), as after a project rename.
+    const moved = await client.updateTicket(d.key, { projectId: q.id });
+    expect(moved.key).toBe("OTHER-1");
+    const detail = await client.getTicket(d.key);
+    expect([detail.ticket.id, detail.ticket.key, detail.resolvedFrom]).toEqual([d.id, "OTHER-1", d.key]);
+    await until(() => events.some((e) => e.kind === "ticket.upserted" && e.ticket.id === d.id && e.ticket.key === "OTHER-1"));
+    const launched = await client.submitTicket(d.key, { start: true });
+    expect([launched.key, launched.draft]).toEqual(["OTHER-1", false]);
+    await expect(client.submitTicket(launched.key, { start: true })).rejects.toMatchObject({ status: 409 });
+    await expect(client.updateTicket(launched.key, { kind: "conductor" })).rejects.toMatchObject({ status: 409 });
+    await until(() => events.some((e) => e.kind === "run.upserted" && e.run.sessionId === d.sessionId));
+    await until(() => events.some((e) => e.kind === "ticket.upserted" && e.ticket.id === d.id && e.ticket.draft === false));
+  });
+});
+
 describe("ticket paging + search over http", () => {
   async function seedBoard() {
     const env = await boot();

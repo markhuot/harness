@@ -192,6 +192,12 @@ describe("Cli new / tickets", () => {
     out.length = 0;
     expect(await cli.run(["tickets"])).toBe(0);
     expect(out[0]).toMatch(/MYAPP-1\s+review/);
+    // A draft is listed as one, not as the planning ticket it technically is.
+    const project = running.orchestrator.listProjects()[0]!;
+    await running.orchestrator.createTicket({ projectId: project.id, prompt: "Later idea", draft: true, driver: "dummy" });
+    out.length = 0;
+    expect(await cli.run(["tickets"])).toBe(0);
+    expect(out[0]).toMatch(/MYAPP-3\s+draft\s/);
   });
 });
 
