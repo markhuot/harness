@@ -10,7 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
-import { boardColumns, COLUMN_EMPTY_TEXT, doneCount, hideOnBoard, positionForDrop, scopeOf, searchColumns, searchStatusText, STATUS_LABEL } from "@harness/shared/state";
+import { boardColumns, COLUMN_EMPTY_TEXT, doneCount, scopeOf, searchColumns, searchStatusText, STATUS_LABEL } from "@harness/shared/state";
+import { columnCount, moveBody, visibleColumns } from "../lib/boardColumns";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { StatusDot, Empty, Spinner } from "../ui/kit";
@@ -57,11 +58,8 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
   const board = useMemo(() => boardColumns(state, projectId), [state.tickets, state.donePaging, state.keyAliases, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
   const results = useMemo(() => searchColumns(state, projectId), [state.tickets, state.search, state.keyAliases, projectId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Search shows every match (children included): hiding one would read as "not found".
-  const shown = useMemo(
-    () => (searching ? results.columns : (Object.fromEntries(TICKET_STATUSES.map((s) => [s, board[s].filter((t) => !hideOnBoard(t, hideChildren))])) as Record<TicketStatus, Ticket[]>)),
-    [searching, results, board, hideChildren],
-  );
-  const count = (s: TicketStatus) => (!searching && s === "done" ? doneCount(state, projectId, shown.done.length) : shown[s].length);
+  const shown = useMemo(() => (searching ? results.columns : visibleColumns(board, hideChildren)), [searching, results, board, hideChildren]);
+  const count = (s: TicketStatus) => columnCount(state, projectId, shown, s, searching);
   const total = TICKET_STATUSES.reduce((n, s) => n + (s === "done" ? doneCount(state, projectId, board.done.length) : board[s].length), 0);
   const paging = state.donePaging[scope];
 
@@ -107,13 +105,10 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
 
   const move = useCallback(
     async (t: Ticket, status: TicketStatus, where: "top" | "bottom" = "bottom") => {
-      const cols = boardColumns(state, projectId);
-      const others = cols[status].filter((x) => x.id !== t.id);
-      const position = status === "done" ? undefined : positionForDrop(others, where === "top" ? 0 : others.length);
-      const body = { ...(t.status !== status ? { status } : {}), ...(position !== undefined ? { position } : {}) };
-      if (!Object.keys(body).length) return;
-      // Optimistic: a card dropped into Done is the newest completion (the service's event confirms it).
-      const completedAt = t.status === status ? t.completedAt : status === "done" ? Date.now() : null;
+      const m = moveBody(t, status, where, boardColumns(state, projectId));
+      if (!m) return;
+      const { body, completedAt } = m;
+      // Optimistic; the service's event confirms it.
       dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: { ...t, ...body, completedAt, updatedAt: t.updatedAt } } });
       const res = await act(() => client.updateTicket(t.key, body), t.status !== status ? `${t.key} → ${STATUS_LABEL[status]}` : undefined);
       if (!res) void refresh();

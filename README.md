@@ -48,7 +48,10 @@ It shares its state logic with the desktop through `@harness/shared/state`.
   then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
   throwaway daemon, taps through opening a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
   and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
-  board + settings shots per color theme). `ios/` is gitignored and outlives dependency changes, so
+  board + settings shots per color theme). It splits the work across its own simulators,
+  "sim-check 1" to "sim-check 3" (`--shards=N`), which it creates the first time. With
+  `--no-build` and those simulators booted, a run takes about a minute, and
+  `mobile/build/screens/timings.json` shows where the time went. `ios/` is gitignored and outlives dependency changes, so
   `release:publish` regenerates it on every build, and sim-check does whenever it doesn't link
   every native package in `mobile/package.json` (`bun Tools/nativeDeps.ts check`). A stale `ios/` still builds, but the
   app then crashes on its first use of the missing module. Use

@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Server } from "bun";
 import type { BrowserState } from "@harness/shared";
-import { codeSignCloneRoot, findChrome, listCodeSignClones } from "./chrome.ts";
+import { codeSignCloneRoot, findChrome } from "./chrome.ts";
 import { BrowserManager, normalizeUrl } from "./manager.ts";
 import { createBrowserService } from "./index.ts";
 import type { BrowserFrame } from "./types.ts";
@@ -439,24 +439,19 @@ withChrome("createBrowserService shutdown", () => {
     try {
       expect(service.chromePid).toBeUndefined(); // lazy: nothing launched yet
       for (let round = 0; round < 2; round++) {
-        const before = new Set(listCodeSignClones());
         await service.open("s", "about:blank");
         const pid = service.chromePid!;
         expect(isAlive(pid)).toBe(true);
-        if (cloneRoot) {
-          // This Chrome made (and was attributed) exactly one new clone — so the check below can fail.
-          const fresh = listCodeSignClones().filter((n) => !before.has(n));
-          expect(fresh.length).toBe(1);
-          expect(service.chromeCloneDir).toBe(join(cloneRoot, fresh[0]!));
-        }
+        // Only this Chrome's own clone is checked: the clone root is shared with every other
+        // Chrome on the machine (other test runs, the daemon), so its listing isn't ours to assert on.
+        // Chrome 154+ deletes the clone itself shortly after startup; older versions keep it until exit.
+        const clone = service.chromeCloneDir;
+        if (clone) expect(dirname(clone)).toBe(cloneRoot!);
         await service.shutdown();
         expect(isAlive(pid)).toBe(false);
         expect(service.chromePid).toBeUndefined();
         expect(await service.state("s")).toBeNull();
-        if (cloneRoot) {
-          // Chrome itself removed it on its clean exit; nothing new is left behind.
-          expect(listCodeSignClones().filter((n) => !before.has(n))).toEqual([]);
-        }
+        if (clone) expect(existsSync(clone)).toBe(false);
       }
     } finally {
       await service.shutdown();

@@ -13,6 +13,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPhone, a bulleted or numbered list in your own message now shows its text in the transcript.
   Before, only the bullets or numbers appeared.
+- Stopping a watcher now stops everything its command started. A looping command such as
+  `while true; do curl …; sleep 60; done` used to keep running after its watcher was disabled or
+  deleted, and made the Harness service take 25 seconds to quit or restart.
+>>>>>>> main
 
 ## [app-20260928.2051](https://github.com/markhuot/harness/releases/tag/app-20260928.2051) - 2026-09-28
 

@@ -160,6 +160,20 @@ describe("http api", () => {
     await expect(client.getTicket(f.key)).rejects.toMatchObject({ status: 404 });
   });
 
+  test("start a planned ticket over REST; 409 once it's past planning, 404 for an unknown key", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, prompt: "Write the landing page", start: false });
+    await h.orchestrator.idle();
+    expect((await client.getTicket(t.key)).ticket.status).toBe("planning");
+    const started = await client.startTicket(t.key);
+    expect(started.status).toBe("in_progress");
+    await h.orchestrator.idle();
+    expect((await client.getTicket(t.key)).ticket.status).toBe("review");
+    await expect(client.startTicket(t.key)).rejects.toMatchObject({ status: 409 });
+    await expect(client.startTicket("NOPE-1")).rejects.toMatchObject({ status: 404 });
+  });
+
   test("re-open a done ticket over REST: 409 before done, 400 without notes", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
