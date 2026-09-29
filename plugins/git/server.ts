@@ -2,12 +2,15 @@
 // While a ticket branch's worktree exists, every ticket event re-pins its diff as refs in the repo
 // (git.ts pinChanges). Once the worktree is gone, the routes and the tab read that pin instead.
 import { definePlugin, PluginHttpError, type PluginContext } from "@harness/plugin-sdk/server";
-import type { Ticket } from "@harness/shared";
+import type { Project, Ticket } from "@harness/shared";
 import { commitLog, computeChanges, DEFAULT_MAX_PATCH_BYTES, fileContents, pinChanges, pinnedChanges, pinnedLog, readPin, unpinChanges, type Pin } from "./git";
 
+/** `base`: the ticket's or project's base branch override (DESIGN.md "Branches"); null → git.ts resolveBase's fallbacks */
 type Target =
-  | { kind: "live"; workdir: string; branch: string | null; projectPath: string | null }
-  | { kind: "pinned"; repoPath: string; branch: string | null; pin: Pin };
+  | { kind: "live"; workdir: string; branch: string | null; projectPath: string | null; base: string | null }
+  | { kind: "pinned"; repoPath: string; branch: string | null; pin: Pin; base: string | null };
+
+const baseOverride = (ticket: Ticket, project: Project) => ticket.baseBranch || project.baseBranch || null;
 
 async function target(ctx: PluginContext, query: URLSearchParams): Promise<Target> {
   const key = query.get("ticket");
@@ -16,9 +19,10 @@ async function target(ctx: PluginContext, query: URLSearchParams): Promise<Targe
   if (!found) throw new PluginHttpError(404, `No ticket ${key}`);
   const { ticket, project } = found;
   const workdir = ctx.ticketWorkdir(key);
-  if (workdir) return { kind: "live", workdir, branch: ticket.branch, projectPath: project.path };
+  const base = baseOverride(ticket, project);
+  if (workdir) return { kind: "live", workdir, branch: ticket.branch, projectPath: project.path, base };
   const pin = ticket.branch ? await readPin(ctx.exec, project.path, ticket.id) : null;
-  if (pin) return { kind: "pinned", repoPath: project.path, branch: ticket.branch, pin };
+  if (pin) return { kind: "pinned", repoPath: project.path, branch: ticket.branch, pin, base };
   throw new PluginHttpError(409, `${key} has no workdir yet`);
 }
 
@@ -47,7 +51,7 @@ async function pin(ctx: PluginContext, ticket: Ticket) {
       const found = ctx.getTicket(ticket.key);
       const workdir = ctx.ticketWorkdir(ticket.key);
       if (!found?.ticket.branch || !workdir || found.ticket.status === "done") return;
-      await pinChanges(ctx.exec, { workdir, branch: found.ticket.branch, projectPath: found.project.path, ticketId: found.ticket.id });
+      await pinChanges(ctx.exec, { workdir, branch: found.ticket.branch, projectPath: found.project.path, base: baseOverride(found.ticket, found.project), ticketId: found.ticket.id });
     }
   } catch (err) {
     ctx.log.warn(`pinning ${ticket.key} failed: ${err instanceof Error ? err.message : err}`);

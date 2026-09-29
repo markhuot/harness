@@ -170,6 +170,29 @@ describe("GET /plugins/git/api/changes", () => {
     expect(c.files).toEqual([{ path: "a.txt", status: "modified", additions: 1, deletions: 1, binary: false }]);
   });
 
+  test("a ticket's base branch override beats the project's checked-out branch", async () => {
+    const repo = await makeRepo({ "a.txt": "a\n" });
+    await git(repo, "branch", "develop");
+    // develop moves ahead of main with a change the ticket branch also has: diffing against main would show it.
+    const dev = join(root, `dev-${seq}`);
+    await git(repo, "worktree", "add", "-q", dev, "develop");
+    writeFileSync(join(dev, "shared.txt"), "from develop\n");
+    await git(dev, "add", "-A");
+    await git(dev, "commit", "-qm", "develop work");
+    const wt = join(root, `wt-${seq}`);
+    await git(repo, "worktree", "add", "-q", wt, "-b", "harness/g-9", "develop");
+    writeFileSync(join(wt, "ticket.txt"), "ticket\n");
+    const { ticket } = await ticketFor(repo, { workdir: wt, branch: "harness/g-9", baseBranch: "develop" });
+    const c = await changes(ticket.key);
+    expect(c.base).toBe("develop");
+    expect(c.files.map((f) => f.path)).toEqual(["ticket.txt"]);
+    // Without the override the project's checked-out branch (main) is the base, and develop's commit shows.
+    h.store.tickets.update(ticket.id, { baseBranch: null });
+    const fallback = await changes(ticket.key);
+    expect(fallback.base).toBe("main");
+    expect(fallback.files.map((f) => f.path).sort()).toEqual(["shared.txt", "ticket.txt"]);
+  });
+
   test("workdir mode (no branch): uncommitted + untracked changes vs HEAD", async () => {
     const repo = await makeRepo({ "a.txt": "a\n", "gone.txt": "x\n", "img.bin": "\0\0\0" });
     writeFileSync(join(repo, "a.txt"), "a\nb\n");

@@ -136,8 +136,12 @@ export class Repo {
   }
 }
 
-/** Base branch for a ticket branch: the project's checked-out branch, else main/master. */
-export async function resolveBase(repo: Repo, exec: Exec, projectPath: string | null, ticketBranch: string): Promise<string | null> {
+/**
+ * Base branch for a ticket branch: `preferred` (the ticket's or project's base branch override)
+ * when the repo has it, else the project's checked-out branch, else main/master.
+ */
+export async function resolveBase(repo: Repo, exec: Exec, projectPath: string | null, ticketBranch: string, preferred?: string | null): Promise<string | null> {
+  if (preferred && preferred !== ticketBranch && (await repo.revParse(`refs/heads/${preferred}`))) return preferred;
   if (projectPath && existsSync(projectPath)) {
     const r = await exec("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: projectPath });
     const b = r.code === 0 ? r.stdout.trim() : "";
@@ -194,7 +198,7 @@ export function truncatePatch(patch: string, maxBytes: number): { patch: string;
 
 export async function computeChanges(
   exec: Exec,
-  opts: { workdir: string; branch: string | null; projectPath: string | null; maxPatchBytes?: number },
+  opts: { workdir: string; branch: string | null; projectPath: string | null; base?: string | null; maxPatchBytes?: number },
 ): Promise<Changes> {
   const repo = await Repo.open(exec, opts.workdir);
   const head = await repo.revParse("HEAD");
@@ -206,7 +210,7 @@ export async function computeChanges(
   if (opts.branch) {
     mode = "branch";
     branch = opts.branch;
-    base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
+    base = await resolveBase(repo, exec, opts.projectPath, opts.branch, opts.base);
     baseSha = base && head ? await mergeBase(repo, base) : null; // unrelated histories: diff against the empty tree
   }
   const from = baseSha ?? EMPTY_TREE;
@@ -297,10 +301,10 @@ const SNAPSHOT_ENV = {
  * and the live diff is empty, but the pin should keep showing what the ticket changed.
  * Returns the pin written, or null when nothing was written.
  */
-export async function pinChanges(exec: Exec, opts: { workdir: string; branch: string; projectPath: string | null; ticketId: string }): Promise<Pin | null> {
+export async function pinChanges(exec: Exec, opts: { workdir: string; branch: string; projectPath: string | null; base?: string | null; ticketId: string }): Promise<Pin | null> {
   const repo = await Repo.open(exec, opts.workdir);
   const head = await repo.revParse("HEAD");
-  const base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
+  const base = await resolveBase(repo, exec, opts.projectPath, opts.branch, opts.base);
   const baseSha = head && base ? await mergeBase(repo, base) : null;
   if (!head || !baseSha) return null;
   const tree = await repo.withWorkingTreeIndex(async (env) => (await repo.ok(["write-tree"], { env })).trim());
@@ -324,9 +328,9 @@ export async function unpinChanges(exec: Exec, dir: string, ticketId: string): P
 }
 
 /** The pinned diff, read from the project repo (the worktree is gone). */
-export async function pinnedChanges(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; maxPatchBytes?: number }): Promise<Changes> {
+export async function pinnedChanges(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; base?: string | null; maxPatchBytes?: number }): Promise<Changes> {
   const repo = await Repo.open(exec, opts.repoPath);
-  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch) : null;
+  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch, opts.base) : null;
   const to = opts.pin.worktree ?? opts.pin.head;
   return {
     mode: "pinned",
@@ -339,19 +343,19 @@ export async function pinnedChanges(exec: Exec, opts: { repoPath: string; pin: P
   };
 }
 
-export async function commitLog(exec: Exec, opts: { workdir: string; branch: string | null; projectPath: string | null; limit?: number }) {
+export async function commitLog(exec: Exec, opts: { workdir: string; branch: string | null; projectPath: string | null; base?: string | null; limit?: number }) {
   const repo = await Repo.open(exec, opts.workdir);
   const head = await repo.revParse("HEAD");
   if (!opts.branch || !head) return { mode: opts.branch ? ("branch" as const) : ("workdir" as const), base: null, commits: [] as Commit[] };
-  const base = await resolveBase(repo, exec, opts.projectPath, opts.branch);
+  const base = await resolveBase(repo, exec, opts.projectPath, opts.branch, opts.base);
   const mb = base ? await mergeBase(repo, base) : null;
   return { mode: "branch" as const, base, commits: await log(repo, mb ? [`${mb}..HEAD`] : ["HEAD"], opts.limit) };
 }
 
 /** The pinned branch's commits (base..head), read from the project repo. */
-export async function pinnedLog(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; limit?: number }) {
+export async function pinnedLog(exec: Exec, opts: { repoPath: string; pin: Pin; branch: string | null; base?: string | null; limit?: number }) {
   const repo = await Repo.open(exec, opts.repoPath);
-  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch) : null;
+  const base = opts.branch ? await resolveBase(repo, exec, opts.repoPath, opts.branch, opts.base) : null;
   return { mode: "pinned" as const, base, commits: await log(repo, [`${opts.pin.base}..${opts.pin.head}`], opts.limit) };
 }
 
