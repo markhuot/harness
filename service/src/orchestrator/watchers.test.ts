@@ -769,6 +769,22 @@ process.exit(4);
     expect(errors).toEqual([null]);
   });
 
+  test("stopping a loop watcher stops what its shell is running too, at once", async () => {
+    const outputs: WatcherOutput[] = [];
+    const runner = new WatcherRunner({ onOutput: (_w, o) => void outputs.push(o), onStatus: () => {}, timing: FAST, shell: "/bin/sh" });
+    active.push(runner);
+    // The shell sits in `sleep` holding the output pipes; killing only the shell used to leave the
+    // run (and whoever stops it, like the service shutting down) waiting on it for good.
+    const marker = `sleep 3${String(process.pid).slice(-3)}7`;
+    runner.sync([watcher({ mode: "loop", command: `echo up; while true; do ${marker}; done` })]);
+    await waitFor(() => outputs.length > 0, 10_000, "first output");
+    const started = Date.now();
+    await Promise.race([runner.stopAll(), Bun.sleep(5000).then(() => Promise.reject(new Error("stopAll hung")))]);
+    expect(Date.now() - started).toBeLessThan(2000);
+    await Bun.sleep(100);
+    expect(Bun.spawnSync(["pgrep", "-f", marker]).stdout.toString().trim()).toBe("");
+  });
+
   test("a shell command line gets pipes, variables and the watcher env", async () => {
     const outputs: WatcherOutput[] = [];
     const errors: (string | null | undefined)[] = [];
