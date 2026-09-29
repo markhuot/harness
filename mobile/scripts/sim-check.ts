@@ -192,6 +192,21 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
+/**
+ * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
+ * sits in the upper middle of the screen. Elements scrolled far out of view may be missing from
+ * the tree, so it swipes a fixed distance until one shows up, then just far enough.
+ */
+async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
+  for (let i = 0; i < tries; i++) {
+    const el = await findElement(udid, match);
+    if (el && el.frame.y >= 140 && el.frame.y <= 520) return;
+    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 300)) : 380;
+    await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
+    await Bun.sleep(400);
+  }
+  throw new Error("scrollTo: element never came into view");
+}
 async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> {
   const end = Date.now() + ms;
   let last: unknown;
@@ -962,6 +977,9 @@ function screens(s: Seeded): Screen[] {
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
+    // Scrolled to the Base branch fields (General in Settings, Agents in the git project's settings).
+    { name: "settings-base-branch", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
+    { name: "project-settings-base-branch", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
     { name: "connect", url: "harness://connect" },
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
