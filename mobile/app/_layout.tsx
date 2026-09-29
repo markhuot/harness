@@ -36,6 +36,8 @@ function Themed() {
             <Stack.Screen name="ticket/[key]" options={{ title: "" }} />
             <Stack.Screen name="inbox/[id]" options={{ title: "" }} />
             <Stack.Screen name="project/[id]" options={{ title: "Project settings" }} />
+            <Stack.Screen name="prompts" options={{ title: "Prompts" }} />
+            <Stack.Screen name="prompt/[id]" options={{ title: "" }} />
             <Stack.Screen name="new" options={{ presentation: "modal", title: "New session" }} />
             <Stack.Screen name="projects" options={{ presentation: "formSheet", title: "Projects", sheetAllowedDetents: [0.6, 1], sheetGrabberVisible: true, headerShown: true }} />
             <Stack.Screen name="watcher" options={{ presentation: "modal", title: "Watcher" }} />

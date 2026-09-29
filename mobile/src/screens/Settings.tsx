@@ -1,10 +1,10 @@
 // Settings: connection (saved servers, token rotation), network, appearance, drivers + login,
-// general, models, permissions, watchers, projects.
+// general, models, permissions, triage, prompts, watchers, projects.
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, promptCounts, promptsSummary, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
 import { CLASSIFIER_LABELS, inheritedModel, modelName, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -19,6 +19,7 @@ import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { driverOptions } from "../lib/selectOptions";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { PROMPTS_INTRO, usePrompts } from "./Prompts";
 import { ThemeSwatch } from "../ui/ThemeSwatch";
 import { pickerCaption, themeLinkPrefs, themeOptions, themePrefKey } from "../lib/themePicker";
 import type { Prefs } from "../lib/prefs";
@@ -55,6 +56,7 @@ export function SettingsScreen() {
       {state.settings && <ModelsSection settings={state.settings} />}
       {state.settings && <PermissionsSection settings={state.settings} />}
       {state.settings && <TriageSection settings={state.settings} />}
+      <PromptsSection />
       <WatchersSection />
       <ProjectsSection />
     </ScrollView>
@@ -413,6 +415,29 @@ function TriageSection({ settings }: { settings: PublicSettings }) {
           title="Default model"
         />
       </SRow>
+    </Group>
+  );
+}
+
+function PromptsSection() {
+  const { prompts, error } = usePrompts();
+  const c = useColors();
+  const router = useRouter();
+  const broken = prompts ? promptCounts(prompts).broken : 0;
+  return (
+    <Group title="Prompts" footer={PROMPTS_INTRO}>
+      <SRow
+        title="Prompts"
+        chevron
+        last
+        onPress={() => router.push("/prompts")}
+        sub={
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            {broken > 0 && <Icon name="alert" size={13} color={c.red} strokeWidth={2} />}
+            <Text style={{ color: error || broken ? c.red : c.text3, fontSize: 13, lineHeight: 18, flexShrink: 1 }}>{error ?? (prompts ? promptsSummary(prompts) : "Loading…")}</Text>
+          </View>
+        }
+      />
     </Group>
   );
 }
