@@ -3,7 +3,7 @@
 //
 //   bun scripts/acceptance.ts [driver=dummy] [projectDir=~/Sites/hello-harness]
 //
-// Drives the UI: composer → "hello world" → watches the card go In progress → Review →
+// Drives the UI: New session pane → "hello world" → watches the card go In progress → Review →
 // Approve → the complete run (autoComplete, or Complete when the project turned it off) → Done, then prints the agent's summaries.
 
 import { mkdirSync, readFileSync } from "node:fs";
@@ -75,17 +75,22 @@ try {
 
   await js(`location.hash = ${JSON.stringify(`#/board/${project.id}`)}`);
   await js(`location.hash = "#/compose"`);
-  await until("composer", () => exists(".new-session-prompt"));
-  await until(`driver option ${driver}`, () => js<boolean>(`[...document.querySelectorAll(".modal-foot select option")].some(o => o.value === ${JSON.stringify(driver)})`));
-  await Bun.sleep(300);
-  await js(`(() => { const s = [...document.querySelectorAll(".modal-foot select")].find(s => [...s.options].some(o => o.value === ${JSON.stringify(driver)}));
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, ${JSON.stringify(driver)}); s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
-  await js(`document.querySelector(".new-session-prompt").focus()`);
+  await until("New session pane", () => exists(".draft-pane .draft-prompt"));
+  // The project, then the driver (its default model) under Options, then the prompt: ⌘↩ would do, the button is the same.
+  await js(`(() => { const s = document.querySelector(".draft-pane .project-picker select");
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, ${JSON.stringify(project.id)}); s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  await js(`document.querySelector(".draft-pane [data-testid=draft-options]").click()`);
+  await until("Options", () => exists(".draft-pane [data-testid=ticket-settings] [data-testid=driver-model-select] button"));
+  await js(`document.querySelector(".draft-pane [data-testid=ticket-settings] [data-testid=driver-model-select] button").click()`);
+  const optionFor = `[...document.querySelectorAll(".model-combo-option")].find(o => o.id.includes("-o-" + encodeURIComponent(${JSON.stringify(driver)})))`;
+  await until(`driver option ${driver}`, () => js<boolean>(`!!${optionFor}`));
+  await js(`${optionFor}.click()`);
+  await js(`document.querySelector(".draft-pane .draft-prompt").focus()`);
   await cdp("Input.insertText", { text: "hello world" });
-  console.log("  composer state:", await js(`JSON.stringify({ tag: document.querySelector(".new-session-prompt")?.tagName, value: document.querySelector(".new-session-prompt")?.value, driver: [...document.querySelectorAll(".modal-foot select")].map(s => s.value) })`));
-  const before = new Set((await api<Ticket[]>("GET", "/tickets")).map((t) => t.key));
-  await until("Start session", () => clickText(".modal-foot button", "Start session"));
-  const ticket = await until("ticket created", async () => (await api<Ticket[]>("GET", "/tickets")).find((t) => !before.has(t.key)));
+  console.log("  composer state:", await js(`JSON.stringify({ value: document.querySelector(".draft-pane .draft-prompt")?.value, options: document.querySelector(".draft-pane [data-testid=draft-options-summary]")?.textContent ?? "" })`));
+  const before = new Set((await api<Ticket[]>("GET", "/tickets")).filter((t) => !t.draft).map((t) => t.key));
+  await until("Start session", () => clickText(".draft-pane [data-testid=draft-start]", "Start session"));
+  const ticket = await until("ticket created", async () => (await api<Ticket[]>("GET", "/tickets")).find((t) => !before.has(t.key) && !t.draft));
   console.log(`✓ composer created ${ticket.key} (driver ${ticket.driver}, status ${ticket.status})`);
 
   await until("card In progress", () => column("In progress", ticket.key), 15000).catch(() => undefined);

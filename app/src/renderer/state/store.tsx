@@ -35,8 +35,9 @@ import {
   orphanSessions,
   openTicket,
   pruneTickets,
-  reloadPanes,
   retainPaneScopes,
+  storedPaneStore,
+  terminalSessions,
   updateAllPanes,
   updatePanes,
   usePanes,
@@ -122,9 +123,12 @@ function useTerminalLifecycle() {
       .list()
       .then((ids) => {
         if (!live) return;
-        // Re-read first: another window may have stored a terminal this one hasn't heard about yet.
-        reloadPanes();
-        orphanSessions(ids, getPaneStore()).forEach(kill);
+        // Also check what's stored: another window may have a terminal this one hasn't heard about
+        // yet. (Read, not adopted: adopting it would drop this window's New session panes.)
+        const stored = terminalSessions(storedPaneStore());
+        orphanSessions(ids, getPaneStore())
+          .filter((id) => !stored.has(id))
+          .forEach(kill);
       })
       .catch(() => {});
     return () => {

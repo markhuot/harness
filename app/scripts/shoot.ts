@@ -41,9 +41,18 @@ const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id
 const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
 const search = (q: string) =>
   `(() => { const el = document.querySelector("[data-testid=board-search]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(q)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
-// Picks a project in the composer by key (the select is controlled, so set it the way React sees).
-const pickProject = (key: string) =>
-  `(() => { const el = document.querySelector(".project-picker select"); const opt = [...el.options].find((o) => o.textContent?.includes("(${key})")); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, opt.value); el.dispatchEvent(new Event("change", { bubbles: true })); })()`;
+// A New session pane's setup: waits for the draft editor, then runs `body` with helpers that always
+// find the current editor (typing a prompt saves the draft, and its pane re-renders as the ticket's):
+// draft() the pane, typeIn(text), pickProject(key), options() to toggle Options, wait(ms).
+const inDraft = (body: string) => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const draft = () => document.querySelector(".draft-pane");
+  for (let i = 0; i < 40 && !draft()?.querySelector(".draft-prompt"); i++) await wait(100);
+  const typeIn = async (text) => { const el = draft().querySelector(".draft-prompt"); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(el, text); el.dispatchEvent(new Event("input", { bubbles: true })); await wait(500); };
+  const pickProject = async (key) => { const el = draft().querySelector(".project-picker select"); const opt = [...el.options].find((o) => o.textContent?.includes("(" + key + ")")); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, opt.value); el.dispatchEvent(new Event("change", { bubbles: true })); await wait(150); };
+  const options = async () => { draft().querySelector("[data-testid=draft-options]")?.click(); await wait(250); };
+  ${body}
+})()`;
 const collapseSidebar = `document.querySelector("[data-testid=sidebar-toggle]")?.click()`;
 // The layout store follows storage events (another window, or this).
 const layout = (l: object) =>
@@ -84,16 +93,13 @@ const openModelCombo = (q: string) => `(async () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
 })()`;
-// Opens the composer's first branch combobox (the ticket's branch), typing `q` into its search;
-// with `pick`, then picks the first branch row.
-const openBranchCombo = (q: string, pick = false) => `(async () => {
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  let trigger = null;
-  for (let i = 0; i < 40 && !trigger; i++) {
-    await wait(100);
-    trigger = document.querySelector(".new-session-branches [data-testid=branch-select] .model-combo-trigger");
-  }
-  trigger?.click();
+// In a draft's Options (opened first), opens the Branch combobox, typing `q` into its search; with
+// `pick`, then picks the first branch row.
+const openBranchCombo = (q: string, pick = false) =>
+  inDraft(`
+  await pickProject("NYTIMES");
+  await options();
+  draft().querySelector("[data-testid=ticket-settings] [data-testid=branch-select] .model-combo-trigger")?.click();
   await wait(200);
   const input = document.querySelector(".branch-combo .model-combo-search");
   if (input && ${JSON.stringify(q)}) {
@@ -101,8 +107,8 @@ const openBranchCombo = (q: string, pick = false) => `(async () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
   await wait(400);
-  if (${pick}) [...document.querySelectorAll(".branch-combo .model-combo-option")].find((o) => o.querySelector(".mono"))?.click();
-})()`;
+  if (${pick}) { [...document.querySelectorAll(".branch-combo .model-combo-option")].find((o) => o.querySelector(".mono"))?.click(); await wait(600); }
+`);
 // Opens the driver + model combobox inside `scope` once it renders.
 const openCombo = (scope: string) => `(async () => {
   let t = null;
@@ -158,15 +164,9 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
-  { name: "compose", route: "#/compose" },
-  { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
-  // The composer with Skip agent review switched on.
-  { name: "compose-skip-review", route: "#/compose", setup: `[...document.querySelectorAll(".new-session-options .switch")].find((l) => l.textContent === "Skip agent review")?.click()` },
-  { name: "new-session", route: "#/compose", setup: `(async () => { let t = null; for (let i = 0; i < 40 && !t; i++) { await new Promise((r) => setTimeout(r, 100)); t = document.querySelector(".new-session-foot .model-combo-trigger"); } t?.click(); })()` },
-  // The composer's branch picker with type-ahead open, then a branch checked out elsewhere picked.
-  { name: "branch-picker", route: "#/compose", setup: openBranchCombo("de") },
-  { name: "branch-picked", route: "#/compose", setup: openBranchCombo("medl", true) },
-  { name: "branch-picker-new", route: "#/compose", setup: openBranchCombo("feature/new-login") },
+  // New session: an empty New session pane beside the board, and one on a project that isn't git.
+  { name: "compose", route: "#/compose", setup: inDraft(`await pickProject("NYTIMES");`) },
+  { name: "compose-nogit", route: "#/compose", setup: inDraft(`await pickProject("SITE"); await options();`) },
   { name: "permissions", route: "#/settings/permissions" },
   // Settings → Models: one Default model combobox, then a review model per driver.
   { name: "settings-models", route: "#/settings/models" },
@@ -227,6 +227,28 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
     route: "#/board/all/ticket/NYTIMES-4",
     setup: `${panes([board, ticketPane("t1", "NYTIMES-4")], [0.6, 0.4], "t1")}; ${holdDrag("NYTIMES-3", "t1", 0.5, 0.85)}`,
   },
+  // Drafts last: these save drafts in the mock, which the shots above shouldn't show.
+  // A saved draft with Options open (Skip agent review on), and its Model combobox open.
+  {
+    name: "draft-options",
+    route: "#/compose",
+    setup: inDraft(`await pickProject("NYTIMES"); await typeIn("Try a darker masthead on the opinion pages"); await options(); [...draft().querySelectorAll(".switch")].find((l) => l.textContent === "Skip agent review")?.click(); await wait(600);`),
+  },
+  { name: "new-session", route: "#/compose", setup: inDraft(`await pickProject("NYTIMES"); await options(); draft().querySelector("[data-testid=ticket-settings] .model-combo-trigger")?.click();`) },
+  // The Branch picker with type-ahead open, a new name typed, then a branch checked out in another worktree (the warning).
+  { name: "branch-picker", route: "#/compose", setup: openBranchCombo("de") },
+  { name: "branch-picker-new", route: "#/compose", setup: openBranchCombo("feature/new-login") },
+  { name: "branch-warning", route: "#/compose", setup: openBranchCombo("medl", true) },
+  // A draft beside a launched ticket.
+  {
+    name: "draft-beside-ticket",
+    route: "#/board/all/ticket/NYTIMES-4",
+    setup: `${panes([board, ticketPane("t1", "NYTIMES-4")], [0.5, 0.5], "t1")}; setTimeout(() => (location.hash = "#/compose"), 300); ${inDraft(`await wait(400); await pickProject("NYTIMES"); await typeIn("Add a print stylesheet for recipe cards");`)}`,
+  },
+  // Closing a draft with something in it asks first.
+  { name: "draft-close", route: "#/compose", setup: inDraft(`await pickProject("NYTIMES"); await typeIn("Audit the cookie banner copy"); draft().querySelector("[data-testid=pane-close]")?.click();`) },
+  // The drafts above, as cards in Planning.
+  { name: "draft-card", route: "#/board/all", setup: `setTimeout(() => document.querySelector(".card.draft")?.scrollIntoView({ block: "center" }), 300)` },
 ];
 
 const electron = join(appDir, "..", "node_modules", ".bin", "electron");

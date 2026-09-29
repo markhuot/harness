@@ -1095,8 +1095,14 @@ export function forgetProjectPanes(projectId: string, projectKey: string | null)
   commit(forgetProject(getStore(), projectId, projectKey));
 }
 
-/** Re-read the stored panes (another window wrote them). */
+/**
+ * Re-read the stored panes (another window wrote them). This window's New session panes aren't
+ * stored, so they go with it; anything typed in one is already a draft ticket, whose pane is.
+ */
 export const reloadPanes = () => publish(load());
+
+/** The panes as stored, without adopting them (e.g. to see another window's terminals). */
+export const storedPaneStore = (): PaneStore => load();
 
 /** The whole store (every scope), for things that span scopes like the terminal lifecycle. */
 export const getPaneStore = (): PaneStore => getStore();
