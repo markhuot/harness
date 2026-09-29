@@ -4,21 +4,25 @@
 import type { Ticket } from "./protocol";
 
 /** Where an effective base branch came from. */
-export type BaseBranchSource = "ticket" | "project" | "settings";
+export type BaseBranchSource = "ticket" | "parent" | "project" | "settings";
 
 /** The built-in default for settings.baseBranch. */
 export const DEFAULT_BASE_BRANCH = "main";
 
 /**
- * Resolve the base branch: ticket override → project override → the global setting (default
- * "main"). null and "" inherit. Same shape as resolvePermissionMode.
+ * Resolve the base branch: ticket override → the parent ticket's branch (a child of a parent
+ * working in a worktree of its own lands on that branch, so a conductor stays on one branch) →
+ * project override → the global setting (default "main"). null and "" inherit. Same shape as
+ * resolvePermissionMode.
  */
 export function resolveBaseBranch(
   ticket: { baseBranch?: string | null } | null | undefined,
   project: { baseBranch?: string | null } | null | undefined,
   settings: { baseBranch?: string | null } | null | undefined,
+  parent?: { branch?: string | null } | null,
 ): { branch: string; source: BaseBranchSource } {
   if (ticket?.baseBranch) return { branch: ticket.baseBranch, source: "ticket" };
+  if (parent?.branch) return { branch: parent.branch, source: "parent" };
   if (project?.baseBranch) return { branch: project.baseBranch, source: "project" };
   return { branch: settings?.baseBranch || DEFAULT_BASE_BRANCH, source: "settings" };
 }

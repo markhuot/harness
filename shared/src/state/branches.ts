@@ -23,7 +23,7 @@ export function newTicketBranchLabel(key: string): string {
   return `New branch ${harnessBranch(key)}`;
 }
 
-const SOURCE_LABEL: Record<BaseBranchSource, string> = { ticket: "ticket", project: "project default", settings: "app default" };
+const SOURCE_LABEL: Record<BaseBranchSource, string> = { ticket: "ticket", parent: "parent ticket's branch", project: "project default", settings: "app default" };
 
 /** What an empty base-branch field inherits, e.g. "main (app default)" or "develop (project default)". */
 export function inheritedBaseLabel(resolved: { branch: string; source: BaseBranchSource }): string {
