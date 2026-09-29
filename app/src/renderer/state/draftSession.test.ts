@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CreateTicketBody, Project, Ticket, UpdateTicketBody } from "@harness/shared";
 import { applyTicketPatch, blankDraftTicket } from "@harness/shared/state";
-import { DraftSession, dropDraftSession, paneDraftSession, rebase, releaseDraftSession, type DraftDeps } from "./draftSession";
+import { DraftSession, dropDraftSession, paneDraftSession, rebase, releaseDraftSession, unloadDraftSessions, type DraftDeps } from "./draftSession";
 
 const projects: Record<string, Project> = {
   p1: { id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null } as unknown as Project,
@@ -219,5 +219,38 @@ describe("paneDraftSession", () => {
     expect(paneDraftSession("p9", (s) => s === b, () => new DraftSession(blank(), null, svc.deps))).toBe(b);
     dropDraftSession("p9", b);
     expect(paneDraftSession("p9", (s) => s === b, () => a)).toBe(a);
+  });
+});
+
+describe("unloading the page mid-debounce", () => {
+  test("a pending edit goes out at once as a keepalive PATCH, only once, and the debounce never fires", async () => {
+    const svc = fakeService(true);
+    const sent: [string, string, unknown][] = [];
+    svc.deps.keepalive = (method, path, body) => void sent.push([method, path, body]);
+    const s = paneDraftSession("u1", () => false, () => new DraftSession(blank(), null, svc.deps, "n1", 30));
+    s.edit({ description: "Fix the header" });
+    await tick(5);
+    s.edit({ description: "Fix the header and footer", permissionMode: "ask" });
+    expect(unloadDraftSessions()).toBe(1);
+    expect(sent).toEqual([["PATCH", "/tickets/WEB-4", { description: "Fix the header and footer", permissionMode: "ask" }]]);
+    // pagehide after beforeunload: nothing left to send.
+    expect(unloadDraftSessions()).toBe(0);
+    await tick(50);
+    expect(svc.patches.length).toBe(0);
+    dropDraftSession("u1", s);
+  });
+
+  test("an unsaved New session with a prompt is created; an empty one, or one whose create is out, isn't", async () => {
+    const svc = fakeService();
+    const sent: [string, string, unknown][] = [];
+    svc.deps.keepalive = (method, path, body) => void sent.push([method, path, body]);
+    const empty = new DraftSession(blank(), null, svc.deps, "n1");
+    expect(empty.unload()).toBe(false);
+    const creating = new DraftSession(blank(), null, svc.deps, "n2");
+    creating.edit({ description: "x" }); // its POST is out (unanswered)
+    expect(creating.unload()).toBe(false);
+    const typed = new DraftSession({ ...blank(), description: "Typed, never saved" }, null, svc.deps, "n3");
+    expect(typed.unload()).toBe(true);
+    expect(sent.map(([m, p, b]) => [m, p, (b as CreateTicketBody).prompt, (b as CreateTicketBody).draft])).toEqual([["POST", "/tickets", "Typed, never saved", true]]);
   });
 });

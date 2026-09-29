@@ -32,6 +32,11 @@ export interface DraftDeps {
   /** The draft got its key (first save: `from` is null) or another one (it moved to another project). */
   rekeyed(from: string | null, to: string): void;
   error(message: string): void;
+  /**
+   * A request that outlives the page (fetch keepalive), for the page going away mid-debounce. Without
+   * it, unload() falls back to the client (which a closing page may cut off).
+   */
+  keepalive?(method: "POST" | "PATCH", path: string, body: unknown): void;
 }
 
 /** The fields a draft editor changes. The rest (title, status, ids) are the service's. */
@@ -209,6 +214,33 @@ export class DraftSession {
     if (t.key !== from) this.deps.rekeyed(from, t.key);
   }
 
+  /**
+   * The page is going away (a reload, the window closing): send what's waiting now, without waiting
+   * for the debounce or an answer. A draft whose first save is already out isn't created twice.
+   * Returns whether anything was sent.
+   */
+  unload(): boolean {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const send = (method: "POST" | "PATCH", path: string, body: unknown) => {
+      if (this.deps.keepalive) this.deps.keepalive(method, path, body);
+      else if (method === "POST") void this.deps.client.createTicket(body as CreateTicketBody).catch(() => {});
+      else void this.deps.client.updateTicket(this.saved!.key, body as UpdateTicketBody).catch(() => {});
+    };
+    if (!this.saved) {
+      const project = this.deps.project(this.local.projectId);
+      if (this.inflight || !project || this.isEmpty()) return false;
+      send("POST", "/tickets", draftCreateBody(this.local, project));
+      return true;
+    }
+    const patch = draftPatch(this.saved, this.local);
+    if (!patch) return false;
+    send("PATCH", `/tickets/${encodeURIComponent(this.saved.key)}`, patch);
+    // What was sent counts as saved, so a second unload event (pagehide after beforeunload) doesn't resend it.
+    this.saved = { ...this.saved, ...this.local };
+    return true;
+  }
+
   /** Launch it: save what's waiting (creating it if need be), then submit. The launched ticket, or null. */
   async submit(start: boolean): Promise<Ticket | null> {
     if (this.busy) return null;
@@ -271,6 +303,13 @@ export function releaseDraftSession(leafId: string, s: DraftSession, stillShown:
   if (stillShown || sessions.get(leafId) !== s) return;
   sessions.delete(leafId);
   void s.flush();
+}
+
+/** The page is going away: every pane's draft sends what it hasn't yet (DraftSession.unload). How many did. */
+export function unloadDraftSessions(): number {
+  let n = 0;
+  for (const s of sessions.values()) if (s.unload()) n++;
+  return n;
 }
 
 /** Forget a session outright (discarded or submitted). */

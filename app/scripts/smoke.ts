@@ -656,6 +656,17 @@ try {
   await js(`document.querySelector("[data-testid=close-draft-discard]").click()`);
   await until("checkout draft discarded", async () => !(await allTickets()).some((t) => t.key === moved.key));
 
+  // A reload inside the save delay still saves the last edit (keepalive requests on pagehide/beforeunload).
+  const rlId = await newCompose();
+  await typeIn(rlId, "Reload mid-debounce");
+  const rl = await savedDraft(rlId, "Reload mid-debounce");
+  await typeIn(rlId, "Reload mid-debounce, then keep this");
+  await js(`location.reload()`);
+  const survived = await until("edit saved across the reload", async () => (await api<{ ticket: DT }>("GET", `/tickets/${rl.key}`)).ticket.description === "Reload mid-debounce, then keep this");
+  check("an edit made just before a reload is saved anyway", survived);
+  await until("app back after reload", () => exists(".board-pane .card"), 15000);
+  await api("DELETE", `/tickets/${rl.key}`);
+
   // ⌘↩ from the prompt launches it (in progress) and the same pane shows the transcript.
   // (Mid-run checks follow, so this goes last.) A pointerdown makes it the focused pane, as a click would.
   await js(`(() => { const el = document.querySelector('${inPane(reopened.id, ".draft-prompt")}'); el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); el.focus(); })()`);

@@ -26,7 +26,7 @@ import {
 } from "@harness/shared/state";
 import { useAction, useStore } from "../state/store";
 import { closePane, composeToTicket, findLeaf, getPaneStore, renameTicketKey, setTab, toggleZoom, updateAllPanes, updatePanes, type ComposeContent } from "../state/panes";
-import { DraftSession, dropDraftSession, paneDraftSession, releaseDraftSession, type DraftDeps } from "../state/draftSession";
+import { DraftSession, dropDraftSession, paneDraftSession, releaseDraftSession, unloadDraftSessions, type DraftDeps } from "../state/draftSession";
 import { MenuButton, MOD, Modal } from "../components/bits";
 import { Icon } from "../components/Icon";
 import { MentionTextarea } from "../components/MentionTextarea";
@@ -49,6 +49,12 @@ function readLast(): string | null {
     return null;
   }
 }
+
+// A reload or the window closing mid-debounce: every open draft sends what it hasn't yet, as
+// keepalive requests (they outlive the page). pagehide covers what beforeunload misses; the second
+// finds nothing left to send.
+addEventListener("beforeunload", () => void unloadDraftSessions());
+addEventListener("pagehide", () => void unloadDraftSessions());
 
 /** Whether pane `leafId` (in any board's panes) still shows the session's draft. */
 function paneShows(leafId: string, s: DraftSession): boolean {
@@ -105,6 +111,13 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
       else if (from) updateAllPanes((s) => renameTicketKey(s, from, to));
     },
     error: (m) => toast(m, "error"),
+    keepalive: (method, path, body) =>
+      void fetch(client.baseUrl + path, {
+        method,
+        keepalive: true,
+        headers: { authorization: `Bearer ${client.token}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).catch(() => {}),
   };
   const session = useDraftSession(paneId, compose, ticket, state.projects[ticket?.projectId ?? composeProject], deps);
   const local = session?.local;
