@@ -35,7 +35,7 @@ import type {
   TranscriptRole,
   Watcher,
 } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle, reviewPassed } from "@harness/shared";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -372,6 +372,7 @@ interface SeedTicket {
   busy?: boolean;
   agentReview?: Ticket["agentReview"];
   humanReview?: Ticket["humanReview"];
+  skipAgentReview?: boolean;
   blockedReason?: string;
   pendingApproval?: Ticket["pendingApproval"];
   allowedTools?: string[];
@@ -410,6 +411,7 @@ function seedTicket(s: SeedTicket): Ticket {
     autoStart: s.autoStart ?? !!s.parentKey,
     agentReview: s.agentReview ?? "pending",
     humanReview: s.humanReview ?? "pending",
+    skipAgentReview: s.skipAgentReview ?? false,
     externalRef: s.externalRef ?? null,
     workdir: worktree ? `/Users/markhuot/.harness/worktrees/${key}` : s.project.path,
     branch: worktree ? `harness/${key.toLowerCase()}` : null,
@@ -956,22 +958,48 @@ function setStatus(t: Ticket, status: TicketStatus) {
   appendEntry(t.sessionId, null, "system", { type: "status", text: `Moved to ${status.replace("_", " ")}` });
 }
 
+/** Mirrors Orchestrator.submit: a ticket with skipAgentReview gets agentReview "skipped" and no review run. */
 function submitForReview(t: Ticket) {
   setStatus(t, "review");
-  t.agentReview = "pending";
+  t.agentReview = t.skipAgentReview ? "skipped" : "pending";
   const project = projects.get(t.projectId);
   t.humanReview = project?.requireHumanReview === false ? "approved" : "pending";
   addSummary(t.sessionId, t.id, "agent", `Work finished for **${t.title}**. Ready for review.`);
   upsertTicket(t);
-  simulateRun(t, "review", "Review the change.", "The change looks correct and is covered by tests. Approving.", (cur) => {
+  if (t.skipAgentReview) {
+    appendEntry(t.sessionId, null, "system", { type: "status", text: "Agent review: skipped" });
+    noteReady(t);
+  } else agentReviewRun(t, "The change looks correct and is covered by tests. Approving.");
+}
+
+function agentReviewRun(t: Ticket, text: string) {
+  simulateRun(t, "review", "Review the change.", text, (cur) => {
     cur.agentReview = "approved";
     queueMicrotask(() => noteReady(cur));
   });
 }
 
-/** Mirrors Orchestrator.noteReady: both reviews approved + project autoComplete → complete run. */
+/** Mirrors Orchestrator.applySkipAgentReview: in review, the flag skips a pending review or starts one for a skipped review. */
+function applySkipAgentReview(t: Ticket) {
+  if (t.status !== "review") return;
+  if (t.skipAgentReview && t.agentReview === "pending") {
+    const r = activeRun(t.sessionId);
+    if (r?.kind === "review") {
+      finishRun(r, "cancelled");
+      t.busy = false;
+    }
+    t.agentReview = "skipped";
+    appendEntry(t.sessionId, null, "system", { type: "status", text: "Agent review: skipped" });
+    noteReady(t);
+  } else if (!t.skipAgentReview && t.agentReview === "skipped") {
+    t.agentReview = "pending";
+    agentReviewRun(t, "The change looks correct and is covered by tests. Approving.");
+  }
+}
+
+/** Mirrors Orchestrator.noteReady: both reviews passed + project autoComplete → complete run. */
 function noteReady(t: Ticket) {
-  if (t.status !== "review" || t.agentReview !== "approved" || t.humanReview !== "approved") return;
+  if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
   if (!projects.get(t.projectId)?.autoComplete || t.parentId) return;
   completeRun(t);
 }
@@ -1018,6 +1046,7 @@ function createTicket(body: Record<string, any>): Ticket {
     autoStart: body.autoStart ?? false,
     agentReview: "pending",
     humanReview: "pending",
+    skipAgentReview: body.skipAgentReview === true,
     externalRef: body.externalRef ?? null,
     workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
     branch: start && worktree ? body.branch || `harness/${key.toLowerCase()}` : null,
@@ -1181,6 +1210,10 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (t.branch) throw new HttpError(409, `${t.key} already has a worktree on ${t.branch}; ask its agent to move it with update_branch`);
           t.requestedBranch = body.branch || null;
         }
+        if (typeof body.skipAgentReview === "boolean" && body.skipAgentReview !== !!t.skipAgentReview) {
+          t.skipAgentReview = body.skipAgentReview;
+          applySkipAgentReview(t);
+        }
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;
           if (to === "in_progress" && t.status === "planning") {
@@ -1294,10 +1327,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "agent-review":
           t.agentReview = "pending";
           upsertTicket(t);
-          simulateRun(t, "review", "Review the change.", "Re-reviewed: still looks good. Approving.", (cur) => {
-            cur.agentReview = "approved";
-            queueMicrotask(() => noteReady(cur));
-          });
+          agentReviewRun(t, "Re-reviewed: still looks good. Approving.");
           return ok(t);
       }
     }

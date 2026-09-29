@@ -32,13 +32,21 @@ export function DriverBadge({ driver }: { driver: string }) {
   );
 }
 
+const REVIEW_MARK: Record<ReviewState, { cls: string; mark: ReactNode }> = {
+  approved: { cls: "badge-green", mark: <Icon name="check" strokeWidth={2.5} /> },
+  changes_requested: { cls: "badge-red", mark: <Icon name="x" strokeWidth={2.5} /> },
+  pending: { cls: "", mark: <span className="pending-dot" /> },
+  // Skipped (agent review only, Ticket.skipAgentReview): outlined and muted, nothing to wait for.
+  skipped: { cls: "badge-outline review-skipped", mark: <Icon name="minus" strokeWidth={2.5} /> },
+};
+
 export function ReviewMark({ who, state }: { who: "agent" | "human"; state: ReviewState }) {
-  const cls = state === "approved" ? "badge-green" : state === "changes_requested" ? "badge-red" : "";
+  const { cls, mark } = REVIEW_MARK[state];
   const label = who === "agent" ? "Agent" : "Human";
   return (
-    <span className={`badge ${cls}`} title={`${label} review: ${state.replace("_", " ")}`}>
+    <span className={`badge ${cls}`} data-review={state} title={`${label} review: ${state.replace("_", " ")}`}>
       <Icon name={who === "agent" ? "bot" : "user"} />
-      {state === "approved" ? <Icon name="check" strokeWidth={2.5} /> : state === "changes_requested" ? <Icon name="x" strokeWidth={2.5} /> : <span className="pending-dot" />}
+      {mark}
     </span>
   );
 }
@@ -130,10 +138,24 @@ export function Modal({ onClose, children, width, className }: { onClose: () => 
 }
 
 /** On/off switch. Pass ariaLabel when there's no visible label (e.g. the title sits in a settings Row). */
-export function Switch({ checked, onChange, label, ariaLabel, title }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; ariaLabel?: string; title?: string }) {
+export function Switch({
+  checked,
+  onChange,
+  label,
+  ariaLabel,
+  title,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label?: ReactNode;
+  ariaLabel?: string;
+  title?: string;
+  disabled?: boolean;
+}) {
   return (
     <label className="switch" title={title}>
-      <input type="checkbox" role="switch" aria-label={ariaLabel} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" aria-label={ariaLabel} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="switch-track" />
       {label}
     </label>

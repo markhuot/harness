@@ -130,6 +130,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
   { name: "compose", route: "#/compose" },
   { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
+  // The composer with Skip agent review switched on.
+  { name: "compose-skip-review", route: "#/compose", setup: `[...document.querySelectorAll(".new-session-options .switch")].find((l) => l.textContent === "Skip agent review")?.click()` },
   { name: "new-session", route: "#/compose", setup: `(async () => { let t = null; for (let i = 0; i < 40 && !t; i++) { await new Promise((r) => setTimeout(r, 100)); t = document.querySelector(".new-session-foot .model-combo-trigger"); } t?.click(); })()` },
   // The composer's branch picker with type-ahead open, then a branch checked out elsewhere picked.
   { name: "branch-picker", route: "#/compose", setup: openBranchCombo("de") },
