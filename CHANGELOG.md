@@ -15,6 +15,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   is now a single Model menu that lists every signed-in driver's models under that driver's name,
   so picking Opus under Claude Code sets both at once. With only one driver signed in, the menu is
   a plain list of that driver's models. New and existing watchers stay on Default.
+- The Model menu has a search field, so you can type "son" to jump to Sonnet when several drivers
+  (or one with a long model list) are signed in. The New session window uses the same menu in
+  place of its separate Driver and Model menus.
 - Settings has a default model for every watcher that doesn't pick its own (on the Mac, at the
   top of Watchers; on iPhone, in a Triage group above Watchers). You can set all watchers to
   Claude Code with Sonnet, then switch one watcher to Opus when its output needs more reasoning.
