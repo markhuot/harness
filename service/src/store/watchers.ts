@@ -14,6 +14,7 @@ interface WatcherRow {
   interval_sec: number;
   enabled: number;
   driver: string | null;
+  models: string;
   last_run_at: number | null;
   last_error: string | null;
   created_at: number;
@@ -32,6 +33,7 @@ const toWatcher = (r: WatcherRow): Watcher => ({
   intervalSec: r.interval_sec,
   enabled: bool(r.enabled),
   driver: r.driver,
+  models: fromJson<Record<string, string>>(r.models, {}),
   lastRunAt: r.last_run_at,
   lastError: r.last_error,
   createdAt: r.created_at,
@@ -57,8 +59,8 @@ export class WatcherRepo {
     const t = now();
     this.db
       .query(
-        `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, last_run_at, last_error, created_at, updated_at)
-         VALUES ($id, $name, $command, $args, $prompt, $cwd, $env, $mode, $intervalSec, $enabled, $driver, NULL, NULL, $t, $t)`,
+        `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at)
+         VALUES ($id, $name, $command, $args, $prompt, $cwd, $env, $mode, $intervalSec, $enabled, $driver, $models, NULL, NULL, $t, $t)`,
       )
       .run({
         id,
@@ -72,6 +74,7 @@ export class WatcherRepo {
         intervalSec: input.intervalSec ?? 300,
         enabled: int(input.enabled ?? true),
         driver: input.driver ?? null,
+        models: JSON.stringify(input.models ?? {}),
         t,
       });
     return this.get(id)!;
@@ -84,7 +87,7 @@ export class WatcherRepo {
     this.db
       .query(
         `UPDATE watchers SET name = $name, command = $command, args = $args, prompt = $prompt, cwd = $cwd, env = $env, mode = $mode,
-           interval_sec = $intervalSec, enabled = $enabled, driver = $driver, last_run_at = $lastRunAt, last_error = $lastError, updated_at = $t
+           interval_sec = $intervalSec, enabled = $enabled, driver = $driver, models = $models, last_run_at = $lastRunAt, last_error = $lastError, updated_at = $t
          WHERE id = $id`,
       )
       .run({
@@ -99,6 +102,7 @@ export class WatcherRepo {
         intervalSec: next.intervalSec,
         enabled: int(next.enabled),
         driver: next.driver,
+        models: JSON.stringify(next.models ?? {}),
         lastRunAt: next.lastRunAt,
         lastError: next.lastError,
         t: now(),

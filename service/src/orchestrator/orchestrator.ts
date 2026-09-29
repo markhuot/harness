@@ -33,9 +33,22 @@ import type {
   TranscriptRole,
   UpdateTicketBody,
   Watcher,
+  WatcherBody,
   WatcherLive,
 } from "@harness/shared";
-import { checkProjectKey, isConductor, isTicketKey, normalizeProjectColor, outputTitle, PERMISSION_MODES, PROJECT_COLORS, resolvePermissionMode, TICKET_STATUSES } from "@harness/shared";
+import {
+  checkProjectKey,
+  isConductor,
+  isTicketKey,
+  normalizeProjectColor,
+  outputTitle,
+  PERMISSION_MODES,
+  PROJECT_COLORS,
+  resolvePermissionMode,
+  TICKET_STATUSES,
+  watcherDriver,
+  watcherModel,
+} from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -151,6 +164,8 @@ interface TriageMeta {
   truncated?: boolean;
   /** The watcher's prompt at the time ("" → none) */
   prompt?: string;
+  /** The watcher that printed it (absent for injected output); its models apply to the triage run */
+  watcherId?: string | null;
 }
 
 /** One chunk of watcher (or injected) output on its way into triage. */
@@ -161,7 +176,10 @@ export interface IngestInput {
   source: string;
   output: WatcherOutput;
   prompt: string;
+  /** The watcher's own driver (null → settings.watcherDriver, then settings.defaultDriver) */
   driver: string | null;
+  /** The watcher's id, so its model applies when the triage run starts (absent for injected output) */
+  watcherId?: string | null;
 }
 
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
@@ -314,7 +332,7 @@ export class Orchestrator {
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
-        await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver });
+        await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver, watcherId: w.id });
       },
       onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
         const w = this.store.watchers.update(id, patch);
@@ -1099,8 +1117,8 @@ export class Orchestrator {
     return live ? { ...w, live } : w;
   }
 
-  createWatcher(body: WatcherInput & { name: string; command: string }): Watcher {
-    const input = this.validateWatcher(body, true) as WatcherInput & { name: string; command: string };
+  createWatcher(body: WatcherBody & { name: string; command: string }): Watcher {
+    const input = this.validateWatcher(body, null) as WatcherInput & { name: string; command: string };
     const created = this.store.watchers.create(input);
     // Sync first so the event (and the response) carry the new process state.
     this.syncWatchers();
@@ -1109,9 +1127,10 @@ export class Orchestrator {
     return w;
   }
 
-  updateWatcher(id: string, body: WatcherInput): Watcher {
-    if (!this.store.watchers.get(id)) throw notFound(`Unknown watcher: ${id}`);
-    this.store.watchers.update(id, this.validateWatcher(body, false));
+  updateWatcher(id: string, body: WatcherBody): Watcher {
+    const existing = this.store.watchers.get(id);
+    if (!existing) throw notFound(`Unknown watcher: ${id}`);
+    this.store.watchers.update(id, this.validateWatcher(body, existing));
     this.syncWatchers();
     const w = this.withLive(this.store.watchers.get(id)!);
     this.bus.emit({ kind: "watcher.upserted", watcher: w });
@@ -1131,8 +1150,10 @@ export class Orchestrator {
     await this.watcherRunner.runNow(id);
   }
 
-  private validateWatcher(body: WatcherInput, creating: boolean): WatcherInput {
+  /** `existing` is the watcher being updated (null when creating); models merge over its map. */
+  private validateWatcher(body: WatcherBody, existing: Watcher | null): WatcherInput {
     if (!body || typeof body !== "object") throw badRequest("body is required");
+    const creating = !existing;
     const out: WatcherInput = {};
     if (creating || body.name !== undefined) {
       if (typeof body.name !== "string" || !body.name.trim()) throw badRequest("name is required");
@@ -1169,6 +1190,7 @@ export class Orchestrator {
       if (body.driver && !this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
       out.driver = body.driver || null;
     }
+    if (body.models !== undefined) out.models = mergeModelMap(existing?.models ?? {}, validateModelMap("models", body.models, [...this.drivers.keys()]));
     return out;
   }
 
@@ -1198,7 +1220,7 @@ export class Orchestrator {
   }
 
   triage(input: Omit<IngestInput, "sourceId">): Session {
-    const { source, output, prompt, driver } = input;
+    const { source, output, prompt, driver, watcherId = null } = input;
     const projects = this.store.projects.list();
     const keys = findKeys(output.text);
     const existingTickets = keys.flatMap((key) => {
@@ -1211,11 +1233,11 @@ export class Orchestrator {
       key: `TRIAGE-${n}`,
       kind: "triage",
       ticketId: null,
-      driver: driver ?? this.settings().defaultDriver,
+      driver: watcherDriver({ driver }, this.settings()),
       cwd: this.paths.home,
       title,
       triageStatus: "triaging",
-      meta: { source, text: output.text, truncated: output.truncated, prompt } satisfies TriageMeta,
+      meta: { source, text: output.text, truncated: output.truncated, prompt, watcherId } satisfies TriageMeta,
     });
     this.touchSession(session.id);
     this.appendStatus(session.id, null, `New output from ${source}`);
@@ -1781,20 +1803,20 @@ export class Orchestrator {
     return Promise.all(infos.map(async (info) => ({ ...info, models: await this.listModels(info.id) })));
   }
 
-  async createWatcher_(ctx: ToolContext, input: WatcherInput & { name: string; command: string }, dryRun = false): Promise<Watcher | null> {
+  async createWatcher_(ctx: ToolContext, input: WatcherBody & { name: string; command: string }, dryRun = false): Promise<Watcher | null> {
     this.configWriter(ctx);
     return this.asToolError(() => {
-      if (dryRun) return (this.validateWatcher(input, true), null);
+      if (dryRun) return (this.validateWatcher(input, null), null);
       const w = this.createWatcher(input);
       this.log(`watcher "${w.name}" created by ${ctx.ticket!.key}`);
       return w;
     });
   }
 
-  async updateWatcher_(ctx: ToolContext, ref: string, input: WatcherInput, dryRun = false): Promise<Watcher | null> {
+  async updateWatcher_(ctx: ToolContext, ref: string, input: WatcherBody, dryRun = false): Promise<Watcher | null> {
     this.configWriter(ctx);
     const w = this.watcherByRef(ref);
-    const body: WatcherInput = { ...input };
+    const body: WatcherBody = { ...input };
     if (input.env !== undefined) {
       // Tools merge env (a model never sees the stored values): "" removes a variable.
       const env = { ...w.env };
@@ -1804,7 +1826,7 @@ export class Orchestrator {
       }
       body.env = env;
     }
-    return this.asToolError(() => (dryRun ? (this.validateWatcher(body, false), null) : this.updateWatcher(w.id, body)));
+    return this.asToolError(() => (dryRun ? (this.validateWatcher(body, w), null) : this.updateWatcher(w.id, body)));
   }
 
   async deleteWatcher_(ctx: ToolContext, ref: string, dryRun = false): Promise<Watcher> {
@@ -2292,6 +2314,19 @@ export class Orchestrator {
   // Runs
   // =========================================================================
 
+  /**
+   * The model a run starts with (see resolveRunModel). Triage runs follow their watcher's models,
+   * then settings.watcherModels (the watcher's current values: an edit applies to the next run).
+   */
+  private runModel(run: Run, session: Session, ticket: Ticket | null, project: Project | null): string | null {
+    const settings = this.settings();
+    if (run.kind === "triage") {
+      const watcherId = this.store.sessions.getMeta<TriageMeta>(session.id)?.watcherId;
+      return watcherModel(run.driver, watcherId ? this.store.watchers.get(watcherId) : null, settings);
+    }
+    return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
+  }
+
   private enqueueRun(sessionId: string, kind: RunKind, prompt: string): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
@@ -2373,7 +2408,7 @@ export class Orchestrator {
     const run = this.store.runs.markRunning(active.run.id);
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
-    const model = resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings: this.settings() });
+    const model = this.runModel(run, session, ticket, project);
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;

@@ -233,13 +233,13 @@ Harness tools (always exposed, via MCP for claude-code):
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
 | `list_drivers` | all | `{}` → drivers with their models |
-| `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver? }` |
+| `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
-| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, listen? }` |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen? }` |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
@@ -587,6 +587,15 @@ applies from its next run; claude-code resumes the same conversation with the ne
 (verified against the real CLI). Changing a ticket's driver clears its model. Both settings maps
 and `project.defaultModels` PATCH-merge per driver (`null` clears one). Migration 3 moved the old
 `claudeModel` / `anthropicModel` settings into `defaultModels`.
+
+Triage runs have no ticket or project, so they resolve through the watcher instead. The driver is
+fixed when the triage session is created: `watcher.driver`, else `settings.watcherDriver`, else
+`settings.defaultDriver` (injected output has no watcher and starts at `settings.watcherDriver`).
+The model is resolved when the run starts: `watcher.models[driver]`, then
+`settings.watcherModels[driver]`, then `settings.defaultModels[driver]`, else `null`
+(`watcherDriver` / `watcherModel` in `shared/src/watchers.ts`). The triage session's meta keeps the
+watcher id, so a model edit applies to the watcher's next run. `watcher.models` and
+`settings.watcherModels` PATCH-merge per driver like the other maps (migration 15 added the column).
 
 ### Sub-agents
 
