@@ -221,6 +221,9 @@ describe("watcher driver and model", () => {
     expect(h.orch.updateWatcher(w.id, { models: { fake: null } }).models).toEqual({ other: "b" });
     expect(h.orch.updateWatcher(w.id, { name: "renamed" }).models).toEqual({ other: "b" }); // untouched when omitted
     expect(() => h.orch.updateWatcher(w.id, { models: { fake: "two words" } })).toThrow(/without spaces/);
+    // A stale entry for a driver that's gone can still be cleared.
+    h.store.watchers.update(w.id, { models: { other: "b", gone: "x" } });
+    expect(h.orch.updateWatcher(w.id, { models: { gone: null } }).models).toEqual({ other: "b" });
   });
 
   test("settings: watcherDriver must be a known driver; watcherModels merge like the other maps", () => {

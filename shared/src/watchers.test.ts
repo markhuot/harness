@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { outputTitle, OUTPUT_TITLE_MAX, shellQuote, watcherCommandLine, watcherDriver, watcherModel } from "./watchers";
+import {
+  DEFAULT_TRIAGE_CHOICE,
+  outputTitle,
+  OUTPUT_TITLE_MAX,
+  settingsWatcherChoice,
+  settingsWatcherChoicePatch,
+  shellQuote,
+  watcherChoice,
+  watcherChoiceBody,
+  watcherCommandLine,
+  watcherDriver,
+  watcherModel,
+} from "./watchers";
 
 describe("watcherCommandLine", () => {
   test("a shell watcher's command is used as is", () => {
@@ -56,5 +68,34 @@ describe("watcherDriver / watcherModel", () => {
     expect(watcherModel("claude-code", { models: {} }, s)).toBe("sonnet");
     expect(watcherModel("claude-code", null, settings)).toBe("haiku");
     expect(watcherModel("anthropic-api", { models: { "claude-code": "opus" } }, s)).toBeNull();
+  });
+});
+
+describe("triage choice ↔ saved fields", () => {
+  const settings = { defaultDriver: "claude-code", watcherDriver: null as string | null, watcherModels: {} as Record<string, string | null> };
+
+  test("a watcher's pick: its own driver and model, a tools-set model for the default driver, else Default", () => {
+    expect(watcherChoice({ driver: "codex", models: { codex: "luna", "claude-code": "opus" } }, settings)).toEqual({ driver: "codex", model: "luna" });
+    expect(watcherChoice({ driver: "codex", models: {} }, settings)).toEqual({ driver: "codex", model: null });
+    expect(watcherChoice({ driver: null, models: { "claude-code": "opus" } }, settings)).toEqual({ driver: "claude-code", model: "opus" });
+    expect(watcherChoice({ driver: null, models: { codex: "luna" } }, settings)).toEqual(DEFAULT_TRIAGE_CHOICE);
+  });
+
+  test("saving a pick pins its driver and clears every other model; Default clears them all", () => {
+    const w = { models: { codex: "luna", "claude-code": "sonnet" } };
+    expect(watcherChoiceBody({ driver: "claude-code", model: "opus" }, w)).toEqual({ driver: "claude-code", models: { codex: null, "claude-code": "opus" } });
+    expect(watcherChoiceBody(DEFAULT_TRIAGE_CHOICE, w)).toEqual({ driver: null, models: { codex: null, "claude-code": null } });
+    expect(watcherChoiceBody({ driver: "codex", model: null }, null)).toEqual({ driver: "codex", models: { codex: null } });
+  });
+
+  test("settings default: pick and patch", () => {
+    expect(settingsWatcherChoice(settings)).toEqual(DEFAULT_TRIAGE_CHOICE);
+    expect(settingsWatcherChoice({ ...settings, watcherModels: { "claude-code": "sonnet" } })).toEqual({ driver: "claude-code", model: "sonnet" });
+    expect(settingsWatcherChoice({ ...settings, watcherDriver: "codex" })).toEqual({ driver: "codex", model: null });
+    expect(settingsWatcherChoicePatch({ driver: "codex", model: "luna" }, { watcherModels: { "claude-code": "sonnet" } })).toEqual({
+      watcherDriver: "codex",
+      watcherModels: { "claude-code": null, codex: "luna" },
+    });
+    expect(settingsWatcherChoicePatch(DEFAULT_TRIAGE_CHOICE, { watcherModels: { codex: "luna" } })).toEqual({ watcherDriver: null, watcherModels: { codex: null } });
   });
 });

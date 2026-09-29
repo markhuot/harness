@@ -138,7 +138,8 @@ export function validateModelMap(field: string, value: unknown, knownDrivers?: s
   if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest(`${field} must be an object of driver id → model id`);
   const out: Record<string, string | null> = {};
   for (const [driver, model] of Object.entries(value as Record<string, unknown>)) {
-    if (knownDrivers && !knownDrivers.includes(driver)) throw badRequest(`Unknown driver in ${field}: ${driver}`);
+    // Clearing (null / "") is fine for any key, so an entry left by a removed driver can be dropped.
+    if (knownDrivers && !knownDrivers.includes(driver) && model !== null && model !== "") throw badRequest(`Unknown driver in ${field}: ${driver}`);
     out[driver] = validateModelId(`${field}.${driver}`, model);
   }
   return out;
