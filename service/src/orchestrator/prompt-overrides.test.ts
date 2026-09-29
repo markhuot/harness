@@ -222,3 +222,16 @@ describe("overrides reach runs", () => {
     });
   });
 });
+
+describe("renamed prompt ids", () => {
+  test("an override under system.complete / run.complete applies to the _merge prompts, read or sent", () => {
+    const read = resolveSettings({ prompts: { "system.complete": "Merge it {{branch}}", "run.complete": "Go {{ticket}}" } }).prompts!;
+    expect(read["system.complete_merge"]).toBe("Merge it {{branch}}");
+    expect(read["run.complete_merge"]).toBe("Go {{ticket}}");
+    // An override saved under the new id wins over one left under the old id.
+    expect(resolveSettings({ prompts: { "system.complete": "old", "system.complete_merge": "new" } }).prompts!["system.complete_merge"]).toBe("new");
+    // An older client sending the old id saves it under the new one.
+    expect(validateSettingsPatch({ prompts: { "run.complete": "Finish {{ticket}}" } }).prompts).toEqual({ "run.complete_merge": "Finish {{ticket}}" });
+    expect(() => validateSettingsPatch({ prompts: { "run.completely": "x" } })).toThrow(/Unknown prompt/);
+  });
+});

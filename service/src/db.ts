@@ -375,6 +375,29 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN skip_agent_review INTEGER NOT NULL DEFAULT 0;
   `,
+  // 18: completion actions (DESIGN.md "Completion"). projects.completion_action: what approving
+  //     does by default ('merge', 'pr' or 'custom'). tickets.completion_action /
+  //     completion_instructions: the choice made at approval, kept until the completion runs
+  //     (NULL → the project's). tickets.pull_request_url: the pull request a 'pr' completion
+  //     opened. The completion prompts were renamed system.complete → system.complete_merge and
+  //     run.complete → run.complete_merge: saved overrides move with them (unless the new id
+  //     already has one).
+  `
+  ALTER TABLE projects ADD COLUMN completion_action TEXT NOT NULL DEFAULT 'merge';
+  ALTER TABLE tickets ADD COLUMN completion_action TEXT;
+  ALTER TABLE tickets ADD COLUMN completion_instructions TEXT;
+  ALTER TABLE tickets ADD COLUMN pull_request_url TEXT;
+  UPDATE settings SET value = json_remove(
+      CASE WHEN json_extract(value, '$."system.complete_merge"') IS NULL
+        THEN json_set(value, '$."system.complete_merge"', json_extract(value, '$."system.complete"')) ELSE value END,
+      '$."system.complete"')
+    WHERE key = 'prompts' AND json_valid(value) AND json_type(value, '$."system.complete"') IS NOT NULL;
+  UPDATE settings SET value = json_remove(
+      CASE WHEN json_extract(value, '$."run.complete_merge"') IS NULL
+        THEN json_set(value, '$."run.complete_merge"', json_extract(value, '$."run.complete"')) ELSE value END,
+      '$."run.complete"')
+    WHERE key = 'prompts' AND json_valid(value) AND json_type(value, '$."run.complete"') IS NOT NULL;
+  `,
 ];
 
 /**

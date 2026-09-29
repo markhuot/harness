@@ -22,3 +22,15 @@ test("branch names follow git check-ref-format --branch", () => {
     expect(branchNameError(bad)).not.toBeNull();
   }
 });
+
+test("base branch: a child lands on its parent's branch unless it sets its own", () => {
+  const parent = { branch: "harness/web-1" };
+  expect(resolveBaseBranch({ baseBranch: null }, { baseBranch: "develop" }, {}, parent)).toEqual({ branch: "harness/web-1", source: "parent" });
+  expect(resolveBaseBranch({ baseBranch: "release" }, { baseBranch: "develop" }, {}, parent)).toEqual({ branch: "release", source: "ticket" });
+  // A parent without a worktree branch is skipped.
+  expect(resolveBaseBranch({ baseBranch: null }, { baseBranch: "develop" }, {}, { branch: null })).toEqual({ branch: "develop", source: "project" });
+});
+
+test("base branch: a done parent's branch is no longer inherited", () => {
+  expect(resolveBaseBranch({ baseBranch: null }, { baseBranch: "develop" }, {}, { branch: "harness/web-1", status: "done" })).toEqual({ branch: "develop", source: "project" });
+});

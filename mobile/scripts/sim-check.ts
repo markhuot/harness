@@ -409,6 +409,13 @@ let ticketsCreated!: () => void;
 const ticketsUp = new Promise<void>((r) => (ticketsCreated = r));
 
 const REPLY_ITEMS = ["Keep plain main", "Ship it"];
+/** The Approve button's menu trigger, and the primary label in the git project (no gh remote, so merge). */
+const APPROVE_MORE = "More ways to approve";
+const APPROVE_MERGE = "Approve and merge";
+/** The "Approve and…" sheet's field (its label runs on into the placeholder). */
+const instructionsField = (l: string) => l.startsWith("Completion instructions");
+/** The Approve action sheet has finished sliding up: a tap before that is lost. */
+const approveMenuUp = (udid: string) => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000).then(() => Bun.sleep(400));
 
 /**
  * A brief like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
@@ -502,6 +509,8 @@ async function seed() {
   const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
   // A quick ask that skips the agent review: in review with the muted "skipped" mark.
   const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
+  // Another one, approved by the human while the project doesn't complete on its own: waiting on Complete.
+  const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -530,6 +539,7 @@ async function seed() {
     settle(plan.key, (t) => t.status === "planning" && !t.busy),
     settle(branchPlan.key, (t) => t.status === "planning" && !t.busy),
     settle(quick.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
+    settle(waiting.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
     settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
@@ -545,7 +555,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -975,7 +985,7 @@ interface Screen {
   browse?: boolean;
   /** Taps to make before the shot. */
   prepare?: (udid: string) => Promise<unknown>;
-  /** Taps after the shot, to close what prepare opened (a sheet a deep link doesn't dismiss). */
+  /** Taps after the shot, to close what prepare opened (a sheet or an action sheet a deep link doesn't dismiss). */
   after?: (udid: string) => Promise<unknown>;
   /** Waits out the redraw after the appearance flips, for a screen slower than FLIP_MS (a plugin's WebView reloads). */
   redrawn?: (udid: string) => Promise<unknown>;
@@ -1046,6 +1056,32 @@ function screens(s: Seeded): Screen[] {
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
+    // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
+    // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
+    { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
+    // A git ticket in review: the Approve button's menu (merge, Approve and…, take no action), then
+    // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
+    {
+      name: "approve-menu",
+      url: `harness://ticket/${k(s.agents)}`,
+      ready: hasLabel(APPROVE_MORE),
+      seconds: 6,
+      prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
+      after: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(400)),
+    },
+    {
+      name: "approve-custom",
+      url: `harness://ticket/${k(s.agents)}`,
+      ready: hasLabel(APPROVE_MORE),
+      seconds: 7,
+      prepare: (udid) =>
+        tapWhere(udid, APPROVE_MORE)
+          .then(() => approveMenuUp(udid))
+          .then(() => tapWhere(udid, "Approve and…"))
+          .then(() => until("instructions sheet", async () => (await labels(udid)).some(instructionsField), 5000))
+          .then(() => Bun.sleep(800)),
+      after: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(600)),
+    },
     // Settings → Prompts (seedPrompts): the list, a built-in prompt, the customized review message
     // and the broken Files section.
     { name: "settings-prompts", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Prompts, ")).then(() => Bun.sleep(500)) },
@@ -1158,7 +1194,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${t.key} → ${t.status}`;
       });
     }),
-    chain(9, async (udid) => {
+    chain(20, async (udid) => {
       const card = (l: string) => l.startsWith(`${s.hello.key} `);
       // Before Approve below, which moves the ticket to Done.
       await check("a reply's list items show their text in the transcript", async () => {
@@ -1188,22 +1224,50 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         }, 15000);
         await tapWhere(udid, card);
         moved(udid);
-        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes("Approve"), 8000).catch(async (e) => {
+        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes(APPROVE_MERGE), 8000).catch(async (e) => {
           throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
         });
         await shot(udid, "card-tap-detail-light");
         // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
         await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
-        await until("back on the board", async () => ((l) => l.some(card) && !l.includes("Approve"))(await labels(udid)), 8000);
+        await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
         lastUrl.set(udid, BOARD);
         await shot(udid, "card-tap-back-light");
         return `${s.hello.key} → detail → board`;
       });
-      await check("Approve records the human review and auto-completes the ticket", async () => {
-        await goto(udid, `harness://ticket/${k(s.hello)}`, (l) => l.includes("Approve"));
-        await tapWhere(udid, "Approve");
+      await check("Approve and merge records the human review with merge and auto-completes the ticket", async () => {
+        await goto(udid, `harness://ticket/${k(s.hello)}`, (l) => l.includes(APPROVE_MERGE));
+        await tapWhere(udid, APPROVE_MERGE);
         const t = await settle(s.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
-        return `${t.key} human=${t.humanReview} → ${t.status}`;
+        if (t.completionAction !== "merge") throw new Error(`completionAction ${t.completionAction}`);
+        return `${t.key} human=${t.humanReview} action=${t.completionAction} → ${t.status}`;
+      });
+      // The same project as the ticket above, so it waits for that Approve (whose label follows the default).
+      await check("Approve menu → Approve and… sends the instructions with a custom completion", async () => {
+        const text = "Tag it v2 then clean up";
+        await goto(udid, `harness://ticket/${k(s.agents)}`, (l) => l.includes(APPROVE_MORE));
+        await tapWhere(udid, APPROVE_MORE);
+        await approveMenuUp(udid);
+        await tapWhere(udid, "Approve and…");
+        await tapWhere(udid, instructionsField);
+        await Bun.sleep(600);
+        await axe("type", text, "--udid", udid);
+        await Bun.sleep(300);
+        await tapWhere(udid, "Approve");
+        const t = await settle(s.agents.key, (x) => x.humanReview === "approved", 15000);
+        if (t.completionAction !== "custom" || t.completionInstructions !== text) throw new Error(`stored ${t.completionAction} / ${JSON.stringify(t.completionInstructions)}`);
+        return `${t.key} action=custom instructions=${JSON.stringify(t.completionInstructions)} → ${t.status}`;
+      });
+      await check("project settings: When approved saves the project's default", async () => {
+        await goto(udid, `harness://project/${s.project.id}`, (l) => l.includes("When approved"));
+        await scrollTo(udid, (l) => l === "When approved", 3).catch(() => {});
+        await tapWhere(udid, (l) => l.startsWith("When approved, "));
+        await tapWhere(udid, "Custom");
+        const p = await until("default saved", async () => ((x) => (x?.completionAction === "custom" ? x : null))((await api<Project[]>("GET", "/projects")).find((x) => x.id === s.project.id)), 8000);
+        await until("select shows Custom", async () => (await labels(udid)).includes("When approved, Custom"), 5000);
+        await shot(udid, "when-approved-custom-light");
+        await api("PATCH", `/projects/${s.project.id}`, { completionAction: "merge" });
+        return `${p.key} completionAction=${p.completionAction}`;
       });
     }),
     chain(14, async (udid) => {
@@ -1283,7 +1347,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${picked.driver}/${picked.model} → ${cleared.driver}/${cleared.model ?? "default"}`;
       });
     }),
-    chain(9, async (udid) => {
+    chain(18, async (udid) => {
       await check("board context menu moves a card to Done", async () => {
         await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
@@ -1292,6 +1356,31 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, "Move to Done");
         const t = await settle(s.browse.key, (x) => x.status === "done", 15000);
         return `${t.key} → ${t.status}`;
+      });
+      await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
+        await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
+        await tapWhere(udid, APPROVE_MORE);
+        await tapWhere(udid, "Approve and take no action");
+        const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
+        if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
+        return `${t.key} human=${t.humanReview} → ${t.status}`;
+      });
+      await check("Complete menu → Complete and take no action finishes a human-approved ticket without a run", async () => {
+        // With auto-complete off, the approval leaves it in review, ready, waiting on Complete.
+        await api("PATCH", `/projects/${s.other.id}`, { autoComplete: false });
+        try {
+          await api("POST", `/tickets/${s.waiting.key}/review`, { decision: "approve" });
+          await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("More ways to complete"));
+          await tapWhere(udid, "More ways to complete");
+          await until("complete menu", async () => (await labels(udid)).includes("Complete and take no action"), 5000).then(() => Bun.sleep(400));
+          await tapWhere(udid, "Complete and take no action");
+          const t = await settle(s.waiting.key, (x) => x.status === "done", 15000);
+          const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
+          if (runs.some((r) => r.kind === "complete")) throw new Error("a completion run started");
+          return `${t.key} → ${t.status}, no completion run`;
+        } finally {
+          await api("PATCH", `/projects/${s.other.id}`, { autoComplete: true });
+        }
       });
       await check("approval card: Allow once resumes the agent", async () => {
         await goto(udid, `harness://ticket/${k(s.approval)}`, (l) => l.includes("Allow once"));

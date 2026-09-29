@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import { isCompletionAction } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
@@ -34,6 +35,9 @@ interface TicketRow {
   base_branch: string | null;
   requested_branch: string | null;
   skip_agent_review: number;
+  completion_action?: string | null;
+  completion_instructions?: string | null;
+  pull_request_url?: string | null;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -122,6 +126,9 @@ export type TicketPatch = Partial<{
   baseBranch: string | null;
   requestedBranch: string | null;
   skipAgentReview: boolean;
+  completionAction: CompletionAction | null;
+  completionInstructions: string | null;
+  pullRequestUrl: string | null;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -144,6 +151,9 @@ const COLUMNS: Record<string, string> = {
   baseBranch: "base_branch",
   requestedBranch: "requested_branch",
   skipAgentReview: "skip_agent_review",
+  completionAction: "completion_action",
+  completionInstructions: "completion_instructions",
+  pullRequestUrl: "pull_request_url",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
@@ -196,6 +206,9 @@ export class TicketRepo {
       model: r.model ?? null,
       useWorktree: r.use_worktree === null || r.use_worktree === undefined ? null : bool(r.use_worktree),
       skipAgentReview: bool(r.skip_agent_review ?? 0),
+      completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
+      completionInstructions: r.completion_instructions ?? null,
+      pullRequestUrl: r.pull_request_url ?? null,
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,

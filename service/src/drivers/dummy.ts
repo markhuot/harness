@@ -390,6 +390,11 @@ export class DummyDriver implements Driver {
 
       case "complete": {
         yield* say("Finalizing the ticket.");
+        // A pull request completion only finishes once one is recorded; the dummy makes one up.
+        const t = req.toolContext.ticket;
+        if (t?.completionAction === "pr") {
+          yield* call("record_pull_request", { url: t.pullRequestUrl ?? `https://github.com/example/dummy/pull/${t.key.split("-").pop()}` });
+        }
         yield* call("post_summary", { summary: "Completed." });
         break;
       }

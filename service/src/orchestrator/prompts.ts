@@ -12,7 +12,7 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
+import type { CompletionAction, Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
 import { harnessBranch, plannedBranch, resolveBaseBranch } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
@@ -31,6 +31,13 @@ export interface BranchContext {
   worktreesDir?: string;
   /** An earlier harness worktree of this ticket left on disk after update_branch moved it elsewhere */
   leftover?: { path: string; branch: string | null } | null;
+  /** Where a "pr" completion pushes and opens its pull request (null: nowhere gh can reach) */
+  pullRequest?: { host: string; remote: string; repo: string } | null;
+}
+
+/** The completion prompts a complete run of `ticket` uses: the action chosen at approval (default merge). */
+export function completionActionOf(ticket: Pick<Ticket, "completionAction"> | null | undefined): CompletionAction {
+  return ticket?.completionAction ?? "merge";
 }
 
 export interface PromptInfo {
@@ -56,6 +63,7 @@ function branchesOf(ticket: Ticket | null, project: Project | null, branches?: B
 
 const BASE_SOURCE: Record<string, string> = {
   ticket: "set on this ticket",
+  parent: "the parent ticket's branch: children land on it",
   project: "the project's base branch",
   settings: "the default from Settings",
   checkout: "the branch checked out in the main checkout, since the Settings default isn't in this repository",
@@ -170,14 +178,52 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       const b = branchesOf(ticket, project, info.branches);
       const { branch, baseBranch, onBase, workdir, ownsWorktree, isHarnessBranch } = branchVars(ticket, b);
       const harness = ticket ? harnessBranch(ticket.key) : "";
+      const mainCheckout = project?.path ?? "the main project checkout";
+      const action = completionActionOf(ticket);
+      if (action === "pr") {
+        const pr = b.pullRequest;
+        return renderPrompt(
+          "system.complete_pr",
+          {
+            branch,
+            baseBranch,
+            onBase,
+            workdir,
+            mainCheckout,
+            ownsWorktree,
+            worktreesDir: b.worktreesDir ?? "",
+            prHost: pr?.host ?? "github.com",
+            remoteName: pr?.remote ?? "origin",
+            repo: pr?.repo ?? "<host>/<owner>/<repo>",
+            pullRequestUrl: ticket?.pullRequestUrl ?? "",
+          },
+          o,
+        );
+      }
+      if (action === "custom") {
+        return renderPrompt(
+          "system.complete_custom",
+          {
+            branch,
+            baseBranch,
+            workdir,
+            mainCheckout,
+            ownsWorktree,
+            harnessBranch: harness,
+            worktreesDir: b.worktreesDir ?? "",
+            hasInstructions: !!ticket?.completionInstructions?.trim(),
+          },
+          o,
+        );
+      }
       return renderPrompt(
-        "system.complete",
+        "system.complete_merge",
         {
           branch,
           baseBranch,
           onBase,
           workdir,
-          mainCheckout: project?.path ?? "the main project checkout",
+          mainCheckout,
           ownsWorktree,
           harnessBranch: harness,
           isHarnessBranch,
@@ -190,7 +236,15 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       );
     }
     case "conductor":
-      return renderPrompt("system.conductor", { children: (info.children ?? []).map(childLine).join("\n") }, o);
+      return renderPrompt(
+        "system.conductor",
+        {
+          children: (info.children ?? []).map(childLine).join("\n"),
+          branch: ticket?.branch ?? "",
+          baseBranch: branchesOf(ticket, project, info.branches).base,
+        },
+        o,
+      );
     case "triage":
       return renderPrompt("system.triage", { lookupTools: triageLookupTools() }, o);
     case "chat": {
@@ -245,7 +299,9 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && renderPrompt("system.lifecycle", {}, o),
     instructionsSection(info, o),
     // A task ticket that has taken children conducts them too; conductor runs list theirs in their instructions.
-    kind === "work" && !!info.children?.length && renderPrompt("system.children", { children: info.children.map(childLine).join("\n") }, o),
+    kind === "work" &&
+      !!info.children?.length &&
+      renderPrompt("system.children", { children: info.children.map(childLine).join("\n"), branch: ticket?.branch ?? "" }, o),
     // update_branch (tools/ticket.ts): work and conductor runs of a ticket with a worktree.
     changes &&
       !!ticket?.branch &&
@@ -301,8 +357,30 @@ export function completePrompt(
   project: Project | null = null,
   overrides?: PromptOverrides | null,
 ): string {
-  const v = branchVars(ticket, branchesOf(ticket, project, branches));
-  return renderPrompt("run.complete", { ticket: ticketLabel(ticket), ...v, instructions: instructions?.trim() ?? "" }, overrides);
+  const b = branchesOf(ticket, project, branches);
+  const v = branchVars(ticket, b);
+  const label = ticketLabel(ticket);
+  const text = instructions?.trim() ?? "";
+  switch (completionActionOf(ticket)) {
+    case "pr":
+      return renderPrompt(
+        "run.complete_pr",
+        {
+          ticket: label,
+          branch: v.branch,
+          baseBranch: v.baseBranch,
+          onBase: v.onBase,
+          remoteName: b.pullRequest?.remote ?? "origin",
+          pullRequestUrl: ticket.pullRequestUrl ?? "",
+          instructions: text,
+        },
+        overrides,
+      );
+    case "custom":
+      return renderPrompt("run.complete_custom", { ticket: label, branch: v.branch, instructions: text }, overrides);
+    case "merge":
+      return renderPrompt("run.complete_merge", { ticket: label, ...v, instructions: text }, overrides);
+  }
 }
 
 export function conductorUpdatePrompt(
@@ -334,6 +412,7 @@ export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overr
       branch: ticket.branch ?? "",
       baseBranch: base ?? "",
       isHarnessBranch: !!ticket.branch && ticket.branch === harnessBranch(ticket.key),
+      pullRequestUrl: ticket.pullRequestUrl ?? "",
     },
     overrides,
   );

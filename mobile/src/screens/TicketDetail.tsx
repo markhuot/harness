@@ -7,7 +7,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextIn
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isConductor, type Ticket } from "@harness/shared";
+import { approveLabel, completionOptions, isConductor, type CompletionAction, type Ticket } from "@harness/shared";
 import {
   CHAT_PLACEHOLDER,
   chatHint,
@@ -46,10 +46,22 @@ import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
 import { isIconName } from "@harness/shared/state";
-import { confirm } from "../ui/pick";
+import { confirm, pick } from "../ui/pick";
 import { haptic } from "../ui/haptics";
 import { MentionList, useFileMentions } from "../ui/mentions";
 import { action, menuItem } from "../ui/header";
+import {
+  approveMenuChoices,
+  approveRequest,
+  approveToast,
+  completeBody,
+  completeMenuChoices,
+  completeMenuRequest,
+  completionActionOptions,
+  primaryApproveRequest,
+  type ApproveRequest,
+} from "../lib/approve";
+import { Select } from "../ui/selects";
 import { ApprovalCard } from "./Approval";
 import { Transcript } from "./Transcript";
 import { ChildrenTab, DetailsTab, SummariesTab } from "./TicketTabs";
@@ -172,7 +184,9 @@ function Header({ ticket }: { ticket: Ticket }) {
             action("Copy key", "number", () => void Clipboard.setStringAsync(k)),
             ...(ticket.externalRef?.url ? [action(`Open ${ticket.externalRef.key}`, "arrow.up.right.square", () => void Linking.openURL(ticket.externalRef!.url!))] : []),
             ...(ticket.busy ? [action("Cancel run", "stop.circle", () => void act(() => client.cancelTicket(k), "Run cancelled"), { destructive: true })] : []),
-            ...(ticket.status !== "done" ? [action("Mark done", "checkmark.circle", () => void act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`))] : []),
+            ...(ticket.pullRequestUrl ? [action("Open pull request", "arrow.triangle.pull", () => void Linking.openURL(ticket.pullRequestUrl!))] : []),
+            // In review, the Approve menu's "Approve and take no action" does this (and records the approval).
+            ...(ticket.status !== "done" && ticket.status !== "review" ? [action("Mark done", "checkmark.circle", () => void act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`))] : []),
             action("Delete ticket", "trash", () => void remove(), { destructive: true }),
           ]),
         ],
@@ -191,12 +205,31 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const { height } = useWindowDimensions();
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
-  const [completing, setCompleting] = useState(false);
+  /** The Complete sheet: open with the preselected action (true), or with one picked from the menu */
+  const [completing, setCompleting] = useState<boolean | CompletionAction>(false);
+  const [approvingCustom, setApprovingCustom] = useState(false);
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
   const k = ticket.key;
+  const opts = completionOptions(ticket, project, parent);
+  const send = (req: ApproveRequest, toast: string) => act(() => (req.via === "review" ? client.humanReview(k, req.body) : client.completeTicket(k, req.body)), toast);
+  const approveMenu = async () => {
+    const choice = await pick({ title: `Approve ${k}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: approveMenuChoices(opts) });
+    if (!choice) return;
+    if (choice === "custom") return setApprovingCustom(true);
+    haptic("success");
+    await send(approveRequest(choice), approveToast(choice, k));
+  };
+  // After the human approved: complete another way, or take no action (no agent run).
+  const completeMenu = async () => {
+    const choice = await pick({ title: `Complete ${k}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: completeMenuChoices(opts, ready && !ticket.busy) });
+    if (!choice) return;
+    if (choice === "custom") return setCompleting("custom");
+    haptic("success");
+    await act(() => client.completeTicket(k, completeMenuRequest(choice)), choice === "none" ? `${k} marked done` : "Completion run queued");
+  };
 
   return (
     <ScrollView style={{ maxHeight: height * 0.45, flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }} contentContainerStyle={{ padding: 14, paddingTop: 10, gap: 10 }}>
@@ -219,6 +252,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
             {ticket.branch}
           </Badge>
         )}
+        {ticket.pullRequestUrl && <PullRequestBadge url={ticket.pullRequestUrl} />}
         {ticket.status === "review" && (
           <>
             <ReviewMark who="agent" state={ticket.agentReview} />
@@ -234,13 +268,21 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
         {ticket.status === "planning" && <Button small title="Start work" icon="play" variant="primary" hapticKind="success" onPress={() => void act(() => client.startTicket(k))} />}
         {ticket.status === "review" && ticket.humanReview !== "approved" && (
           <>
-            <Button small title="Approve" icon="check" variant="primary" hapticKind="success" onPress={() => void act(() => client.humanReview(k, { decision: "approve" }), "Approved")} />
+            <View style={{ flexDirection: "row", gap: 2 }}>
+              <Button small title={approveLabel(opts)} icon="check" variant="primary" hapticKind="success" onPress={() => void send(primaryApproveRequest(opts, ticket), "Approved")} style={{ borderTopRightRadius: 4, borderBottomRightRadius: 4 }} />
+              <Button small icon="chevronDown" variant="primary" accessibilityLabel="More ways to approve" onPress={() => void approveMenu()} style={{ borderTopLeftRadius: 4, borderBottomLeftRadius: 4 }} />
+            </View>
             <Button small title="Request changes" icon="edit" onPress={() => setChanges(true)} />
           </>
         )}
         {ticket.status === "review" && (
           <>
-            <Button small title="Complete" icon="checkCircle" variant={ready ? "primary" : "secondary"} disabled={!ready || ticket.busy} onPress={() => setCompleting(true)} accessibilityLabel={!ready ? "Complete (needs both agent and human approval)" : ticket.busy ? "Complete (an agent run is in progress)" : "Complete"} />
+            <View style={{ flexDirection: "row", gap: 2 }}>
+              <Button small title="Complete" icon="checkCircle" variant={ready ? "primary" : "secondary"} disabled={!ready || ticket.busy} onPress={() => setCompleting(true)} accessibilityLabel={!ready ? "Complete (needs both agent and human approval)" : ticket.busy ? "Complete (an agent run is in progress)" : "Complete"} style={ticket.humanReview === "approved" ? { borderTopRightRadius: 4, borderBottomRightRadius: 4 } : undefined} />
+              {ticket.humanReview === "approved" && (
+                <Button small icon="chevronDown" variant={ready ? "primary" : "secondary"} accessibilityLabel="More ways to complete" onPress={() => void completeMenu()} style={{ borderTopLeftRadius: 4, borderBottomLeftRadius: 4 }} />
+              )}
+            </View>
             <Button small title={ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"} icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
           </>
         )}
@@ -249,7 +291,8 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
       </View>}
       {changes && <RequestChanges ticket={ticket} onClose={() => setChanges(false)} />}
       {reopening && <RequestChanges reopen ticket={ticket} onClose={() => setReopening(false)} />}
-      {completing && <Complete ticket={ticket} onClose={() => setCompleting(false)} />}
+      {completing && <Complete ticket={ticket} initialAction={completing === true ? undefined : completing} onClose={() => setCompleting(false)} />}
+      {approvingCustom && <ApproveCustom ticket={ticket} onClose={() => setApprovingCustom(false)} />}
     </ScrollView>
   );
 }
@@ -435,27 +478,70 @@ function RequestChanges({ ticket, onClose, reopen = false }: { ticket: Ticket; o
   );
 }
 
-function Complete({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+/** The PR a "pr" completion opened, as a tappable badge. */
+function PullRequestBadge({ url }: { url: string }) {
+  const number = /\/pull\/(\d+)/.exec(url)?.[1];
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={`Pull request${number ? ` #${number}` : ""}`} accessibilityHint="Opens it in the browser" onPress={() => void Linking.openURL(url)}>
+      <Badge tone="violet" icon="external">
+        {number ? `PR #${number}` : "Pull request"}
+      </Badge>
+    </Pressable>
+  );
+}
+
+/** "Approve and…": approve with instructions for the completion run. */
+function ApproveCustom({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
   const { client } = useStore();
   const act = useAction();
   const c = useColors();
-  const [instructions, setInstructions] = useState("");
-  const [skip, setSkip] = useState(false);
+  const [instructions, setInstructions] = useState(ticket.completionAction === "custom" ? ticket.completionInstructions ?? "" : "");
   const submit = async () => {
-    const ok = await act(() => client.completeTicket(ticket.key, skip ? { skipAgent: true } : { instructions: instructions.trim() || undefined }), skip ? `${ticket.key} marked done` : "Completion run queued");
+    const req = approveRequest("custom", instructions);
+    if (req.via !== "review") return;
+    const ok = await act(() => client.humanReview(ticket.key, req.body), "Approved");
     if (ok) {
       haptic("success");
       onClose();
     }
   };
   return (
-    <SheetFrame title={`Complete ${ticket.key}`} onClose={onClose} primary={<Button title={skip ? "Mark done" : "Complete"} variant="primary" onPress={() => void submit()} hapticKind={null} />}>
-      <Text style={{ color: c.text2, fontSize: 15, lineHeight: 21 }}>The agent finalizes the work: merges the worktree branch, cleans up, and marks the ticket done.</Text>
-      <TextInput editable={!skip} multiline placeholder="Optional instructions, e.g. “squash-merge into main and delete the branch”" placeholderTextColor={c.text3} value={instructions} onChangeText={setInstructions} style={{ minHeight: 110, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16, opacity: skip ? 0.5 : 1 }} />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <Switch value={skip} onValueChange={setSkip} trackColor={{ true: c.accent }} />
-        <Text style={{ color: c.text, fontSize: 15 }}>Just mark it done (no agent run)</Text>
-      </View>
+    <SheetFrame title="Approve and…" subtitle={ticket.key} onClose={onClose} primary={<Button title="Approve" variant="primary" disabled={!instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
+      <TextInput autoFocus multiline placeholder="What should the agent do with the work? e.g. “deploy it to staging, then open a PR”" placeholderTextColor={c.text3} value={instructions} onChangeText={setInstructions} accessibilityLabel="Completion instructions" style={{ minHeight: 140, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
+      <Text style={{ color: c.text3, fontSize: 13 }}>Once the ticket is ready, the agent finishes the work following these instructions and marks it done.</Text>
+    </SheetFrame>
+  );
+}
+
+function Complete({ ticket, initialAction, onClose }: { ticket: Ticket; initialAction?: CompletionAction; onClose: () => void }) {
+  const { state, client } = useStore();
+  const act = useAction();
+  const c = useColors();
+  const project = state.projects[ticket.projectId];
+  const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
+  const opts = completionOptions(ticket, project, parent);
+  // Both reviews passed and nothing completes it on its own: choose how the work lands here.
+  const choose = isReady(ticket) && !project?.autoComplete && !opts.parentBranch && opts.actions.length > 1;
+  const [choice, setChoice] = useState<CompletionAction>(initialAction && opts.actions.includes(initialAction) ? initialAction : opts.defaultAction);
+  const [instructions, setInstructions] = useState(ticket.completionInstructions ?? "");
+  const submit = async () => {
+    const ok = await act(() => client.completeTicket(ticket.key, completeBody(choose || !!initialAction, choice, instructions)), "Completion run queued");
+    if (ok) {
+      haptic("success");
+      onClose();
+    }
+  };
+  const what = opts.parentBranch ? `merges the branch into ${opts.parentBranch}` : { merge: "merges the worktree branch", pr: "pushes the branch and opens a pull request", custom: "follows your instructions" }[choice];
+  return (
+    <SheetFrame title={`Complete ${ticket.key}`} onClose={onClose} primary={<Button title="Complete" variant="primary" disabled={choice === "custom" && (choose || !!initialAction) && !instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
+      {choose && (
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <Text style={{ color: c.text, fontSize: 15 }}>When approved</Text>
+          <Select value={choice} options={completionActionOptions(opts.actions)} onChange={setChoice} title="How the work lands" accessibilityName="Completion action" />
+        </View>
+      )}
+      <Text style={{ color: c.text2, fontSize: 15, lineHeight: 21 }}>{`The agent finalizes the work: ${what}, cleans up, and marks the ticket done.`}</Text>
+      <TextInput multiline placeholder={choice === "custom" ? "What should the agent do with the work?" : "Optional instructions, e.g. “squash-merge and delete the branch”"} placeholderTextColor={c.text3} value={instructions} onChangeText={setInstructions} accessibilityLabel="Completion instructions" style={{ minHeight: 110, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
     </SheetFrame>
   );
 }

@@ -126,6 +126,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       humanReview: decision === "approve" ? "approved" : "changes_requested",
     }),
     completeTicket: async (_ctx: ToolContext, key: string) => find(key),
+    recordPullRequest: async (_ctx: ToolContext, url: string) => `Recorded ${url}.`,
     listProjects: async () => [{ key: "WEB", name: "Website", path: "/code/web" }],
     listInbox: async () => ({ items: [], total: 0 }),
     dispatchTicket: async (_ctx: ToolContext, input: { key?: string; conductor?: boolean; start?: boolean; title: string }) =>

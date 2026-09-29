@@ -4,6 +4,7 @@ import {
   changesRequestedPrompt,
   completePrompt,
   conductorUpdatePrompt,
+  reopenPrompt,
   reviewPrompt,
   systemPrompt,
   triagePrompt,
@@ -290,10 +291,93 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(sys("complete", ticket(worktree))).not.toContain("update_branch");
   });
 
-  test("conductors point merges into another branch at base_branch", () => {
-    const text = sys("conductor", ticket({ kind: "conductor" }));
-    expect(text).toContain("`update_ticket` { key, base_branch }");
-    expect(text).not.toContain("target branch other than main");
+  test("a conductor on its own branch keeps its children on it; without one, complete_ticket's action picks", () => {
+    const onBranch = sys("conductor", ticket({ ...worktree, kind: "conductor" }), { branches: { base: "main", baseSource: "settings", ownsWorktree: true } });
+    expect(onBranch).toContain("Children land on this ticket's branch `harness/nyt-3`");
+    expect(onBranch).toContain("reaches `main` (by a merge, a pull request, or what the human asks) only when this ticket itself completes");
+    expect(onBranch).not.toContain("`update_ticket` { key, base_branch } first");
+    const inCheckout = sys("conductor", ticket({ kind: "conductor" }));
+    expect(inCheckout).not.toContain("Children land on");
+    expect(inCheckout).toContain("pass `action` to choose");
+    // A task ticket that took children says where they merge too.
+    const child = ticket({ key: "NYT-4", title: "Part", status: "review" });
+    expect(sys("work", ticket(worktree), { children: [child] })).toContain("it merges into this ticket's branch `harness/nyt-3`");
+  });
+
+  const prTarget = { host: "github.com", remote: "origin", repo: "github.com/nytimes/web" };
+  const prBranches = { base: "main", baseSource: "settings", ownsWorktree: true, worktreesDir: "/Users/me/.harness/worktrees", pullRequest: prTarget };
+
+  test("a pr completion pushes and opens a pull request with gh, records it, keeps the branch and never merges", () => {
+    const t = ticket({ ...worktree, completionAction: "pr" });
+    const text = sys("complete", t, { branches: prBranches });
+    expect(text).toContain("gh auth status --hostname github.com");
+    expect(text).toContain(`git -C ${worktree.workdir} push -u origin harness/nyt-3`);
+    expect(text).toContain("gh pr create --repo github.com/nytimes/web --base main --head harness/nyt-3");
+    expect(text).toContain("`record_pull_request` { url }");
+    expect(text).toContain(`worktree remove ${worktree.workdir}`);
+    expect(text).toContain("keep `harness/nyt-3`: the pull request needs it");
+    expect(text).toContain("never force-push");
+    // None of the local merge steps.
+    expect(text).not.toContain("fetch . harness/nyt-3");
+    expect(text).not.toContain("branch -d");
+    expect(text).not.toContain("merge harness/nyt-3");
+    const run = completePrompt(t, "Add the design label", prBranches, project);
+    expect(run).toContain("Push `harness/nyt-3` to origin and open a pull request into `main`");
+    expect(run).toContain("Add the design label");
+    expect(run).not.toContain("Merge branch");
+  });
+
+  test("a pr completion of a ticket that already has a pull request updates it; an Enterprise host is named as gh knows it", () => {
+    const url = "https://ghe.acme.com/web/site/pull/7";
+    const t = ticket({ ...worktree, completionAction: "pr", pullRequestUrl: url });
+    const b = { ...prBranches, pullRequest: { host: "ghe.acme.com", remote: "upstream", repo: "ghe.acme.com/web/site" } };
+    const text = sys("complete", t, { branches: b });
+    expect(text).toContain(`This ticket already opened ${url}`);
+    expect(text).toContain("gh auth status --hostname ghe.acme.com");
+    expect(text).toContain("push -u upstream harness/nyt-3");
+    expect(text).toContain("--repo ghe.acme.com/web/site");
+    expect(completePrompt(t, undefined, b, project)).toContain(`update its pull request ${url}`);
+  });
+
+  test("a pr completion on the base branch itself, or without a branch, stops instead of pushing", () => {
+    for (const t of [ticket({ ...worktree, branch: "main", completionAction: "pr" }), ticket({ completionAction: "pr" })]) {
+      const text = sys("complete", t, { branches: prBranches });
+      expect(text).toContain("Don't push");
+      expect(text).not.toContain("gh pr create");
+    }
+  });
+
+  test("a custom completion follows the approver's instructions and merges or pushes nothing on its own", () => {
+    const t = ticket({ ...worktree, completionAction: "custom", completionInstructions: "Cherry-pick onto release-2.4" });
+    const text = sys("complete", t, { branches: { base: "main", baseSource: "settings", ownsWorktree: true } });
+    expect(text).toContain("Do exactly what their instructions (in the run's message) ask");
+    expect(text).toContain("don't merge, push, open pull requests, or delete branches or worktrees");
+    expect(text).not.toContain("fetch . harness/nyt-3");
+    expect(text).not.toContain("gh pr create");
+    const run = completePrompt(t, "Cherry-pick onto release-2.4", undefined, project);
+    expect(run).toContain("## Instructions from the human\nCherry-pick onto release-2.4");
+    // No instructions (the plain Approve of a folder outside git): a light wrap-up.
+    const plain = ticket({ completionAction: "custom" });
+    expect(sys("complete", plain)).toContain("Confirm the working directory is in a sensible state, and stop.");
+    const wrap = completePrompt(plain, undefined, undefined, project);
+    expect(wrap).toContain("gave no instructions");
+    expect(wrap).toContain("Don't merge or push.");
+  });
+
+  test("a merge completion deletes the branch where the base is checked out, not in the main checkout", () => {
+    const text = sys("complete", ticket(worktree), { branches: { base: "harness/nyt-1", baseSource: "parent", ownsWorktree: true } });
+    expect(text).toContain("Merge `harness/nyt-3` into the base branch `harness/nyt-1`");
+    expect(text).toContain("`git -C <that path> branch -d harness/nyt-3`");
+    expect(text).not.toContain(`git -C ${project.path} branch -d harness/nyt-3`);
+    expect(text).toContain("Base branch: harness/nyt-1 (the parent ticket's branch: children land on it)");
+  });
+
+  test("re-opening a ticket with a pull request points at the pull request's review", () => {
+    const url = "https://github.com/nytimes/web/pull/12";
+    const text = reopenPrompt(ticket({ ...worktree, pullRequestUrl: url }), "Address the review comments", "main");
+    expect(text).toContain(`is in the pull request ${url}`);
+    expect(text).toContain("the new commits go to the same pull request");
+    expect(text).not.toContain("probably merged");
   });
 
   test("complete without a branch has nothing to merge", () => {

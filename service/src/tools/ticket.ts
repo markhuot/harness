@@ -115,3 +115,13 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
       : "Review recorded: changes requested. The ticket goes back to the implementer. Stop here.";
   },
 });
+
+export const recordPullRequest = defineTool<{ url: string }>({
+  name: "record_pull_request",
+  description:
+    "Record the pull request this completion opened or updated, e.g. https://github.com/acme/web/pull/42. Only for completion runs that land the work as a pull request: the ticket moves to done only once one is recorded, and the board links to it.",
+  inputSchema: schema({ url: { type: "string", minLength: 1, description: "The pull request's link, as gh printed it." } }, ["url"]),
+  async run({ url }, ctx) {
+    return ctx.ops.recordPullRequest(ctx, url);
+  },
+});

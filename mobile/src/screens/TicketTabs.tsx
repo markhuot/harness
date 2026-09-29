@@ -361,6 +361,13 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
           </Prop>
         )}
         {project?.isGit && <BaseBranchProp ticket={ticket} editable={editable} />}
+        {ticket.pullRequestUrl && (
+          <Prop label="Pull request">
+            <Text style={{ color: c.accentText, fontSize: 14, flexShrink: 1, textAlign: "right" }} numberOfLines={1} ellipsizeMode="middle" accessibilityRole="link" onPress={() => void Linking.openURL(ticket.pullRequestUrl!)}>
+              {ticket.pullRequestUrl.replace(/^https?:\/\//, "")}
+            </Text>
+          </Prop>
+        )}
         {ticket.externalRef && (
           <Prop label="External">
             <Text style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14 }} onPress={ticket.externalRef.url ? () => void Linking.openURL(ticket.externalRef!.url!) : undefined}>

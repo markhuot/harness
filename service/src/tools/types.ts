@@ -3,6 +3,7 @@
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
 import type {
+  CompletionAction,
   CreateProjectBody,
   DriverInfo,
   DriverModels,
@@ -235,8 +236,11 @@ export interface HarnessOps {
 
   // --- conductor runs (act on child tickets) ---
   /** Conductor stands in for the human reviewer of its children. */
-  reviewTicket(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket>;
-  completeTicket(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket>;
+  /** `action`, with approve: how the child's work lands once it completes (DESIGN.md "Completion"). */
+  reviewTicket(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string, action?: CompletionAction): Promise<Ticket>;
+  completeTicket(ctx: ToolContext, key: string, instructions?: string, action?: CompletionAction): Promise<Ticket>;
+  /** record_pull_request: store the pull request a "pr" completion opened; refused in any other run. */
+  recordPullRequest(ctx: ToolContext, url: string): Promise<string>;
 
   // --- triage runs ---
   /** Create (and optionally start) a local ticket mirroring the external item. */
@@ -330,6 +334,12 @@ export interface ProjectView {
   color: string | null;
   /** Base branch override; null → settings.baseBranch */
   baseBranch: string | null;
+  /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */
+  completionAction: CompletionAction;
+  /** The completion actions the project offers (pr needs a remote gh is logged into) */
+  completionActions: CompletionAction[];
+  /** The host pull requests open on, or null when the project can't open one */
+  pullRequestHost: string | null;
 }
 
 export interface ApprovalMeta {

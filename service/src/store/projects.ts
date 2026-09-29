@@ -1,8 +1,9 @@
 import type { Database } from "bun:sqlite";
-import type { PermissionMode, Project } from "@harness/shared";
-import { projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
+import type { CompletionAction, PermissionMode, Project } from "@harness/shared";
+import { isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { type PullRequestTarget, pullRequestTarget } from "./remotes";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
 
 interface ProjectRow {
@@ -18,29 +19,58 @@ interface ProjectRow {
   permission_mode?: string | null;
   color?: string | null;
   base_branch?: string | null;
+  completion_action?: string | null;
   default_models: string;
   created_at: number;
   updated_at: number;
 }
 
-const toProject = (r: ProjectRow): Project => ({
-  id: r.id,
-  key: r.key,
-  name: r.name,
-  path: r.path,
-  nextSeq: r.next_seq,
-  defaultDriver: r.default_driver,
-  useWorktrees: bool(r.use_worktrees),
-  isGit: insideGitCheckout(r.path),
-  requireHumanReview: bool(r.require_human_review),
-  autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
-  permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
-  color: r.color ?? null,
-  baseBranch: r.base_branch ?? null,
-  defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
-  createdAt: r.created_at,
-  updatedAt: r.updated_at,
-});
+/**
+ * pullRequestTarget reads two small files; projects are read many times a second while agents
+ * run, so the answer is kept for a moment. A remote added or a gh login shows up within it.
+ */
+const PR_TARGET_TTL_MS = 2000;
+const prTargets = new Map<string, { at: number; target: PullRequestTarget | null }>();
+
+export function cachedPullRequestTarget(path: string): PullRequestTarget | null {
+  const hit = prTargets.get(path);
+  const t = Date.now();
+  if (hit && t - hit.at < PR_TARGET_TTL_MS) return hit.target;
+  const target = pullRequestTarget(path);
+  prTargets.set(path, { at: t, target });
+  return target;
+}
+
+/** Forget cached pull request targets (tests that change a repo's remote or gh's login). */
+export function clearPullRequestTargets() {
+  prTargets.clear();
+}
+
+const toProject = (r: ProjectRow): Project => {
+  const isGit = insideGitCheckout(r.path);
+  const pullRequestHost = isGit ? (cachedPullRequestTarget(r.path)?.host ?? null) : null;
+  return {
+    id: r.id,
+    key: r.key,
+    name: r.name,
+    path: r.path,
+    nextSeq: r.next_seq,
+    defaultDriver: r.default_driver,
+    useWorktrees: bool(r.use_worktrees),
+    isGit,
+    requireHumanReview: bool(r.require_human_review),
+    autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
+    permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
+    color: r.color ?? null,
+    baseBranch: r.base_branch ?? null,
+    completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
+    completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
+    pullRequestHost,
+    defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+};
 
 /**
  * Whether `path` is inside a git checkout: `.git` (a directory, or a file in worktrees and
@@ -69,6 +99,7 @@ export interface NewProject {
   autoComplete?: boolean;
   color?: string | null;
   baseBranch?: string | null;
+  completionAction?: CompletionAction;
   defaultModels?: Record<string, string>;
 }
 
@@ -111,8 +142,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, color, base_branch, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $color, $baseBranch, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, color, base_branch, completion_action, default_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $color, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
         )
         .run({
           id,
@@ -125,6 +156,7 @@ export class ProjectRepo {
           autoComplete: int(input.autoComplete ?? true),
           color: input.color ?? null,
           baseBranch: input.baseBranch ?? null,
+          completionAction: input.completionAction ?? "merge",
           defaultModels: toJson(input.defaultModels ?? {}),
           t,
         });
@@ -139,7 +171,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, color = $color, base_branch = $baseBranch, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, color = $color, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -152,6 +184,7 @@ export class ProjectRepo {
         autoComplete: int(patch.autoComplete ?? existing.autoComplete),
         color: patch.color !== undefined ? patch.color : existing.color,
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
+        completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
         defaultModels: toJson(patch.defaultModels ?? existing.defaultModels),
         t: now(),
       });

@@ -47,6 +47,26 @@ export interface Project {
    */
   baseBranch?: string | null;
   /**
+   * What approving one of this project's tickets does by default (DESIGN.md "Completion"): the
+   * choice preselected on the Approve button, and the action used when nobody picks one (no human
+   * review, a conductor completing a child, auto-complete). When the project stops offering it
+   * (see `completionActions`), the effective default falls back to merge, then custom; resolve with
+   * `completionOptions`. Optional only so older payloads type-check.
+   */
+  completionAction?: CompletionAction;
+  /**
+   * The completion actions this project offers, worked out on each read (never stored): custom
+   * only outside git, merge and custom in a git repo, plus pr when `pullRequestHost` is set.
+   * Optional only so older payloads type-check.
+   */
+  completionActions?: CompletionAction[];
+  /**
+   * The host a pull request would open on, e.g. "github.com" or an Enterprise host: set when `gh`
+   * is installed, the repo has a remote, and gh is logged into that remote's host. null otherwise
+   * (no pr action). Worked out on each read. Optional only so older payloads type-check.
+   */
+  pullRequestHost?: string | null;
+  /**
    * Color of the project's key badge: a preset id from PROJECT_COLORS ("blue") or a custom
    * "#rrggbb". null → the theme's accent.
    */
@@ -101,6 +121,14 @@ export function reviewPassed(state: ReviewState): boolean {
 }
 
 export type TicketKind = "task" | "conductor";
+
+/**
+ * How an approved ticket's work lands (DESIGN.md "Completion"), each with its own completion
+ * prompts: "merge" merges the branch into its base branch locally, "pr" pushes it and opens a
+ * GitHub pull request with gh, "custom" follows the approver's own instructions.
+ */
+export const COMPLETION_ACTIONS = ["merge", "pr", "custom"] as const;
+export type CompletionAction = (typeof COMPLETION_ACTIONS)[number];
 
 export interface Ticket {
   id: string;
@@ -164,6 +192,19 @@ export interface Ticket {
    * ticket's own agent (`submit_for_review` skip_agent_review). Optional so older payloads type-check.
    */
   skipAgentReview?: boolean;
+  /**
+   * The completion action picked when the ticket was approved (or completed), kept until the
+   * completion runs: a human approval can come before the agent review finishes. null → the
+   * project's default. Optional so older payloads type-check.
+   */
+  completionAction?: CompletionAction | null;
+  /** The approver's instructions for the completion run, kept with `completionAction`. */
+  completionInstructions?: string | null;
+  /**
+   * The pull request a "pr" completion opened (the agent records it with record_pull_request).
+   * Later approvals of the ticket default to "pr", so they update the same pull request.
+   */
+  pullRequestUrl?: string | null;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -525,7 +566,9 @@ export const PROMPT_IDS = [
   "system.plan",
   "system.work",
   "system.review",
-  "system.complete",
+  "system.complete_merge",
+  "system.complete_pr",
+  "system.complete_custom",
   "system.conductor",
   "system.chat",
   "system.triage",
@@ -541,13 +584,24 @@ export const PROMPT_IDS = [
   "run.work_start",
   "run.conductor_start",
   "run.review",
-  "run.complete",
+  "run.complete_merge",
+  "run.complete_pr",
+  "run.complete_custom",
   "run.conductor_update",
   "run.changes_requested",
   "run.reopen",
   "run.triage",
 ] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];
+
+/**
+ * Prompt ids that were renamed, old → new. Overrides saved under an old id still apply (the
+ * service migrates stored ones and maps any it's sent).
+ */
+export const RENAMED_PROMPT_IDS: Record<string, PromptId> = {
+  "system.complete": "system.complete_merge",
+  "run.complete": "run.complete_merge",
+};
 export type PromptGroup = "system" | "run";
 
 export interface PromptVariable {
@@ -732,6 +786,8 @@ export interface CreateProjectBody {
   defaultModels?: Record<string, string | null>;
   /** A valid branch name; null or "" → inherit settings.baseBranch */
   baseBranch?: string | null;
+  /** The default completion action; must be one the project offers. Default "merge". */
+  completionAction?: CompletionAction;
 }
 
 export interface CreateTicketBody {
@@ -819,6 +875,13 @@ export interface BranchInfo {
 export interface HumanReviewBody {
   decision: "approve" | "request_changes";
   notes?: string;
+  /**
+   * With "approve": how the work lands once the ticket is ready (kept on the ticket until then).
+   * Omitted → the ticket's earlier choice, else the project default. Must be one the ticket offers.
+   */
+  action?: CompletionAction;
+  /** With "approve": instructions for the completion run (required in spirit for custom). */
+  instructions?: string;
 }
 
 /** POST /tickets/:key/messages */
@@ -844,9 +907,14 @@ export interface ApprovalBody {
 }
 
 export interface CompleteBody {
+  /** How the work lands; omitted → the choice made at approval, else the project default. */
+  action?: CompletionAction;
   /** Extra instructions for the completion run, e.g. "merge into main" */
   instructions?: string;
-  /** Mark done without running the agent */
+  /**
+   * Mark done without running the agent ("Approve and take no action"): on a ticket in review this
+   * also records the human approval.
+   */
   skipAgent?: boolean;
 }
 

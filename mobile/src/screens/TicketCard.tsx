@@ -62,6 +62,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
         )}
         {t.busy && <Spinner />}
         {t.externalRef && <Badge icon="link">{t.externalRef.source}</Badge>}
+        {t.status === "done" && t.pullRequestUrl && <Badge tone="violet" icon="external">PR</Badge>}
       </View>
       <Text style={[styles.title, { color: dim ? c.text2 : c.text, fontSize: dim ? 14.5 : 15.5 }]} numberOfLines={dim ? 2 : 3}>
         {t.title || "Untitled"}

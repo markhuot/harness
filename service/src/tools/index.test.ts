@@ -31,7 +31,7 @@ describe("toolsForRun", () => {
     plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
     work: ["post_summary", "block", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    complete: ["post_summary", ...BOARD, ...CONFIG_READ],
+    complete: ["post_summary", "record_pull_request", ...BOARD, ...CONFIG_READ],
     conductor: ["post_summary", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
     chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],

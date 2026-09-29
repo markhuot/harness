@@ -117,6 +117,20 @@ const TICKETS: Record<string, { t: Partial<Ticket>; b?: BranchContext; p?: Parti
   "external ref without url": { t: { externalRef: { source: "jira", key: "WEB-9", url: null } as unknown as Ticket["externalRef"] } },
 };
 
+const GH = { host: "github.com", remote: "origin", repo: "github.com/nytimes/web" };
+const GHE = { host: "ghe.acme.com", remote: "upstream", repo: "ghe.acme.com/web/site" };
+const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; pullRequest?: BranchContext["pullRequest"]; instructions?: string }>> = {
+  pr: {
+    github: { pullRequest: GH },
+    "enterprise, existing pull request": { pullRequest: GHE, t: { pullRequestUrl: "https://ghe.acme.com/web/site/pull/7" }, instructions: "Add the design label." },
+  },
+  custom: {
+    instructions: { t: { completionInstructions: "Cherry-pick onto release-2.4." }, instructions: "Cherry-pick onto release-2.4." },
+    "no instructions": {},
+  },
+};
+const COMPLETION_SHAPES = ["harness worktree", "branch is the base branch", "outside worktree with leftover harness worktree", "checkout (no worktree)", "not git"];
+
 const CHILDREN: Ticket[] = [
   ticket({ id: "c1", key: "NYT-4", title: "Tokens", status: "review", agentReview: "approved", humanReview: "pending" }),
   ticket({ id: "c2", key: "NYT-5", title: "Toggle", status: "blocked", dependsOn: ["NYT-4"], blockedReason: "Which  icon?\nSun or moon" }),
@@ -153,6 +167,22 @@ describe("built-in system prompts", () => {
     test(`${kind} with an empty children list`, () => {
       expect(systemPrompt({ kind, project, ticket: ticket({ kind: kind === "conductor" ? "conductor" : "task" }), session, children: [] })).toMatchSnapshot();
     });
+  }
+
+  // Completion actions other than merge (DESIGN.md "Completion"), over the shapes that change them.
+  for (const [action, variants] of Object.entries(COMPLETION_VARIANTS)) {
+    for (const [variant, extra] of Object.entries(variants)) {
+      for (const name of COMPLETION_SHAPES) {
+        test(`complete · ${action} · ${variant} · ${name}`, () => {
+          const c = TICKETS[name]!;
+          const p = c.p === null ? null : { ...project, ...c.p };
+          const b = c.b ? { ...c.b, pullRequest: extra.pullRequest } : undefined;
+          const t = ticket({ ...c.t, completionAction: action as "pr" | "custom", ...extra.t });
+          expect(systemPrompt({ kind: "complete", project: p, ticket: t, session, branches: b })).toMatchSnapshot();
+          expect(completePrompt(t, extra.instructions, b, p)).toMatchSnapshot();
+        });
+      }
+    }
   }
 
   for (const status of ["planning", "in_progress", "blocked", "review", "done"] as TicketStatus[]) {
@@ -258,6 +288,10 @@ describe("built-in run prompts", () => {
       });
     }
   }
+  test("reopenPrompt · with a pull request", () => {
+    const t = ticket({ branch: "harness/nyt-3", status: "done", pullRequestUrl: "https://github.com/nytimes/web/pull/12" });
+    expect(reopenPrompt(t, "Address the review comments.", "main")).toMatchSnapshot();
+  });
 
   const tickets = [ticket(), ticket({ id: "t2", key: "WEB-9", title: "Mirrored", status: "planning" })];
   for (const prompt of ["", "Only failures. Dispatch to NYT."]) {

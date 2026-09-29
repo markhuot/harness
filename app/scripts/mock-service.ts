@@ -36,7 +36,8 @@ import type {
   Watcher,
 } from "@harness/shared";
 import type { PromptEntry, PromptId } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, LISTEN_MODES, normalizeProjectColor, outputTitle, PROMPT_IDS, reviewPassed } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, isCompletionAction, LISTEN_MODES, normalizeProjectColor, offeredCompletionActions, outputTitle, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
+import type { CompletionAction } from "@harness/shared";
 // The real catalog, so the Prompts screen shows the text runs get.
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
 
@@ -362,7 +363,27 @@ function simulateRun(t: Ticket, kind: RunKind, prompt: string, text: string, aft
 // Seed
 // ---------------------------------------------------------------------------
 
-function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null, isGit = true): Project {
+/**
+ * Mirrors the service's project reads: the offered completion actions follow the checkout (git,
+ * and a remote on a host gh is logged into → pullRequestHost). Recomputed after each change.
+ */
+function withCompletionActions(p: Project): Project {
+  p.completionActions = offeredCompletionActions({ isGit: p.isGit, pullRequestHost: p.pullRequestHost ?? null });
+  return p;
+}
+
+/** The ticket's parent, for a completion choice (a child on its parent's branch only merges). */
+const parentOf = (t: Ticket) => (t.parentId ? (tickets.get(t.parentId) ?? null) : null);
+
+/** Mirrors the service's resolveCompletionAction check: 400 for a choice the ticket doesn't offer. */
+function checkCompletionAction(t: Ticket, requested: unknown): CompletionAction {
+  if (requested != null && !isCompletionAction(requested)) throw new HttpError(400, `action must be one of merge, pr, custom`);
+  const r = resolveCompletionAction((requested as CompletionAction | undefined) ?? null, t, projects.get(t.projectId), parentOf(t));
+  if (r.error !== null) throw new HttpError(400, r.error);
+  return r.action;
+}
+
+function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null, isGit = true, pullRequestHost: string | null = null): Project {
   const p: Project = {
     id: newId("proj"),
     key,
@@ -377,10 +398,12 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     autoComplete: true,
     permissionMode: null,
     color,
+    completionAction: "merge",
+    pullRequestHost: isGit ? pullRequestHost : null,
     createdAt: now() - 86400_000 * 7,
     updatedAt: now() - 86400_000 * 7,
   };
-  projects.set(p.id, p);
+  projects.set(p.id, withCompletionActions(p));
   return p;
 }
 
@@ -530,7 +553,9 @@ function seedTicket(s: SeedTicket): Ticket {
 }
 
 function seed() {
-  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes", true, "blue");
+  // Three kinds of checkout for the Approve menu: a GitHub remote gh is logged into (merge, open
+  // PR, custom), plain git (HARNESS, HELLOHARNESS: merge, custom) and no git (SITE: custom only).
+  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes", true, "blue", true, "github.com");
   const hx = seedProject("HARNESS", "harness", "/Users/markhuot/Sites/harness", false);
 
   seedTicket({
@@ -628,7 +653,7 @@ function seed() {
       ["system", "Agent review approved: change is minimal and well tested."],
     ],
   }); // NYTIMES-4
-  seedTicket({
+  const upgrade = seedTicket({
     project: ny,
     title: "Upgrade Next.js to 15 and fix type errors",
     description: "Bump next and react, fix the resulting type errors.",
@@ -637,8 +662,11 @@ function seed() {
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 3000,
-    summaries: [["agent", "Upgraded to Next 15. All `tsc` errors fixed; `bun test` green."], ["agent", "Completed. Merged `harness/nytimes-5` into `main`."]],
+    summaries: [["agent", "Upgraded to Next 15. All `tsc` errors fixed; `bun test` green."], ["agent", "Completed. Opened https://github.com/markhuot/nytimes/pull/318 from `harness/nytimes-5`."]],
   }); // NYTIMES-5
+  // Completed with "Approve and open PR": the card shows a PR chip, the ticket a PR link.
+  upgrade.completionAction = "pr";
+  upgrade.pullRequestUrl = "https://github.com/markhuot/nytimes/pull/318";
   seedTicket({
     project: ny,
     title: "Paywall meter counts AMP pageviews twice",
@@ -1050,9 +1078,16 @@ function noteReady(t: Ticket) {
   completeRun(t);
 }
 
-function completeRun(t: Ticket, instructions = "") {
-  simulateRun(t, "complete", `Finalize: merge the worktree branch. ${instructions}`, "Merged the branch and cleaned up the worktree.", (cur) => {
-    addSummary(cur.sessionId, cur.id, "agent", "Completed.");
+/** Mirrors the service's completion run for the ticket's action (merge / pr / custom). */
+function completeRun(t: Ticket, instructions = t.completionInstructions ?? "") {
+  const project = projects.get(t.projectId);
+  // A stored choice the project no longer offers falls back to the default (as the service does).
+  const action = resolveCompletionAction(t.completionAction ?? null, t, project, parentOf(t)).action ?? resolveCompletionAction(null, t, project, parentOf(t)).action!;
+  const prompt = { merge: "Finalize: merge the worktree branch.", pr: "Finalize: push the branch and open a pull request.", custom: "Finalize the work as instructed." }[action];
+  const result = { merge: "Merged the branch and cleaned up the worktree.", pr: "Pushed the branch and opened a pull request.", custom: instructions ? `Done: ${instructions}` : "Wrapped up." }[action];
+  simulateRun(t, "complete", `${prompt} ${instructions}`.trim(), result, (cur) => {
+    if (action === "pr" && !cur.pullRequestUrl) cur.pullRequestUrl = `https://${project?.pullRequestHost ?? "github.com"}/markhuot/${project?.name ?? "repo"}/pull/${400 + tickets.size}`;
+    addSummary(cur.sessionId, cur.id, "agent", action === "pr" ? `Completed. Opened ${cur.pullRequestUrl}` : "Completed.");
     setStatus(cur, "done");
   });
 }
@@ -1175,9 +1210,16 @@ async function route(req: Request, url: URL): Promise<Response> {
         autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
         color: normalizeProjectColor(body.color ?? null) ?? null,
+        completionAction: "merge",
+        pullRequestHost: null,
         createdAt: now(),
         updatedAt: now(),
       };
+      withCompletionActions(p);
+      if (body.completionAction !== undefined) {
+        if (!p.completionActions!.includes(body.completionAction)) throw new HttpError(400, `completionAction must be one of ${p.completionActions!.join(", ")}`);
+        p.completionAction = body.completionAction;
+      }
       projects.set(p.id, p);
       broadcast({ kind: "project.upserted", project: p });
       return ok(p, 201);
@@ -1189,7 +1231,10 @@ async function route(req: Request, url: URL): Promise<Response> {
       return ok(filterBranches(url.searchParams.get("q") ?? "", Math.min(200, Number(url.searchParams.get("limit")) || 50)));
     }
     if (method === "PATCH") {
-      const { key: rawKey, nextSeq: _n, ...body } = await readBody(req);
+      const { key: rawKey, nextSeq: _n, completionActions: _ca, pullRequestHost: _ph, isGit: _g, ...body } = await readBody(req);
+      if (body.completionAction !== undefined && !offeredCompletionActions(p).includes(body.completionAction)) {
+        throw new HttpError(400, `completionAction must be one of ${offeredCompletionActions(p).join(", ")}`);
+      }
       if (rawKey !== undefined) {
         const { key, error } = checkProjectKey(String(rawKey));
         if (error) throw new HttpError(400, `Invalid project key "${key}": ${error}`);
@@ -1202,6 +1247,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         body.color = color;
       }
       Object.assign(p, body, { id: p.id, key: p.key, updatedAt: now() });
+      withCompletionActions(p);
       broadcast({ kind: "project.upserted", project: p });
       return ok(p);
     }
@@ -1314,6 +1360,11 @@ async function route(req: Request, url: URL): Promise<Response> {
         }
         case "review": {
           if (body.decision === "approve") {
+            // Mirrors the service: the choice is kept on the ticket until the completion runs.
+            if (body.action !== undefined) {
+              t.completionAction = checkCompletionAction(t, body.action);
+              t.completionInstructions = typeof body.instructions === "string" && body.instructions.trim() ? body.instructions.trim() : null;
+            }
             t.humanReview = "approved";
             addSummary(t.sessionId, t.id, "human", body.notes ? `Approved: ${body.notes}` : "Approved.");
             upsertTicket(t);
@@ -1340,10 +1391,17 @@ async function route(req: Request, url: URL): Promise<Response> {
         }
         case "complete":
           if (body.skipAgent) {
+            // "Approve and take no action": in review it's also the human's approval.
+            const inReview = t.status === "review";
+            if (inReview) t.humanReview = "approved";
+            appendEntry(t.sessionId, null, "system", { type: "status", text: inReview ? "Approved, no action taken" : "Marked done" });
             setStatus(t, "done");
             upsertTicket(t);
           } else {
-            completeRun(t, body.instructions ?? "");
+            const action = checkCompletionAction(t, body.action ?? t.completionAction ?? undefined);
+            t.completionAction = action;
+            if (typeof body.instructions === "string") t.completionInstructions = body.instructions.trim() || null;
+            completeRun(t, t.completionInstructions ?? "");
           }
           return ok(t);
         case "cancel": {
