@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODE_LABELS, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
 import { CLASSIFIER_LABELS, inheritedModel, modelName, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -286,7 +286,7 @@ function DriversSection() {
 }
 
 function GeneralSection({ settings }: { settings: PublicSettings }) {
-  const { state, client } = useStore();
+  const { state, client, toast } = useStore();
   const act = useAction();
   const c = useColors();
   const inputStyle = useInputStyle();
@@ -313,6 +313,23 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
           onCommit={(v) => {
             const n = Math.round(Number(v));
             if (Number.isFinite(n)) void save({ maxConcurrentRuns: Math.min(32, Math.max(1, n)) });
+          }}
+        />
+      </SRow>
+      <SRow title="Base branch" sub="Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.">
+        <DraftField
+          value={settings.baseBranch ?? DEFAULT_BASE_BRANCH}
+          mono
+          placeholder={DEFAULT_BASE_BRANCH}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Base branch"
+          onCommit={(v) => {
+            // Empty goes back to the built-in default; the service refuses invalid names too.
+            const name = v.trim() || DEFAULT_BASE_BRANCH;
+            const error = branchNameError(name);
+            if (error) toast(`Not a valid branch name: ${error}`, "error");
+            else if (name !== settings.baseBranch) void save({ baseBranch: name });
           }}
         />
       </SRow>

@@ -3,9 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { isTicketKey, resolvePermissionMode, type Ticket } from "@harness/shared";
+import { branchNameError, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type Ticket } from "@harness/shared";
 import {
   attentionOf,
+  canChangeBranch,
+  inheritedBaseLabel,
+  newTicketBranchLabel,
+  ticketHasBranch,
   childrenOfTicket,
   dependencyStates,
   dependentsOf,
@@ -32,6 +36,8 @@ import { ProgressBar } from "../ui/Conductor";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
 import { useStickToBottom } from "../ui/stickToBottom";
+import { BranchPicker } from "../ui/BranchPicker";
+import { DraftField } from "../ui/settings";
 
 export function useOpenTicket() {
   const router = useRouter();
@@ -334,13 +340,24 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
             {ticket.workdir ?? "Not prepared yet"}
           </Text>
         </Prop>
-        {ticket.branch && (
-          <Prop label="Branch">
-            <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: c.text }}>
-              {ticket.branch}
-            </Text>
+        {ticketHasBranch(ticket, project) && (
+          <Prop label="Branch" hint={canChangeBranch(ticket, project) ? "Until work starts" : ticket.branch ? undefined : "When work starts"}>
+            {canChangeBranch(ticket, project) ? (
+              <BranchPicker
+                projectId={ticket.projectId}
+                value={ticket.requestedBranch ?? null}
+                defaultLabel={newTicketBranchLabel(ticket.key)}
+                newLabel={(name) => `Create ${name} from ${resolveBaseBranch(ticket, project, state.settings).branch}`}
+                onChange={(branch) => void act(() => client.updateTicket(ticket.key, { branch }))}
+              />
+            ) : (
+              <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: c.text }}>
+                {plannedBranch(ticket)}
+              </Text>
+            )}
           </Prop>
         )}
+        {project?.isGit && <BaseBranchProp ticket={ticket} editable={editable} />}
         {ticket.externalRef && (
           <Prop label="External">
             <Text style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14 }} onPress={ticket.externalRef.url ? () => void Linking.openURL(ticket.externalRef!.url!) : undefined}>
@@ -394,6 +411,32 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         </View>
       )}
     </ScrollView>
+  );
+}
+
+/** The ticket's base branch override; empty shows (and follows) what the project or app gives. */
+function BaseBranchProp({ ticket, editable }: { ticket: Ticket; editable: boolean }) {
+  const { state, client, toast } = useStore();
+  const act = useAction();
+  const c = useColors();
+  const project = state.projects[ticket.projectId];
+  const inherited = resolveBaseBranch(null, project, state.settings);
+  const save = (v: string) => {
+    const name = v.trim();
+    const error = name ? branchNameError(name) : null;
+    if (error) toast(`Not a valid branch name: ${error}`, "error");
+    else void act(() => client.updateTicket(ticket.key, { baseBranch: name || null }));
+  };
+  return (
+    <Prop label="Base branch" hint={ticket.baseBranch ? "Applies from the next run" : "Inherited"}>
+      {editable ? (
+        <DraftField value={ticket.baseBranch ?? ""} mono placeholder={inheritedBaseLabel(inherited)} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Base branch" onCommit={save} style={{ fontSize: 12.5 }} />
+      ) : (
+        <Text selectable style={{ fontFamily: MONO, fontSize: 12.5, color: ticket.baseBranch ? c.text : c.text3 }}>
+          {ticket.baseBranch || inheritedBaseLabel(inherited)}
+        </Text>
+      )}
+    </Prop>
   );
 }
 

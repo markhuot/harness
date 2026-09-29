@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { depChipTitle, dependencyStates, dependentsOf, inheritedModel } from "@harness/shared/state";
+import { depChipTitle, dependencyStates, dependentsOf, inheritedBaseLabel, inheritedModel, newTicketBranchLabel } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { ModelSelect } from "../components/ModelSelect";
@@ -10,7 +10,6 @@ import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import { useOpenTicket } from "../components/paneContext";
 import { BranchSelect } from "../components/BranchSelect";
-import { inheritedBaseLabel, newTicketBranchLabel } from "../components/branchPicker";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const { state, client } = useStore();

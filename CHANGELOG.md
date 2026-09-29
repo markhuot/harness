@@ -36,6 +36,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   into, and the one a new ticket branch starts from. It defaults to `main`, a project can set its
   own, and a single ticket can override both. Agents can set a ticket's or project's base branch
   for you, and the Changes tab compares against a project's or ticket's base branch when one is set.
+- On iPhone, Settings → General has a Base branch field, and a git project's settings have one
+  too. Leave the project's field empty to use the app's value, which shows as the placeholder.
+- On iPhone, New session has a Branch picker for git projects. It starts on "New branch
+  harness/<key>", and you can search the project's branches or type a new name, which the ticket
+  creates from the base branch. A line under the picker says what will happen, including a warning
+  when another worktree already has the branch checked out. A Base branch field next to it
+  overrides the project's for this one ticket.
+- On iPhone, a ticket's Details tab shows its branch and base branch, and marks the base branch
+  as inherited when the ticket doesn't set its own. You can change the base branch until the
+  ticket is done, and you can pick a different branch until work starts.
 - On the Mac, Settings → General has a Base branch field, and a git project's settings have a
   Base branch picker that inherits the app's value when left on its default.
 - The Mac's New session window has a Branch picker for git projects. It starts on a new

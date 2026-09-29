@@ -192,6 +192,21 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
+/**
+ * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
+ * sits in the upper middle of the screen. Elements scrolled far out of view may be missing from
+ * the tree, so it swipes a fixed distance until one shows up, then just far enough.
+ */
+async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
+  for (let i = 0; i < tries; i++) {
+    const el = await findElement(udid, match);
+    if (el && el.frame.y >= 140 && el.frame.y <= 520) return;
+    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 300)) : 380;
+    await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
+    await Bun.sleep(400);
+  }
+  throw new Error("scrollTo: element never came into view");
+}
 async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> {
   const end = Date.now() + ms;
   let last: unknown;
@@ -432,6 +447,9 @@ async function seed() {
   await git(repo, "init", "-q", "-b", "main");
   await git(repo, "add", "-A");
   await git(repo, "commit", "-qm", "Initial commit");
+  // More branches for the branch picker: one free, one checked out in another worktree.
+  await git(repo, "branch", "feature/greet-emoji");
+  await git(repo, "worktree", "add", "-q", "-b", "release/v2", join(scratch, "greeter-release"));
   mkdirSync(join(scratch, "harness-site"), { recursive: true });
   const [project, other] = await Promise.all([
     api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" }),
@@ -456,6 +474,8 @@ async function seed() {
   // Sub-agents: two, the second starting a nested third (the dummy driver's /agents).
   const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
   const tables = await create(other.id, TABLE_BRIEF);
+  // Not started, so its branch can still be picked on the Details tab.
+  const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -482,6 +502,7 @@ async function seed() {
     settle(configApproval.key, (t) => !!t.pendingApproval),
     settle(blocked.key, (t) => t.status === "blocked" && !t.busy),
     settle(plan.key, (t) => t.status === "planning" && !t.busy),
+    settle(branchPlan.key, (t) => t.status === "planning" && !t.busy),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
     settle(tables.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved"),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
@@ -497,7 +518,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -927,11 +948,38 @@ function screens(s: Seeded): Screen[] {
     // when the appearance flips.
     { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
     { name: "new-session", url: "harness://new" },
+    // The git project's New session with the branch sheet open, searching "re": Create re, then
+    // release/v2 (checked out in another worktree).
+    {
+      name: "new-session-branch",
+      url: `harness://new?projectId=${s.project.id}`,
+      ready: (l) => l.some((x) => x.startsWith("Branch, ")),
+      seconds: 6,
+      prepare: (udid) =>
+        tapWhere(udid, (l) => l.startsWith("Branch, "))
+          .then(() => until("branch sheet", async () => (await labels(udid)).includes("Search branches"), 5000))
+          // The field takes focus as the sheet finishes sliding up; typing before that drops keys.
+          .then(() => Bun.sleep(800))
+          .then(() => axe("type", "re", "--udid", udid))
+          .then(() => until("branch rows", async () => (await labels(udid)).some((x) => x.startsWith("release/v2")), 5000)),
+    },
+    // Scrolled down past the plan to the Branch and Base branch rows.
+    {
+      name: "ticket-details-branch",
+      url: `harness://ticket/${k(s.branchPlan)}?tab=details`,
+      prepare: async (udid) => {
+        for (let i = 0; i < 2; i++) await axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "330", "--duration", "0.6", "--udid", udid);
+        await Bun.sleep(700);
+      },
+    },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
+    // Scrolled to the Base branch fields (General in Settings, Agents in the git project's settings).
+    { name: "settings-base-branch", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
+    { name: "project-settings-base-branch", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
     { name: "connect", url: "harness://connect" },
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
