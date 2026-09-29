@@ -1489,8 +1489,11 @@ Settings, project settings, or on the board route the pane workspace.
   draft (`blankDraftTicket`); the first change that makes it non-empty creates the draft ticket and
   swaps the leaf to that ticket in place, keeping its id and size. From then on it's a ticket
   pane: `TicketDetail` renders the draft editor while `ticket.draft` is set, and the ticket's tabs
-  once it's submitted (on any device). Closing a compose or draft pane goes through
-  `requestCloseDraft`: an empty one closes (a saved empty draft is deleted), anything else asks
+  once it's submitted (on any device). The editing state lives outside React in a `DraftSession`
+  per pane leaf (`state/draftSession.ts`), so it survives that swap and a move to another project
+  (which re-keys the pane with `renameTicketKey`); edits typed while the first POST is out are
+  rebased onto its response. Closing a compose or draft pane (✕, ⌘W, Escape, More → Close) goes
+  through `requestClosePane` (`components/draftClose.ts`): an empty one closes (a saved empty draft is deleted), anything else asks
   Save draft (the default), Discard draft or Cancel. The editor has the project picker with
   Task / Conductor beside it, the prompt, the Options disclosure (always collapsed at first, with
   `newSessionOptionsSummary` as its label, opened by itself when `optionsNeedAttention`), and
