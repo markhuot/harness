@@ -217,6 +217,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/tickets/:key", async ({ params, body }) => o.updateTicket(params.key!, await body()));
   add("DELETE", "/tickets/:key", async ({ params }) => (await o.deleteTicket(params.key!), ok));
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
+  add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     const b = await body();
     return o.sendMessage(params.key!, b?.text, { chat: b?.chat === true });

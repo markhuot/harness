@@ -6,12 +6,15 @@ import {
   checkPanes,
   clampSizes,
   closedSessions,
+  composeLeafById,
+  composeToTicket,
   cwdName,
   closePane,
   defaultPanes,
   dropContent,
   dropPreview,
   dropTargetAt,
+  escapePanes,
   findLeaf,
   focusedTicket,
   focusPane,
@@ -24,9 +27,11 @@ import {
   mapScopes,
   minSize,
   movePane,
+  newComposeContent,
   newTerminalContent,
   normalize,
   orphanSessions,
+  openCompose,
   openTerminal,
   openTicket,
   paneInDirection,
@@ -80,7 +85,8 @@ const col = (id: string, children: PaneNode[], sizes?: number[]) => split("colum
 const st = (root: PaneNode, focusedId: string | null = null, zoomedId: string | null = null): PaneState => ({ root, focusedId, zoomedId });
 
 const ticketContent = (key: string, tab: "summaries" | "transcript" = "summaries"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
-const label = (l: PaneLeaf) => (l.content.kind === "board" ? "board" : l.content.kind === "ticket" ? l.content.ticketKey : `$${l.content.sessionId}`);
+const label = (l: PaneLeaf) =>
+  l.content.kind === "board" ? "board" : l.content.kind === "ticket" ? l.content.ticketKey : l.content.kind === "compose" ? `+${l.content.id}` : `$${l.content.sessionId}`;
 const r = (n: number) => Math.round(n * 1000) / 1000;
 /** A compact picture of a tree: row[board .6, col[A .5, B .5] .4] */
 function shape(n: PaneNode): string {
@@ -1242,5 +1248,84 @@ describe("paneInDirection (⌥⌘arrows / ⌃hjkl)", () => {
   test("an unknown or hidden starting pane goes nowhere", () => {
     expect(go(tree(), "nope", "right")).toBeNull();
     expect(go(st(tree().root, "A", "A"), "B", "right")).toBeNull();
+  });
+});
+
+describe("New session panes (compose)", () => {
+  const C = (id: string): PaneLeaf => ({ type: "leaf", id: `c-${id}`, content: { kind: "compose", id } });
+
+  test("every open adds another New session pane, docked right of the focused pane like a terminal", () => {
+    const one = valid(openCompose(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1")));
+    const two = valid(openCompose(one));
+    const composes = leaves(two.root).filter((l) => l.content.kind === "compose");
+    expect(composes.length).toBe(2);
+    expect(new Set(composes.map((l) => (l.content as { id: string }).id)).size).toBe(2);
+    // The first split the ticket pane; the second split the first (it was focused).
+    expect(shape(two.root)).toMatch(/^row\[board 0\.6, A-1 0\.2, \+n\d+ 0\.1, \+n\d+ 0\.1\]$/);
+    expect(findLeaf(two.root, two.focusedId!)!.content).toEqual(composes[1]!.content);
+  });
+
+  test("with nothing focused it docks beside the board, which keeps its share", () => {
+    const s = valid(openCompose(defaultPanes("B")));
+    expect(shape(s.root)).toMatch(/^row\[board 0\.6, \+n\d+ 0\.4\]$/);
+  });
+
+  test("the same content twice focuses the open pane instead of opening another", () => {
+    const content = newComposeContent("proj-1");
+    const once = openCompose(defaultPanes("B"), null, content);
+    const again = openCompose({ ...once, focusedId: "B" }, null, content);
+    expect(leaves(again.root).length).toBe(2);
+    expect(again.focusedId).toBe(composeLeafById(once.root, content.id)!.id);
+    expect(content.projectId).toBe("proj-1");
+  });
+
+  test("normalize keeps at most one leaf per New session id", () => {
+    const s = normalize(st(row("r", [B, C("x"), { ...C("x"), id: "dup" }])));
+    expect(leaves(s.root).filter((l) => l.content.kind === "compose").length).toBe(1);
+    expect(checkPanes(st(row("r", [B, C("x"), { ...C("x"), id: "dup" }])))).toContain("New session x is open twice");
+  });
+
+  test("saving swaps the pane to the ticket in place: same leaf id, same size, same focus", () => {
+    const start = valid(normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.2, 0.3]), "c-x")));
+    const s = valid(composeToTicket(start, "x", "A-7"));
+    const leaf = findLeaf(s.root, "c-x")!;
+    expect(leaf.content).toEqual({ kind: "ticket", ticketKey: "A-7", tab: "summaries" });
+    expect(shape(s.root)).toBe("row[board 0.5, A-1 0.2, A-7 0.3]");
+    expect(s.focusedId).toBe("c-x");
+    expect(composeToTicket(start, "nope", "A-7")).toBe(start);
+  });
+
+  test("saving as a ticket that's already open closes the New session and focuses that pane", () => {
+    const start = normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.2, 0.3]), "c-x"));
+    const s = valid(composeToTicket(start, "x", "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.5, A-1 0.5]");
+    expect(s.focusedId).toBe("A-1");
+  });
+
+  test("New session panes are never stored: serializing drops them, and their focus", () => {
+    const s = normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.25, 0.25]), "c-x", "c-x"));
+    const back = parsePanes(serializePanes(s));
+    expect(shape(back.root)).toBe("row[board 0.667, A-1 0.333]");
+    expect(back.focusedId).toBeNull();
+    expect(back.zoomedId).toBeNull();
+    const store = parsePaneStore(serializePaneStore({ scopes: { [ALL_SCOPE]: s, p1: normalize(st(row("r2", [{ ...B, id: "B2" }, C("y")]))) } }));
+    expect(shape(store.scopes[ALL_SCOPE]!.root)).toBe("row[board 0.667, A-1 0.333]");
+    expect(shape(store.scopes.p1!.root)).toBe("board");
+  });
+
+  test("a stored New session (from anywhere) doesn't parse back", () => {
+    const raw = JSON.stringify({ root: { type: "split", id: "r", dir: "row", children: [B, C("x")], sizes: [0.5, 0.5] }, focusedId: null, zoomedId: null });
+    expect(shape(parsePanes(raw).root)).toBe("board");
+  });
+
+  test("labels and minimum width", () => {
+    expect(paneLabel({ kind: "compose", id: "x" })).toBe("New session");
+    expect(minSize(C("x"), "row")).toBe(PANE_MIN_WIDTH.compose);
+    expect(PANE_MIN_WIDTH.compose).toBe(360);
+  });
+
+  test("Escape closes a focused New session pane", () => {
+    const s = normalize(st(row("r", [B, C("x")]), "c-x"));
+    expect(shape(escapePanes(s).root)).toBe("board");
   });
 });

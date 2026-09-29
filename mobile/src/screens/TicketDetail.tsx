@@ -115,7 +115,13 @@ export function TicketDetailScreen() {
     };
   }, [loadDetail, ticketKey, epoch, router, hasDetail]);
 
-  if (!ticket) {
+  // A draft hasn't launched: it opens in the New session editor instead.
+  const isDraft = !!ticket?.draft;
+  useEffect(() => {
+    if (isDraft) router.replace({ pathname: "/new", params: { key: ticketKey } });
+  }, [isDraft, ticketKey, router]);
+
+  if (!ticket || ticket.draft) {
     return (
       <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: "center" }}>
         <Stack.Screen options={{ title: ticketKey }} />

@@ -1,5 +1,5 @@
 // The pane workspace: everything in <main> on the board route is a split tree of panes
-// (state/panes.ts). The board is one pane, and each open ticket or terminal another. Panes are rendered as flat,
+// (state/panes.ts). The board is one pane, and each open ticket, terminal or New session another. Panes are rendered as flat,
 // absolutely positioned siblings (layoutPanes), so reshaping the tree never remounts one: the board
 // keeps its search and scroll, and a ticket keeps its transcript, browser and plugin frames.
 //
@@ -37,6 +37,7 @@ import {
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { TerminalPane } from "../views/TerminalPane";
+import { DraftEditor } from "../views/DraftEditor";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
@@ -183,6 +184,8 @@ function Pane({
           <BoardPane />
         ) : c.kind === "ticket" ? (
           <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
+        ) : c.kind === "compose" ? (
+          <DraftEditor key={c.id} paneId={leaf.id} compose={c} zoomed={zoomed} />
         ) : (
           <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
         )}

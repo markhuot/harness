@@ -94,6 +94,8 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | --- | --- |
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
+| Create with `draft: true` | status `planning`, `draft` set, no run (see "Drafts") |
+| `POST /submit {start}` on a draft | `draft` cleared, then exactly what a create with that `start` does |
 | Human message in planning | enqueue plan run with the message |
 | `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | enqueue work run with the message (queued behind any active run) |
@@ -130,8 +132,8 @@ for changes resets the agent review to `pending` as usual; the next submit skips
 
 Who sets it:
 
-- **The human**, with `CreateTicketBody.skipAgentReview` (the "Skip agent review" checkbox in the
-  new-session composer on Mac and iPhone) or `UpdateTicketBody.skipAgentReview` (the ticket's
+- **The human**, with `CreateTicketBody.skipAgentReview` (the "Skip agent review" switch in
+  New session's Options on Mac and iPhone) or `UpdateTicketBody.skipAgentReview` (the ticket's
   details). A change while the ticket is in review applies at once: turned on with the agent
   review `pending`, the review is `skipped` and queued or running review runs are cancelled
   (a late `review_decision` from one is refused); turned off with it `skipped`, the review goes
@@ -147,6 +149,45 @@ Who sets it:
 Agents can only turn it on where someone else still reviews the work: for a project that requires
 a human review (`requireHumanReview`). Otherwise the agent review is the only check, and the call
 fails with an error saying a human can turn it off on the ticket. Humans can set it anywhere.
+
+### Drafts
+
+A New session is saved as a **draft** while it's written: a real ticket with `Ticket.draft` set,
+in planning, created with `CreateTicketBody.draft` (the prompt may still be empty). It takes a key
+like any ticket (a discarded draft leaves a gap in the numbers). Because it's an ordinary ticket,
+the board, its order, search, keyboard focus and the WebSocket sync need nothing special: the
+apps draw its card dashed and dimmed, and opening it shows the draft editor instead of the
+ticket's tabs.
+
+While `draft` is set:
+
+- Nothing runs. `enqueueRun`, `begin` and `/start` refuse a draft, and the scheduler, run recovery
+  and dependency auto-start skip it. Status moves, messages, reviews and completion get a 409.
+- Agents don't see it: the MCP ticket tools and watcher triage leave drafts out, and a draft can't
+  be a dependency.
+- `UpdateTicketBody` also takes `kind`, `useWorktree` and `projectId` (a 409 on any other
+  ticket, since they're fixed once it launches). A `projectId` change moves the draft into that
+  project under its next key and keeps the old key as an alias, the same way a project rename
+  does, so open panes follow it. A `description` change re-derives the title.
+
+`POST /tickets/:key/submit {start}` launches it: the flag is cleared, and the ticket then goes
+exactly where a create with that `start` would have sent it (a work run, a plan run, or waiting
+on its dependencies), keeping its place in the column. Discarding is `DELETE /tickets/:key`.
+
+The editors save lazily. Nothing is sent until the draft stops being empty (`draftIsEmpty`: no
+prompt and every setting inherited); then one `POST /tickets`, and after that a debounced PATCH
+of the changed fields (`draftPatch`). Incoming updates apply only when the editor has no unsent
+edits, so two devices editing one draft is last write wins. The draft helpers
+(`shared/src/state/drafts.ts`) are shared by both apps.
+
+**One settings UI.** A ticket's Details tab and a draft's Options render the same component
+(`TicketSettings`: `app/src/renderer/components/TicketSettings.tsx`, `mobile/src/ui/TicketSettings.tsx`)
+with the rows Model, Permissions, Agent review, Branch, Base branch and Depends on.
+`ticketSettingsRows` decides which rows show and which can change, and the two screens differ
+only in what their `onPatch` does (an immediate PATCH in Details, the local state and debounced
+save in a draft). In a draft the Branch row also decides the worktree: the branch the project
+directory has checked out (`checkoutBranch`, matched on `BranchInfo.checkedOutAt`) means no
+worktree, any other branch means one (`draftBranchPatch`). Base branch shows only with a worktree.
 
 ### Branches
 
@@ -1449,6 +1490,21 @@ Settings, project settings, or on the board route the pane workspace.
   keeps it inside the window. It shifts the menu left or right at the sides and flips it above
   the trigger near the bottom. When the menu doesn't fit either way, it goes on the roomier side
   and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
+- **New session panes.** ⌘N, the sidebar's New session, the palette, a project's "New session
+  here" and `#/compose` open a **compose** pane (`{ kind: "compose", id }` in `state/panes.ts`,
+  never persisted) on the right of the focused pane, one more each time. It holds a local blank
+  draft (`blankDraftTicket`); the first change that makes it non-empty creates the draft ticket and
+  swaps the leaf to that ticket in place, keeping its id and size. From then on it's a ticket
+  pane: `TicketDetail` renders the draft editor while `ticket.draft` is set, and the ticket's tabs
+  once it's submitted (on any device). The editing state lives outside React in a `DraftSession`
+  per pane leaf (`state/draftSession.ts`), so it survives that swap and a move to another project
+  (which re-keys the pane with `renameTicketKey`); edits typed while the first POST is out are
+  rebased onto its response. Closing a compose or draft pane (✕, ⌘W, Escape, More → Close) goes
+  through `requestClosePane` (`components/draftClose.ts`): an empty one closes (a saved empty draft is deleted), anything else asks
+  Save draft (the default), Discard draft or Cancel. The editor has the project picker with
+  Task / Conductor beside it, the prompt, the Options disclosure (always collapsed at first, with
+  `newSessionOptionsSummary` as its label, opened by itself when `optionsNeedAttention`), and
+  Plan first (⇧⌘↩) and Start session (⌘↩).
 - **Terminal panes.** New ▾ → New terminal in the sidebar (a split button whose main part is
   still New session ⌘N), File ▸ New Terminal (⌘T) and a project's context menu call the store's
   `openTerminal(projectId?)`. It picks the board (`terminalScope`: the board on screen, a
@@ -1530,6 +1586,11 @@ child tickets, rollups, key-rename preview, model and permission options) match 
 - **Board.** Five columns as horizontal pages under a status strip with counts. Touch and hold
   a card to move it between columns or to the top or bottom (VoiceOver gets the moves as custom
   actions). The project filter and the sidebar live in a Projects sheet.
+- **New session.** `harness://new` starts a blank draft and `harness://new?key=<KEY>` reopens a
+  saved one (a draft's `/ticket/[key]` link goes there too). It saves lazily like the desktop (see
+  "Drafts"), and its Options row holds the same `TicketSettings` as the Details tab. Cancel on a
+  non-empty draft offers Save draft, Discard draft or Keep editing, and swiping the sheet away
+  saves it.
 - **Selects.** Every desktop `<select>` is a `Select` (`mobile/src/ui/selects.tsx`): a SwiftUI
   `Menu` from `@expo/ui` whose label shows the value with the ⌃⌄ glyph. Each option is a
   controlled `Toggle` (a menu draws it as a checkmark item, with an optional subtitle line), so

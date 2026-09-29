@@ -32,6 +32,7 @@ import type {
   TranscriptContent,
   TranscriptRole,
   UpdateTicketBody,
+  SubmitTicketBody,
   Watcher,
   WatcherBody,
   WatcherLive,
@@ -319,6 +320,13 @@ export function deriveTitle(prompt: string): string {
       .find((l) => l.length > 0) ?? "Untitled";
   return line.length > 80 ? line.slice(0, 79).trimEnd() + "…" : line;
 }
+
+/** A draft's title while nobody set one: from its prompt, or "Untitled draft" while that's blank. */
+export function draftTitle(prompt: string): string {
+  return prompt.trim() ? deriveTitle(prompt) : UNTITLED_DRAFT;
+}
+
+const UNTITLED_DRAFT = "Untitled draft";
 
 export class Orchestrator {
   readonly store: Store;
@@ -757,7 +765,7 @@ export class Orchestrator {
   }
 
   /** Ticket search across every status (GET /tickets/search). See TicketRepo.search. */
-  searchTickets(opts: { q: string; projectId?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
+  searchTickets(opts: { q: string; projectId?: string; limit?: number | string | null; cursor?: string | null; drafts?: boolean }): TicketPage {
     if (!opts.q?.trim()) throw badRequest("q is required");
     return this.withCursor(() => this.store.tickets.search({ ...opts, limit: clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT) }));
   }
@@ -775,6 +783,17 @@ export class Orchestrator {
     const t = this.store.tickets.getByKey(key);
     if (!t) throw notFound(`Unknown ticket: ${key}`);
     return t;
+  }
+
+  /** Drafts have no agent and never run: anything that would act on one is refused (409). */
+  private notDraft(t: Ticket, what: string) {
+    if (t.draft) throw conflict(`${t.key} is a draft: it can't be ${what} until it's submitted (POST /tickets/${t.key}/submit)`);
+  }
+
+  /** The ticket an agent (tool) names, or null: drafts don't exist for agents until they're submitted. */
+  private agentLookup(key: string): { ticket: Ticket; alias: string | null } | null {
+    const found = this.store.tickets.lookup(key);
+    return found && !found.ticket.draft ? found : null;
   }
 
   ticketDetail(key: string): TicketDetail {
@@ -841,7 +860,8 @@ export class Orchestrator {
     const project = this.store.projects.get(body.projectId);
     if (!project) throw notFound(`Unknown project: ${body.projectId}`);
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
-    if (!prompt.trim() && !body.title?.trim()) throw badRequest("prompt is required");
+    const draft = validBoolean("draft", body.draft) ?? false;
+    if (!draft && !prompt.trim() && !body.title?.trim()) throw badRequest("prompt is required");
     const kind = body.kind ?? "task";
     if (kind !== "task" && kind !== "conductor") throw badRequest(`Invalid kind: ${kind}`);
     const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
@@ -861,6 +881,9 @@ export class Orchestrator {
     if (body.parentId) {
       const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
       if (!parent) throw badRequest(`Unknown parent: ${body.parentId}`);
+      if (parent.draft) throw badRequest(`${parent.key} is a draft; it can't have children until it's submitted`);
+      // A child is its conductor's to review and complete; a draft child would hold it up unseen.
+      if (draft) throw badRequest("A draft can't be a child ticket");
       parentId = parent.id;
     }
     let explicitKey: string | null = null;
@@ -869,9 +892,10 @@ export class Orchestrator {
       if (!isTicketKey(explicitKey)) throw badRequest(`Invalid ticket key: ${body.key}`);
       if (this.store.tickets.keyExists(explicitKey)) throw conflict(`Ticket ${explicitKey} already exists`);
     }
-    const start = body.start ?? true;
-    const autoStart = body.autoStart ?? parentId !== null;
-    const title = body.title?.trim() || deriveTitle(prompt);
+    // A draft never starts on its own: submit decides (and sets autoStart) when it launches.
+    const start = draft ? false : (body.start ?? true);
+    const autoStart = draft ? false : (body.autoStart ?? parentId !== null);
+    const title = body.title?.trim() || (draft ? draftTitle(prompt) : deriveTitle(prompt));
 
     const ticket = this.store.transaction(() => {
       const key = explicitKey ?? this.store.projects.takeNextKey(project.id, (k) => this.store.tickets.keyExists(k));
@@ -895,6 +919,7 @@ export class Orchestrator {
         baseBranch,
         requestedBranch,
         skipAgentReview,
+        draft,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -903,8 +928,20 @@ export class Orchestrator {
     if (p2) this.bus.emit({ kind: "project.upserted", project: p2 });
     this.touchSession(ticket.sessionId);
     if (parentId) this.touchTicket(parentId); // its childCount changed
+    if (draft) {
+      this.appendStatus(ticket.sessionId, null, "Draft saved");
+      return this.store.tickets.get(ticket.id)!;
+    }
     this.appendStatus(ticket.sessionId, null, "Ticket created");
+    await this.launch(ticket, start, prompt);
+    return this.store.tickets.get(ticket.id)!;
+  }
 
+  /**
+   * A new (or just submitted) ticket's first step: start work when asked to (or autoStart) and its
+   * dependencies are done, wait on them otherwise, or plan first.
+   */
+  private async launch(ticket: Ticket, start: boolean, prompt: string) {
     const depsDone = this.depsDone(ticket);
     if ((start || ticket.autoStart) && depsDone) {
       await this.begin(ticket, prompt);
@@ -913,6 +950,24 @@ export class Orchestrator {
     } else {
       this.enqueueRun(ticket.sessionId, "plan", prompt);
     }
+  }
+
+  /**
+   * Launch a draft (POST /tickets/:key/submit): it stops being a draft and goes the way a ticket
+   * created with the same `start` would. Its prompt is its description.
+   */
+  async submitTicket(key: string, body: SubmitTicketBody): Promise<Ticket> {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    const start = validBoolean("start", body.start);
+    if (start === undefined) throw badRequest("start must be true or false");
+    const ticket = this.requireTicket(key);
+    if (!ticket.draft) throw conflict(`${ticket.key} isn't a draft; it was already submitted`);
+    const prompt = ticket.description;
+    if (!prompt.trim()) throw badRequest("prompt is required");
+    const launched = this.store.tickets.update(ticket.id, { draft: false, autoStart: start && ticket.dependsOn.length > 0 })!;
+    this.touchSession(launched.sessionId);
+    this.appendStatus(launched.sessionId, null, "Ticket created");
+    await this.launch(launched, start, prompt);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -921,18 +976,50 @@ export class Orchestrator {
     const out: string[] = [];
     for (const raw of keys) {
       // Old keys (from before a project rename) are stored as the ticket's current key.
-      const key = this.store.tickets.resolveKey(String(raw));
-      if (!key) throw badRequest(`Unknown dependency: ${raw}`);
+      const dep = this.store.tickets.getByKey(String(raw));
+      if (!dep) throw badRequest(`Unknown dependency: ${raw}`);
+      if (dep.draft) throw badRequest(`${dep.key} is a draft; submit it before other tickets depend on it`);
+      const key = dep.key;
       if (!out.includes(key)) out.push(key);
     }
     return out;
   }
 
   async updateTicket(key: string, body: UpdateTicketBody): Promise<Ticket> {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
     let ticket = this.requireTicket(key);
+    for (const field of ["kind", "useWorktree", "projectId"] as const) {
+      if (body[field] !== undefined && !ticket.draft) throw conflict(`${ticket.key} isn't a draft: its ${field} is fixed once it has launched`);
+    }
+    if (ticket.draft && body.status !== undefined && body.status !== ticket.status) {
+      throw conflict(`${ticket.key} is a draft; submit it to start work or plan (it can't be moved to ${body.status})`);
+    }
+    if (body.kind !== undefined && body.kind !== "task" && body.kind !== "conductor") throw badRequest(`Invalid kind: ${body.kind}`);
+    const useWorktree = body.useWorktree !== undefined ? validUseWorktree(body.useWorktree) : undefined;
+    // Moving a draft to another project: validated here, applied once the rest of the PATCH is.
+    let moveTo: Project | null = null;
+    if (body.projectId !== undefined && body.projectId !== ticket.projectId) {
+      if (typeof body.projectId !== "string" || !body.projectId.trim()) throw badRequest("projectId must be a project id");
+      moveTo = this.store.projects.get(body.projectId);
+      if (!moveTo) throw notFound(`Unknown project: ${body.projectId}`);
+    }
+    const projectOf = () => moveTo ?? this.store.projects.get(ticket.projectId);
     const patch: TicketPatch = {};
     if (body.title !== undefined) patch.title = String(body.title);
-    if (body.description !== undefined) patch.description = String(body.description);
+    if (body.description !== undefined) {
+      patch.description = String(body.description);
+      // A draft's title follows its prompt until someone names it.
+      if (ticket.draft && body.title === undefined && (ticket.title === UNTITLED_DRAFT || ticket.title === draftTitle(ticket.description))) {
+        patch.title = draftTitle(patch.description);
+      }
+    }
+    if (body.kind !== undefined && body.kind !== ticket.kind) patch.kind = body.kind;
+    if (useWorktree !== undefined) {
+      patch.useWorktree = useWorktree;
+      // Without a worktree there's no branch to ask for; drop it so the draft stays valid.
+      const project = projectOf();
+      if (project && !(useWorktree ?? project.useWorktrees) && body.branch === undefined) patch.requestedBranch = null;
+    }
     if (body.position !== undefined) {
       if (typeof body.position !== "number" || !Number.isFinite(body.position)) throw badRequest("position must be a number");
       patch.position = body.position;
@@ -957,10 +1044,13 @@ export class Orchestrator {
             : `${ticket.key} already works in the project checkout at ${ticket.workdir}, not a worktree of its own, so it has no branch to change.`,
         );
       }
-      const project = this.store.projects.get(ticket.projectId);
-      if (branch && project && !(ticket.useWorktree ?? project.useWorktrees)) {
+      const project = projectOf();
+      // A move resets the draft's worktree choice to the new project's.
+      const worktree = patch.useWorktree !== undefined ? patch.useWorktree : moveTo ? null : ticket.useWorktree;
+      if (branch && project && !(worktree ?? project.useWorktrees)) {
         throw badRequest(`branch ${branch} needs a worktree, but ${ticket.key} runs in the project checkout (useWorktree is off)`);
       }
+      if (branch && project?.isGit === false) throw badRequest(`branch ${branch} needs a git repository; ${project.path} isn't one`);
       patch.requestedBranch = branch;
     }
     if (body.dependsOn !== undefined) {
@@ -971,6 +1061,7 @@ export class Orchestrator {
     const skip = validBoolean("skipAgentReview", body.skipAgentReview);
     if (skip !== undefined && skip !== !!ticket.skipAgentReview) patch.skipAgentReview = skip;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
+    if (moveTo) ticket = this.moveDraft(ticket, moveTo);
     if (Object.keys(patch).length) {
       ticket = this.store.tickets.update(ticket.id, patch)!;
       if (patch.title) this.store.sessions.update(ticket.sessionId, { title: patch.title });
@@ -1001,6 +1092,29 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
+  /**
+   * PATCH projectId on a draft: it takes the other project's next key (the old key stays an alias,
+   * as with a project rename), moves to the end of that project's planning column, and its branch
+   * choices reset, since they were the old project's.
+   */
+  private moveDraft(ticket: Ticket, project: Project): Ticket {
+    const from = this.store.projects.get(ticket.projectId);
+    const moved = this.store.transaction(() => {
+      const key = this.store.projects.takeNextKey(project.id, (k) => this.store.tickets.keyExists(k) || !!this.store.db.query("SELECT 1 FROM sessions WHERE key = $k").get({ k }));
+      const renamed = this.store.tickets.moveToProject(ticket.id, project.id, key);
+      this.store.sessions.update(ticket.sessionId, { cwd: project.path });
+      return renamed;
+    });
+    for (const p of [from, project]) {
+      const fresh = p ? this.store.projects.get(p.id) : null;
+      if (fresh) this.bus.emit({ kind: "project.upserted", project: fresh });
+    }
+    this.appendStatus(ticket.sessionId, null, `Moved to ${project.name}: ${moved.from} → ${moved.to}`);
+    this.touchSession(ticket.sessionId);
+    this.log(`draft ${moved.from} → ${moved.to} (moved to ${project.key})`);
+    return this.store.tickets.get(ticket.id)!;
+  }
+
   async deleteTicket(key: string) {
     const ticket = this.requireTicket(key);
     await this.cancelSession(ticket.sessionId, true);
@@ -1025,6 +1139,7 @@ export class Orchestrator {
 
   async startTicket(key: string): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
     if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
     await this.begin(ticket, this.prompts().workStartPrompt(ticket));
@@ -1039,6 +1154,7 @@ export class Orchestrator {
   async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "messaged (it has no agent yet)");
     if (opts.chat) {
       if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
       this.notCompleting(ticket, "messaged");
@@ -1085,6 +1201,7 @@ export class Orchestrator {
   /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
   async reopenTicket(key: string, body: ReopenBody): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "re-opened");
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
@@ -1104,6 +1221,7 @@ export class Orchestrator {
 
   humanReview(key: string, body: HumanReviewBody): Ticket {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "reviewed");
     return this.applyReview(ticket, body.decision, body.notes ?? "", "human", body);
   }
 
@@ -1151,6 +1269,7 @@ export class Orchestrator {
   /** Answer the ticket's pending tool-permission request and resume the agent. */
   async answerApproval(key: string, body: ApprovalBody): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "approved");
     const pa = ticket.pendingApproval;
     if (!pa) throw conflict(`${ticket.key} has no pending approval`);
     const decision = body?.decision;
@@ -1215,6 +1334,7 @@ export class Orchestrator {
 
   async completeTicket(key: string, body: CompleteBody = {}): Promise<Ticket> {
     let ticket = this.requireTicket(key);
+    this.notDraft(ticket, "completed");
     if (ticket.status === "done") throw conflict(`${ticket.key} is already done`);
     if (body.skipAgent) {
       // "Approve and take no action": no completion run. In review it counts as the approval.
@@ -1308,6 +1428,7 @@ export class Orchestrator {
 
   rerunAgentReview(key: string): Ticket {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "reviewed");
     if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
     const t = this.store.tickets.update(ticket.id, { agentReview: "pending" })!;
     this.enqueueReview(t);
@@ -1316,6 +1437,7 @@ export class Orchestrator {
 
   async cancelTicket(key: string): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "cancelled (nothing runs on a draft)");
     await this.cancelSession(ticket.sessionId, true);
     return this.store.tickets.get(ticket.id)!;
   }
@@ -1488,7 +1610,7 @@ export class Orchestrator {
     const projects = this.store.projects.list();
     const keys = findKeys(output.text);
     const existingTickets = keys.flatMap((key) => {
-      const t = this.store.tickets.getByKey(key);
+      const t = this.agentLookup(key)?.ticket;
       return t ? [t] : [];
     });
     const title = outputTitle(output.text);
@@ -1658,14 +1780,14 @@ export class Orchestrator {
     if (scope === "children") {
       if (!own) throw new Error('scope "children" needs a ticket run; use "project" with project_key, or "all"');
       const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : undefined;
-      tickets = this.store.tickets.list({ parentId: own.id, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+      tickets = this.store.tickets.list({ parentId: own.id, drafts: false, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
     } else if (scope === "project") {
       const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : own?.projectId;
       if (!projectId) throw new Error('project_key is required for scope "project" in a run without a ticket');
-      tickets = this.store.tickets.list({ projectId, ...(statuses ? { statuses } : {}) });
+      tickets = this.store.tickets.list({ projectId, drafts: false, ...(statuses ? { statuses } : {}) });
     } else if (scope === "all") {
       if (filter.projectKey) throw new Error('scope "all" spans every project; drop project_key or use scope "project"');
-      tickets = this.store.tickets.list(statuses ? { statuses } : {});
+      tickets = this.store.tickets.list({ drafts: false, ...(statuses ? { statuses } : {}) });
     } else {
       throw new Error(`Unknown scope: ${scope}`);
     }
@@ -1681,14 +1803,14 @@ export class Orchestrator {
   }
 
   async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number } = {}): Promise<BoardTicketDetail> {
-    const found = this.store.tickets.lookup(key);
+    const found = this.agentLookup(key);
     if (!found) throw new Error(`Unknown ticket: ${key}`);
     const t = found.ticket;
     const detail: BoardTicketDetail = {
       ticket: this.boardTicket(t),
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
-      children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
+      children: this.store.tickets.list({ parentId: t.id, drafts: false }).map((c) => c.key),
       base: await this.refreshBaseBranch(t),
       summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({
         author: s.author,
@@ -1713,7 +1835,7 @@ export class Orchestrator {
     const projectId = input.projectKey ? this.boardProject(input.projectKey).id : undefined;
     let page: TicketPage;
     try {
-      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null });
+      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null, drafts: false });
     } catch (err) {
       throw new Error(errMsg(err));
     }
@@ -1766,7 +1888,7 @@ export class Orchestrator {
   /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
   private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
     const actor = this.boardActor(ctx, tool);
-    const target = this.store.tickets.lookup(String(key ?? "").trim())?.ticket;
+    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
     if (!target) throw new Error(`Unknown ticket: ${key}`);
     if (target.id === actor.id) {
       throw new Error(`${target.key} is your own ticket. ${tool} acts on other tickets; use ${actor.kind === "conductor" ? "submit_for_review" : "block or submit_for_review"} to change your own.`);
@@ -1936,7 +2058,7 @@ export class Orchestrator {
     let pos: number | undefined;
     if (position !== undefined) {
       if (status === "done") throw new Error("The done column is ordered by completion time; position doesn't apply");
-      const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status] }).filter((t) => t.id !== target.id);
+      const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status], drafts: false }).filter((t) => t.id !== target.id);
       pos = positionForDrop(column, position);
     }
     return this.asTool(() => this.updateTicket(target.key, { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) }));
@@ -1982,7 +2104,7 @@ export class Orchestrator {
   }
 
   private childOf(conductor: Ticket, key: string): Ticket {
-    const t = this.store.tickets.getByKey(key);
+    const t = this.agentLookup(key)?.ticket;
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
     return t;
@@ -2041,7 +2163,8 @@ export class Orchestrator {
     const project = this.store.projects.getByKey(input.projectKey ?? "");
     if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
     const key = input.key?.trim().toUpperCase() || null;
-    const existing = key ? this.store.tickets.getByKey(key) : null;
+    // A draft isn't there for triage: its key is taken, so creating one under it fails below.
+    const existing = key ? (this.agentLookup(key)?.ticket ?? null) : null;
     if (existing) {
       const body = input.description?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
       const t = await this.sendMessage(existing.key, body);
@@ -2207,7 +2330,7 @@ export class Orchestrator {
 
   async deleteTicket_(ctx: ToolContext, key: string, dryRun = false): Promise<Ticket> {
     const own = this.configWriter(ctx);
-    const t = this.store.tickets.getByKey(String(key ?? "").trim().toUpperCase());
+    const t = this.agentLookup(String(key ?? "").trim().toUpperCase())?.ticket;
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (this.lineage(own).some((a) => a.id === t.id)) {
       throw new Error(t.id === own.id ? `You can't delete your own ticket (${t.key}).` : `You can't delete ${t.key}: it is an ancestor of your ticket ${own.key}.`);
@@ -2599,6 +2722,7 @@ export class Orchestrator {
    * that has gone missing (removed by the complete run of a ticket now re-opened) is recreated.
    */
   private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress") {
+    this.notDraft(ticket, "started");
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
     try {
@@ -2738,11 +2862,11 @@ export class Orchestrator {
   /** Start autoStart tickets whose dependencies are all done. */
   async schedule() {
     if (this.stopping) return;
-    for (const t of this.store.tickets.list()) {
+    for (const t of this.store.tickets.list({ drafts: false })) {
       if (!t.autoStart || t.status !== "planning" || t.busy || this.starting.has(t.id)) continue;
       if (!this.depsDone(t)) continue;
       const fresh = this.store.tickets.get(t.id); // an earlier await may have started it already
-      if (!fresh || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
+      if (!fresh || fresh.draft || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
       await this.begin(fresh, this.prompts().workStartPrompt(fresh));
     }
   }
@@ -2790,6 +2914,7 @@ export class Orchestrator {
   private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
+    if (ticket?.draft) throw conflict(`${ticket.key} is a draft: nothing runs on it until it's submitted`);
     const driver = ticket?.driver ?? session.driver;
     const run = this.store.runs.create({ sessionId, kind, driver, prompt });
     this.bus.emit({ kind: "run.upserted", run });

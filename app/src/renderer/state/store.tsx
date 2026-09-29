@@ -28,13 +28,16 @@ import {
   forgetProjectPanes,
   getPanes,
   getPaneStore,
+  newComposeContent,
   newTerminalContent,
+  openCompose as openComposePane,
   openTerminal as openTerminalPane,
   orphanSessions,
   openTicket,
   pruneTickets,
-  reloadPanes,
   retainPaneScopes,
+  storedPaneStore,
+  terminalSessions,
   updateAllPanes,
   updatePanes,
   usePanes,
@@ -81,6 +84,11 @@ export interface Store {
    * last shown). Goes to that board if it isn't the one on screen.
    */
   openTerminal: (projectId?: string | null) => void;
+  /**
+   * Open a New session pane (views/DraftEditor.tsx) on the board on screen (from elsewhere, the
+   * board last shown, which it goes to), beside the focused pane. `projectId` presets its project.
+   */
+  openCompose: (projectId?: string | null) => void;
   /** The service's code, from /health and service.status events (null until known) */
   serviceCode: ServiceCode;
   /** The service runs older code than this app (see state/service.ts) */
@@ -115,9 +123,12 @@ function useTerminalLifecycle() {
       .list()
       .then((ids) => {
         if (!live) return;
-        // Re-read first: another window may have stored a terminal this one hasn't heard about yet.
-        reloadPanes();
-        orphanSessions(ids, getPaneStore()).forEach(kill);
+        // Also check what's stored: another window may have a terminal this one hasn't heard about
+        // yet. (Read, not adopted: adopting it would drop this window's New session panes.)
+        const stored = terminalSessions(storedPaneStore());
+        orphanSessions(ids, getPaneStore())
+          .filter((id) => !stored.has(id))
+          .forEach(kill);
       })
       .catch(() => {});
     return () => {
@@ -429,6 +440,16 @@ export function StoreProvider({
     [navigate],
   );
 
+  const openCompose = useCallback(
+    (projectId: string | null = null) => {
+      const r = parseRoute(location.hash);
+      const scope = terminalScope(r, scopeRef.current);
+      updatePanes(scope, (s) => openComposePane(s, null, newComposeContent(projectId)));
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+    },
+    [navigate],
+  );
+
   const value = useMemo<Store>(
     () => ({
       state,
@@ -450,8 +471,9 @@ export function StoreProvider({
       serviceStale,
       restartService,
       openTerminal,
+      openCompose,
     }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal],
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal, openCompose],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

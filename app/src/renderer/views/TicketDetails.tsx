@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
-import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { depChipTitle, dependencyStates, dependentsOf, inheritedBaseLabel, inheritedModel, newTicketBranchLabel, ticketChoice, ticketChoicePatch, ticketResolvedChoice } from "@harness/shared/state";
+import { dependentsOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { driverLabel, relativeTime, StatusDot, Switch, useNow } from "../components/bits";
-import { skipReviewHint } from "../state/newSession";
-import { DriverModelSelect } from "../components/ModelSelect";
-import { PermissionModeSelect } from "../components/PermissionModeSelect";
-import { plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
+import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
 import { useOpenTicket } from "../components/paneContext";
-import { BranchSelect } from "../components/BranchSelect";
+import { TicketSettings } from "../components/TicketSettings";
 
 export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const { state, client } = useStore();
@@ -19,7 +14,6 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const now = useNow();
   const [title, setTitle] = useState(ticket.title);
   const [description, setDescription] = useState(ticket.description);
-  const [deps, setDeps] = useState(ticket.dependsOn.join(", "));
 
   // Follow server-side changes unless the user is mid-edit.
   useEffect(() => {
@@ -28,25 +22,15 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   useEffect(() => {
     setDescription(ticket.description);
   }, [ticket.description]);
-  useEffect(() => {
-    setDeps(ticket.dependsOn.join(", "));
-  }, [ticket.dependsOn.join(",")]);
 
   // The detail's dependents (done ones may not be loaded) merged with live ones.
   const dependents = useMemo(() => dependentsOf(state, ticket), [state.tickets, state.dependents, state.keyAliases, ticket]);
-  const depStates = dependencyStates(state, ticket);
   const runs = useMemo(
     () => Object.values(state.runs).filter((r) => r.sessionId === ticket.sessionId).sort((a, b) => b.createdAt - a.createdAt),
     [state.runs, ticket.sessionId],
   );
   const editable = ticket.status !== "done";
-  // Branch fields for a ticket that gets (or has) a worktree of its own. The branch can change
-  // only until the worktree exists; after that its agent re-points it (update_branch).
   const project = state.projects[ticket.projectId];
-  const usesWorktree = !!ticket.branch || (!!project?.isGit && (ticket.useWorktree ?? project.useWorktrees));
-  const branchEditable = editable && !ticket.branch;
-  const inheritedBase = resolveBaseBranch(null, project, state.settings);
-  const base = resolveBaseBranch(ticket, project, state.settings);
 
   const open = (key: string) => openTicket(key);
 
@@ -55,16 +39,6 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   };
   const descDirty = description !== ticket.description;
   const saveDescription = () => void act(() => client.updateTicket(ticket.key, { description }), "Saved");
-  const parsedDeps = deps
-    .split(/[\s,]+/)
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-  const badDeps = parsedDeps.filter((d) => !isTicketKey(d));
-  const depsDirty = parsedDeps.join(",") !== ticket.dependsOn.join(",");
-  const saveDeps = () => {
-    if (!depsDirty || badDeps.length) return;
-    void act(() => client.updateTicket(ticket.key, { dependsOn: parsedDeps }));
-  };
 
   return (
     <div className="details">
@@ -102,65 +76,8 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
         )}
       </div>
 
-      <div className="field">
-        <label>Depends on</label>
-        <input
-          className="input mono"
-          placeholder="e.g. NYTIMES-3, NYTIMES-4"
-          value={deps}
-          disabled={!editable}
-          onChange={(e) => setDeps(e.target.value)}
-          onBlur={saveDeps}
-          onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-        />
-        {badDeps.length > 0 ? (
-          <span className="field-hint" style={{ color: "var(--red)" }}>
-            Not a ticket key: {badDeps.join(", ")}
-          </span>
-        ) : (
-          depStates.length > 0 && (
-            <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-              {depStates.map((d) => (
-                <button key={d.key} className={`chip link-chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)} onClick={() => d.ticket && open(d.ticket.key)} disabled={!d.ticket}>
-                  {d.ticket && <StatusDot status={d.ticket.status} />}
-                  {d.ticket?.key ?? d.key}
-                </button>
-              ))}
-            </div>
-          )
-        )}
-      </div>
-
-      <dl className="props">
-        <dt>Model</dt>
-        <dd title={ticket.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run"}>
-          <DriverModelSelect
-            value={ticketChoice(ticket, project, state.settings)}
-            resolved={ticketResolvedChoice(project, state.settings)}
-            disabled={!editable}
-            onlyDriver={ticket.busy ? ticket.driver : undefined}
-            inheritedModel={(d) => inheritedModel(d, "ticket", project, state.settings)}
-            onChange={(c) => void act(() => client.updateTicket(ticket.key, ticketChoicePatch(c, project, state.settings)))}
-          />
-        </dd>
-        <dt>Permissions</dt>
-        <dd title="Applies from the next tool call">
-          <PermissionModeSelect
-            value={ticket.permissionMode}
-            disabled={!editable}
-            inherited={resolvePermissionMode(null, state.projects[ticket.projectId], state.settings ?? { permissionMode: "auto" }).mode}
-            onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))}
-          />
-        </dd>
-        <dt>Agent review</dt>
-        <dd title={editable ? skipReviewHint(ticket) : undefined}>
-          <Switch
-            checked={!!ticket.skipAgentReview}
-            disabled={!editable}
-            onChange={(v) => void act(() => client.updateTicket(ticket.key, { skipAgentReview: v }))}
-            label="Skip agent review"
-          />
-        </dd>
+      {/* The settings rows (the same ones a draft's Options shows), then what's read-only. */}
+      <TicketSettings ticket={ticket} project={project} onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))}>
         {dependents.length > 0 && (
           <>
             <dt>Blocks</dt>
@@ -179,43 +96,6 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
         )}
         <dt>Workdir</dt>
         <dd className="mono selectable">{ticket.workdir ?? <span className="muted">Not prepared yet</span>}</dd>
-        {usesWorktree && (
-          <>
-            <dt>Branch</dt>
-            {branchEditable ? (
-              <dd title="The branch the ticket's worktree checks out when work starts">
-                <BranchSelect
-                  projectId={ticket.projectId}
-                  value={ticket.requestedBranch ?? null}
-                  onChange={(v) => void act(() => client.updateTicket(ticket.key, { branch: v }))}
-                  defaultLabel={newTicketBranchLabel(ticket.key)}
-                  newLabel={(name) => `Create ${name} from ${base.branch}`}
-                />
-              </dd>
-            ) : (
-              // Read-only once the worktree exists (or the ticket is done), so no "when work starts" note.
-              <dd className="mono selectable">{plannedBranch(ticket)}</dd>
-            )}
-            <dt>Base branch</dt>
-            {editable ? (
-              <dd title="What the ticket's work merges into when it completes. Applies from the next run.">
-                <BranchSelect
-                  label="Base branch"
-                  projectId={ticket.projectId}
-                  value={ticket.baseBranch ?? null}
-                  onChange={(v) => void act(() => client.updateTicket(ticket.key, { baseBranch: v }))}
-                  defaultLabel={inheritedBaseLabel(inheritedBase)}
-                  newLabel={(name) => `Use ${name}`}
-                />
-              </dd>
-            ) : (
-              <dd className="mono selectable">
-                {base.branch}
-                {base.source !== "ticket" && <span className="muted"> · inherited</span>}
-              </dd>
-            )}
-          </>
-        )}
         {ticket.externalRef && (
           <>
             <dt>External</dt>
@@ -252,7 +132,7 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
         <dd title={new Date(ticket.createdAt).toLocaleString()}>{relativeTime(ticket.createdAt, now)}</dd>
         <dt>Updated</dt>
         <dd title={new Date(ticket.updatedAt).toLocaleString()}>{relativeTime(ticket.updatedAt, now)}</dd>
-      </dl>
+      </TicketSettings>
 
       {runs.length > 0 && (
         <>

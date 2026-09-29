@@ -465,18 +465,90 @@ try {
     await api("DELETE", `/projects/${plain.id}`);
   }
 
-  // 5. New session composer (⌘N path goes through the menu; use the #/compose route).
-  await js(`location.hash = "#/board/all"`);
-  await Bun.sleep(100);
-  await js(`location.hash = "#/compose"`);
-  await until("composer", () => exists(".new-session-prompt"));
-  const projectOpts = await js<string[]>(`[...document.querySelectorAll(".project-picker select option")].map(o => o.textContent)`);
-  check("composer's project dropdown ends with Add project…", projectOpts.length > 1 && projectOpts.at(-1) === "Add project…", projectOpts.join(","));
-  const headText = await js<string>(`document.querySelector(".new-session-head")?.textContent ?? ""`);
-  check("composer header has no separate Add project button or New session label", !(await exists(".new-session-head button")) && !headText.includes("New session"), headText);
-  // 5a. Model combobox: Default first, then each signed-in driver's models under its name.
+  // 5. New session (DESIGN.md "Drafts"): ⌘N opens a New session pane beside the board; nothing is
+  // saved until it has something in it, then it's a draft ticket (planning, no run) edited in the
+  // same pane; Close asks Save / Discard; ⌘↩ starts it, ⇧⌘↩ plans it first.
+  type DT = { key: string; title: string; status: string; draft?: boolean; driver: string; model: string | null; permissionMode: string | null; useWorktree: boolean | null; description: string };
+  const allTickets = () => api<DT[]>("GET", "/tickets");
+  const draftList = async () => (await allTickets()).filter((t) => t.draft);
+  const cmdN = () => app!.key("n", "KeyN", 78, 4);
   const pick = (sel: string, value: string) =>
     js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  const pickProjectKey = (key: string, paneId?: string) =>
+    js(`(() => { const el = document.querySelector('${paneId ? `[data-pane-id="${paneId}"] ` : ""}.draft-pane .project-picker select'); const opt = [...el.options].find((o) => o.textContent.includes("(${key})")); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, opt.value); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+  const composeOpen = () => until("New session pane", () => exists("[data-testid=pane-compose] .draft-prompt"));
+  /** A new New session pane on NYTIMES (the pane id it opened in). */
+  const newCompose = async () => {
+    const before = await js<string[]>(`[...document.querySelectorAll("[data-testid=pane-compose]")].map(p => p.dataset.paneId)`);
+    await cmdN();
+    const id = await until("another New session pane", () =>
+      js<string | null>(`[...document.querySelectorAll("[data-testid=pane-compose]")].map(p => p.dataset.paneId).find(id => !${JSON.stringify(before)}.includes(id)) ?? null`),
+    );
+    await until("its prompt", () => exists(`[data-pane-id="${id}"] .draft-prompt`));
+    await pickProjectKey("NYTIMES", id);
+    return id;
+  };
+  const inPane = (id: string, sel: string) => `[data-pane-id="${id}"] ${sel}`;
+  const paneKind = (id: string) => js<string | null>(`document.querySelector('[data-pane-id="${id}"]')?.dataset.testid ?? null`);
+  const typeIn = (id: string, text: string) => type(inPane(id, ".draft-prompt"), text);
+  /** The draft a New session pane saved (its pane now shows the ticket). */
+  const savedDraft = async (id: string, title: string) => {
+    const d = await until(`draft "${title}" saved`, async () => (await draftList()).find((t) => t.title.includes(title)));
+    await until("pane shows the draft", async () => (await paneKind(id)) === "pane-ticket" && (await js<string>(`document.querySelector('${inPane(id, "[data-testid=draft-title]")}')?.textContent ?? ""`)) === d.key);
+    return d;
+  };
+  const closeDraftPane = (id: string) => js(`document.querySelector('${inPane(id, "[data-testid=pane-close]")}').click()`);
+  const closePrompt = () => until("Close this draft?", () => js<boolean>(`!!document.querySelector(".close-draft .modal") && document.querySelector(".close-draft .modal").textContent.includes("Close this draft?")`));
+
+  await js(`location.hash = "#/board/all"`);
+  await until("board", () => exists(".board-pane .card"));
+  const countBefore = (await allTickets()).length;
+  await cmdN();
+  await composeOpen();
+  const firstId = await js<string>(`document.querySelector("[data-testid=pane-compose]").dataset.paneId`);
+  check("⌘N opens a New session pane, not a modal", !(await exists(".modal")) && (await exists(".pane-board")), firstId);
+  check("the New session pane is titled New session and marked Draft", (await js<string>(`document.querySelector("[data-testid=pane-compose] [data-testid=draft-title]").textContent`)) === "New session" && (await exists("[data-testid=pane-compose] .draft-badge")));
+  const projectOpts = await js<string[]>(`[...document.querySelectorAll(".draft-pane .project-picker select option")].map(o => o.textContent)`);
+  check("its project dropdown ends with Add project…", projectOpts.length > 1 && projectOpts.at(-1) === "Add project…", projectOpts.join(","));
+  check("Options starts collapsed", await js<boolean>(`document.querySelector("[data-testid=pane-compose] [data-testid=draft-options]").getAttribute("aria-expanded") === "false" && !document.querySelector("[data-testid=pane-compose] [data-testid=ticket-settings]")`));
+  check("Start session and Plan first wait for a prompt", await js<boolean>(`document.querySelector("[data-testid=draft-start]").disabled && document.querySelector("[data-testid=draft-plan]").disabled`));
+  await pickProjectKey("NYTIMES");
+  await Bun.sleep(700);
+  check("nothing is created while the New session is empty (not even by picking a project)", (await allTickets()).length === countBefore && (await draftList()).length === 0);
+  await closeDraftPane(firstId);
+  await until("empty New session closed", async () => !(await exists("[data-testid=pane-compose]")));
+  check("closing an empty New session doesn't ask", !(await exists(".modal")));
+
+  // Typing makes it a draft ticket: planning, no run, and the pane shows its key in place.
+  const printId = await newCompose();
+  await typeIn(printId, "Add a print stylesheet for recipe cards");
+  const printDraft = await savedDraft(printId, "print stylesheet");
+  const printDetail = await api<{ ticket: DT; runs: unknown[] }>("GET", `/tickets/${printDraft.key}`);
+  check("typing creates a draft: planning, draft, no run", printDetail.ticket.draft === true && printDetail.ticket.status === "planning" && printDetail.runs.length === 0, `${printDraft.key} ${printDetail.ticket.status} runs=${printDetail.runs.length}`);
+  check("the pane turns into the draft's pane in place and shows its key", (await paneKind(printId)) === "pane-ticket" && !(await exists("[data-testid=pane-compose]")));
+  const hashAfterSave = await until("hash follows the draft", () => js<string>(`location.hash`).then((h) => h.includes(printDraft.key) && h));
+  check("the draft pane is the focused ticket (the hash names it)", !!hashAfterSave, hashAfterSave);
+
+  // Its card: dashed, a Draft badge, in Planning, and the arrow keys stop on it.
+  const card = await until("draft card", () =>
+    js<{ planning: boolean; badge: boolean; dashed: string } | null>(`(() => { const c = document.querySelector('.card[data-key="${printDraft.key}"]'); if (!c) return null;
+      return { planning: c.closest(".column").querySelector(".column-title").textContent === "Planning", badge: !!c.querySelector("[data-testid=card-draft]"), dashed: getComputedStyle(c).borderTopStyle }; })()`),
+  );
+  check("the draft's card sits in Planning, dashed, with a Draft badge", card.planning && card.badge && card.dashed === "dashed" && (await exists(`.card.draft[data-key="${printDraft.key}"]`)), JSON.stringify(card));
+  {
+    const neighbour = await js<{ key: string; dir: string } | null>(`(() => { const c = document.querySelector('.card[data-key="${printDraft.key}"]'); const prev = c.previousElementSibling?.closest(".card"); const next = c.nextElementSibling?.closest(".card");
+      return prev ? { key: prev.dataset.key, dir: "down" } : next ? { key: next.dataset.key, dir: "up" } : null; })()`);
+    if (neighbour) {
+      await js(`document.querySelector('.card[data-key="${neighbour.key}"]').focus()`);
+      await (neighbour.dir === "down" ? app!.key("ArrowDown", "ArrowDown", 40) : app!.key("ArrowUp", "ArrowUp", 38));
+      const focused = await until("focus on the draft card", () => js<string | null>(`document.activeElement?.closest(".card")?.dataset.key ?? null`).then((k) => k === printDraft.key && k)).catch(() => null);
+      check("arrow-key focus stops on the draft card", focused === printDraft.key, String(focused));
+    } else check("arrow-key focus stops on the draft card", false, "no neighbouring card in Planning");
+  }
+
+  // Options: the same TicketSettings rows as Details; picks PATCH the draft (debounced).
+  await js(`document.querySelector('${inPane(printId, "[data-testid=draft-options]")}').click()`);
+  await until("Options open", () => exists(inPane(printId, "[data-testid=ticket-settings]")));
   const comboClose = () => js(`document.querySelector(".model-combo") && window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
   /** Open the combined Model combobox inside `scope` and list its rows ("# Driver" for headings). */
   const comboRows = async (scope: string) => {
@@ -489,28 +561,139 @@ try {
   /** Pick the open combobox's option whose label starts with `label`. */
   const comboPick = (label: string) =>
     js<boolean>(`(() => { const el = [...document.querySelectorAll(".model-combo-option")].find(e => e.textContent.startsWith(${JSON.stringify(label)})); if (!el) return false; el.click(); return true; })()`);
-  const ccRows = await comboRows(".modal-foot");
+  const ccRows = await comboRows(inPane(printId, ".draft-options"));
   check(
-    "composer model combobox: Default first, then models under each signed-in driver",
+    "the draft's Model combobox: Default first, then models under each signed-in driver",
     ccRows[0]!.startsWith("Default (") && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
     ccRows.join(","),
   );
-  check("composer combobox picks a driver + model in one go", await comboPick("Dummy Slow"));
-  const modeOpts = await js<string[]>(`[...document.querySelectorAll(".modal-foot [data-testid=permission-mode] option")].map(o => o.textContent)`);
-  check("composer offers the permission modes, inheriting by default", modeOpts.join(",") === "Default · Auto,Auto,Ask,Read only", modeOpts.join(","));
-  await pick(".modal-foot [data-testid=permission-mode]", "read_only");
-  await type(".new-session-prompt", "Add a print stylesheet for recipe cards");
-  await cmdEnter();
-  const created = await until("ticket created", async () =>
-    (await api<{ key: string; title: string; status: string }[]>("GET", "/tickets")).find((t) => t.title.includes("print stylesheet")),
+  check("the combobox picks a driver + model in one go", await comboPick("Dummy Slow"));
+  const modeOpts = await js<string[]>(`[...document.querySelectorAll('${inPane(printId, "[data-testid=permission-mode] option")}')].map(o => o.textContent)`);
+  check("the draft offers the permission modes, inheriting by default", modeOpts.join(",") === "Default (Auto),Auto,Ask,Read only", modeOpts.join(","));
+  await pick(inPane(printId, "[data-testid=permission-mode]"), "read_only");
+  const patched = await until("draft PATCHed", async () => {
+    const t = (await api<{ ticket: DT }>("GET", `/tickets/${printDraft.key}`)).ticket;
+    return t.driver === "dummy" && t.model === "dummy-slow" && t.permissionMode === "read_only" && t;
+  });
+  check("Options picks PATCH the draft", !!patched, JSON.stringify({ d: patched.driver, m: patched.model, p: patched.permissionMode }));
+  const settingsRows = (scope: string) => js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings] > dt`)})].map(d => d.textContent)`);
+  const draftRows = await settingsRows(inPane(printId, ".draft-options"));
+  check("the draft's Options rows", draftRows.join(",") === "Model,Permissions,Agent review,Branch,Base branch,Depends on", draftRows.join(","));
+  await js(`document.querySelector('${inPane(printId, "[data-testid=draft-options]")}').click()`);
+  const summaryText = await until("Options summary", () => js<string>(`document.querySelector('${inPane(printId, "[data-testid=draft-options-summary]")}')?.textContent ?? ""`).then((t) => t.includes("Read only") && t));
+  check("collapsed Options sums up what differs from the defaults", summaryText === "Dummy Slow · Read only", summaryText);
+
+  // Close → Save keeps it; Enter on its card opens it again with the prompt and model.
+  await closeDraftPane(printId);
+  await closePrompt();
+  const buttons = await js<string[]>(`[...document.querySelectorAll(".close-draft .modal button")].map(b => b.textContent.trim())`);
+  check("the close prompt offers Discard draft, Cancel and Save draft", buttons.some((b) => b.startsWith("Discard draft")) && buttons.includes("Cancel") && buttons.some((b) => b.startsWith("Save draft")), buttons.join(","));
+  check("Save draft is the default (focused)", await js<boolean>(`document.activeElement?.dataset.testid === "close-draft-save"`));
+  await app!.key("Escape", "Escape", 27);
+  await until("prompt cancelled", async () => !(await exists(".modal")));
+  check("Escape cancels: the draft pane stays", (await paneKind(printId)) === "pane-ticket");
+  await closeDraftPane(printId);
+  await closePrompt();
+  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await until("saved and closed", async () => !(await exists(`[data-pane-id="${printId}"]`)));
+  const kept = (await api<{ ticket: DT }>("GET", `/tickets/${printDraft.key}`)).ticket;
+  check("Close → Save draft keeps it", kept.draft === true && kept.description === "Add a print stylesheet for recipe cards", JSON.stringify({ draft: kept.draft }));
+  await js(`document.querySelector('.card[data-key="${printDraft.key}"]').focus()`);
+  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  const reopened = await until("draft reopened", () =>
+    js<{ id: string; prompt: string; summary: string } | null>(`(() => { const p = document.querySelector('.draft-pane[data-draft-key="${printDraft.key}"]'); if (!p) return null;
+      return { id: p.closest("[data-pane-id]").dataset.paneId, prompt: p.querySelector(".draft-prompt").value, summary: p.querySelector("[data-testid=draft-options-summary]")?.textContent ?? "" }; })()`),
   );
-  check("composer creates and starts a ticket", created.status === "in_progress", created.key);
+  check("Enter on the draft card reopens it with its prompt and model", reopened.prompt === "Add a print stylesheet for recipe cards" && reopened.summary.startsWith("Dummy Slow"), JSON.stringify(reopened));
+  check("…with Options collapsed again", await js<boolean>(`document.querySelector('${inPane(reopened.id, "[data-testid=draft-options]")}').getAttribute("aria-expanded") === "false"`));
+
+  // Close → Discard deletes the draft.
+  const tossId = await newCompose();
+  await typeIn(tossId, "Throwaway idea");
+  const toss = await savedDraft(tossId, "Throwaway idea");
+  await closeDraftPane(tossId);
+  await closePrompt();
+  await js(`document.querySelector("[data-testid=close-draft-discard]").click()`);
+  const tossed = await until("draft discarded", async () => !(await allTickets()).some((t) => t.key === toss.key));
+  check("Close → Discard draft deletes it and closes the pane", tossed && !(await exists(`[data-pane-id="${tossId}"]`)));
+
+  // ⇧⌘↩ plans first: planning, not a draft, on Summaries.
+  const planId = await newCompose();
+  await typeIn(planId, "Plan the paywall migration");
+  await app!.key("Enter", "Enter", 13, 4 | 8);
+  const planned = await until("planned", async () => (await allTickets()).find((t) => t.title.includes("paywall migration") && t.draft === false));
+  check("⇧⌘↩ submits it to plan first (planning)", planned.status === "planning", `${planned.key} ${planned.status}`);
+  const planTab = await until("planned pane", () => js<string | null>(`document.querySelector('${inPane(planId, ".tabs [aria-selected=true]")}')?.dataset.tab ?? null`));
+  check("…and its pane shows the summaries", planTab === "summaries", String(planTab));
+  await js(`document.querySelector('${inPane(planId, "[data-testid=pane-close]")}').click()`);
+
+  // Picking the project directory's own branch means no worktree (useWorktree false).
+  const coId = await newCompose();
+  await typeIn(coId, "Work right in the checkout");
+  const co = await savedDraft(coId, "right in the checkout");
+  await js(`document.querySelector('${inPane(coId, "[data-testid=draft-options]")}').click()`);
+  await until("Options open", () => exists(inPane(coId, "[data-testid=ticket-settings] [data-testid=branch-select] button")));
+  const defaultBranch = await js<string>(`document.querySelector('${inPane(coId, "[data-testid=ticket-settings] [data-testid=branch-select] button")}').textContent`);
+  check("the Branch row defaults to a new harness branch", defaultBranch === `New branch harness/${co.key.toLowerCase()}`, defaultBranch);
+  await js(`document.querySelector('${inPane(coId, "[data-testid=ticket-settings] [data-testid=branch-select] button")}').click()`);
+  await until("branch rows", () => js<boolean>(`[...document.querySelectorAll(".branch-combo .model-combo-option .mono")].some(e => e.textContent === "main")`));
+  await js(`[...document.querySelectorAll(".branch-combo .model-combo-option")].find(o => o.querySelector(".mono")?.textContent === "main").click()`);
+  const noWorktree = await until("useWorktree false", async () => (await api<{ ticket: DT }>("GET", `/tickets/${co.key}`)).ticket.useWorktree === false);
+  check("picking the checkout's branch sends useWorktree false", noWorktree);
+  const coHint = await js<string>(`document.querySelector('${inPane(coId, "[data-testid=branch-hint]")}')?.textContent ?? ""`);
+  check("…and the hint says it works in the project directory", coHint.includes("with no worktree"), coHint);
+  const coRows = await settingsRows(inPane(coId, ".draft-options"));
+  check("without a worktree there's no Base branch row", coRows.join(",") === "Model,Permissions,Agent review,Branch,Depends on", coRows.join(","));
+  // Moving a saved draft to another project re-keys it; its pane follows the new key.
+  await pickProjectKey("HARNESS", coId);
+  const moved = await until("draft moved", async () => (await draftList()).find((t) => t.title.includes("right in the checkout") && t.key.startsWith("HARNESS-")));
+  const movedTitle = await until("pane follows the new key", () => js<string>(`document.querySelector('${inPane(coId, "[data-testid=draft-title]")}')?.textContent ?? ""`).then((t) => t === moved.key && t));
+  check("picking another project moves the draft (a new key) and its pane follows", movedTitle === moved.key && !(await allTickets()).some((t) => t.key === co.key), `${co.key} → ${moved.key}`);
+  await closeDraftPane(coId);
+  await closePrompt();
+  await js(`document.querySelector("[data-testid=close-draft-discard]").click()`);
+  await until("checkout draft discarded", async () => !(await allTickets()).some((t) => t.key === moved.key));
+
+  // A reload inside the save delay still saves the last edit (keepalive requests on pagehide/beforeunload).
+  const rlId = await newCompose();
+  await typeIn(rlId, "Reload mid-debounce");
+  const rl = await savedDraft(rlId, "Reload mid-debounce");
+  await typeIn(rlId, "Reload mid-debounce, then keep this");
+  await js(`location.reload()`);
+  const survived = await until("edit saved across the reload", async () => (await api<{ ticket: DT }>("GET", `/tickets/${rl.key}`)).ticket.description === "Reload mid-debounce, then keep this");
+  check("an edit made just before a reload is saved anyway", survived);
+  await until("app back after reload", () => exists(".board-pane .card"), 15000);
+  await api("DELETE", `/tickets/${rl.key}`);
+
+  // ⌘↩ from the prompt launches it (in progress) and the same pane shows the transcript.
+  // (Mid-run checks follow, so this goes last.) A pointerdown makes it the focused pane, as a click would.
+  await js(`(() => { const el = document.querySelector('${inPane(reopened.id, ".draft-prompt")}'); el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); el.focus(); })()`);
+  await cmdEnter();
+  const created = await until("draft started", async () => {
+    const t = (await api<{ ticket: DT }>("GET", `/tickets/${printDraft.key}`)).ticket;
+    return t.draft === false && t.status === "in_progress" && t;
+  });
+  check("⌘↩ launches the draft in progress", !!created, created.key);
+  const launchedTab = await until("launched pane", () => js<string | null>(`document.querySelector('${inPane(reopened.id, ".tabs [aria-selected=true]")}')?.dataset.tab ?? null`));
+  check("…and its pane shows the transcript", launchedTab === "transcript" && !(await exists(inPane(reopened.id, ".draft-pane"))), String(launchedTab));
   const opened = await until("detail opened", () => js<string>(`location.hash`).then((h) => h.includes(created.key) && h));
-  check("composer opens the new ticket", !!opened, opened);
+  check("the launched ticket is the focused pane", !!opened, opened);
+
+  // A launched ticket's Details render the same TicketSettings controls (plus its read-only rows).
+  await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
+  await until("details settings", () => exists(".details [data-testid=ticket-settings]"));
+  const detailRows = await settingsRows(".details");
+  check("Details renders the same TicketSettings rows, then the read-only ones", detailRows.slice(0, draftRows.length).join(",") === draftRows.join(",") && detailRows.includes("Workdir"), detailRows.join(","));
+  const controls = (scope: string) =>
+    js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings]`)})].flatMap(s => ["driver-model-select", "permission-mode", "depends-on"].filter(t => s.querySelector("[data-testid=" + t + "]")).concat(s.querySelector("input[role=switch]") ? ["switch"] : []))`);
+  check("…with the same controls as a draft's Options", (await controls(".details")).join(",") === "driver-model-select,permission-mode,depends-on,switch", (await controls(".details")).join(","));
+
   const withModel = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
-  check("composer sends the chosen driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
+  check("the launched ticket keeps the draft's driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
   const withMode = (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
-  check("composer sends the chosen permission mode", withMode.permissionMode === "read_only", String(withMode.permissionMode));
+  check("…and its permission mode", withMode.permissionMode === "read_only", String(withMode.permissionMode));
   const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
   check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
   await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);

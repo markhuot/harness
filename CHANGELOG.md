@@ -9,6 +9,33 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- New sessions are saved as drafts while you type. A draft is a ticket that hasn't started yet,
+  so it shows up in Planning (with a dashed, dimmed card and a Draft badge) in its usual place,
+  and the arrow keys stop on it like any other card. Drafts sync between the Mac and iPhone, so
+  you can start one on your phone and finish it at your desk.
+- Closing a draft asks whether to save it or discard it. Saving is the default, and a draft with
+  nothing typed in it closes without asking.
+
+### Changed
+
+- On the Mac, New session opens as a pane next to the board instead of a window on top of it, so
+  you can write a new session with another ticket open beside it, or keep several going at once.
+  Its pane is tinted and marked Draft until you start it.
+- New session keeps its settings under a collapsed Options row, which lists anything you've
+  changed from the project's defaults. Options uses the same controls as a ticket's Details tab,
+  and it opens by itself when the branch you picked needs a look.
+- Task and Conductor now sit next to the project picker at the top of New session.
+- Start session and Plan first are separate buttons, replacing the "Start immediately" switch.
+  On the Mac, ⌘↩ starts the session and ⇧⌘↩ plans it first.
+- The "Use worktree" switch is gone. Pick the branch your project folder already has checked out
+  (usually `main`) to have the agent work right in the project folder, or any other branch to
+  give the ticket a worktree of its own.
+- On iPhone, you now pick the base branch from the project's branches instead of typing it, in
+  New session and on a ticket's Details tab. Details shows it only when the ticket has a
+  worktree of its own.
+
 ### Fixed
 
 - Agents using the Claude Code driver can use your claude.ai connectors (Jira, Atlassian, Google

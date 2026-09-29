@@ -2,16 +2,11 @@
 // zooming, and Escape. Registered once by the shell for the board scope on screen (null off the
 // board, where only the sidebar and the window are left to act on).
 
-import { boardLeaf, closePane, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, type PaneDir, type PaneState } from "../state/panes";
+import { boardLeaf, escapePanes, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, type PaneDir } from "../state/panes";
 import { GLOBAL_OWNER, useCommands } from "./commands";
+import { hasDraftCloser, requestClosePane } from "./draftClose";
 import { focusPaneBy, focusSidebar } from "./paneFocus";
 
-/** Escape ends a zoom, or else closes the focused ticket pane (never the board, nor a terminal: Escape is the shell's). */
-export function escapePanes(s: PaneState): PaneState {
-  if (s.zoomedId) return toggleZoom(s, s.zoomedId);
-  const leaf = s.focusedId ? findLeaf(s.root, s.focusedId) : null;
-  return leaf?.content.kind === "ticket" ? closePane(s, leaf.id) : s;
-}
 
 const inSidebar = () => !!document.activeElement?.closest("#app-sidebar");
 
@@ -56,10 +51,17 @@ export function usePaneCommands(scope: string | null, sidebarOpen: boolean) {
     "pane.close": () => {
       const s = scope ? getPanes(scope) : null;
       const leaf = s?.focusedId ? findLeaf(s.root, s.focusedId) : null;
-      if (scope && leaf && leaf.content.kind !== "board") focusPaneBy(scope, (st) => closePane(st, leaf.id));
+      if (scope && leaf && leaf.content.kind !== "board") requestClosePane(scope, leaf.id, true);
       else closeWindow();
     },
     "pane.zoom": !!scope && (() => focusPaneBy(scope!, (s) => toggleZoom(s))),
-    "pane.escape": !!scope && (() => focusPaneBy(scope!, escapePanes)),
+    "pane.escape":
+      !!scope &&
+      (() => {
+        // A draft's pane asks before it closes (a zoom still just ends).
+        const s = getPanes(scope!);
+        if (!s.zoomedId && s.focusedId && hasDraftCloser(s.focusedId)) return requestClosePane(scope!, s.focusedId, true);
+        focusPaneBy(scope!, escapePanes);
+      }),
   });
 }
