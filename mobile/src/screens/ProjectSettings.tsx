@@ -1,12 +1,12 @@
 // Project settings: name, identifier (rename with the desktop's live validation + preview), color,
 // folder path (a text field: there's no folder picker on the phone), default driver / models /
-// permission mode, worktrees, base branch (git projects), human review, remove.
+// permission mode, worktrees, base branch and "When approved" (git projects), human review, remove.
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { Project } from "@harness/shared";
 import { inheritedBaseLabel, inheritedModel, previewProjectKey } from "@harness/shared/state";
-import { branchNameError, PERMISSION_MODE_LABELS, resolveBaseBranch } from "@harness/shared";
+import { branchNameError, offeredCompletionActions, PERMISSION_MODE_LABELS, projectCompletionDefault, resolveBaseBranch } from "@harness/shared";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -16,6 +16,7 @@ import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
+import { completionActionOptions } from "../lib/approve";
 import { confirm } from "../ui/pick";
 
 export function ProjectSettingsScreen() {
@@ -139,9 +140,20 @@ function ProjectSettings({ project }: { project: Project }) {
         <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
           <SSwitch label="Require human review" value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
         </SRow>
-        <SRow title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done." last>
+        <SRow title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done." last={!project.isGit}>
           <SSwitch label="Complete when approved" value={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
         </SRow>
+        {project.isGit && (
+          <SRow title="When approved" sub="What the Approve button does by default: merge the branch, open a pull request, or follow instructions you give. Each approval can pick another." last>
+            <Select
+              value={projectCompletionDefault(project)}
+              options={completionActionOptions(offeredCompletionActions(project))}
+              onChange={(completionAction) => void save({ completionAction })}
+              title="When approved"
+              accessibilityName="When approved"
+            />
+          </SRow>
+        )}
       </Group>
       <Group title="Danger zone">
         <SRow title="Remove project" sub={`Deletes ${ticketCount ? `${ticketCount} ticket${ticketCount === 1 ? "" : "s"} and their history` : "the project"} from Harness. Files on disk are left alone.`} stacked last>
