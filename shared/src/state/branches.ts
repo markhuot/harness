@@ -81,15 +81,35 @@ export type BranchChoice =
   | { kind: "existing"; name: string; checkedOutAt: string | null }
   /** A name no branch has yet: created from the base */
   | { kind: "new"; name: string }
-  | { kind: "invalid"; name: string; error: string };
+  | { kind: "invalid"; name: string; error: string }
+  /**
+   * The branch the project directory itself has checked out: a draft that picks it works right
+   * there, with no worktree (only offered while the ticket is a draft; see `branchChoice`).
+   */
+  | { kind: "checkout"; name: string; path: string };
+
+/** Paths compared as the same directory: trailing slashes don't count. */
+export function samePath(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const norm = (p: string) => p.replace(/\/+$/, "") || "/";
+  return norm(a) === norm(b);
+}
+
+/** The branch the project directory has checked out, from a branch list (null when it isn't listed). */
+export function checkoutBranch(branches: readonly BranchInfo[], projectPath: string | null | undefined): BranchInfo | null {
+  return branches.find((b) => samePath(b.checkedOutAt, projectPath)) ?? null;
+}
 
 /**
  * Classify `name` (null or blank → the default branch) against the branches the service listed.
  * `known` only needs to include the branch itself when it exists, e.g. the row it was picked from.
  */
-export function branchChoice(name: string | null | undefined, defaultName: string, known: readonly BranchInfo[]): BranchChoice {
+export function branchChoice(name: string | null | undefined, defaultName: string, known: readonly BranchInfo[], checkoutPath?: string | null): BranchChoice {
   const n = name?.trim() || defaultName;
   const hit = known.find((b) => b.name === n);
+  // `checkoutPath` (the project path) is passed only for a draft: there the project directory's own
+  // branch means "no worktree" rather than "blocks on the main checkout".
+  if (hit && checkoutPath && samePath(hit.checkedOutAt, checkoutPath)) return { kind: "checkout", name: n, path: hit.checkedOutAt! };
   if (hit) return { kind: "existing", name: n, checkedOutAt: hit.checkedOutAt };
   if (n === defaultName) return { kind: "default", name: n };
   const error = branchNameError(n);
@@ -108,6 +128,8 @@ export function branchChoiceHint(choice: BranchChoice, base: string): { text: st
       return { text: `${choice.name} doesn't exist yet. It will be created from ${base} when work starts.`, tone: "plain" };
     case "invalid":
       return { text: `Not a valid branch name: ${choice.error}.`, tone: "error" };
+    case "checkout":
+      return { text: `Works directly in ${tildify(choice.path)} on ${choice.name}, with no worktree.`, tone: "plain" };
     case "existing":
       return choice.checkedOutAt
         ? { text: `Checked out in ${tildify(choice.checkedOutAt)}. The ticket will block when it starts unless that worktree lets go of it.`, tone: "warn" }

@@ -76,13 +76,9 @@ export function composerHint(t: { busy: boolean; status: TicketStatus }): string
   return t.busy ? "Queued behind the current run" : t.status === "planning" ? "The planning agent will revise" : "";
 }
 
-/** New-session prompt placeholder. */
-export function newSessionPlaceholder(kind: TicketKind, start: boolean): string {
-  return kind === "conductor"
-    ? "Describe a larger job. The conductor splits it into tickets and steers them…"
-    : start
-      ? "What should the agent do?"
-      : "What do you want to plan? The agent drafts a plan for you to refine…";
+/** New-session prompt placeholder. Start vs plan is picked when it's submitted, so only the kind matters. */
+export function newSessionPlaceholder(kind: TicketKind): string {
+  return kind === "conductor" ? "Describe a larger job. The conductor splits it into tickets and steers them…" : "What should the agent do? Start it now, or plan it first…";
 }
 
 // ---------------------------------------------------------------------------

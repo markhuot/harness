@@ -205,6 +205,13 @@ export interface Ticket {
    * Later approvals of the ticket default to "pr", so they update the same pull request.
    */
   pullRequestUrl?: string | null;
+  /**
+   * A draft (DESIGN.md "Drafts"): a New session saved before it was launched. It stays in planning
+   * and never runs or reaches agents until POST /tickets/:key/submit clears the flag. While it's set,
+   * `kind`, `useWorktree` and `projectId` can still change (UpdateTicketBody). Optional so fixtures
+   * type-check; the service always sends it.
+   */
+  draft?: boolean;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -822,6 +829,11 @@ export interface CreateTicketBody {
   /** Use this key instead of the next native key (external mirrors) */
   key?: string;
   externalRef?: ExternalRef | null;
+  /**
+   * Save it as a draft (Ticket.draft): created in planning with no run, whatever `start` says.
+   * POST /tickets/:key/submit launches it later. The prompt may be empty for a draft.
+   */
+  draft?: boolean;
 }
 
 export interface UpdateTicketBody {
@@ -848,6 +860,20 @@ export interface UpdateTicketBody {
   skipAgentReview?: boolean;
   dependsOn?: string[];
   position?: number;
+  /** Drafts only (409 otherwise): what the ticket is, fixed once it launches */
+  kind?: TicketKind;
+  /** Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches */
+  useWorktree?: boolean | null;
+  /**
+   * Drafts only (409 otherwise): move the draft to another project. It takes that project's next
+   * key; the old key is kept as an alias (like a project rename), so open panes follow it.
+   */
+  projectId?: string;
+}
+
+/** POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first. */
+export interface SubmitTicketBody {
+  start: boolean;
 }
 
 export interface MessageBody {

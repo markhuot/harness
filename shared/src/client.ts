@@ -2,6 +2,7 @@
 // Works in Bun, Node 22+, Electron renderers and browsers (fetch + WebSocket globals).
 
 import type {
+  SubmitTicketBody,
   ClientMessage,
   CompleteBody,
   CreateProjectBody,
@@ -155,6 +156,10 @@ export class HarnessClient {
   }
   startTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/start`);
+  }
+  /** Launch a draft (Ticket.draft): start work now, or plan first. */
+  submitTicket(key: string, body: SubmitTicketBody) {
+    return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
   sendMessage(key: string, text: string, opts: { chat?: boolean } = {}) {
     const body: MessageBody = opts.chat ? { text, chat: true } : { text };
