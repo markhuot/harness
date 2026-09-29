@@ -182,17 +182,6 @@ function Shell() {
       className={`app ${layout.sidebarCollapsed ? "sidebar-collapsed" : ""} ${window.harness?.platform === "darwin" ? "has-traffic-lights" : ""}`}
       style={layout.sidebarWidth ? ({ "--sidebar-width": `${layout.sidebarWidth}px` } as React.CSSProperties) : undefined}
     >
-      <button
-        className="btn btn-ghost btn-icon sidebar-toggle"
-        data-testid="sidebar-toggle"
-        aria-controls="app-sidebar"
-        aria-expanded={!layout.sidebarCollapsed}
-        aria-label={layout.sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-        title={`${layout.sidebarCollapsed ? "Show" : "Hide"} sidebar (⌃⌘S)`}
-        onClick={toggleSidebar}
-      >
-        <Icon name="sidebar" />
-      </button>
       <div className="sidebar-slot">
         <Sidebar
           ref={sidebarRef}
@@ -232,6 +221,21 @@ function Shell() {
         )}
         <ServiceBanner />
       </main>
+      {/* After the sidebar and main: Electron builds the window's drag area from app-region boxes in
+          document order, so this no-drag button has to follow the drag headers it sits on (the
+          sidebar top, the collapsed board header), or they re-cover it and a real click drags the
+          window instead. */}
+      <button
+        className="btn btn-ghost btn-icon sidebar-toggle"
+        data-testid="sidebar-toggle"
+        aria-controls="app-sidebar"
+        aria-expanded={!layout.sidebarCollapsed}
+        aria-label={layout.sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        title={`${layout.sidebarCollapsed ? "Show" : "Hide"} sidebar (⌃⌘S)`}
+        onClick={toggleSidebar}
+      >
+        <Icon name="sidebar" />
+      </button>
       {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}
       {palette && <CommandPalette origin={palette} onClose={() => setPalette(null)} onShortcuts={() => setShortcuts(true)} />}
       {shortcuts && <ShortcutsOverlay onClose={() => setShortcuts(false)} />}
