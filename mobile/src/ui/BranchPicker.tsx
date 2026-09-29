@@ -169,7 +169,7 @@ function BranchSheet({ title, projectId, picked, defaultName, onClose, onPick }:
                     {item.label}
                   </Text>
                   {item.branch ? (
-                    <Text style={{ color: where ? c.amber : c.text3, fontSize: 12.5 }} numberOfLines={1}>
+                    <Text style={{ color: where ? c.amber : c.text3, fontSize: 12.5 }} numberOfLines={1} ellipsizeMode="middle">
                       {where ? `Checked out in ${tildify(where)}` : `Last commit ${relativeTime(item.branch.lastCommitAt)}`}
                     </Text>
                   ) : (
