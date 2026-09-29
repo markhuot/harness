@@ -11,6 +11,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- You can rewrite the instructions Harness gives its agents. Each part of the built-in prompts
+  (the work, review and completion rules, the ticket lifecycle, the triage instructions, and the
+  rest) can be replaced with your own text, and it applies to every run from then on. A prompt you
+  haven't changed keeps the built-in text, so it picks up improvements when you update the app,
+  and resetting a prompt goes back to the built-in. Harness refuses a prompt that names a variable
+  it doesn't have (a typo like `{{brnch}}`), so a mistake never reaches an agent. Agents can also
+  change a prompt for you, after you approve it.
 - Each watcher can now pick the model its triage agent runs on. The watcher form's driver menu
   is now a single Model menu that lists every signed-in driver's models under that driver's name,
   so picking Opus under Claude Code sets both at once. With only one driver signed in, the menu is
