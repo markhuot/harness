@@ -324,6 +324,8 @@ export class Orchestrator {
    * repos without the settings' branch (refreshBaseBranch; see baseBranchFor)
    */
   private baseFallback = new Map<string, string>();
+  /** Tickets whose complete run is about to be enqueued (enqueueComplete); they count as completing */
+  private startingComplete = new Set<string>();
 
   constructor(opts: OrchestratorOptions) {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
@@ -1098,8 +1100,25 @@ export class Orchestrator {
     if (ticket.status !== "review") throw conflict(`${ticket.key} must be in review to complete`);
     if (this.completing(ticket)) throw conflict(`${ticket.key} is already completing`);
     this.appendStatus(ticket.sessionId, null, "Completing");
-    this.enqueueRun(ticket.sessionId, "complete", this.completePromptFor(ticket, body.instructions));
+    await this.enqueueComplete(ticket, body.instructions);
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * Enqueue the complete run once git has said what the base branch is (the prompt names it, and
+   * the fallback cache is empty after a restart). The ticket counts as completing meanwhile, so
+   * nothing is queued ahead of it.
+   */
+  private async enqueueComplete(ticket: Ticket, instructions?: string) {
+    this.startingComplete.add(ticket.id);
+    try {
+      await this.refreshBaseBranch(ticket);
+      const t = this.store.tickets.get(ticket.id);
+      if (!t || t.status !== "review") return;
+      this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, instructions));
+    } finally {
+      this.startingComplete.delete(ticket.id);
+    }
   }
 
   rerunAgentReview(key: string): Ticket {
@@ -2173,7 +2192,7 @@ export class Orchestrator {
         done.push(`${t.key} is already on ${branch} in ${workdir}; nothing changed.`);
       } else {
         const holder = await checkedOutElsewhere(workdir, branch, workdir);
-        const unmerged = await commitsNotIn(workdir, from, branch);
+        const unmerged = await commitsNotIn(workdir, from, branch, (await this.refreshBaseBranch(t)).branch);
         const pending =
           unmerged > 0
             ? ` ${unmerged} commit${unmerged === 1 ? "" : "s"} on ${from} ${unmerged === 1 ? "isn't" : "aren't"} on ${branch}: integrate ${unmerged === 1 ? "it" : "them"}${holder ? ` in ${holder.path} (git -C ${holder.path} cherry-pick or merge ${from})` : ` (git cherry-pick or git merge ${from})`} before you finish, since completion merges ${branch}, not ${from}.`
@@ -2423,7 +2442,7 @@ export class Orchestrator {
       return;
     }
     this.appendStatus(t.sessionId, null, "Both reviews approved: completing automatically");
-    this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t));
+    this.track(this.enqueueComplete(t));
   }
 
   /**
@@ -2439,6 +2458,7 @@ export class Orchestrator {
 
   /** A complete run is queued or running for the ticket. */
   private completing(t: Ticket): boolean {
+    if (this.startingComplete.has(t.id)) return true;
     return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
   }
 

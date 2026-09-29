@@ -108,7 +108,24 @@ export async function ensureWorktree(opts: {
 }): Promise<{ workdir: string; branch: string }> {
   const workdir = join(opts.worktreesDir, opts.key);
   const branch = opts.branch || branchForKey(opts.key);
-  if (existsSync(workdir) && (await isGitRepo(workdir))) return { workdir, branch: (await currentBranch(workdir)) ?? branch };
+  if (existsSync(workdir) && (await isGitRepo(workdir))) {
+    const current = await currentBranch(workdir);
+    if (current === branch || !opts.branch) return { workdir, branch: current ?? branch };
+    // A worktree left on another branch (update_branch moved the ticket elsewhere, and that
+    // worktree is gone now): put it back on the ticket's branch rather than quietly dropping it.
+    const holder = await checkedOutElsewhere(opts.repo, branch, workdir);
+    if (holder) {
+      throw new Error(
+        `branch ${branch} is already checked out in the worktree at ${holder.path}, and this ticket's worktree at ${workdir} is on ${current ?? "a detached HEAD"}. Switch that worktree off ${branch}, then start the ticket again.`,
+      );
+    }
+    try {
+      await switchBranch(workdir, branch);
+    } catch (err) {
+      throw new Error(`the worktree at ${workdir} is on ${current ?? "a detached HEAD"}, not this ticket's branch ${branch}, and switching failed: ${err instanceof Error ? err.message : err}`);
+    }
+    return { workdir, branch };
+  }
   let args: string[];
   if (await branchExists(opts.repo, branch)) {
     // Only an existing branch can be checked out somewhere else already.
@@ -144,9 +161,14 @@ export async function switchBranch(workdir: string, branch: string): Promise<{ c
   return { created };
 }
 
-/** How many commits on `from` aren't on `into` (0 when either is missing). */
-export async function commitsNotIn(repo: string, from: string, into: string): Promise<number> {
-  const r = await git(["rev-list", "--count", `refs/heads/${into}..refs/heads/${from}`], repo);
+/**
+ * How many of the ticket's commits on `from` aren't on `into` (0 when either is missing). With
+ * `base`, commits the base branch already has don't count: they arrive with the merge anyway.
+ */
+export async function commitsNotIn(repo: string, from: string, into: string, base?: string | null): Promise<number> {
+  const args = ["rev-list", "--count", `refs/heads/${from}`, `^refs/heads/${into}`];
+  if (base && base !== into && (await branchExists(repo, base))) args.push(`^refs/heads/${base}`);
+  const r = await git(args, repo);
   return r.code === 0 ? Number(r.stdout) || 0 : 0;
 }
 
