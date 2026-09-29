@@ -85,14 +85,19 @@ export function ProjectKey({ k, color, size = "md" }: { k: string; color: string
 export function ReviewMark({ who, state }: { who: "agent" | "human"; state: ReviewState }) {
   const c = useColors();
   const tone: Tone = state === "approved" ? "green" : state === "changes_requested" ? "red" : "neutral";
-  const t = toneColors(c, tone);
+  // Skipped is quieter than pending: outlined and muted, since nothing is left to wait for.
+  const skipped = state === "skipped";
+  const t = skipped ? { bg: "transparent", fg: c.text3 } : toneColors(c, tone);
   return (
-    <View style={[s.badge, { backgroundColor: t.bg, gap: 3 }]} accessibilityLabel={`${who === "agent" ? "Agent" : "Human"} review: ${state.replace("_", " ")}`}>
+    <View style={[s.badge, { backgroundColor: t.bg, gap: 3 }, skipped && { borderColor: c.border }]} accessibilityLabel={`${who === "agent" ? "Agent" : "Human"} review: ${state.replace("_", " ")}`}>
       <Icon name={who === "agent" ? "bot" : "user"} size={11} color={t.fg} strokeWidth={2} />
       {state === "approved" ? (
         <Icon name="check" size={11} color={t.fg} strokeWidth={2.75} />
       ) : state === "changes_requested" ? (
         <Icon name="x" size={11} color={t.fg} strokeWidth={2.75} />
+      ) : skipped ? (
+        // A dash: no review ran, and none is coming.
+        <View style={{ width: 7, height: 2, borderRadius: 1, backgroundColor: t.fg }} />
       ) : (
         <View style={{ width: 6, height: 6, borderRadius: 3, borderWidth: 1.5, borderColor: t.fg, opacity: 0.7 }} />
       )}

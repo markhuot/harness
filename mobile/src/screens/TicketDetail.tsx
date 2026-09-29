@@ -241,7 +241,7 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
         {ticket.status === "review" && (
           <>
             <Button small title="Complete" icon="checkCircle" variant={ready ? "primary" : "secondary"} disabled={!ready || ticket.busy} onPress={() => setCompleting(true)} accessibilityLabel={!ready ? "Complete (needs both agent and human approval)" : ticket.busy ? "Complete (an agent run is in progress)" : "Complete"} />
-            <Button small title="Re-run agent review" icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
+            <Button small title={ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"} icon="refresh" variant="ghost" disabled={ticket.busy} onPress={() => void act(() => client.rerunAgentReview(k), "Agent review queued")} />
           </>
         )}
         {ticket.status === "done" && <Button small title="Re-open" icon="refresh" onPress={() => setReopening(true)} />}
