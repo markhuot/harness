@@ -1,9 +1,10 @@
-// New session: project, prompt, Task/Conductor, driver + model (one picker), permission mode, Start immediately, Use worktree.
+// New session: project, prompt, Task/Conductor, driver + model (one picker), permission mode, Start immediately, Use worktree,
+// and for git projects the branch (picker over the project's branches) and a base branch override.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { DEFAULT_TRIAGE_CHOICE, resolvePermissionMode, type PermissionMode, type TicketKind, type TriageChoice } from "@harness/shared";
-import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
+import { branchNameError, DEFAULT_TRIAGE_CHOICE, resolveBaseBranch, resolvePermissionMode, type BranchInfo, type PermissionMode, type TicketKind, type TriageChoice } from "@harness/shared";
+import { branchChoice, branchChoiceHint, composerProject, inheritedBaseLabel, inheritedModel, newSessionPlaceholder, predictedBranch, sortedProjects } from "@harness/shared/state";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { Button, ProjectKey, Segmented } from "../ui/kit";
@@ -13,6 +14,8 @@ import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { haptic } from "../ui/haptics";
 import { buttonItem, primaryItemStyle } from "../ui/header";
 import { MentionList, useFileMentions } from "../ui/mentions";
+import { BranchPicker } from "../ui/BranchPicker";
+import { MONO } from "../theme/tokens";
 
 export function NewSessionScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
@@ -42,16 +45,30 @@ export function NewSessionScreen() {
     if (!touchedWorktree.current) setWorktree(projectWorktrees);
   }, [projectWorktrees]);
   const canWorktree = project?.isGit !== false;
+  // Branch + base override, for git projects whose ticket gets a worktree. A project switch resets them.
+  const [branch, setBranch] = useState<{ name: string; info: BranchInfo | null } | null>(null);
+  const [base, setBase] = useState("");
+  useEffect(() => {
+    setBranch(null);
+    setBase("");
+  }, [projectId]);
+  const isGit = !!project?.isGit;
+  const showBranch = isGit && canWorktree && worktree;
+  const defaultBranch = project ? predictedBranch(project, Object.keys(state.tickets)) : "";
+  const inheritedBase = resolveBaseBranch(null, project, state.settings);
+  const baseError = base.trim() ? branchNameError(base.trim()) : null;
+  const picked = branchChoice(branch?.name, defaultBranch, branch?.info ? [branch.info] : []);
+  const branchHint = branchChoiceHint(picked, base.trim() || inheritedBase.branch);
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
   const [busy, setBusy] = useState(false);
-  const canSubmit = !!prompt.trim() && !!projectId && !busy;
+  const canSubmit = !!prompt.trim() && !!projectId && !busy && !baseError && !(showBranch && picked.kind === "invalid");
 
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
     const useWorktree = canWorktree ? worktree : null;
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree }));
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree, branch: showBranch ? (branch?.name ?? null) : undefined, baseBranch: isGit ? base.trim() || null : undefined }));
     setBusy(false);
     if (!t) return;
     haptic("success");
@@ -131,6 +148,32 @@ export function NewSessionScreen() {
                 trackColor={{ true: c.accent }}
               />
             </Line>
+          )}
+          {showBranch && project && (
+            <View>
+              <Line label="Branch">
+                <BranchPicker projectId={project.id} value={branch?.name ?? null} defaultName={defaultBranch} onChange={(name, info) => setBranch(name ? { name, info } : null)} />
+              </Line>
+              <Text style={{ color: picked.kind === "existing" && picked.checkedOutAt ? c.amber : picked.kind === "invalid" ? c.red : c.text3, fontSize: 13, lineHeight: 18 }}>{branchHint}</Text>
+            </View>
+          )}
+          {isGit && (
+            <View>
+              <Line label="Base branch">
+                <TextInput
+                  value={base}
+                  onChangeText={setBase}
+                  placeholder={inheritedBaseLabel(inheritedBase)}
+                  placeholderTextColor={c.text3}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  accessibilityLabel="Base branch"
+                  style={{ color: c.text, fontSize: 15, fontFamily: MONO, textAlign: "right", minWidth: 160, flexShrink: 1, paddingVertical: 4 }}
+                />
+              </Line>
+              <Text style={{ color: baseError ? c.red : c.text3, fontSize: 13, lineHeight: 18 }}>{baseError ? `Not a valid branch name: ${baseError}.` : "What the work merges into when it completes. Empty follows the project."}</Text>
+            </View>
           )}
         </View>
         <Button title={start ? "Start session" : "Plan first"} variant="primary" icon={start ? "play" : "fileText"} onPress={() => void submit()} disabled={!canSubmit} loading={busy} hapticKind={null} />

@@ -1,12 +1,12 @@
 // Project settings: name, identifier (rename with the desktop's live validation + preview), color,
 // folder path (a text field: there's no folder picker on the phone), default driver / models /
-// permission mode, worktrees, human review, remove.
+// permission mode, worktrees, base branch (git projects), human review, remove.
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { Project } from "@harness/shared";
-import { inheritedModel, previewProjectKey } from "@harness/shared/state";
-import { PERMISSION_MODE_LABELS } from "@harness/shared";
+import { inheritedBaseLabel, inheritedModel, previewProjectKey } from "@harness/shared/state";
+import { branchNameError, PERMISSION_MODE_LABELS, resolveBaseBranch } from "@harness/shared";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -33,7 +33,7 @@ export function ProjectSettingsScreen() {
 }
 
 function ProjectSettings({ project }: { project: Project }) {
-  const { state, client } = useStore();
+  const { state, client, toast } = useStore();
   const { prefs, setPref } = useApp();
   const act = useAction();
   const c = useColors();
@@ -118,6 +118,24 @@ function ProjectSettings({ project }: { project: Project }) {
         <SRow title="Worktree per ticket" sub="Each ticket works on its own branch (harness/<key>) when the folder is a git repo.">
           <SSwitch label="Worktree per ticket" value={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
         </SRow>
+        {project.isGit && (
+          <SRow title="Base branch" sub="Tickets merge into it when they complete, and new branches start from it. Empty follows the app setting.">
+            <DraftField
+              value={project.baseBranch ?? ""}
+              mono
+              placeholder={inheritedBaseLabel(resolveBaseBranch(null, null, state.settings))}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Base branch"
+              onCommit={(v) => {
+                const name = v.trim();
+                const error = name ? branchNameError(name) : null;
+                if (error) toast(`Not a valid branch name: ${error}`, "error");
+                else void save({ baseBranch: name || null });
+              }}
+            />
+          </SRow>
+        )}
         <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
           <SSwitch label="Require human review" value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
         </SRow>
