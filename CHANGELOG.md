@@ -18,6 +18,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A Claude Code agent that starts a long command in the background (such as a test run that
+  outlasts the two-minute command limit) and ends its turn to wait for it now waits for it and
+  carries on. Before, the command was cut off when the turn ended, and the ticket went to review
+  with "I'll be notified when it completes" as its summary. While it waits, the ticket shows a
+  status line, and it stops waiting after 30 minutes.
 - Choosing "Allow once" on an auto-mode ticket no longer makes you approve every command for
   the rest of that turn. Before, allowing a command with a pipe or `2>/dev/null` in it sent even
   plain file reads to you for approval until the agent finished.

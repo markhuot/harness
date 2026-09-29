@@ -1,4 +1,4 @@
-// claude-code driver: wraps the `claude` CLI in print mode with stream-json output.
+// claude-code driver: wraps the `claude` CLI in print mode with stream-json input and output.
 // Harness tools reach the CLI through the run's MCP endpoint (--mcp-config).
 
 import { existsSync } from "node:fs";
@@ -28,6 +28,19 @@ export interface ClaudeCodeDriverOptions {
   env?: Record<string, string | undefined>;
   /** How long login() waits for the CLI to print its URL */
   loginUrlTimeoutMs?: number;
+  /** How long a turn that ended with background tasks still running waits for them (default 30 min) */
+  backgroundWaitMs?: number;
+}
+
+/**
+ * Harness tools that finish a run. A turn that called one ends even if background tasks are
+ * still running (a dev server started to check the UI never finishes on its own).
+ */
+const FINISHING_TOOLS = new Set(["submit_for_review", "block", "review_decision", "dispatch_ticket", "decline_work"]);
+const BACKGROUND_WAIT_MS = 30 * 60_000;
+
+function formatWait(ms: number): string {
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.max(1, Math.round(ms / 1000))}s`;
 }
 
 /** Resolve the claude binary: HARNESS_CLAUDE_BIN, then PATH, then ~/.local/bin/claude. */
@@ -60,7 +73,7 @@ export function displayToolName(name: string): string {
   return name.startsWith(MCP_PREFIX) ? name.slice(MCP_PREFIX.length) : name;
 }
 
-/** Build the CLI argv (without the binary). The prompt is written to stdin. */
+/** Build the CLI argv (without the binary). The prompt is written to stdin as a stream-json user message. */
 export const PERMISSION_PROMPT_TOOL = `${MCP_PREFIX}permission_prompt`;
 
 /**
@@ -184,6 +197,10 @@ export function buildClaudeArgs(
   const { permissionMode, rules } = planGrants(req, settings);
   const args = [
     "-p",
+    // stream-json input keeps the CLI alive while stdin is open, so a background task's
+    // completion starts another turn instead of the task being killed when the turn ends.
+    "--input-format",
+    "stream-json",
     "--output-format",
     "stream-json",
     "--verbose",
@@ -245,6 +262,12 @@ export interface ClaudeResultInfo {
 const AGENT_TOOLS = new Set(["Agent", "Task"]);
 /** The Agent tool's result when it started the sub-agent in the background (the default in 2.1). */
 const ASYNC_LAUNCH = /^\s*Async agent launched/i;
+/**
+ * A result for a call that keeps running in the background (claude 2.1.284): Bash's "Command
+ * running in background with ID: …" or "…was moved to the background (ID: …)", and Monitor's
+ * "Monitor started (task …".
+ */
+const IN_BACKGROUND = /^\s*(Command (running in background|did not complete .* moved to the background)|Monitor started)/i;
 
 /** task_notification / task_updated status → SubagentStatus (running for anything unfinished). */
 function taskStatus(status: unknown): SubagentStatus | null {
@@ -276,19 +299,31 @@ const str = (v: unknown): string | undefined => (typeof v === "string" ? v : und
  * transcript but never become the run's pending approval: the sub-agent reports back to the agent.
  * Anything else carrying parent_tool_use_id (tool_progress heartbeats of a long Bash call,
  * sub-agent stream events) is dropped.
+ *
+ * One CLI process can run several turns: while stdin stays open, a background task's
+ * completion starts a new turn, which sends another init and ends in another result. The
+ * parser tracks the background tasks still running and whether the agent called a finishing
+ * tool, so the driver knows when to close stdin.
  */
 export class StreamJsonParser {
   sessionId: string | null = null;
+  /** The latest turn's result */
   result: ClaudeResultInfo | null = null;
   sawInit = false;
   /** permissionMode the CLI reported in its init event */
   initPermissionMode: string | null = null;
+  /** Background tasks (Bash and agents) started and not yet finished: CLI task id → description */
+  readonly runningTasks = new Map<string, string>();
+  /** The agent called a tool that finishes the run (FINISHING_TOOLS) */
+  finished = false;
   private toolNames = new Map<string, string>();
   private toolInputs = new Map<string, unknown>();
   /** Sub-agents reported so far (their tool call ids) */
   private subagents = new Set<string>();
   /** CLI task id → the tool call id of the sub-agent it runs */
   private tasks = new Map<string, string>();
+  /** Tool call id → the CLI task running it (any task type) */
+  private taskCalls = new Map<string, string>();
 
   /**
    * @param baseline the resumed session and its cumulative cost before this run (from state)
@@ -298,11 +333,16 @@ export class StreamJsonParser {
   constructor(
     private readonly baseline: { sessionId: string; costUsd: number } | null = null,
     private readonly permission: { requested: string; mode: PermissionMode } | null = null,
-  ) {}
+  ) {
+    this.costBase = baseline;
+  }
 
-  /** Prior cumulative cost of the current session (0 unless it is the resumed one). */
+  /** The session's cumulative cost at the last result (starts as the resumed session's). */
+  private costBase: { sessionId: string; costUsd: number } | null;
+
+  /** Prior cumulative cost of the current session (0 unless it is resumed or ran a turn already). */
   private priorCost(): number {
-    return this.baseline && this.baseline.sessionId === this.sessionId ? this.baseline.costUsd : 0;
+    return this.costBase && this.costBase.sessionId === this.sessionId ? this.costBase.costUsd : 0;
   }
 
   handle(msg: any): DriverEvent[] {
@@ -332,6 +372,12 @@ export class StreamJsonParser {
 
     switch (msg.type) {
       case "system":
+        if (msg.subtype === "task_started" && typeof msg.task_id === "string") {
+          this.runningTasks.set(msg.task_id, str(msg.description) ?? msg.task_id);
+          if (typeof msg.tool_use_id === "string") this.taskCalls.set(msg.tool_use_id, msg.task_id);
+        } else if (msg.subtype === "task_notification" || (msg.subtype === "task_updated" && taskStatus(msg.patch?.status))) {
+          if (typeof msg.task_id === "string") this.runningTasks.delete(msg.task_id);
+        }
         if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string") {
           const callId = msg.tool_use_id;
           // Background Bash commands are tasks too; only agents are sub-agents.
@@ -348,11 +394,13 @@ export class StreamJsonParser {
           if (!callId || !this.subagents.has(callId) || !status) break;
           events.push({ type: "subagent", subagent: { id: callId, status, ...(typeof msg.summary === "string" ? { result: msg.summary } : {}) } });
         } else if (msg.subtype === "init") {
+          // Every turn of the process starts with an init; report a mode downgrade once.
+          const firstInit = !this.sawInit;
           this.sawInit = true;
           noteSession(msg.session_id);
           if (typeof msg.permissionMode === "string") this.initPermissionMode = msg.permissionMode;
           const requested = this.permission?.requested;
-          if (requested && typeof msg.permissionMode === "string" && msg.permissionMode !== requested) {
+          if (firstInit && requested && typeof msg.permissionMode === "string" && msg.permissionMode !== requested) {
             const model = typeof msg.model === "string" && msg.model ? msg.model : "this model";
             events.push({
               type: "status",
@@ -385,6 +433,7 @@ export class StreamJsonParser {
             const input = block.input ?? {};
             this.toolNames.set(callId, name);
             this.toolInputs.set(callId, input);
+            if (!subagentId && FINISHING_TOOLS.has(name)) this.finished = true;
             events.push({ type: "tool_call", callId, name, input, ...from });
             if (AGENT_TOOLS.has(name) && !this.subagents.has(callId)) {
               this.subagents.add(callId);
@@ -414,6 +463,10 @@ export class StreamJsonParser {
           const name = this.toolNames.get(callId) ?? "unknown";
           events.push({ type: "tool_result", callId, name, result: { content, ...(block.is_error ? { isError: true } : {}) }, ...from });
           const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+          // A long foreground call is a task too; its result finishes it unless the call went
+          // to the background (run_in_background, a Bash timeout, an async agent).
+          const task = this.taskCalls.get(callId);
+          if (task && !subagentId && !ASYNC_LAUNCH.test(text) && !IN_BACKGROUND.test(text)) this.runningTasks.delete(task);
           if (this.subagents.has(callId) && !ASYNC_LAUNCH.test(text)) {
             events.push({ type: "subagent", subagent: { id: callId, status: block.is_error ? "failed" : "succeeded", result: text } });
           }
@@ -458,6 +511,8 @@ export class StreamJsonParser {
         });
         if (total !== undefined && this.sessionId) {
           events.push({ type: "state", state: { sessionId: this.sessionId, costUsd: total } satisfies ClaudeCodeState });
+          // The next turn's total includes this one.
+          this.costBase = { sessionId: this.sessionId, costUsd: total };
         }
         const errors: string[] = Array.isArray(msg.errors) ? msg.errors.map(String) : [];
         const isError = msg.is_error === true || (typeof msg.subtype === "string" && msg.subtype.startsWith("error"));
@@ -621,9 +676,26 @@ export class ClaudeCodeDriver implements Driver {
       }
     })().catch(() => {});
 
+    // stdin stays open while the turn runs. Closing it lets the CLI exit after the current
+    // turn and kills any background task still running.
+    const waitMs = this.opts.backgroundWaitMs ?? BACKGROUND_WAIT_MS;
+    let stdinOpen = true;
+    let waitTimer: ReturnType<typeof setTimeout> | null = null;
+    let waitedOut = false;
+    const closeStdin = () => {
+      if (waitTimer) clearTimeout(waitTimer);
+      waitTimer = null;
+      if (!stdinOpen) return;
+      stdinOpen = false;
+      try {
+        void Promise.resolve(proc.stdin.end()).catch(() => {});
+      } catch {
+        /* child already gone */
+      }
+    };
     try {
-      proc.stdin.write(req.prompt);
-      await proc.stdin.end();
+      proc.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: req.prompt } }) + "\n");
+      await proc.stdin.flush();
     } catch {
       /* child died early; reported below */
     }
@@ -636,13 +708,32 @@ export class ClaudeCodeDriver implements Driver {
     const buffered: DriverEvent[] = [];
     try {
       for await (const line of readLines(proc.stdout)) {
-        let msg: unknown;
+        let msg: any;
         try {
           msg = JSON.parse(line);
         } catch {
           continue; // non-JSON noise
         }
         const events = parser.handle(msg);
+        if (msg?.type === "result" && stdinOpen) {
+          // The turn ended. Keep the CLI alive only while the agent's own background tasks
+          // run (a test suite it moved to the background, a sub-agent): their completion
+          // starts the next turn. A finished run, an error or a turn with nothing left ends it.
+          // The wait limit counts from the latest turn's end.
+          const waiting = [...parser.runningTasks.values()];
+          if (!waiting.length || parser.finished || parser.result?.isError) closeStdin();
+          else {
+            events.push({
+              type: "status",
+              text: `Waiting for ${waiting.length === 1 ? "a background task" : `${waiting.length} background tasks`} to finish (${waiting.join("; ")}), up to ${formatWait(waitMs)}.`,
+            });
+            if (waitTimer) clearTimeout(waitTimer);
+            waitTimer = setTimeout(() => {
+              waitedOut = true;
+              closeStdin();
+            }, waitMs);
+          }
+        }
         // Hold events back until the session has started so a failed --resume can be
         // retried without having emitted anything.
         if (resume && !parser.sawInit) buffered.push(...events);
@@ -670,8 +761,12 @@ export class ClaudeCodeDriver implements Driver {
         yield { type: "error", message };
         throw new Error(message);
       }
+      if (waitedOut) {
+        yield { type: "status", text: `Background tasks were still running after ${formatWait(waitMs)}, so the turn ended and they were stopped.` };
+      }
       return "done";
     } finally {
+      closeStdin();
       req.signal.removeEventListener("abort", onAbort);
       if (proc.exitCode === null) proc.kill("SIGTERM");
     }

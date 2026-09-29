@@ -413,8 +413,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 ## Drivers
 
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).
-- **claude-code** — wraps the `claude` CLI (`claude -p --output-format stream-json --verbose
-  --include-partial-messages`), which carries your **team-plan OAuth** login
+- **claude-code** — wraps the `claude` CLI (`claude -p --input-format stream-json --output-format
+  stream-json --verbose --include-partial-messages`), which carries your **team-plan OAuth** login
   (`claude auth login --claudeai`; status via `claude auth status --json`). Harness tools are
   injected with `--mcp-config` pointing at `POST /mcp/:runToken`. Conversation continuity via
   `--resume <session_id>` (stored as driver state). `--permission-mode` comes from the ticket's
@@ -422,6 +422,24 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
   prompt the mode doesn't auto-allow goes to `--permission-prompt-tool
   mcp__harness__permission_prompt` → `requestApproval` → a human. The harness server entry sets
   `alwaysLoad: true` so its tools skip ToolSearch deferral.
+
+  **Background tasks and stdin** (verified against claude 2.1.284). The prompt goes in as one
+  stream-json `user` message and stdin stays open. Each turn ends in a `result`; the CLI exits
+  once stdin is closed after it. In plain `-p` mode the CLI waits for background agents and
+  Monitor tasks, but it kills a background Bash command the moment the turn ends (even with
+  `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`), including one Bash moved to the background after
+  its 120 s timeout. With stdin open, the task's completion starts another turn instead. So at
+  each `result` the driver closes stdin unless the agent's own tasks are still running
+  (`task_started` → `task_notification` / terminal `task_updated`; a task whose tool result
+  isn't a "running in background" / "moved to the background" / "Monitor started" / "Async
+  agent launched" notice ends with that result). It also closes stdin when the turn called a
+  finishing tool (`submit_for_review`, `block`, `review_decision`, `dispatch_ticket`,
+  `decline_work`), so a dev server left running doesn't hold the run open, and when the result
+  is an error. A wait posts a status line and lasts at most 30 min from the latest turn's end
+  (`backgroundWaitMs`). `total_cost_usd` is cumulative across turns, so each `usage` is charged
+  the difference from the previous result. Before this, a work run whose agent ended its turn
+  to wait on a background test run was cut short, and the orchestrator auto-submitted the
+  "I'll be notified…" text (HARNESS-81).
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
 
@@ -625,7 +643,8 @@ default: the tool result only says `Async agent launched…`, and the outcome ar
 `system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
 `task_id`, mapped from `task_started`), inside the same `claude -p` process (the CLI takes
 another turn after the notification). A foreground agent's tool result is its outcome.
-`task_started` for other task types (background Bash) is ignored. Only conversation messages
+`task_started` for other task types (background Bash, Monitor) doesn't make a sub-agent, but
+the driver tracks it as a running task (see "Drivers"). Only conversation messages
 (`assistant` / `user`) under a `parent_tool_use_id` are a sub-agent's output: anything else is
 the tool's own progress, like the `tool_progress` heartbeat a Bash call sends every 30 s while
 it runs, and is dropped. Output from a sub-agent the parser didn't see start creates one called

@@ -6,6 +6,11 @@
 //   FAKE_CLAUDE_SCRIPT   NDJSON file replayed on stdout for `-p` runs. Control lines:
 //                          {"__sleep": ms}  {"__stderr": "text"}  {"__exit": code}
 //                          {"__echo_session": true} → emits system/init with the --resume id (or "new-session")
+//                          {"__mark": "label"} → appends { label, stdinClosed } to FAKE_CLAUDE_RECORD + ".marks"
+//                          {"__until_stdin_closed": true} → waits for the harness to close stdin
+//                        Runs read one stream-json user message (recorded as stdin), replay the
+//                        script, then exit once stdin closes like the real CLI (code 7 if it
+//                        stays open for 5s: the driver never ended the run).
 //   FAKE_CLAUDE_MISSING_SESSION  when --resume equals this id, fail like the real CLI does
 //   FAKE_CLAUDE_AUTH     JSON printed by `auth status --json`
 //   FAKE_CLAUDE_LOGIN_URL URL printed by `auth login` (then it sleeps FAKE_CLAUDE_LOGIN_SLEEP ms)
@@ -19,7 +24,9 @@ const env = process.env;
 //   FAKE_CLAUDE_MODELS       JSON array for response.models (default: two models + "default")
 //   FAKE_CLAUDE_INIT         "error" → error control_response; "exit" → exit 2 with stderr, no answer;
 //                            "hang" → never answer; "noise" → junk lines + an unrelated response first
-if (argv[0] === "-p" && argv[argv.indexOf("--input-format") + 1] === "stream-json") {
+const streamInput = argv[0] === "-p" && argv[argv.indexOf("--input-format") + 1] === "stream-json";
+// Model listing runs without --mcp-config; agent runs always pass it.
+if (streamInput && !argv.includes("--mcp-config")) {
   if (env.FAKE_CLAUDE_RECORD) {
     const passEnv = Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith("CLAUDE") || k === "HARNESS_MARKER"));
     appendFileSync(env.FAKE_CLAUDE_RECORD, JSON.stringify({ argv, stdin: "", cwd: process.cwd(), env: passEnv }) + "\n");
@@ -64,7 +71,39 @@ if (argv[0] === "-p" && argv[argv.indexOf("--input-format") + 1] === "stream-jso
   }
   process.exit(0);
 }
-const stdin = argv[0] === "-p" ? await new Response(Bun.stdin.stream()).text() : "";
+// Agent runs: the prompt is the first stream-json user message; stdin then stays open until the
+// harness closes it.
+let stdinClosed = false;
+let stdin = "";
+if (argv[0] === "-p") {
+  const reader = (Bun.stdin.stream() as ReadableStream<Uint8Array>).getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (!buf.includes("\n")) {
+    const { value, done } = await reader.read();
+    if (done) {
+      stdinClosed = true;
+      break;
+    }
+    buf += decoder.decode(value, { stream: true });
+  }
+  const first = buf.split("\n")[0]!.trim();
+  if (streamInput && first) {
+    const content = JSON.parse(first).message?.content;
+    stdin = typeof content === "string" ? content : JSON.stringify(content);
+  } else stdin = buf;
+  if (!stdinClosed) {
+    void (async () => {
+      while (!(await reader.read()).done) {}
+      stdinClosed = true;
+    })();
+  }
+}
+const untilStdinClosed = async (limitMs: number) => {
+  const start = Date.now();
+  while (!stdinClosed && Date.now() - start < limitMs) await Bun.sleep(10);
+  return stdinClosed;
+};
 
 if (env.FAKE_CLAUDE_RECORD) {
   const passEnv = Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith("CLAUDE") || k === "HARNESS_MARKER"));
@@ -103,6 +142,13 @@ for (const raw of script.split("\n")) {
   else if (typeof line.__stderr === "string") process.stderr.write(line.__stderr + "\n");
   else if (typeof line.__exit === "number") process.exit(line.__exit);
   else if (line.__echo_session) out(JSON.stringify({ type: "system", subtype: "init", session_id: resume ?? "new-session", tools: [] }));
+  else if (typeof line.__mark === "string") {
+    if (env.FAKE_CLAUDE_RECORD) appendFileSync(env.FAKE_CLAUDE_RECORD + ".marks", JSON.stringify({ label: line.__mark, stdinClosed }) + "\n");
+  } else if (line.__until_stdin_closed) await untilStdinClosed(10_000);
   else out(raw);
+}
+if (argv[0] === "-p" && !(await untilStdinClosed(5_000))) {
+  process.stderr.write("fake-claude: stdin never closed\n");
+  process.exit(7);
 }
 process.exit(0);
