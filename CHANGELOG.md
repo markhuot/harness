@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260929.2219](https://github.com/markhuot/harness/releases/tag/app-20260929.2219) - 2026-09-29
+
 ### Added
 
 - The Approve button on a ticket in review now asks how the work should land. "Approve and
