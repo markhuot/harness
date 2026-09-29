@@ -142,6 +142,26 @@ export function driverModelChoices(
   return { default: def, groups, selectedLabel };
 }
 
+/**
+ * The groups a type-ahead query leaves: every word of the query must appear (case-insensitive) in
+ * the option's label, its model id, or its driver's name, so "claude op" finds Opus under Claude
+ * Code and "gpt" finds gpt-4o by id. Groups with no match are dropped; an empty query keeps all.
+ */
+export function filterChoiceGroups(groups: ChoiceGroup[], query: string, driverNames: Record<string, string> = {}): ChoiceGroup[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return groups;
+  return groups
+    .map((g) => {
+      const driver = `${g.label ?? ""} ${driverNames[g.driver] ?? ""} ${g.driver}`;
+      const options = g.options.filter((o) => {
+        const hay = `${o.label} ${decodeChoice(o.value).model ?? ""} ${driver}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      });
+      return { ...g, options };
+    })
+    .filter((g) => g.options.length > 0);
+}
+
 // ---------------------------------------------------------------------------
 // Shared per-driver cache (one fetch per driver however many selects are mounted)
 // ---------------------------------------------------------------------------

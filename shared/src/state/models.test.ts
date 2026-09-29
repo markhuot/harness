@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DriverModels, ModelInfo } from "../index";
-import { decodeChoice, driverModelChoices, encodeChoice, inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
+import { decodeChoice, driverModelChoices, encodeChoice, filterChoiceGroups, inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
 
 const MODELS: ModelInfo[] = [
   { id: "opus", name: "Opus 5.5", default: true },
@@ -162,5 +162,28 @@ describe("driverModelChoices (combined driver + model select)", () => {
     expect(decodeChoice("")).toEqual(none);
     expect(decodeChoice(encodeChoice({ driver: "a", model: "m:1" }))).toEqual({ driver: "a", model: "m:1" });
     expect(decodeChoice(encodeChoice({ driver: "a", model: null }))).toEqual({ driver: "a", model: null });
+  });
+});
+
+describe("filterChoiceGroups (type-ahead)", () => {
+  const groups = [
+    { driver: "claude-code", label: "Claude Code", options: [{ value: encodeChoice({ driver: "claude-code", model: "opus" }), label: "Opus 5.5" }, { value: encodeChoice({ driver: "claude-code", model: "sonnet" }), label: "Sonnet 5" }] },
+    { driver: "openrouter", label: "OpenRouter", options: [{ value: encodeChoice({ driver: "openrouter", model: "openai/gpt-4o" }), label: "GPT-4o" }] },
+  ];
+
+  test("an empty query keeps everything", () => {
+    expect(filterChoiceGroups(groups, "  ")).toBe(groups);
+  });
+
+  test("words match label, model id or driver name; groups without matches drop out", () => {
+    expect(filterChoiceGroups(groups, "claude op").map((g) => g.options.map((o) => o.label))).toEqual([["Opus 5.5"]]);
+    expect(filterChoiceGroups(groups, "openai").map((g) => g.driver)).toEqual(["openrouter"]); // by model id
+    expect(filterChoiceGroups(groups, "SONNET")[0]!.options.map((o) => o.label)).toEqual(["Sonnet 5"]);
+    expect(filterChoiceGroups(groups, "opus router")).toEqual([]);
+  });
+
+  test("a flat group (no label) still matches its driver through driverNames", () => {
+    const flat = [{ ...groups[0]!, label: null }];
+    expect(filterChoiceGroups(flat, "claude", { "claude-code": "Claude Code" })[0]!.options).toHaveLength(2);
   });
 });
