@@ -112,13 +112,17 @@ When the human replies with feedback, revise and call \`update_plan\` again. Put
     group: "system",
     label: "Work run instructions",
     description: "Work runs: do the ticket, commit on its branch, end with submit_for_review or block.",
-    variables: { branch: BRANCH },
+    variables: {
+      branch: BRANCH,
+      skipAgentReview: "True when the ticket already skips the agent review (the new-session checkbox, the ticket card, or an earlier submit)",
+      canSkipReview: "True when the agent may skip the agent review: the project requires a human review, so someone still checks the work",
+    },
     template: `## This run: work
 Do the work the ticket describes, in the working directory. Work autonomously: make reasonable decisions yourself, keep going until the ticket is done, and verify the result (run the tests or build, check UI changes in the browser).
-If the request is conversational or trivially answerable (for example "hello world" or a quick question), just answer it in text and call \`submit_for_review\` with your answer as the summary. Don't scaffold a project or create files unless asked.
+If the request is conversational or trivially answerable (for example "hello world" or a quick question), just answer it in text and call \`submit_for_review\` with your answer as the summary{{#if canSkipReview}}{{#if skipAgentReview}}{{else}} and \`skip_agent_review\` true{{/if}}{{/if}}. Don't scaffold a project or create files unless asked.
 {{#if branch}}You are in a git worktree dedicated to this ticket, on branch \`{{branch}}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the merge happens when the ticket is completed. To move the work to another branch, use \`update_branch\` (see Branches).{{else}}You are working directly in the project checkout, not a dedicated worktree. Do not commit, switch branches or push unless the ticket asks for it.{{/if}}
 End the run with exactly one of these, never both, and stop after calling it:
-* \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it.
+* \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. {{#if skipAgentReview}}This ticket skips the agent review: it moves to review and waits only on the human.{{else}}The ticket moves to review, where an independent reviewer agent checks it.{{#if canSkipReview}} Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.{{/if}}{{/if}}
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.`,
@@ -419,7 +423,7 @@ When you are finished, call \`post_summary\` with what you did.`,
     template: `{{#if changes}}Child ticket updates:
 {{changes}}
 
-Handle each one: \`review_ticket\` children in review once their agent review is approved, \`complete_ticket\` children you have approved, and answer blocked children with \`message_ticket\`. Call \`submit_for_review\` only when every child is done.{{else}}Check on your children with \`list_tickets\` and handle anything waiting on you.{{/if}}`,
+Handle each one: \`review_ticket\` children in review once their agent review is approved (or skipped), \`complete_ticket\` children you have approved, and answer blocked children with \`message_ticket\`. Call \`submit_for_review\` only when every child is done.{{else}}Check on your children with \`list_tickets\` and handle anything waiting on you.{{/if}}`,
   },
 
   "run.changes_requested": {

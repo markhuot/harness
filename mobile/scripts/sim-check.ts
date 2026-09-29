@@ -45,7 +45,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
+import { buildPairUrl, reviewPassed, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 
 const here = resolve(import.meta.dir, "..");
@@ -476,6 +476,8 @@ async function seed() {
   const tables = await create(other.id, TABLE_BRIEF);
   // Not started, so its branch can still be picked on the Details tab.
   const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
+  // A quick ask that skips the agent review: in review with the muted "skipped" mark.
+  const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -494,17 +496,18 @@ async function seed() {
 
   const [, ch] = await Promise.all([
     // Then a reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
-    settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved")
+    settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
       .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
-      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved")),
+      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
     settle(configApproval.key, (t) => !!t.pendingApproval),
     settle(blocked.key, (t) => t.status === "blocked" && !t.busy),
     settle(plan.key, (t) => t.status === "planning" && !t.busy),
     settle(branchPlan.key, (t) => t.status === "planning" && !t.busy),
+    settle(quick.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
-    settle(tables.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved"),
+    settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -518,7 +521,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -616,7 +619,7 @@ const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do e
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
 async function sayStick(key: string, n: number) {
   await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
-  return settle(key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+  return settle(key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
 }
 /** A project with a few files and one ticket in review (brief `prompt`), for --stick, --keyboard and --mentions. */
 async function seedTicket(key: string, prompt: string, files: Record<string, string> = {}) {
@@ -629,7 +632,7 @@ async function seedTicket(key: string, prompt: string, files: Record<string, str
   }
   const project = await api<Project>("POST", "/projects", { path: dir, name: key.toLowerCase(), key, defaultDriver: "dummy" });
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: true });
-  await settle(ticket.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
+  await settle(ticket.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
   return { project, ticket };
 }
 async function seedStick() {
@@ -972,6 +975,11 @@ function screens(s: Seeded): Screen[] {
         await Bun.sleep(700);
       },
     },
+    // The git project's New session scrolled to Skip agent review, below the branch fields.
+    { name: "new-session-skip-review", url: `harness://new?projectId=${s.project.id}`, seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
+    // A ticket in review whose agent review was skipped: the muted mark in the header, and the
+    // switch (on) on its Details tab.
+    { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
     { name: "watcher-new", url: "harness://watcher" },

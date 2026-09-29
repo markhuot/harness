@@ -423,7 +423,7 @@ function DetailHeader({
                 <Icon name="checkCircle" /> Complete
               </button>
               <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
-                <Icon name="refresh" /> Re-run agent review
+                <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
               </button>
             </>
           )}

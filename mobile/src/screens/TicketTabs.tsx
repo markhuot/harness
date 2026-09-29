@@ -1,7 +1,7 @@
 // Ticket detail tab bodies: Summaries, Tickets (conductor children) and Details.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { branchNameError, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type Ticket } from "@harness/shared";
 import {
@@ -35,6 +35,7 @@ import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { driverOptions } from "../lib/selectOptions";
+import { skipReviewHint } from "../lib/newSession";
 import { useStickToBottom } from "../ui/stickToBottom";
 import { BranchPicker } from "../ui/BranchPicker";
 import { DraftField } from "../ui/settings";
@@ -322,6 +323,9 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         </Prop>
         <Prop label="Permissions" hint="Applies from the next tool call">
           <PermissionPicker value={ticket.permissionMode} disabled={!editable} inherited={resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode} onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))} />
+        </Prop>
+        <Prop label="Skip agent review" hint={editable ? skipReviewHint(ticket) : undefined}>
+          <Switch value={!!ticket.skipAgentReview} disabled={!editable} onValueChange={(v) => void act(() => client.updateTicket(ticket.key, { skipAgentReview: v }))} trackColor={{ true: c.accent }} accessibilityLabel="Skip agent review" />
         </Prop>
         {dependents.length > 0 && (
           <Prop label="Blocks">

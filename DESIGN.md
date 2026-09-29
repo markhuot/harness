@@ -100,14 +100,14 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
 | Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
-| Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
+| Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
-| Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
+| Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
 | `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately. While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
 | `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
@@ -116,6 +116,37 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 
 Review runs start from a **fresh** driver conversation (independent reviewer) and never
 write driver state back to the session. All other ticket runs resume the session's state.
+
+### Skipping the agent review
+
+`Ticket.skipAgentReview` (migration 17, default false) is for tickets with nothing for a reviewer
+agent to check, like a question answered in text. Submitting such a ticket (the agent's
+`submit_for_review` or the auto-submit at the end of a run) sets `agentReview = "skipped"` and
+starts no review run, so the ticket waits in Review only on the human, or on its conductor for a
+child. `"skipped"` is only ever an agent review state, and `reviewPassed` (shared) treats it like
+`approved`: the human's approval makes the ticket ready, and with `autoComplete` it completes right
+away. A project with human review off makes the ticket ready as soon as it's submitted. A request
+for changes resets the agent review to `pending` as usual; the next submit skips it again.
+
+Who sets it:
+
+- **The human**, with `CreateTicketBody.skipAgentReview` (the "Skip agent review" checkbox in the
+  new-session composer on Mac and iPhone) or `UpdateTicketBody.skipAgentReview` (the ticket's
+  details). A change while the ticket is in review applies at once: turned on with the agent
+  review `pending`, the review is `skipped` and queued or running review runs are cancelled
+  (a late `review_decision` from one is refused); turned off with it `skipped`, the review goes
+  back to `pending` and a review run starts. "Re-run agent review" (`POST /agent-review`) still
+  runs one on demand.
+- **The ticket's own agent**, with `submit_for_review { skip_agent_review: true }`, when the human
+  asked for no agent review or the request was conversational and it changed no files (the work
+  prompt says so, and says the ticket already skips it when the flag is set). `false` turns the
+  flag back off. The flag is stored before the submit, so later submits skip too.
+- **Other agents**, with `create_ticket` / `update_ticket` `skip_agent_review` (see "Board changes by
+  agents").
+
+Agents can only turn it on where someone else still reviews the work: for a project that requires
+a human review (`requireHumanReview`). Otherwise the agent review is the only check, and the call
+fails with an error saying a human can turn it off on the ticket. Humans can set it anywhere.
 
 ### Branches
 
@@ -254,11 +285,11 @@ Harness tools (always exposed, via MCP for claude-code):
 | `post_summary` | all ticket kinds | `{ summary, attachments?: string[] }` (image/video paths, see "Summary attachments") |
 | `update_plan` | plan | `{ plan, title? }` |
 | `block` | work | `{ question }` |
-| `submit_for_review` | work, conductor | `{ summary, attachments?: string[] }` |
+| `submit_for_review` | work, conductor | `{ summary, attachments?: string[], skip_agent_review? }`: `skip_agent_review` sets the ticket's `skipAgentReview` first (true is refused when the project doesn't require a human review; see "Skipping the agent review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `update_branch` | work, conductor | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` sets `skipAgentReview`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
@@ -317,6 +348,11 @@ hits them too:
   or out of it (the agent reviewer, then the human or the parent conductor via `review_ticket` /
   `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
   message sends it back to in progress, unless the caller is that ticket's parent conductor.
+- **No skipping the only review.** `create_ticket` / `update_ticket` with `skip_agent_review: true`
+  are refused for a project without human review, like the ticket's own `submit_for_review`
+  ("Skipping the agent review"). `update_ticket` `skip_agent_review` on a ticket in review is
+  refused unless the caller is its parent conductor (its reviewer): it would end or start the
+  review under way.
 - **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
   (closing one that isn't needed). Anything that ran goes through review and a complete run.
 - **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a
@@ -757,7 +793,7 @@ Directives are read from the run prompt:
 | work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")` |
-| conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
+| conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 | triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key is the first `KEY-123` in the fenced output. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
 ## HTTP API

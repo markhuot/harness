@@ -101,6 +101,38 @@ describe("create_ticket", () => {
 });
 
 describe("guard rails", () => {
+  test("skip_agent_review: agents set it only where a human or conductor still reviews, and not mid-review", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const c = h.ctx("work", me);
+    // Through the tool, so the snake_case input is what's checked.
+    const r = await executeTool([createTicketTool], "create_ticket", { title: "Question", description: "Just answer it", skip_agent_review: true }, c);
+    expect(r.isError).toBeFalsy();
+    const created = h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
+    expect(created.skipAgentReview).toBe(true);
+    expect(text(r)).toContain('"skipAgentReview": true');
+
+    h.orch.updateProject(h.api.id, { requireHumanReview: false });
+    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true })).rejects.toThrow(
+      "API doesn't require a human review, so the agent review is the only review its tickets get",
+    );
+    const apiTicket = await h.make("api work", { projectId: h.api.id });
+    await expect(h.orch.ops.updateTicket(c, apiTicket.key, { skipAgentReview: true })).rejects.toThrow("doesn't require a human review");
+    expect(h.get(apiTicket).skipAgentReview).toBe(false);
+
+    const inReview = await h.make("in review", { status: "review" });
+    await expect(h.orch.ops.updateTicket(c, inReview.key, { skipAgentReview: true })).rejects.toThrow(`${inReview.key} is in review; its reviewers decide`);
+    const planned = await h.make("planned");
+    expect((await h.orch.ops.updateTicket(c, planned.key, { skipAgentReview: true })).skipAgentReview).toBe(true);
+
+    // A conductor is its child's reviewer, so it may skip the child's agent review in review too.
+    const cond = await h.make("conduct", { kind: "conductor", status: "in_progress" });
+    const child = await h.make("child", { parentId: cond.id, status: "review" });
+    h.store.tickets.update(child.id, { agentReview: "pending" });
+    const skipped = await h.orch.ops.updateTicket(h.ctx("conductor", h.get(cond)), child.key, { skipAgentReview: true });
+    expect([skipped.skipAgentReview, skipped.agentReview]).toEqual([true, "skipped"]);
+  });
+
   test("plan, review, complete and triage runs can't change the board, even calling ops directly", async () => {
     const h = await setup();
     const me = await h.make("me");

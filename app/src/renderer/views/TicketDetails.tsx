@@ -4,7 +4,8 @@ import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { depChipTitle, dependencyStates, dependentsOf, inheritedBaseLabel, inheritedModel, newTicketBranchLabel } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
+import { driverLabel, relativeTime, StatusDot, Switch, useNow } from "../components/bits";
+import { skipReviewHint } from "../state/newSession";
 import { ModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
@@ -165,6 +166,15 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
             disabled={!editable}
             inherited={resolvePermissionMode(null, state.projects[ticket.projectId], state.settings ?? { permissionMode: "auto" }).mode}
             onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))}
+          />
+        </dd>
+        <dt>Agent review</dt>
+        <dd title={editable ? skipReviewHint(ticket) : undefined}>
+          <Switch
+            checked={!!ticket.skipAgentReview}
+            disabled={!editable}
+            onChange={(v) => void act(() => client.updateTicket(ticket.key, { skipAgentReview: v }))}
+            label="Skip agent review"
           />
         </dd>
         {dependents.length > 0 && (

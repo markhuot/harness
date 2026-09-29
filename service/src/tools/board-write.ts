@@ -21,6 +21,11 @@ const branchProp = {
     "Branch for its worktree: an existing local branch is checked out as is (the ticket blocks if another worktree has it checked out); a new name is created from the base branch. \"\" means harness/<key>, the default.",
 };
 
+const skipAgentReviewProp = {
+  type: "boolean",
+  description: "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Only for a project that requires a human review.",
+};
+
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
 /** "inherit" / "" → null (inherit); undefined → unchanged. */
 const baseBranchInput = (b: string | undefined) => (b === undefined ? undefined : b.trim() === "inherit" ? null : b.trim() || null);
@@ -40,6 +45,7 @@ export const createTicket = defineTool<{
   use_worktree?: boolean;
   base_branch?: string;
   branch?: string;
+  skip_agent_review?: boolean;
 }>({
   name: "create_ticket",
   description:
@@ -66,6 +72,7 @@ export const createTicket = defineTool<{
       },
       base_branch: baseBranchProp,
       branch: branchProp,
+      skip_agent_review: skipAgentReviewProp,
     },
     ["title", "description"],
   ),
@@ -84,6 +91,7 @@ export const createTicket = defineTool<{
       useWorktree: input.use_worktree,
       baseBranch: baseBranchInput(input.base_branch),
       branch: branchInput(input.branch),
+      skipAgentReview: input.skip_agent_review,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },
@@ -99,10 +107,11 @@ export const updateTicket = defineTool<{
   depends_on?: string[];
   base_branch?: string;
   branch?: string;
+  skip_agent_review?: boolean;
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, or branch. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, or whether it skips the agent review. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -114,6 +123,7 @@ export const updateTicket = defineTool<{
       depends_on: depsProp,
       base_branch: baseBranchProp,
       branch: branchProp,
+      skip_agent_review: skipAgentReviewProp,
     },
     ["key"],
   ),
@@ -127,6 +137,7 @@ export const updateTicket = defineTool<{
       dependsOn: input.depends_on,
       baseBranch: baseBranchInput(input.base_branch),
       branch: branchInput(input.branch),
+      skipAgentReview: input.skip_agent_review,
     });
     return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, permissionMode: ticket.permissionMode })}`;
   },

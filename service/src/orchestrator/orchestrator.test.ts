@@ -437,6 +437,107 @@ describe("ticket lifecycle", () => {
   });
 });
 
+describe("skipping the agent review", () => {
+  test("a ticket created with skipAgentReview goes to review without a review run and waits only on the human", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "What does this repo do?", skipAgentReview: true });
+    expect(t.skipAgentReview).toBe(true);
+    await h.orch.idle();
+    let cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["review", "skipped", "pending"]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("Agent review: skipped");
+
+    // The human's approval is the only one left: auto-complete finishes it.
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    cur = h.orch.ticketDetail(t.key).ticket;
+    expect(cur.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "complete:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("Both reviews approved: completing automatically");
+  });
+
+  test("changes requested by the human come back skipped again on the next submit", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true });
+    await h.orch.idle();
+    const back = h.orch.humanReview(t.key, { decision: "request_changes", notes: "more" });
+    expect([back.status, back.agentReview]).toEqual(["in_progress", "pending"]);
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.agentReview).toBe("skipped");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "work:succeeded"]);
+  });
+
+  test("with the project's human review off, a skipped agent review makes the ticket ready at once", async () => {
+    const h = setup({ requireHumanReview: false, autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["review", "skipped", "approved"]);
+    expect(statuses(h, t.sessionId)).toContain("Ready to complete");
+    expect(runKinds(h, t)).toEqual(["work:succeeded"]);
+  });
+
+  test("the agent can skip its own review with submit_for_review skip_agent_review", async () => {
+    const h = setup({ autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "hello /skipreview" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["review", "skipped", true]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("The agent turned off the agent review for this ticket");
+  });
+
+  test("an agent can't skip the review when nobody else would review the ticket", async () => {
+    const h = setup({ requireHumanReview: false, autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "hello /skipreview" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    // The refused submit left it in progress; the run's end auto-submitted it for a normal review.
+    expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["review", "approved", false]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
+    const text = h.store.transcript.list(t.sessionId).filter((e) => e.content.type === "text").map((e) => (e.content as { text: string }).text);
+    expect(text.some((x) => x.startsWith("Refused:") && x.includes("doesn't require a human review"))).toBe(true);
+  });
+
+  test("turning skipAgentReview on while the agent review runs stops it; turning it off starts one", async () => {
+    const h = setup({ autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    expect(h.orch.ticketDetail(t.key).ticket.agentReview).toBe("pending");
+
+    let cur = await h.orch.updateTicket(t.key, { skipAgentReview: true });
+    expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["review", "skipped", true]);
+    await h.orch.idle();
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:cancelled"]);
+    expect(h.orch.ticketDetail(t.key).ticket.agentReview).toBe("skipped");
+    h.driver.release(); // drop the aborted run's hold
+
+    cur = await h.orch.updateTicket(t.key, { skipAgentReview: false });
+    expect(cur.agentReview).toBe("pending");
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    h.driver.release();
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.agentReview).toBe("approved");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:cancelled", "review:succeeded"]);
+  });
+
+  test("skipAgentReview must be a boolean", async () => {
+    const h = setup();
+    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: "yes" as never })).rejects.toThrow(/skipAgentReview must be true or false/);
+  });
+
+  test("a conductor's child created with skip_agent_review is reviewed and completed by the conductor alone", async () => {
+    const h = setup();
+    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "- Answer a question [skip-review]", kind: "conductor" });
+    await h.orch.idle();
+    const [child] = h.store.tickets.list({ parentId: parent.id });
+    expect(child!.skipAgentReview).toBe(true);
+    expect(child!.status).toBe("done");
+    expect(runKinds(h, child!)).toEqual(["work:succeeded", "complete:succeeded"]);
+  });
+});
+
 describe("chat messages (sendMessage with chat)", () => {
   test("in review: the agent answers in a chat run and the ticket keeps its status and reviews", async () => {
     const h = setup();

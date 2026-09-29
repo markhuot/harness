@@ -29,8 +29,8 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
-    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "skip_agent_review", "start", "title", "use_worktree"]);
+    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "skip_agent_review", "title"]);
     expect(props("update_branch")).toEqual(["base_branch", "branch"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
@@ -42,6 +42,7 @@ describe("tool catalogue", () => {
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
+    expect(props("submit_for_review")).toEqual(["attachments", "skip_agent_review", "summary"]);
     expect(props("complete_ticket")).toEqual(["instructions", "key"]);
     expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
     expect(props("get_ticket")).toEqual(["include_transcript", "key"]);

@@ -370,6 +370,11 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE tickets ADD COLUMN base_branch TEXT;
   ALTER TABLE tickets ADD COLUMN requested_branch TEXT;
   `,
+  // 17: tickets.skip_agent_review: submitting skips the agent review (agent_review 'skipped'),
+  //     so the ticket waits only on the human (DESIGN.md "Skipping the agent review").
+  `
+  ALTER TABLE tickets ADD COLUMN skip_agent_review INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /**

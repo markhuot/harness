@@ -421,6 +421,9 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   border: 1.5px solid currentColor;
   opacity: 0.7;
 }
+.badge.review-skipped {
+  color: var(--text-3);
+}
 .driver-badge[data-driver="claude-code"] svg {
   color: #d97757;
 }

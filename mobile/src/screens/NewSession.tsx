@@ -1,5 +1,5 @@
 // New session: project, prompt, Task/Conductor, driver + model (one picker), permission mode, Start immediately, Use worktree,
-// and for git projects the branch (picker over the project's branches) and a base branch override.
+// for git projects the branch (picker over the project's branches) and a base branch override, and Skip agent review.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -16,6 +16,7 @@ import { buttonItem, primaryItemStyle } from "../ui/header";
 import { MentionList, useFileMentions } from "../ui/mentions";
 import { BranchPicker } from "../ui/BranchPicker";
 import { MONO } from "../theme/tokens";
+import { newSessionBody } from "../lib/newSession";
 
 export function NewSessionScreen() {
   const params = useLocalSearchParams<{ projectId?: string }>();
@@ -62,14 +63,15 @@ export function NewSessionScreen() {
   const branchHint = branchChoiceHint(picked, effectiveBase);
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
+  const [skipReview, setSkipReview] = useState(false);
   const [busy, setBusy] = useState(false);
   const canSubmit = !!prompt.trim() && !!projectId && !busy && !baseError && !(showBranch && picked.kind === "invalid");
 
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
-    const useWorktree = canWorktree ? worktree : null;
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree, branch: showBranch ? (branch?.name ?? null) : undefined, baseBranch: isGit ? base.trim() || null : undefined }));
+    const body = newSessionBody({ projectId, prompt, start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, canWorktree, worktree, showBranch, branch: branch?.name ?? null, isGit, base, skipAgentReview: skipReview });
+    const t = await act(() => client.createTicket(body));
     setBusy(false);
     if (!t) return;
     haptic("success");
@@ -182,6 +184,12 @@ export function NewSessionScreen() {
               <Text style={{ color: baseError ? c.red : c.text3, fontSize: 13, lineHeight: 18 }}>{baseError ? `Not a valid branch name: ${baseError}.` : "What the work merges into when it completes. Empty follows the project."}</Text>
             </View>
           )}
+          <View>
+            <Line label="Skip agent review">
+              <Switch value={skipReview} onValueChange={setSkipReview} trackColor={{ true: c.accent }} accessibilityLabel="Skip agent review" />
+            </Line>
+            <Text style={{ color: c.text3, fontSize: 13, lineHeight: 18 }}>Goes straight to your review, for questions and quick asks.</Text>
+          </View>
         </View>
         <Button title={start ? "Start session" : "Plan first"} variant="primary" icon={start ? "play" : "fileText"} onPress={() => void submit()} disabled={!canSubmit} loading={busy} hapticKind={null} />
       </ScrollView>

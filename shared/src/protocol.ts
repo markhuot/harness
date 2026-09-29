@@ -89,7 +89,16 @@ export interface PermissionDecisionLog {
 export const TICKET_STATUSES = ["planning", "in_progress", "blocked", "review", "done"] as const;
 export type TicketStatus = (typeof TICKET_STATUSES)[number];
 
-export type ReviewState = "pending" | "approved" | "changes_requested";
+/**
+ * "skipped" is only ever an agent review: the ticket has `skipAgentReview`, so submitting didn't
+ * start a review run (DESIGN.md "Skipping the agent review"). It counts as passed (`reviewPassed`).
+ */
+export type ReviewState = "pending" | "approved" | "changes_requested" | "skipped";
+
+/** An approved or skipped review: nothing left to wait for on that side. */
+export function reviewPassed(state: ReviewState): boolean {
+  return state === "approved" || state === "skipped";
+}
 
 export type TicketKind = "task" | "conductor";
 
@@ -149,6 +158,12 @@ export interface Ticket {
    * project checkout, null → the project's useWorktrees. Optional only so older payloads type-check.
    */
   useWorktree?: boolean | null;
+  /**
+   * Submitting skips the agent review: agentReview becomes "skipped" and the ticket waits only on
+   * the human (or its conductor). Set when the ticket is created, from the ticket card, or by the
+   * ticket's own agent (`submit_for_review` skip_agent_review). Optional so older payloads type-check.
+   */
+  skipAgentReview?: boolean;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -743,6 +758,8 @@ export interface CreateTicketBody {
   branch?: string | null;
   /** Base branch override (Ticket.baseBranch); null / "" → inherit the project's */
   baseBranch?: string | null;
+  /** Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false. */
+  skipAgentReview?: boolean;
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;
@@ -768,6 +785,11 @@ export interface UpdateTicketBody {
    * no worktree (409 once it has one: its agent re-points it with the update_branch tool).
    */
   branch?: string | null;
+  /**
+   * Ticket.skipAgentReview. Turning it on while the ticket waits on its agent review skips that
+   * review (a queued review run is dropped); turning it off while the review is "skipped" starts one.
+   */
+  skipAgentReview?: boolean;
   dependsOn?: string[];
   position?: number;
 }

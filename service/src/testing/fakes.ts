@@ -1,6 +1,6 @@
 // Test doubles shared by service tests. Not imported by production code.
 
-import type { BrowserState, DriverInfo, ModelInfo } from "@harness/shared";
+import { reviewPassed, type BrowserState, type DriverInfo, type ModelInfo } from "@harness/shared";
 import { onTempCleanup, tempDir } from "@harness/shared/testing";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
 import { outputKey, watcherProject } from "../drivers/dummy";
@@ -198,11 +198,26 @@ export class FakeDriver implements Driver {
         if (thrown) throw new Error(thrown[1]!);
         if (p.includes("/nosubmit")) return;
         await ops.postSummary(ctx, "Did the work.");
+        if (p.includes("/skipreview")) {
+          try {
+            await ops.submitForReview(ctx, "All done.", undefined, true);
+          } catch (err) {
+            yield { type: "text", text: `Refused: ${(err as Error).message}` };
+          }
+          return;
+        }
         await ops.submitForReview(ctx, "All done.");
         return;
       }
       case "review": {
         yield { type: "state", state: { reviewer: true } };
+        if (p.includes("[hold-review]")) {
+          await new Promise<void>((resolve) => {
+            this.holds.push(resolve);
+            req.signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+          if (req.signal.aborted) return;
+        }
         if (this.rejectsLeft > 0 || p.includes("[dummy:reject]")) {
           if (this.rejectsLeft > 0) this.rejectsLeft--;
           await ops.reviewDecision(ctx, "request_changes", "Please fix X");
@@ -234,7 +249,8 @@ export class FakeDriver implements Driver {
           ];
           const keys: string[] = [];
           for (const s of specs) {
-            const t = await ops.createTicket(ctx, { title: s.title, description: s.title, dependsOn: s.deps.map((i) => keys[i]!) });
+            const skipAgentReview = s.title.includes("[skip-review]") || undefined;
+            const t = await ops.createTicket(ctx, { title: s.title, description: s.title, dependsOn: s.deps.map((i) => keys[i]!), skipAgentReview });
             keys.push(t.key);
           }
           yield { type: "state", state: { turns, created: true } };
@@ -243,12 +259,12 @@ export class FakeDriver implements Driver {
         yield { type: "state", state: { ...state, turns } };
         const children = (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets;
         for (const c of children) {
-          if (c.status === "review" && c.agentReview === "approved" && c.humanReview === "pending") {
+          if (c.status === "review" && reviewPassed(c.agentReview) && c.humanReview === "pending") {
             await ops.reviewTicket(ctx, c.key, "approve", "ok");
           }
         }
         for (const c of (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets) {
-          if (c.status === "review" && c.agentReview === "approved" && c.humanReview === "approved" && !c.busy) {
+          if (c.status === "review" && reviewPassed(c.agentReview) && c.humanReview === "approved" && !c.busy) {
             await ops.completeTicket(ctx, c.key);
           }
         }

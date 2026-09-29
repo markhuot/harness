@@ -10,6 +10,7 @@ import { ProjectKey } from "../components/ProjectKey";
 import { Icon } from "../components/Icon";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { BranchSelect } from "../components/BranchSelect";
+import { newSessionBody } from "../state/newSession";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -33,6 +34,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const [prompt, setPrompt] = useState("");
   const [start, setStart] = useState(true);
   const [kind, setKind] = useState<TicketKind>("task");
+  const [skipAgentReview, setSkipAgentReview] = useState(false);
   const project = state.projects[projectId];
   const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? state.drivers[0]?.id ?? "";
   // Driver + model in one pick. Default follows the project's driver and model (then the settings').
@@ -80,11 +82,22 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const submit = async () => {
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
-    const useWorktree = canWorktree ? worktree : null;
-    const branches = showBranches ? { branch: branch?.name ?? null, baseBranch } : {};
-    const t = await act(() =>
-      client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree, ...branches }),
-    );
+    const body = newSessionBody({
+      projectId,
+      prompt,
+      start,
+      kind,
+      driver: choice.driver ?? (defaultDriver || undefined),
+      model: choice.model,
+      permissionMode,
+      canWorktree,
+      worktree,
+      showBranches,
+      branch: branch?.name ?? null,
+      baseBranch,
+      skipAgentReview,
+    });
+    const t = await act(() => client.createTicket(body));
     setBusy(false);
     if (!t) return;
     try {
@@ -191,6 +204,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
                 title="Off: the agent works directly in the project directory"
               />
             )}
+            <Switch checked={skipAgentReview} onChange={setSkipAgentReview} label="Skip agent review" title="Goes straight to your review, for questions and quick asks" />
           </div>
           <button className="btn btn-primary" disabled={!prompt.trim() || !projectId || busy} onClick={submit}>
             {busy ? <span className="spinner" /> : null}

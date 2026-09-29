@@ -59,7 +59,7 @@ export const block = defineTool<{ question: string }>({
   },
 });
 
-export const submitForReview = defineTool<{ summary: string; attachments?: string[] }>({
+export const submitForReview = defineTool<{ summary: string; attachments?: string[]; skip_agent_review?: boolean }>({
   name: "submit_for_review",
   description:
     "Call this when the work is complete. Moves the ticket to Review and posts your summary. The summary should say what you changed, how you verified it (tests, commands run), and anything the reviewer should look at closely. When the work has a visible result (a UI change, rendered output, a browser flow), attach screenshots or a short screen recording that show it. Make no further changes after calling it.",
@@ -67,11 +67,16 @@ export const submitForReview = defineTool<{ summary: string; attachments?: strin
     {
       summary: { type: "string", minLength: 1, description: "Markdown summary of the finished work and how it was verified." },
       attachments: attachmentsProp,
+      skip_agent_review: {
+        type: "boolean",
+        description:
+          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). Refused when the project doesn't require a human review. Omit it to keep the ticket's setting.",
+      },
     },
     ["summary"],
   ),
-  async run({ summary, attachments }, ctx) {
-    await ctx.ops.submitForReview(ctx, summary, attachments);
+  async run({ summary, attachments, skip_agent_review }, ctx) {
+    await ctx.ops.submitForReview(ctx, summary, attachments, skip_agent_review);
     return "Ticket moved to review. Stop here.";
   },
 });

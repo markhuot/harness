@@ -262,6 +262,10 @@ kbd {
 .switch input {
   display: none;
 }
+.switch:has(input:disabled) {
+  cursor: default;
+  opacity: 0.5;
+}
 .switch-track {
   width: 28px;
   height: 16px;

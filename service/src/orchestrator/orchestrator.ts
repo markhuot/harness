@@ -47,6 +47,7 @@ import {
   PROJECT_COLORS,
   resolveBaseBranch,
   resolvePermissionMode,
+  reviewPassed,
   PROMPT_IDS,
   TICKET_STATUSES,
   watcherDriver,
@@ -272,6 +273,13 @@ const BASE_SOURCE_LABEL:Record<BaseBranchSource | "checkout", string> = {
 function validUseWorktree(value: unknown): boolean | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "boolean") throw badRequest("useWorktree must be true, false or null");
+  return value;
+}
+
+/** Validate an optional boolean from a request body (omitted → undefined). */
+function validBoolean(name: string, value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw badRequest(`${name} must be true or false`);
   return value;
 }
 
@@ -812,6 +820,7 @@ export class Orchestrator {
     const useWorktree = validUseWorktree(body.useWorktree);
     const baseBranch = validateBranchName("baseBranch", body.baseBranch);
     const requestedBranch = validateBranchName("branch", body.branch);
+    const skipAgentReview = validBoolean("skipAgentReview", body.skipAgentReview) ?? false;
     if (requestedBranch && !(useWorktree ?? project.useWorktrees)) {
       throw badRequest(`branch ${requestedBranch} needs a worktree, but this ticket would run in the project checkout (useWorktree is off)`);
     }
@@ -854,6 +863,7 @@ export class Orchestrator {
         useWorktree,
         baseBranch,
         requestedBranch,
+        skipAgentReview,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -927,12 +937,15 @@ export class Orchestrator {
       if (deps.includes(ticket.key)) throw badRequest("A ticket cannot depend on itself");
       patch.dependsOn = deps;
     }
+    const skip = validBoolean("skipAgentReview", body.skipAgentReview);
+    if (skip !== undefined && skip !== !!ticket.skipAgentReview) patch.skipAgentReview = skip;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
     if (Object.keys(patch).length) {
       ticket = this.store.tickets.update(ticket.id, patch)!;
       if (patch.title) this.store.sessions.update(ticket.sessionId, { title: patch.title });
       this.touchSession(ticket.sessionId);
     }
+    if (patch.skipAgentReview !== undefined) ticket = await this.applySkipAgentReview(ticket);
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
         case "in_progress":
@@ -1154,6 +1167,45 @@ export class Orchestrator {
     } finally {
       this.startingComplete.delete(ticket.id);
     }
+  }
+
+  /**
+   * After skipAgentReview changed: a ticket waiting in review on its agent review follows the
+   * flag right away. On: the review is skipped (queued or running review runs are dropped) and
+   * the ticket may be ready. Off: a skipped review becomes a real one.
+   */
+  private async applySkipAgentReview(ticket: Ticket): Promise<Ticket> {
+    if (ticket.status !== "review") return ticket;
+    if (ticket.skipAgentReview && ticket.agentReview === "pending") {
+      await this.cancelReviewRuns(ticket.sessionId);
+      const t = this.store.tickets.update(ticket.id, { agentReview: "skipped" })!;
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, "Agent review: skipped");
+      this.noteReady(t);
+    } else if (!ticket.skipAgentReview && ticket.agentReview === "skipped") {
+      const t = this.store.tickets.update(ticket.id, { agentReview: "pending" })!;
+      this.touchSession(t.sessionId);
+      this.enqueueReview(t);
+    }
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** Drop the session's queued review runs and stop a running one. */
+  private async cancelReviewRuns(sessionId: string) {
+    for (const job of this.queue.pendingFor(sessionId)) {
+      if (job.kind !== "review" || !this.queue.remove(job.runId)) continue;
+      const r = this.store.runs.finish(job.runId, "cancelled", null);
+      this.bus.emit({ kind: "run.upserted", run: r });
+      this.appendStatus(sessionId, job.runId, "Run cancelled (review)");
+    }
+    const running = this.queue.runningFor(sessionId);
+    if (running?.kind !== "review") return;
+    const a = this.active.get(running.runId);
+    if (a) {
+      a.cancelled = true;
+      a.controller.abort();
+    }
+    await Promise.race([this.queue.whenSessionIdle(sessionId), Bun.sleep(5000)]);
   }
 
   rerunAgentReview(key: string): Ticket {
@@ -1414,8 +1466,8 @@ export class Orchestrator {
     if (a) a.blocked = true;
   }
 
-  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void> {
-    const t = this.ctxTicket(ctx);
+  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void> {
+    let t = this.ctxTicket(ctx);
     if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
     // A parent in review (or done) would strand its children: their reviews and merges are its job.
     const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
@@ -1424,17 +1476,37 @@ export class Orchestrator {
         `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
       );
     }
+    if (skipAgentReview === true) this.assertAgentMaySkipReview(t);
     const prepared = prepareAttachments(attachments, ctx.cwd);
+    if (skipAgentReview !== undefined && skipAgentReview !== !!t.skipAgentReview) {
+      t = this.store.tickets.update(t.id, { skipAgentReview })!;
+      this.appendStatus(t.sessionId, ctx.runId, skipAgentReview ? "The agent turned off the agent review for this ticket" : "The agent turned the agent review back on");
+    }
     this.submit(t, summary?.trim() || "Work submitted for review.", "agent", storeAttachments(this.paths.attachmentsDir, prepared));
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
   }
 
+  /**
+   * An agent may skip an agent review (its own ticket's, or one it creates or edits) only when a
+   * human or conductor still reviews the ticket: with the project's human review off, the agent
+   * review is the only check left.
+   */
+  private assertAgentMaySkipReview(t: Ticket) {
+    const project = this.store.projects.get(t.projectId);
+    if (project && !project.requireHumanReview) {
+      throw new Error(
+        `${t.key}'s project (${project.key}) doesn't require a human review, so the agent review is the only review it gets and an agent can't skip it. A human can turn it off on the ticket.`,
+      );
+    }
+  }
+
   async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (ctx.runKind !== "review") throw new Error("review_decision is only available in review runs");
     if (t.status !== "review") throw new Error(`${t.key} is no longer in review`);
+    if (t.agentReview === "skipped") throw new Error(`The agent review of ${t.key} was skipped; there is nothing to decide`);
     const a = this.ctxActive(ctx);
     if (a?.decided) throw new Error("A review decision was already recorded for this run");
     if (a) a.decided = true;
@@ -1655,6 +1727,9 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
+    if (input.skipAgentReview && !project.requireHumanReview) {
+      throw new Error(`${project.key} doesn't require a human review, so the agent review is the only review its tickets get and an agent can't skip it.`);
+    }
     if (input.child ?? own.kind === "conductor") {
       // Children run on the parent's driver/model unless it picks another. Any ticket can take
       // children; having one makes it act as a conductor (isConductor).
@@ -1674,6 +1749,7 @@ export class Orchestrator {
           useWorktree: input.useWorktree,
           branch: input.branch,
           baseBranch: input.baseBranch,
+          skipAgentReview: input.skipAgentReview,
         }),
       );
     }
@@ -1692,6 +1768,7 @@ export class Orchestrator {
         useWorktree: input.useWorktree,
         branch: input.branch,
         baseBranch: input.baseBranch,
+        skipAgentReview: input.skipAgentReview,
       }),
     );
   }
@@ -1713,6 +1790,14 @@ export class Orchestrator {
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
+    if (input.skipAgentReview !== undefined) {
+      // Turning it on in review would end the review under way; that's the reviewers' call.
+      if (target.status === "review" && target.parentId !== actor.id) {
+        throw new Error(`${target.key} is in review; its reviewers decide whether its agent review runs.`);
+      }
+      if (input.skipAgentReview) this.assertAgentMaySkipReview(target);
+      body.skipAgentReview = input.skipAgentReview;
+    }
     if (input.permissionMode !== undefined) {
       // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
       // around the approvals a human set up.
@@ -1816,7 +1901,7 @@ export class Orchestrator {
 
   async completeTicket_(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket> {
     const child = this.childOf(this.conductorOf(ctx, "complete_ticket"), key);
-    if (child.status !== "review" || child.agentReview !== "approved" || child.humanReview !== "approved") {
+    if (child.status !== "review" || !reviewPassed(child.agentReview) || child.humanReview !== "approved") {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
     return this.completeTicket(child.key, { instructions });
@@ -2451,8 +2536,13 @@ export class Orchestrator {
   private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
     const project = this.store.projects.get(ticket.projectId);
     const humanReview = project && !project.requireHumanReview ? "approved" : "pending";
+    const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
     this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
-    this.transition(ticket, "review", { agentReview: "pending", humanReview, blockedReason: null }, "Moved to review", summary);
+    const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", summary);
+    if (agentReview === "skipped") {
+      this.appendStatus(t.sessionId, null, "Agent review: skipped");
+      this.noteReady(t);
+    }
   }
 
   private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor"): Ticket {
@@ -2474,7 +2564,7 @@ export class Orchestrator {
    * right away. Conductor children wait for their conductor's complete_ticket instead.
    */
   private noteReady(t: Ticket) {
-    if (t.status !== "review" || t.agentReview !== "approved" || t.humanReview !== "approved") return;
+    if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
     const project = this.store.projects.get(t.projectId);
     if (!project?.autoComplete || t.parentId || this.completing(t)) {
       this.appendStatus(t.sessionId, null, "Ready to complete");
@@ -2501,7 +2591,9 @@ export class Orchestrator {
     return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
   }
 
+  /** Start the agent review, unless the ticket skips it (submit already marked it "skipped"). */
   private enqueueReview(t: Ticket) {
+    if (t.agentReview === "skipped") return;
     this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
   }
 
@@ -2903,7 +2995,7 @@ export class Orchestrator {
       postSummary: (c, b, a) => this.postSummary(c, b, a),
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
-      submitForReview: (c, s, a) => this.submitForReview(c, s, a),
+      submitForReview: (c, s, a, skip) => this.submitForReview(c, s, a, skip),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---
