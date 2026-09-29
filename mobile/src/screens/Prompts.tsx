@@ -127,7 +127,13 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
   const [compare, setCompare] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const selection = useRef({ start: 0, end: 0 });
+  // Where the native cursor is. iOS only reports changes, and a field whose text is replaced has
+  // its cursor at the end (so a tap there reports nothing): text the app puts in starts it there.
+  const selection = useRef({ start: entry.override?.length ?? 0, end: entry.override?.length ?? 0 });
+  const setAppDraft = (text: string | null) => {
+    setDraft(text);
+    selection.current = { start: text?.length ?? 0, end: text?.length ?? 0 };
+  };
   const input = useRef<TextInput>(null);
 
   const editing = draft !== null;
@@ -140,7 +146,7 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   useEffect(() => {
-    if (!dirtyRef.current) setDraft(entry.override);
+    if (!dirtyRef.current) setAppDraft(entry.override);
   }, [entry.override]);
 
   const change = (text: string) => {
@@ -154,7 +160,7 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
     try {
       const patch = promptSavePatch(entry, value);
       await client.updateSettings(patch);
-      if (patch.prompts![entry.id] == null) setDraft(null);
+      if (patch.prompts![entry.id] == null) setAppDraft(null);
       dirtyRef.current = false;
       toast(message, "info");
       await reload();
@@ -175,7 +181,7 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
   const cancel = () => {
     setServerError(null);
     setCompare(false);
-    setDraft(entry.override);
+    setAppDraft(entry.override);
     input.current?.blur();
   };
   const reset = async () => {
@@ -187,6 +193,12 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
     const next = insertText(draft, start, end, `{{${name}}}`);
     change(next.text);
     selection.current = { start: next.caret, end: next.caret };
+    // The new value lands natively on the next frame; then put the caret right after the insert,
+    // where the next insert (and the next keystroke) expects it.
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelection(next.caret, next.caret);
+    });
   };
 
   // Cancel stands in for Back while there's something to cancel, so edits aren't lost to a swipe.
@@ -223,7 +235,7 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
         {/* Above the text: a built-in prompt can run to a few screens. */}
         {(!editing || entry.override !== null) && (
           <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-            {!editing && <Button title="Customize" icon="edit" variant="primary" onPress={() => change(promptStartText(entry))} />}
+            {!editing && <Button title="Customize" icon="edit" variant="primary" onPress={() => setAppDraft(promptStartText(entry))} />}
             {entry.override !== null && <Button title="Reset to built-in" icon="refresh" variant="danger" disabled={saving} onPress={() => void reset()} />}
           </View>
         )}
@@ -240,6 +252,13 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
               { value: "compare", label: "Compare with built-in" },
             ]}
           />
+        )}
+
+        {/* Above the field, so it stays in view while editing a prompt that runs to a few screens. */}
+        {errorLine && (
+          <Callout tone="red" icon="alert">
+            {errorLine}
+          </Callout>
         )}
 
         {!editing ? (
@@ -266,12 +285,6 @@ function PromptDetail({ entry, reload }: { entry: PromptEntry; reload: () => Pro
             smartInsertDelete={false}
             accessibilityLabel={`${entry.label} prompt`}
           />
-        )}
-
-        {errorLine && (
-          <Text style={{ color: c.red, fontSize: 13.5, lineHeight: 19 }} selectable>
-            {errorLine}
-          </Text>
         )}
 
         <Text style={{ color: c.text3, fontSize: 13, lineHeight: 18 }}>

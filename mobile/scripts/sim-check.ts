@@ -1224,6 +1224,25 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         moved(udid);
         return `saved ${saved.length} chars, then reset`;
       });
+      // The seeded review message is short, so its end and its variables share the screen.
+      await check("prompt editor: a tapped variable goes in at the cursor, and the next key follows it", async () => {
+        const seeded = await override("run.review");
+        await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
+        const el = await until("editor field", () => findElement(udid, (l) => l === "Agent review prompt"), 5000);
+        // Its last line, past the end of the text: the cursor goes to the end.
+        await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width - 20)), "-y", String(Math.round(el.frame.y + el.frame.height - 16)), "--udid", udid);
+        await Bun.sleep(400);
+        await tapWhere(udid, (l) => l.startsWith("{{brief}}"));
+        await Bun.sleep(500);
+        await axe("type", "Z", "--udid", udid);
+        await Bun.sleep(300);
+        await tapSave();
+        const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000);
+        await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
+        moved(udid);
+        if (!saved?.endsWith("then the diff.{{brief}}Z")) throw new Error(`expected the text to end "then the diff.{{brief}}Z", got ${JSON.stringify(saved)}`);
+        return `ends ${JSON.stringify(saved.slice(-24))}`;
+      });
     }),
     chain(9, async (udid) => {
       await check("board context menu moves a card to Done", async () => {
