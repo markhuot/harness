@@ -861,6 +861,8 @@ interface Screen {
   url: string;
   /** Extra wait after the labels settle, for pixels that land later (a streamed frame, a diff). */
   wait?: number;
+  /** About how long the visit takes on an idle Mac (default 4 s), to split the screens evenly. */
+  seconds?: number;
   ready?: (l: string[]) => boolean;
   /** It shows the /browse ticket, so it waits for that run to finish (the list puts these last). */
   browse?: boolean;
@@ -887,7 +889,7 @@ function screens(s: Seeded): Screen[] {
     { name: "planning", url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work") },
     // The plugin's WebView shows a spinner ("In progress") until its page has loaded, and reloads
     // when the appearance flips.
-    { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
+    { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
     { name: "new-session", url: "harness://new" },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
@@ -897,7 +899,7 @@ function screens(s: Seeded): Screen[] {
     { name: "connect", url: "harness://connect" },
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
-    { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true },
+    { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
   ];
 }
 /** Deals `items` out to `n` lanes so each gets about the same total `weight`, keeping their order within a lane. */
@@ -1030,7 +1032,9 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
   if (themeShots.length) await timed("themes", () => themeScreens(udids[0]!));
   if (!flag("interactions-only")) {
     const list = screens(s).filter((x) => !only || only.includes(x.name));
-    const dealt = lanes(list, udids.length, (x) => 2.5 + (x.wait ?? 0) / 1000);
+    // Longest first deals the most evenly; the screens that wait on the browse ticket then go last.
+    const cost = (x: Screen) => x.seconds ?? 4;
+    const dealt = lanes([...list].sort((a, b) => cost(b) - cost(a)), udids.length, cost).map((lane) => [...lane.filter((x) => !x.browse), ...lane.filter((x) => x.browse)]);
     const crashed = (await timed("screens", () => Promise.all(udids.map((u, i) => shootScreens(u, dealt[i]!, s.browsed))))).flat();
     if (crashed.length) ok = false;
   }
