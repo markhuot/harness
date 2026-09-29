@@ -1,41 +1,49 @@
 // Simulator walk-through against a REAL daemon on a throwaway HARNESS_HOME:
-//   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=40)
+//   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=1)
 //   2. seeds a project with a hello-world ticket, a conductor with children, a /browse ticket,
-//      an approval, a blocked question, a plan-first ticket and a git-worktree ticket with changes
-//   3. builds the Release app for the simulator (skip with --no-build), installs and launches it
-//   4. pairs via `simctl openurl harness://pair?…`, deep-links to every screen and saves
-//      screenshots in light and dark to mobile/build/screens/
+//      an approval, a blocked question, a plan-first ticket and a git-worktree ticket with changes,
+//      while it builds the Release app for the simulator (skip with --no-build)
+//   3. on --shards simulators at once (default 3, named "sim-check 1", "sim-check 2", … and created
+//      on first use), installs the app and pairs it via `simctl openurl harness://pair?…`
+//   4. splits the screens between the simulators: each deep-links the running app to its screens
+//      and saves each one in light and in dark (flipping `simctl ui appearance` in place) to
+//      mobile/build/screens/, then the real-tap checks, also split between them
 //
-//   5. --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
+//   Only what needs a simulator lives here (native scrolling, the keyboard, gestures, media, crashes,
+//   the screenshots); the logic behind each check is in bun test (lib/boardColumns, lib/mentionCaret,
+//   lib/stickToBottom, shared/state paging and details, the service's http tests).
+//
+//   --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
 //      (harness://settings?darkTheme=…) and saves board-<id>.png + settings-<id>.png
 //
-//   6. --paging: only the paging checks: seeds 125+ done tickets (one old "haystack" ticket deep in
-//      the history), a conductor with done children and a ticket depending on the old one; checks
-//      child tickets are hidden by default, the Done count is the server total, the Done column
-//      scrolls into older pages, and the Search tab finds the unloaded done ticket; paging-*.png in light
-//      and dark
+//   The modes below replace the default walk-through and use one simulator:
 //
-//   7. --stick: only the stick-to-bottom checks: a ticket with a long brief and a long transcript;
-//      swipes the Transcript and Summaries tabs and checks they follow new content at the bottom,
-//      stay put once scrolled up, and follow again after scrolling back down
+//   --paging: seeds 125+ done tickets (one old "haystack" ticket deep in the history) and a conductor
+//      with done children; checks child tickets are hidden by default (and the header menu shows
+//      them), the Done column scrolls into older pages, and the Search tab finds the unloaded done
+//      ticket; paging-*.png
 //
-//   8. --keyboard: only the keyboard checks: with the on-screen keyboard up, the ticket composer
-//      sits right on top of it and the New session sheet scrolls to its last button above it.
-//      Needs the simulator's software keyboard (I/O → Keyboard → uncheck Connect Hardware
-//      Keyboard); keyboard-*.png
+//   --stick: a ticket with a long brief and a long transcript; swipes the Transcript tab and checks it
+//      follows new content at the bottom, stays put once scrolled up, and follows again after
+//      scrolling back down; the Summaries tab opens at the bottom and follows
 //
-//   9. --mentions: only the @-mention checks: in New session and the ticket composer, typing `@…`
-//      lists the project's files, tapping one completes it, and the run the prompt starts gets the
-//      file attached ("Attached @…" in the transcript); mentions-*.png in light and dark
+//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it and the
+//      New session sheet scrolls to its last button above it. Needs the simulator's software
+//      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
 //
-//  10. --attachments: only the summary attachment checks (needs ffmpeg): a summary with a tall and a
-//      wide PNG, an H.264 clip and a PNG that won't decode; checks every thumbnail shows, a tap opens
-//      the viewer on that attachment, swiping pages, Close and swipe-down close it;
-//      attachments-*.png (thumbnails in light and dark, the viewer on an image, the video, the failed file)
+//   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
+//      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
+//      in the transcript); mentions-*.png
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--udid=…] [--keep] [--only=name,name] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments]
+//   --attachments (needs ffmpeg): a summary with a tall and a wide PNG, an H.264 clip and a PNG that
+//      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
+//      pages, Close and swipe-down close it; attachments-*.png
+//
+//   Every run prints its slowest steps and writes them all to mobile/build/screens/timings.json.
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
@@ -56,6 +64,8 @@ const stickOnly = flag("stick");
 const keyboardOnly = flag("keyboard");
 const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
+const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly);
+const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 3) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean; env?: Record<string, string> } = {}) {
@@ -87,15 +97,35 @@ function reportTimings() {
   writeFileSync(join(shots, "timings.json"), JSON.stringify({ args, total, timings }, null, 2) + "\n");
 }
 
+// ---------------------------------------------------------------- checks
+type Result = [name: string, ok: boolean, detail: string];
+const results: Result[] = [];
+/** Runs one named check; a thrown error or `false` fails it. The result prints right away. */
+async function check(name: string, fn: () => Promise<string | boolean>) {
+  let r: Result;
+  try {
+    const v = await timed(`check: ${name}`, fn);
+    r = [name, v !== false, typeof v === "string" ? v : ""];
+  } catch (e) {
+    r = [name, false, (e as Error).message.split("\n")[0]!];
+  }
+  results.push(r);
+  console.log(`${r[1] ? "✓" : "✗"} ${r[0]}${r[2] ? ` — ${r[2]}` : ""}`);
+}
+
+// ---------------------------------------------------------------- AXe
 // AXe (brew install cameroncooke/axe/axe) drives taps. It looks for SimulatorKit under
 // Developer/Library/PrivateFrameworks, which Xcode 27 moved to Contents/SharedFrameworks, so give
-// it a symlinked Xcode bundle with the framework where it expects it.
+// it a symlinked Xcode bundle with the framework where it expects it. It lives outside the repo:
+// inside mobile/, bun test walks its thousands of links and runs out of file descriptors.
 function xcodeShim(): string {
+  rmSync(join(here, "build", "xcode-shim"), { recursive: true, force: true }); // where it used to live
   const real = resolve(DEVELOPER_DIR, "..");
-  const contents = join(here, "build", "xcode-shim", "Xcode.app", "Contents");
+  const root = join(homedir(), "Library", "Caches", "harness-sim-check", "xcode-shim");
+  const contents = join(root, "Xcode.app", "Contents");
   const dev = join(contents, "Developer");
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  rmSync(join(here, "build", "xcode-shim"), { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true });
   mkdirSync(join(dev, "Library", "PrivateFrameworks"), { recursive: true });
   const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
   for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(contents, e));
@@ -111,8 +141,14 @@ let shim = "";
 async function axe(...a: string[]) {
   if (!hasAxe) return "";
   shim ||= xcodeShim();
+  const t = performance.now();
   const p = Bun.spawn(["axe", ...a], { env: { ...env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
-  const [out] = await Promise.all([new Response(p.stdout).text(), p.exited]);
+  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  if (process.env.SIM_CHECK_DEBUG) {
+    const ms = Math.round(performance.now() - t);
+    if (code !== 0) console.log(`    axe ${a[0]} → ${code}: ${(err || out).trim().split("\n")[0]}`);
+    else if (ms > 1500) console.log(`    axe ${a[0]} took ${ms} ms`);
+  }
   return out;
 }
 async function labels(udid: string): Promise<string[]> {
@@ -127,11 +163,21 @@ interface AXNode {
   frame: { x: number; y: number; width: number; height: number };
   children?: AXNode[];
 }
+async function tree(udid: string): Promise<AXNode[]> {
+  const out = await axe("describe-ui", "--udid", udid);
+  return JSON.parse(out.slice(out.indexOf("["))) as AXNode[];
+}
+/** Every node on screen, flattened. */
+async function nodes(udid: string): Promise<AXNode[]> {
+  const all: AXNode[] = [];
+  const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
+  (await tree(udid)).forEach(walk);
+  return all;
+}
 async function findElement(udid: string, match: (label: string) => boolean): Promise<AXNode | null> {
   const walk = (n: AXNode): AXNode | null => (n.AXLabel && match(n.AXLabel) ? n : (n.children ?? []).map(walk).find(Boolean) ?? null);
   try {
-    const out = await axe("describe-ui", "--udid", udid);
-    return (JSON.parse(out.slice(out.indexOf("["))) as AXNode[]).map(walk).find(Boolean) ?? null;
+    return (await tree(udid)).map(walk).find(Boolean) ?? null;
   } catch {
     return null;
   }
@@ -146,53 +192,7 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
-
-type Settle = { tree: string; since: number };
-const settleState = (): Settle => ({ tree: "", since: Date.now() });
-/** Whether the app is on screen and its accessibility tree (labels `l`) hasn't changed for 800 ms. */
-function settled(l: string[], prev: Settle): boolean {
-  const tree = l.join("\n");
-  if (tree !== prev.tree) Object.assign(prev, { tree, since: Date.now() });
-  // The splash has only the app's own label; SpringBoard (app not up yet) has no "Harness" root.
-  return l[0] === "Harness" && l.length >= 3 && Date.now() - prev.since >= 800;
-}
-
-/**
- * simctl openurl, accept iOS's "Open in “Harness”?" confirmation if it asks (not every simulator
- * does), and wait until the linked screen has rendered and settled. A cold launch takes ~4 s.
- */
-async function openUrl(udid: string, url: string) {
-  await simctl("openurl", udid, url);
-  if (!hasAxe) return;
-  const prev = settleState();
-  const end = Date.now() + 15000;
-  while (Date.now() < end) {
-    await Bun.sleep(150);
-    const l = await labels(udid);
-    if (l.some((x) => x.startsWith("Open in"))) {
-      await tapLabel(udid, "Open");
-      continue;
-    }
-    if (settled(l, prev)) return;
-  }
-}
-/** Waits until the app is up and its screen has settled (after a plain `simctl launch`). */
-async function whenRendered(udid: string) {
-  const prev = settleState();
-  await until("app rendered", async () => settled(await labels(udid), prev), 15000).catch(() => {});
-}
-/**
- * A fresh launch, so nothing from the previous screen (a modal, a scroll position) frames the next:
- * a deep link cold-launches the app straight onto its screen, no URL launches it on the board.
- * Returns once the screen has rendered and settled.
- */
-async function coldOpen(udid: string, url = "") {
-  await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-  if (url) return openUrl(udid, url);
-  await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true });
-  await whenRendered(udid);
-}
-async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000): Promise<T> {
+async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> {
   const end = Date.now() + ms;
   let last: unknown;
   while (Date.now() < end) {
@@ -202,7 +202,7 @@ async function until<T>(label: string, fn: () => Promise<T | null | undefined | 
     } catch (e) {
       last = e;
     }
-    await Bun.sleep(250);
+    await Bun.sleep(every);
   }
   throw new Error(`timed out: ${label}${last ? ` (${(last as Error).message})` : ""}`);
 }
@@ -210,22 +210,158 @@ async function git(cwd: string, ...a: string[]) {
   await sh(["git", "-c", "user.name=Harness Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...a], { cwd });
 }
 
-// ---------------------------------------------------------------- simulator
+// ---------------------------------------------------------------- simulators
+const BUNDLE = "com.markhuot.harness";
 /** Whether the app process is alive; a screenshot of a crashed app is just the home screen. */
 async function running(udid: string): Promise<boolean> {
-  return (await sh(["xcrun", "simctl", "spawn", udid, "launchctl", "list"], { allowFail: true })).includes("com.markhuot.harness");
+  return (await sh(["xcrun", "simctl", "spawn", udid, "launchctl", "list"], { allowFail: true })).includes(BUNDLE);
 }
-async function pickDevice(): Promise<string> {
-  if (opt("udid")) return opt("udid")!;
-  const list = JSON.parse(await simctl("list", "devices", "available", "--json")) as { devices: Record<string, { udid: string; name: string; state: string }[]> };
+
+/**
+ * The simulators to drive: --udid=a,b, or "sim-check 1" … "sim-check N", created (iPhone 18 Pro on
+ * the newest iOS runtime) and booted as needed. They're sim-check's own, so a run never takes over
+ * a simulator someone (or another agent) is using.
+ */
+async function pickDevices(n: number): Promise<string[]> {
+  const given = opt("udid")?.split(",").filter(Boolean);
+  type Device = { udid: string; name: string; state: string; isAvailable: boolean };
+  const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
   const all = Object.values(list.devices).flat();
-  const d = all.find((x) => x.name === "iPhone 18 Pro") ?? all.find((x) => /^iPhone/.test(x.name));
-  if (!d) throw new Error("no iPhone simulator available");
-  if (d.state !== "Booted") {
-    await simctl("boot", d.udid);
-    await sh(["xcrun", "simctl", "bootstatus", d.udid, "-b"]);
+  const wanted = given ?? Array.from({ length: n }, (_, i) => `sim-check ${i + 1}`);
+  return Promise.all(
+    wanted.map(async (id) => {
+      let d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
+      if (!d && given) throw new Error(`--udid: no simulator ${id}`);
+      if (!d) d = { udid: await createDevice(id), name: id, state: "Shutdown", isAvailable: true };
+      if (d.state !== "Booted") {
+        await simctl("boot", d.udid);
+        await sh(["xcrun", "simctl", "bootstatus", d.udid, "-b"]);
+      }
+      return d.udid;
+    }),
+  );
+}
+async function createDevice(name: string): Promise<string> {
+  type Runtime = { identifier: string; version: string; platform?: string; isAvailable: boolean; supportedDeviceTypes?: { identifier: string; name: string }[] };
+  const runtimes = (JSON.parse(await simctl("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes
+    .filter((r) => r.isAvailable && (r.platform ?? r.identifier).includes("iOS"))
+    .sort((a, b) => Bun.semver.order(b.version, a.version));
+  // The newest runtime that runs an iPhone 18 Pro (the taps' coordinates are its), else any iPhone.
+  const pick = (want: (n: string) => boolean) => runtimes.map((r) => ({ r, type: r.supportedDeviceTypes?.find((t) => want(t.name)) })).find((x) => x.type);
+  const found = pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
+  if (!found) throw new Error("no iOS runtime with an iPhone simulator available");
+  console.log(`creating simulator "${name}" (${found.type!.name}, iOS ${found.r.version})`);
+  return simctl("create", name, found.type!.identifier, found.r.identifier);
+}
+
+// ------------------------------------------------------------ navigating the running app
+// Screens are reached by deep-linking the app while it runs, not by relaunching it for each one.
+// A ticket link pushes a fresh ticket screen; a tab link (harness://board) pops everything above
+// the tabs, modals included. So a modal is only ever opened over the board and left via it.
+const BOARD = "harness://board";
+const isModal = (url: string | undefined) => !!url && /^harness:\/\/(new|watcher|connect|projects|pair|scan)\b/.test(url);
+/** The board is up: its column chips ("Review, 3") are on screen. */
+const onBoard = (l: string[]) => l.some((x) => /^(Planning|In progress|Blocked|Review|Done), \d+$/.test(x));
+const lastUrl = new Map<string, string>();
+const lastTree = new Map<string, string>();
+
+/**
+ * A moment for the screen to finish drawing once its labels are there. Reading the accessibility
+ * tree again to see that it held still costs more: describe-ui takes 0.4 s on an idle Mac and
+ * several seconds with a few simulators busy, and the first read after a link already waits for
+ * the transition to end.
+ */
+const DRAW_MS = 400;
+/**
+ * Waits until the app shows a new screen (its labels differ from `before`) that `ready` accepts
+ * (any, without `ready`), then DRAW_MS. Accepts iOS's "Open in “Harness”?" if it asks. False on a
+ * timeout (the app crashed or never got there).
+ */
+async function whenShown(udid: string, before: string | undefined, ready?: (l: string[]) => boolean, ms = 12000): Promise<boolean> {
+  let prev = "";
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const l = await labels(udid);
+    if (l.some((x) => x.startsWith("Open in “"))) {
+      await tapLabel(udid, "Open");
+      continue;
+    }
+    // Numbers are masked: live text ("started 47s ago") isn't a different screen.
+    const t = l.join("\n").replace(/\d+/g, "#");
+    // The splash has only the app's own label; SpringBoard (app not up) has no "Harness" root.
+    const up = l[0] === "Harness" && l.length >= 3 && t !== before;
+    if (up && (!ready || ready(l))) {
+      lastTree.set(udid, t);
+      await Bun.sleep(DRAW_MS);
+      return true;
+    }
+    if (process.env.SIM_CHECK_DEBUG && prev && t !== prev) {
+      const a = new Set(prev.split("\n"));
+      const b = new Set(l);
+      console.log(`    [${udid.slice(0, 4)}] changed: -${[...a].filter((x) => !b.has(x)).slice(0, 3).join(" | ")} +${l.filter((x) => !a.has(x)).slice(0, 3).join(" | ")}`);
+    }
+    prev = t;
+    await Bun.sleep(100);
   }
-  return d.udid;
+  lastTree.set(udid, prev);
+  console.log(`    [${udid.slice(0, 4)}] no settled screen after ${ms / 1000} s${prev === before ? " (it never left the previous screen)" : ""}`);
+  return false;
+}
+/** Opens `url` on the running app (launching it if it isn't) and waits for its screen. */
+async function visit(udid: string, url: string, ready?: (l: string[]) => boolean): Promise<boolean> {
+  const before = lastUrl.get(udid) === url ? undefined : lastTree.get(udid);
+  lastUrl.set(udid, url);
+  await simctl("openurl", udid, url);
+  if (!hasAxe) return Bun.sleep(2500).then(() => true);
+  return whenShown(udid, before, ready);
+}
+/** Goes to `url`, by way of the board when a modal is leaving or arriving. */
+async function goto(udid: string, url: string, ready?: (l: string[]) => boolean): Promise<boolean> {
+  const prev = lastUrl.get(udid);
+  if (url !== BOARD && prev !== BOARD && (isModal(prev) || isModal(url))) await visit(udid, BOARD, onBoard);
+  return visit(udid, url, url === BOARD ? (ready ?? onBoard) : ready);
+}
+/** After taps moved the app somewhere a link didn't: the next goto can't assume where it is. */
+const moved = (udid: string) => void lastUrl.set(udid, "?");
+
+type Look = "light" | "dark";
+const looks = new Map<string, Look>();
+async function appearance(udid: string, look: Look) {
+  if (looks.get(udid) === look) return;
+  await simctl("ui", udid, "appearance", look);
+  looks.set(udid, look);
+}
+/** How long the app takes to redraw after the appearance flips (the labels don't change, so it's a wait). */
+const FLIP_MS = 300;
+const shot = (udid: string, name: string) => simctl("io", udid, "screenshot", join(shots, `${name}.png`));
+/**
+ * Saves the screen as <name>-light.png and <name>-dark.png: the current appearance first, then the
+ * other, so the next screen starts where this one ended and each screen costs one flip.
+ */
+async function shootBoth(udid: string, name: string, redrawn: () => Promise<unknown> = () => Bun.sleep(FLIP_MS)) {
+  const first = looks.get(udid) ?? "light";
+  const second: Look = first === "light" ? "dark" : "light";
+  await shot(udid, `${name}-${first}`);
+  await appearance(udid, second);
+  await redrawn();
+  await shot(udid, `${name}-${second}`);
+}
+
+/** Installs the app fresh: no saved servers or tokens. */
+async function install(udid: string) {
+  await simctl("terminate", udid, BUNDLE).catch(() => {});
+  await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
+  await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
+  await simctl("install", udid, appPath);
+  await appearance(udid, "light");
+}
+/** Cold-launches the app on the pair link and waits for the board with a ticket on it. */
+async function pair(udid: string, pairUrl: string) {
+  lastUrl.set(udid, pairUrl);
+  await simctl("openurl", udid, pairUrl);
+  if (hasAxe && !(await whenShown(udid, undefined, (l) => onBoard(l) && l.some((x) => /^[A-Z]+-\d+ /.test(x)), 30000)))
+    throw new Error(`${udid}: the app never showed the board after pairing; on screen: ${(await labels(udid)).slice(0, 12).join(" | ")}`);
+  lastUrl.set(udid, BOARD);
 }
 
 // ---------------------------------------------------------------- daemon
@@ -235,7 +371,7 @@ const port = 7830 + Math.floor(Math.random() * 60);
 const base = `http://127.0.0.1:${port}`;
 console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
 const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "40" },
+  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "1" },
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });
@@ -248,10 +384,15 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   return json.data as T;
 }
 const ticketOf = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
-const settle = (key: string, pred: (t: Ticket) => boolean, ms = 60000) => until(`${key} settles`, async () => ((t) => (pred(t) ? t : null))(await ticketOf(key)), ms);
+const settle = (key: string, pred: (t: Ticket) => boolean, ms = 60000) => until(`${key} settles`, async () => ((t) => (pred(t) ? t : null))(await ticketOf(key)), ms, 100);
+const settings = () => api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+
+/** Resolves once the walk-through's tickets exist, before their runs settle: the app can pair then. */
+let ticketsCreated!: () => void;
+const ticketsUp = new Promise<void>((r) => (ticketsCreated = r));
 
 async function seed() {
-  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+  await settings();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
   const repo = join(scratch, "greeter");
   mkdirSync(join(repo, "src"), { recursive: true });
@@ -261,17 +402,22 @@ async function seed() {
   await git(repo, "init", "-q", "-b", "main");
   await git(repo, "add", "-A");
   await git(repo, "commit", "-qm", "Initial commit");
-  const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" });
-  const other = await api<Project>("POST", "/projects", { path: join(scratch, "harness-site"), name: "harness-site", key: "SITE", defaultDriver: "dummy" }).catch(async () => {
-    mkdirSync(join(scratch, "harness-site"), { recursive: true });
-    return api<Project>("POST", "/projects", { path: join(scratch, "harness-site"), name: "harness-site", key: "SITE", defaultDriver: "dummy" });
-  });
+  mkdirSync(join(scratch, "harness-site"), { recursive: true });
+  const [project, other] = await Promise.all([
+    api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" }),
+    api<Project>("POST", "/projects", { path: join(scratch, "harness-site"), name: "harness-site", key: "SITE", defaultDriver: "dummy" }),
+  ]);
   const create = (projectId: string, prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId, prompt, driver: "dummy", start: true, ...extra });
 
+  // In creation order, so the keys stay GREET-1… and SITE-1…
   const hello = await create(project.id, "hello world");
   const changes = await create(project.id, "Add a greet helper with an excited mode");
   const conductor = await create(project.id, "Ship the greeter v2\n- Add a greet helper\n- Wire it into main\n- Update the README", { kind: "conductor" });
   const browse = await create(other.id, "/browse https://example.com");
+  // A real Chrome loading a real page: anywhere from a few seconds to over a minute on a busy
+  // machine. Nothing waits for it but the screens that show it (see Screen.browse).
+  const browsed = timed("seed: browse ticket", () => settle(browse.key, (t) => !t.busy, 120000));
+  browsed.catch(() => {});
   const approval = await create(other.id, 'Install the dependencies\n/approve Bash {"command":"npm install","description":"Install dependencies"}');
   const watcherCall = { name: "create_watcher", input: { name: "events", command: "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", mode: "loop", prompt: "If this event is assigned to me and has actionable next steps, dispatch it to an agent in SITE.", env: { EVENTS_TOKEN: "evt_live_2f9c" } } };
   const configApproval = await create(other.id, `Watch the events API\n/tools ${JSON.stringify([watcherCall])}`);
@@ -279,9 +425,32 @@ async function seed() {
   const plan = await create(other.id, "Write a landing page for the install link", { start: false });
   // Sub-agents: two, the second starting a nested third (the dummy driver's /agents).
   const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
+  ticketsCreated();
 
-  await settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
-  const ch = await settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir);
+  // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
+  // The prompt names the project; the dummy triager reads the [dummy:project KEY] marker.
+  const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent in GREET.";
+  const watchers = Promise.all([
+    // A watcher-less triage item for the Inbox.
+    api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt: `${prompt} [dummy:project ${project.key}]` }),
+    // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
+    api<Watcher>("POST", "/watchers", { name: "jira", command: "while true; do curl -s https://example.com/api/events | jq -c '.[]'; sleep 60; done", args: [], prompt, mode: "loop", enabled: false, driver: "dummy" }),
+    // Live watchers for the Inbox's watcher strip: one whose process stays up (and prints nothing),
+    // one that fails at once and sits in its backoff with the error.
+    api<Watcher>("POST", "/watchers", { name: "heartbeat", command: "while true; do sleep 3600; done", mode: "loop", driver: "dummy" }),
+    api<Watcher>("POST", "/watchers", { name: "jira-sprint", command: "echo 'watch-jira: 401 Unauthorized (check JIRA_TOKEN)' >&2; exit 1", mode: "loop", driver: "dummy" }),
+  ]);
+
+  const [, ch] = await Promise.all([
+    settle(hello.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved"),
+    settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
+    settle(approval.key, (t) => !!t.pendingApproval),
+    settle(configApproval.key, (t) => !!t.pendingApproval),
+    settle(blocked.key, (t) => t.status === "blocked" && !t.busy),
+    settle(plan.key, (t) => t.status === "planning" && !t.busy),
+    settle(agents.key, (t) => t.status === "review" && !t.busy),
+    until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
+  ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
   const wd = ch.workdir!;
   mkdirSync(join(wd, "src/lib"), { recursive: true });
@@ -291,37 +460,12 @@ async function seed() {
   writeFileSync(join(wd, "src/app.ts"), 'import { greet } from "./lib/greet";\n\nexport function main(name = "world") {\n  console.log(greet(name, true));\n}\n');
   writeFileSync(join(wd, "config.json"), '{\n  "verbose": true\n}\n');
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
-  await settle(approval.key, (t) => !!t.pendingApproval);
-  await settle(configApproval.key, (t) => !!t.pendingApproval);
-  await settle(blocked.key, (t) => t.status === "blocked" && !t.busy);
-  await settle(plan.key, (t) => t.status === "planning" && !t.busy);
-  await settle(browse.key, (t) => !t.busy, 90000);
-  await settle(agents.key, (t) => t.status === "review" && !t.busy);
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
-  await until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000);
-  // A watcher-less triage item for the Inbox.
-  // The prompt names the project; the dummy triager reads the [dummy:project KEY] marker.
-  const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent in GREET.";
-  await api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt: `${prompt} [dummy:project ${project.key}]` });
-  // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
-  const watcher = await api<Watcher>("POST", "/watchers", {
-    name: "jira",
-    command: "while true; do curl -s https://example.com/api/events | jq -c '.[]'; sleep 60; done",
-    args: [],
-    prompt,
-    mode: "loop",
-    enabled: false,
-    driver: "dummy",
-  });
-  // Live watchers for the Inbox's watcher strip: one whose process stays up (and prints nothing),
-  // one that fails at once and sits in its backoff with the error.
-  await api<Watcher>("POST", "/watchers", { name: "heartbeat", command: "while true; do sleep 3600; done", mode: "loop", driver: "dummy" });
-  await api<Watcher>("POST", "/watchers", { name: "jira-sprint", command: "echo 'watch-jira: 401 Unauthorized (check JIRA_TOKEN)' >&2; exit 1", mode: "loop", driver: "dummy" });
-  await Bun.sleep(1500);
-  return { project, other, hello, changes, conductor, browse, approval, configApproval, blocked, plan, watcher, agents, nestedAgent };
+  const [, watcher] = await watchers;
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, watcher, agents, nestedAgent };
 }
 
-/** --paging: a long Done history on its own project, a conductor with done children, and a dependency on an old done ticket. */
+/** --paging: a long Done history on its own project and a conductor with done children. */
 async function seedPaging() {
   mkdirSync(join(scratch, "archive"), { recursive: true });
   const project = await api<Project>("POST", "/projects", { path: join(scratch, "archive"), name: "archive", key: "ARCH", defaultDriver: "dummy" });
@@ -331,143 +475,84 @@ async function seedPaging() {
   const needle = await create("Needle in the haystack: rotate the signing certificate");
   await finish(needle);
   const history: Ticket[] = [];
-  for (let i = 1; i <= 125; i += 8) {
-    const batch = await Promise.all(Array.from({ length: Math.min(8, 126 - i) }, (_, j) => create(`Archived chore ${String(i + j).padStart(3, "0")}`)));
-    for (const t of batch) {
-      await finish(t);
-      history.push(t);
-    }
+  for (let i = 1; i <= 125; i += 25) {
+    const batch = await Promise.all(Array.from({ length: Math.min(25, 126 - i) }, (_, j) => create(`Archived chore ${String(i + j).padStart(3, "0")}`)));
+    await Promise.all(batch.map(finish));
+    history.push(...batch);
   }
   const conductor = await create("Release train: ship 2.0", { kind: "conductor" });
   const kids: Ticket[] = [];
   for (const title of ["Cut the release branch", "Write the changelog", "Tag the build", "Announce the release"]) kids.push(await create(title, { parentId: conductor.id }));
   // The newest completions are children: if they weren't hidden they'd top the Done column.
   for (const k of kids.slice(0, 3)) await finish(k);
-  const dependent = await create("Renew the provisioning profile", { dependsOn: [needle.key] });
-  return { project, needle, history, conductor, kids, dependent };
+  // The newest non-child completion, as the server orders them.
+  const top = (await api<TicketPage>("GET", `/tickets/page?status=done&limit=8&projectId=${encodeURIComponent(project.id)}`)).tickets.find((t) => !t.parentId)!;
+  return { project, needle, history, conductor, kids, top };
 }
 
-/** --paging: real taps against the seeded Done history. Returns false when a check failed. */
-async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPaging>>): Promise<boolean> {
-  const results: [string, boolean, string][] = [];
-  const check = async (name: string, fn: () => Promise<string | boolean>) => {
-    try {
-      const r = await timed(`check: ${name}`, fn);
-      results.push([name, r !== false, typeof r === "string" ? r : ""]);
-    } catch (e) {
-      results.push([name, false, (e as Error).message.split("\n")[0]!]);
-    }
-  };
-  const fresh = async (url = "") => {
-    await coldOpen(udid, url);
-    if (!url) await until("board loaded", async () => (await labels(udid)).some((l) => /^ARCH-\d+ /.test(l)), 20000);
-    await Bun.sleep(url ? 1500 : 800);
-  };
+/** --paging: real taps against the seeded Done history. */
+async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPaging>>) {
   const has = async (prefix: string) => (await labels(udid)).some((l) => l.startsWith(prefix));
-  const shot = async (name: string, theme: string) => {
-    const file = join(shots, `paging-${name}-${theme}.png`);
-    await simctl("io", udid, "screenshot", file);
-    console.log(`  ${file}`);
-  };
-  const swipeUp = () => axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "220", "--duration", "0.25", "--udid", udid);
+  // A quick flick, so the list carries on with momentum.
+  const swipeUp = () => axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "220", "--duration", "0.1", "--udid", udid);
   // The strip scrolls to follow the page, so a tap can land on a neighbour: tap until a Done card is on
   // screen. Frames are in screen points and a card sits 14pt into its page, so from the Review page the
   // Done column's first card is at x≈416, just off the right edge: only a card near the left edge counts.
   const openDone = async () => {
-    const top = p.history.at(-1)!.key;
     for (let i = 0; i < 4; i++) {
       await tapWhere(udid, (l) => l.startsWith("Done,"));
-      await Bun.sleep(1200);
-      const card = await findElement(udid, (l) => l.startsWith(`${top} `));
+      const card = await until("a Done card", () => findElement(udid, (l) => l.startsWith(`${p.top.key} `)), 1500).catch(() => null);
       if (card && card.frame.x >= 0 && card.frame.x < 100) return;
     }
     throw new Error("couldn't open the Done column");
   };
-  // Search is its own tab; AXe descends into neither the tab bar nor the header holding the native
-  // field, so tap where each sits.
-  const tapSearch = async () => {
-    await axe("tap", "-x", "328", "-y", "821", "--udid", udid); // Search, last in the tab bar
-    await Bun.sleep(900);
-    await axe("tap", "-x", "200", "-y", "139", "--udid", udid);
-    await Bun.sleep(700);
+  const boardMenu = async () => {
+    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await tapWhere(udid, "Show child tickets");
   };
-  const total = (await api<TicketPage>("GET", "/tickets/page?status=done&limit=1")).total;
-  const k = (t: Ticket) => encodeURIComponent(t.key);
-  const deep = p.history[10]!; // ~118th newest: two pages down
+  const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
 
+  await goto(udid, BOARD, (l) => l.some((x) => /^ARCH-\d+ /.test(x)));
+  await shootBoth(udid, "paging-board");
   await check("child tickets are hidden by default (Done's newest completions are children)", async () => {
-    await fresh();
     await openDone();
-    const newest = p.history.at(-1)!;
-    await until(`${newest.key} on the board`, () => has(`${newest.key} `), 8000);
     const leaked = p.kids.slice(0, 3);
     const shown = (await labels(udid)).filter((l) => leaked.some((kid) => l.startsWith(`${kid.key} `)));
     if (shown.length) throw new Error(`children visible: ${shown.join(" | ")}`);
-    return `newest non-child ${newest.key} on top`;
+    return `newest non-child ${p.top.key} on top`;
   });
+  await shootBoth(udid, "paging-done");
   await check("Show child tickets (header menu) shows them; toggling back hides them", async () => {
-    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
-    await Bun.sleep(900);
-    await tapWhere(udid, "Show child tickets");
+    await boardMenu();
     await until("children visible", () => has(`${p.kids[2]!.key} `), 6000);
-    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
-    await Bun.sleep(900);
-    await tapWhere(udid, "Show child tickets");
+    await boardMenu();
     await until("children hidden", async () => !(await has(`${p.kids[2]!.key} `)), 6000);
     return true;
   });
-  await check("the Done count is the server's total", async () => {
-    await until(`Done, ${total}`, () => has(`Done, ${total}`), 6000);
-    return `Done, ${total}`;
-  });
   await check("the Done column scrolls into older pages", async () => {
-    for (let i = 0; i < 45; i++) {
+    // Reading the tree (every loaded card) costs more than a swipe, so look after every few.
+    for (let i = 0; i < 45; i += 3) {
       if (await has(`${deep.key} `)) return `${deep.key} after ${i} swipes`;
-      await swipeUp();
-      await Bun.sleep(350);
+      for (let j = 0; j < 3; j++) await swipeUp();
+      await Bun.sleep(300);
     }
     throw new Error(`${deep.key} never appeared`);
   });
-  await simctl("io", udid, "screenshot", join(shots, "paging-done-scrolled-light.png"));
+  await shootBoth(udid, "paging-done-scrolled");
   await check("search finds a done ticket that isn't loaded", async () => {
-    await fresh();
-    await tapSearch();
+    // Search is its own tab, linked like the others. AXe doesn't descend into the header holding
+    // the native field, so tap where it sits.
+    await goto(udid, "harness://search");
+    await Bun.sleep(500);
+    await axe("tap", "-x", "200", "-y", "139", "--udid", udid);
+    await Bun.sleep(500);
     await axe("type", "haystack", "--udid", udid);
     await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);
     return p.needle.key;
   });
-  await check("a dependency on an unloaded done ticket resolves", async () => {
-    await fresh(`harness://ticket/${k(p.dependent)}?tab=summaries`);
-    await until("dependency chip", () => has(p.needle.key), 8000);
-    return true;
-  });
-  await check("the conductor's Tickets tab lists its done children", async () => {
-    await fresh(`harness://ticket/${k(p.conductor)}?tab=children`);
-    await until("done children", async () => (await Promise.all(p.kids.slice(0, 3).map((kid) => has(kid.key)))).every(Boolean), 8000);
-    return true;
-  });
-
-  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-  for (const theme of ["light", "dark"] as const) {
-    await simctl("ui", udid, "appearance", theme);
-    await fresh();
-    await shot("board", theme);
-    await openDone();
-    await shot("done", theme);
-    await tapSearch();
-    await axe("type", "haystack", "--udid", udid);
-    await until("results", () => has(`${p.needle.key} `), 10000).catch(() => {});
-    await Bun.sleep(600);
-    await shot("search", theme);
-    await fresh(`harness://ticket/${k(p.conductor)}?tab=children`);
-    await Bun.sleep(1200);
-    await shot("conductor", theme);
-    await fresh(`harness://ticket/${k(p.dependent)}?tab=summaries`);
-    await Bun.sleep(1200);
-    await shot("dependency", theme);
-  }
-  await simctl("ui", udid, "appearance", "light");
-  return results.every((r) => r[1]);
+  moved(udid);
+  await Bun.sleep(400); // the result list's cards finish drawing
+  await shootBoth(udid, "paging-search");
 }
 
 /** --stick: one ticket whose brief and transcript are both taller than the screen. */
@@ -477,42 +562,33 @@ async function sayStick(key: string, n: number) {
   await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
   return settle(key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
 }
-async function seedStick() {
-  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
-  mkdirSync(join(scratch, "sticky"), { recursive: true });
-  const project = await api<Project>("POST", "/projects", { path: join(scratch, "sticky"), name: "sticky", key: "STICK", defaultDriver: "dummy" });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: stickText(0, 14), driver: "dummy", start: true });
+/** A project with a few files and one ticket in review (brief `prompt`), for --stick, --keyboard and --mentions. */
+async function seedTicket(key: string, prompt: string, files: Record<string, string> = {}) {
+  await settings();
+  const dir = join(scratch, key.toLowerCase());
+  mkdirSync(dir, { recursive: true });
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(resolve(dir, path, ".."), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+  const project = await api<Project>("POST", "/projects", { path: dir, name: key.toLowerCase(), key, defaultDriver: "dummy" });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: true });
   await settle(ticket.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
-  for (let n = 1; n <= 5; n++) await sayStick(ticket.key, n);
   return { project, ticket };
 }
+async function seedStick() {
+  const s = await seedTicket("STICK", stickText(0, 14));
+  for (let n = 1; n <= 3; n++) await sayStick(s.ticket.key, n);
+  return s;
+}
 
-/** --stick: real swipes on the Transcript and Summaries tabs. Returns false when a check failed. */
-async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>): Promise<boolean> {
-  const results: [string, boolean, string][] = [];
-  const check = async (name: string, fn: () => Promise<string | boolean>) => {
-    try {
-      const r = await timed(`check: ${name}`, fn);
-      results.push([name, r !== false, typeof r === "string" ? r : ""]);
-    } catch (e) {
-      results.push([name, false, (e as Error).message.split("\n")[0]!]);
-    }
-  };
+/** --stick: real swipes on the Transcript and Summaries tabs. */
+async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>) {
   const key = p.ticket.key;
-  const fresh = async (tab: string) => {
-    await coldOpen(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
-    await Bun.sleep(3000);
-  };
-  const H = (await tree())[0]!.frame.height;
-  async function tree() {
-    const out = await axe("describe-ui", "--udid", udid);
-    return JSON.parse(out.slice(out.indexOf("["))) as AXNode[];
-  }
+  const H = (await tree(udid))[0]!.frame.height;
   // The list's viewport: below the tab strip, above the composer.
   async function listView() {
-    const all: AXNode[] = [];
-    const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
-    (await tree()).forEach(walk);
+    const all = await nodes(udid);
     const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Summaries"));
     const composer = all.find((n) => n.AXLabel?.startsWith("Message the agent"));
     const top = tab ? tab.frame.y + tab.frame.height : 100;
@@ -547,88 +623,71 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const [from, to] = dir === "down" ? [H * 0.45, H * 0.8] : [H * 0.8, H * 0.45];
     for (let i = 0; i < times; i++) {
       await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(from)), "--end-x", "200", "--end-y", String(Math.round(to)), "--duration", "0.25", "--udid", udid);
-      await Bun.sleep(700);
+      await Bun.sleep(500);
     }
-    await Bun.sleep(800);
+    await Bun.sleep(600);
+  };
+  /** New content lands (another message and its runs) and the list has laid it out. */
+  const say = async (n: number, last: (l: string) => boolean) => {
+    await sayStick(key, n);
+    await until(`message ${n} on screen`, async () => (await labels(udid)).some((l) => l.includes(`Stick ${n}:`)) && (await labels(udid)).some(last), 8000).catch(() => {});
+    await Bun.sleep(500);
   };
 
-  let n = 5;
+  let n = 3;
   // Every message ends with the reviewer's run: its last transcript row and its last summary.
-  const tabs: [string, string, (l: string) => boolean][] = [
-    ["transcript", "transcript", (l) => l.startsWith("Run finished (review)")],
-    ["summaries", "summaries", (l) => l.startsWith("Review approved")],
+  // Transcript (a FlatList with estimated rows, where UIKit moves the offset by itself) gets every
+  // check; Summaries uses the same hook, whose gating is unit-tested, so it gets the first two.
+  const tabs: [string, (l: string) => boolean, boolean][] = [
+    ["transcript", (l) => l.startsWith("Run finished (review)"), true],
+    ["summaries", (l) => l.startsWith("Review approved"), false],
   ];
-  for (const [name, tab, last] of tabs) {
-    await check(`${name} opens at the bottom`, async () => {
-      await fresh(tab);
+  for (const [tab, last, all] of tabs) {
+    await check(`${tab} opens at the bottom`, async () => {
+      await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
       return until("at the bottom", () => atBottom(last), 10000);
     });
-    await check(`${name} follows new content while at the bottom`, async () => {
-      await sayStick(key, ++n);
-      await Bun.sleep(1500);
+    await check(`${tab} follows new content while at the bottom`, async () => {
+      await say(++n, last);
       return until("at the bottom", () => atBottom(last), 10000);
     });
-    await check(`${name} stays put after the user scrolls up`, async () => {
+    if (!all) continue;
+    await check(`${tab} stays put after the user scrolls up`, async () => {
       await swipe("down");
       const ref = await until("a row to watch", anchor, 5000);
-      await sayStick(key, ++n);
-      await Bun.sleep(2000);
+      await say(++n, () => true);
       const y = await yOf(ref.label);
       if (y === null || Math.abs(y - ref.y) > 2) throw new Error(`"${ref.label.slice(0, 32)}" ${ref.y}→${y}`);
       if (await atBottom(last)) throw new Error("jumped to the bottom");
       return `"${ref.label.slice(0, 32)}" stayed at y=${y}`;
     });
-    await check(`${name} follows again after scrolling back to the bottom`, async () => {
+    await check(`${tab} follows again after scrolling back to the bottom`, async () => {
       // Swipe back down until the user has reached the end (the list grew a lot meanwhile).
       for (let i = 0; i < 25 && !(await atBottom(last)); i++) await swipe("up", 1);
       if (!(await atBottom(last))) throw new Error("couldn't swipe back to the bottom");
-      await sayStick(key, ++n);
-      await Bun.sleep(1500);
+      await say(++n, last);
       return until("at the bottom", () => atBottom(last), 10000);
     });
   }
-
-  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-  await simctl("io", udid, "screenshot", join(shots, "stick-summaries.png"));
-  return results.every((r) => r[1]);
+  await shot(udid, "stick-summaries");
 }
 
 /** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
-async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>): Promise<boolean> {
-  const results: [string, boolean, string][] = [];
-  const check = async (name: string, fn: () => Promise<string | boolean>) => {
-    try {
-      const r = await timed(`check: ${name}`, fn);
-      results.push([name, r !== false, typeof r === "string" ? r : ""]);
-    } catch (e) {
-      results.push([name, false, (e as Error).message.split("\n")[0]!]);
-    }
-  };
-  const fresh = async (url: string) => {
-    await coldOpen(udid, url);
-    await Bun.sleep(2500);
-  };
-  const nodes = async () => {
-    const out = await axe("describe-ui", "--udid", udid);
-    const all: AXNode[] = [];
-    const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
-    (JSON.parse(out.slice(out.indexOf("["))) as AXNode[]).forEach(walk);
-    return all;
-  };
+async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
   // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
   const keyboardTop = async () => {
-    const keys = (await nodes()).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
+    const keys = (await nodes(udid)).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
     return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
 
   await check("ticket composer sits on top of the keyboard", async () => {
-    await fresh(`harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`);
+    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
-    await Bun.sleep(800);
-    const field = (await nodes()).find((n) => n.AXLabel?.startsWith("Message the agent"));
-    await simctl("io", udid, "screenshot", join(shots, "keyboard-composer.png"));
+    await Bun.sleep(600);
+    const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent"));
+    await shot(udid, "keyboard-composer");
     if (!field) throw new Error("the composer is gone from the screen (behind the keyboard)");
     const gap = Math.round(top - bottomOf(field));
     if (gap < 0) throw new Error(`the composer's field ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
@@ -637,95 +696,65 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedSti
   });
 
   await check("New session scrolls to its last button above the keyboard", async () => {
-    await fresh("harness://new");
+    await goto(udid, "harness://new");
     const top = await until("keyboard up", keyboardTop, 8000);
-    await Bun.sleep(800);
+    await Bun.sleep(600);
     for (let i = 0; i < 3; i++) {
       await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 30)), "--end-x", "200", "--end-y", "160", "--duration", "0.3", "--udid", udid);
-      await Bun.sleep(700);
+      await Bun.sleep(500);
     }
-    await Bun.sleep(800);
-    await simctl("io", udid, "screenshot", join(shots, "keyboard-new-session.png"));
-    const button = (await nodes()).find((n) => n.AXLabel === "Start session" || n.AXLabel === "Plan first");
+    await Bun.sleep(600);
+    await shot(udid, "keyboard-new-session");
+    const button = (await nodes(udid)).find((n) => n.AXLabel === "Start session" || n.AXLabel === "Plan first");
     if (!button) throw new Error("no Start session / Plan first button");
     const gap = Math.round(top - bottomOf(button));
     if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
     return `"${button.AXLabel}" ends ${gap}pt above the keyboard`;
   });
-
-  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-  return results.every((r) => r[1]);
 }
 
 /** --mentions: a project with a few files, and a ticket in review to message. */
-async function seedMentions() {
-  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
-  const dir = join(scratch, "mentions");
-  mkdirSync(join(dir, "src", "lib"), { recursive: true });
-  writeFileSync(join(dir, "README.md"), "# Mentions\n\nThe readme the agent gets without reading it.\n");
-  writeFileSync(join(dir, "src", "app.ts"), "export const app = 1;\n");
-  writeFileSync(join(dir, "src", "lib", "format.ts"), "export const format = 2;\n");
-  const project = await api<Project>("POST", "/projects", { path: dir, name: "mentions", key: "MENT", defaultDriver: "dummy" });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Warm up", driver: "dummy", start: true });
-  await settle(ticket.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved");
-  return { project, ticket };
-}
+const seedMentions = () =>
+  seedTicket("MENT", "Warm up", {
+    "README.md": "# Mentions\n\nThe readme the agent gets without reading it.\n",
+    "src/app.ts": "export const app = 1;\n",
+    "src/lib/format.ts": "export const format = 2;\n",
+  });
 
-/** --mentions: real typing and taps in New session and the composer. Returns false when a check failed. */
-async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMentions>>): Promise<boolean> {
-  const results: [string, boolean, string][] = [];
-  const check = async (name: string, fn: () => Promise<string | boolean>) => {
-    try {
-      const r = await timed(`check: ${name}`, fn);
-      results.push([name, r !== false, typeof r === "string" ? r : ""]);
-    } catch (e) {
-      results.push([name, false, (e as Error).message.split("\n")[0]!]);
-    }
-  };
-  const fresh = async (url: string) => {
-    await coldOpen(udid, url);
-    await Bun.sleep(2500);
-  };
+/** --mentions: real typing and taps in New session and the composer. */
+async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMentions>>) {
   const has = async (label: string) => (await labels(udid)).includes(label);
   const texts = async (key: string) => {
     const d = await api<TicketDetail>("GET", `/tickets/${key}`);
     return (await api<TranscriptEntry[]>("GET", `/sessions/${d.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
   };
-  const newSession = `harness://new?projectId=${encodeURIComponent(p.project.id)}`;
-  const composer = `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`;
 
+  // (Picking a folder keeps the list open inside it: insertMention and mentionCaret's unit tests.)
   await check("New session: @READ lists README.md, a tap completes it, the run gets the file", async () => {
-    await fresh(newSession);
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Prompt")));
     await tapWhere(udid, (l) => l.startsWith("Prompt"));
     await axe("type", "Summarize @READ", "--udid", udid);
     await until("README.md suggested", () => has("README.md"), 8000);
-    await Bun.sleep(400);
+    await Bun.sleep(300);
+    await shootBoth(udid, "mentions-new-session");
     await tapWhere(udid, "README.md");
     await until("list closed", async () => !(await has("README.md")), 4000);
     await tapWhere(udid, "Start session");
+    moved(udid);
     const t = await until("ticket created", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key), 10000);
     if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
     return `${t.key}: ${t.description}`;
   });
 
-  await check("New session: a folder keeps the list open inside it", async () => {
-    await fresh(newSession);
-    await tapWhere(udid, (l) => l.startsWith("Prompt"));
-    await axe("type", "@sr", "--udid", udid);
-    await until("src/ suggested", () => has("src/"), 8000);
-    await tapWhere(udid, "src/");
-    await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
-    return (await has("src/lib/")) ? "src/app.ts, src/lib/ …" : "src/app.ts";
-  });
-
   await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
-    await fresh(composer);
+    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     // iOS may capitalize the first word, so the message is compared without case.
     await axe("type", "see @src/a", "--udid", udid);
     await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
-    await Bun.sleep(400); // let the list settle before aiming at a row
+    await Bun.sleep(300); // let the list settle before aiming at a row
+    await shootBoth(udid, "mentions-composer");
     await tapWhere(udid, "src/app.ts");
     // Picking closes the list and the composer shrinks, which moves Send.
     await until("list closed", async () => !(await has("src/app.ts")), 4000);
@@ -737,37 +766,20 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await until("Attached status", async () => (await texts(p.ticket.key)).includes("Attached @src/app.ts"), 15000);
     return "see @src/app.ts";
   });
-
-  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-  for (const theme of ["light", "dark"] as const) {
-    await simctl("ui", udid, "appearance", theme);
-    await fresh(newSession);
-    await tapWhere(udid, (l) => l.startsWith("Prompt")).catch(() => {});
-    await axe("type", "Read @", "--udid", udid);
-    await until("suggestions", () => has("README.md"), 8000).catch(() => {});
-    await Bun.sleep(600);
-    await simctl("io", udid, "screenshot", join(shots, `mentions-new-session-${theme}.png`));
-    await fresh(composer);
-    await tapWhere(udid, (l) => l.startsWith("Message the agent")).catch(() => {});
-    await axe("type", "@src/", "--udid", udid);
-    await until("suggestions", () => has("src/app.ts"), 8000).catch(() => {});
-    await Bun.sleep(600);
-    await simctl("io", udid, "screenshot", join(shots, `mentions-composer-${theme}.png`));
-  }
-  await simctl("ui", udid, "appearance", "light");
-  return results.every((r) => r[1]);
 }
 
 /** --attachments: a ticket whose summary carries real images, a video and one file that won't decode. */
 async function seedAttachments() {
-  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+  await settings();
   const dir = join(scratch, "media");
   mkdirSync(join(dir, "shots"), { recursive: true });
   const ff = (...a: string[]) => sh(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", ...a], { cwd: dir });
   // A tall phone screenshot, a wide one, a short H.264 clip, and a PNG that's only its header.
-  await ff("-f", "lavfi", "-i", "testsrc2=size=1179x2556:rate=1", "-frames:v", "1", "shots/phone.png");
-  await ff("-f", "lavfi", "-i", "smptehdbars=size=1600x900:rate=1", "-frames:v", "1", "shots/wide.png");
-  await ff("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "4", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-movflags", "+faststart", "shots/flow.mp4");
+  await Promise.all([
+    ff("-f", "lavfi", "-i", "testsrc2=size=1179x2556:rate=1", "-frames:v", "1", "shots/phone.png"),
+    ff("-f", "lavfi", "-i", "smptehdbars=size=1600x900:rate=1", "-frames:v", "1", "shots/wide.png"),
+    ff("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "4", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-movflags", "+faststart", "shots/flow.mp4"),
+  ]);
   writeFileSync(join(dir, "shots/broken.png"), Buffer.concat([readFileSync(join(dir, "shots/wide.png")).subarray(0, 64)]));
   const project = await api<Project>("POST", "/projects", { path: dir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
   const files = ["phone.png", "wide.png", "flow.mp4", "broken.png"].map((f) => join(dir, "shots", f));
@@ -779,285 +791,315 @@ async function seedAttachments() {
   return { project, ticket };
 }
 
-/** --attachments: thumbnails in the Summaries tab, then the viewer (open, page, close, swipe down). */
-async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>): Promise<boolean> {
-  const results: [string, boolean, string][] = [];
-  const check = async (name: string, fn: () => Promise<string | boolean>) => {
-    try {
-      const r = await timed(`check: ${name}`, fn);
-      results.push([name, r !== false, typeof r === "string" ? r : ""]);
-    } catch (e) {
-      results.push([name, false, (e as Error).message.split("\n")[0]!]);
-    }
-  };
-  const summaries = `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=summaries`;
-  const fresh = async () => {
-    await coldOpen(udid, summaries);
-    await until("thumbnails", async () => (await labels(udid)).includes("Image phone.png"), 10000);
-    await Bun.sleep(1500); // let the images and the video's first frame load
-  };
+/** --attachments: thumbnails in the Summaries tab, then the viewer (open, page, close, swipe down), in one visit. */
+async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>) {
   const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
   const counter = (n: number) => (l: string) => l.startsWith(`${n} of 4`);
+  const viewerOpen = () => has((l) => / of 4/.test(l));
+  const closed = () => until("viewer closed", async () => !(await viewerOpen()), 5000);
   const swipeLeft = () => axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
   const swipeDown = () => axe("swipe", "--start-x", "200", "--start-y", "330", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
+  /** Opens the viewer from a thumbnail; its fade-in swallows gestures for a moment. */
+  const open = async (label: string, n: number) => {
+    if (await viewerOpen()) await tapWhere(udid, "Close").then(closed);
+    await tapWhere(udid, label);
+    await until(`viewer on ${n} of 4`, () => has(counter(n)), 5000);
+    await Bun.sleep(800);
+  };
 
+  await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=summaries`, (l) => l.includes("Image phone.png"));
+  await Bun.sleep(1200); // let the images and the video's first frame load
   await check("every attachment has a thumbnail", async () => {
-    await fresh();
     const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png"];
     const l = await labels(udid);
     const missing = want.filter((w) => !l.includes(w));
     if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     return want.join(", ");
   });
+  await shootBoth(udid, "attachments-thumbnails");
   await check("tapping a thumbnail opens the viewer on it; swiping pages; Close closes", async () => {
-    await fresh();
-    await tapWhere(udid, "Image wide.png");
-    await until("viewer on 2 of 4", () => has(counter(2)), 5000);
-    await Bun.sleep(900); // the modal's fade-in swallows gestures
+    await open("Image wide.png", 2);
+    // The viewer is black in both themes. The video and the broken file sit past the screen edge in
+    // the row, so page to them here.
+    await shootBoth(udid, "attachments-viewer-image");
+    await appearance(udid, "light");
     await swipeLeft();
     await until("paged to 3 of 4", () => has(counter(3)), 5000);
+    await Bun.sleep(1500); // the video's first frames
+    await shot(udid, "attachments-viewer-video-light");
+    await swipeLeft();
+    await until("paged to 4 of 4", () => has(counter(4)), 5000);
+    await Bun.sleep(800);
+    await shot(udid, "attachments-viewer-failed-light");
     await tapWhere(udid, "Close");
-    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
-    return "2 of 4 → 3 of 4 → closed";
+    await closed();
+    return "2 of 4 → 3 of 4 → 4 of 4 → closed";
   });
   await check("swiping down closes the viewer", async () => {
-    await fresh();
-    await tapWhere(udid, "Image phone.png");
-    await until("viewer open", () => has(counter(1)), 5000);
-    await Bun.sleep(900);
+    await open("Image phone.png", 1);
     await swipeDown();
-    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    await closed();
     return "closed";
   });
   await check("the video page plays and swiping down closes it too", async () => {
-    await fresh();
-    await tapWhere(udid, "Image wide.png");
-    await until("viewer open", () => has(counter(2)), 5000);
-    await Bun.sleep(900);
+    await open("Image wide.png", 2);
     await swipeLeft();
     await until("on the video", () => has(counter(3)), 5000);
-    await Bun.sleep(1500);
+    await Bun.sleep(1000);
     await swipeDown();
-    await until("viewer closed", async () => !(await has((l) => / of 4/.test(l))), 5000);
+    await closed();
     return "closed";
   });
-  for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-
-  // Screenshots: the thumbnails, an image in the viewer, the playing video, the failed file.
-  for (const theme of ["light", "dark"] as const) {
-    await simctl("ui", udid, "appearance", theme);
-    await fresh().catch(() => {});
-    await simctl("io", udid, "screenshot", join(shots, `attachments-thumbnails-${theme}.png`));
-    // The video and the broken file sit past the screen edge in the row, so page to them in the viewer.
-    await fresh().catch(() => {});
-    await tapWhere(udid, "Image wide.png").catch(() => {});
-    await Bun.sleep(1500);
-    await simctl("io", udid, "screenshot", join(shots, `attachments-viewer-image-${theme}.png`));
-    if (theme === "dark") continue; // the viewer is black in both themes
-    await swipeLeft();
-    await Bun.sleep(2500);
-    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-video-light.png"));
-    await swipeLeft();
-    await Bun.sleep(1500);
-    await simctl("io", udid, "screenshot", join(shots, "attachments-viewer-failed-light.png"));
-  }
-  await simctl("ui", udid, "appearance", "light");
-  return results.every((r) => r[1]);
 }
 
-// ---------------------------------------------------------------- main
-let failed: boolean = false;
-try {
-  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000));
-  token = readFileSync(join(home, "token"), "utf8").trim();
-  const [udid, seeded, paged, sticky, mentioned, media] = await Promise.all([
-    timed("pick device", pickDevice),
-    pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly ? null : timed("seed", seed),
-    pagingOnly ? timed("seed paging", seedPaging) : null,
-    stickOnly || keyboardOnly ? timed("seed stick", seedStick) : null,
-    mentionsOnly ? timed("seed mentions", seedMentions) : null,
-    attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
-  ]);
-  if (seeded) console.log(`simulator ${udid}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
-  if (paged) console.log(`simulator ${udid}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
-
-  if (!flag("no-build") || !existsSync(appPath)) {
-    // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
-    // module, so regenerate it whenever it doesn't link every native dependency.
-    if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {
-      console.log("syncing ios/ (expo prebuild, pod install)…");
-      await sh(["bunx", "expo", "prebuild", "--platform", "ios", "--no-install"], { env: { EXPO_NO_GIT_STATUS: "1" } });
-      await sh([join(here, "Tools", "pod.sh"), "install"], { cwd: join(here, "ios") });
-      await sh(["bun", "Tools/nativeDeps.ts", "check"]);
-    }
-    console.log("building Release (simulator)…");
-    await sh(["xcodebuild", "-workspace", "ios/Harness.xcworkspace", "-scheme", "Harness", "-configuration", "Release", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "-derivedDataPath", "build/dd", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build"]);
+// ---------------------------------------------------------------- walk-through
+type Seeded = Awaited<ReturnType<typeof seed>>;
+interface Screen {
+  name: string;
+  url: string;
+  /** Extra wait after the labels settle, for pixels that land later (a streamed frame, a diff). */
+  wait?: number;
+  ready?: (l: string[]) => boolean;
+  /** It shows the /browse ticket, so it waits for that run to finish (the list puts these last). */
+  browse?: boolean;
+  /** Taps to make before the shot. */
+  prepare?: (udid: string) => Promise<unknown>;
+  /** Waits out the redraw after the appearance flips, for a screen slower than FLIP_MS (a plugin's WebView reloads). */
+  redrawn?: (udid: string) => Promise<unknown>;
+}
+function screens(s: Seeded): Screen[] {
+  const k = (t: Ticket) => encodeURIComponent(t.key);
+  const hasLabel = (x: string) => (l: string[]) => l.includes(x);
+  const pluginLoaded = (l: string[]) => l.includes("Changes") && !l.includes("In progress");
+  return [
+    { name: "projects", url: "harness://projects" },
+    { name: "ticket-summaries", url: `harness://ticket/${k(s.hello)}?tab=summaries` },
+    { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
+    { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
+    { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
+    { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
+    { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },
+    { name: "approval", url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once") },
+    { name: "approval-config", url: `harness://ticket/${k(s.configApproval)}`, ready: hasLabel("Allow once") },
+    { name: "blocked", url: `harness://ticket/${k(s.blocked)}` },
+    { name: "planning", url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work") },
+    // The plugin's WebView shows a spinner ("In progress") until its page has loaded, and reloads
+    // when the appearance flips.
+    { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
+    { name: "new-session", url: "harness://new" },
+    { name: "inbox", url: "harness://inbox" },
+    { name: "settings", url: "harness://settings" },
+    { name: "watcher-new", url: "harness://watcher" },
+    { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
+    { name: "project-settings", url: `harness://project/${s.project.id}` },
+    { name: "connect", url: "harness://connect" },
+    // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
+    { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
+    { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true },
+  ];
+}
+/** Deals `items` out to `n` lanes so each gets about the same total `weight`, keeping their order within a lane. */
+function lanes<T>(items: T[], n: number, weight: (t: T) => number): T[][] {
+  const out = Array.from({ length: n }, () => [] as T[]);
+  const load = Array<number>(n).fill(0);
+  for (const it of items) {
+    const i = load.indexOf(Math.min(...load));
+    out[i]!.push(it);
+    load[i]! += weight(it);
   }
-  const installStart = performance.now();
-  await simctl("terminate", udid, "com.markhuot.harness").catch(() => {});
-  // Start clean: no saved servers or tokens from earlier runs.
-  await sh(["xcrun", "simctl", "uninstall", udid, "com.markhuot.harness"], { allowFail: true });
-  await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
-  await simctl("install", udid, appPath);
-  await simctl("ui", udid, "appearance", "light");
-  if ((await labels(udid)).some((x) => x.startsWith("Open in"))) await tapLabel(udid, "Cancel");
-  await until("app launches", async () => (await sh(["xcrun", "simctl", "launch", udid, "com.markhuot.harness"], { allowFail: true }), true) && (await sh(["xcrun", "simctl", "spawn", udid, "launchctl", "list"], { allowFail: true })).includes("com.markhuot.harness"), 30000);
-  await Bun.sleep(2500);
-  await openUrl(udid, buildPairUrl(base, token));
-  await Bun.sleep(4000);
-  timings.push({ label: "install, launch and pair", ms: Math.round(performance.now() - installStart) });
+  return out;
+}
 
-  mkdirSync(shots, { recursive: true });
-  if (paged) failed = !(await timed("mode: paging", () => pagingChecks(udid, paged)));
-  if (sticky && stickOnly) failed = !(await timed("mode: stick", () => stickChecks(udid, sticky)));
-  if (sticky && keyboardOnly) failed = !(await timed("mode: keyboard", () => keyboardChecks(udid, sticky)));
-  if (mentioned) failed = !(await timed("mode: mentions", () => mentionChecks(udid, mentioned)));
-  if (media) failed = !(await timed("mode: attachments", () => attachmentChecks(udid, media)));
-  if (seeded) {
-    const k = (t: Ticket) => encodeURIComponent(t.key);
-    const screens: [string, string, number?][] = [
-      ["board", "harness://board"],
-      ["projects", "harness://projects"],
-      ["ticket-summaries", `harness://ticket/${k(seeded.hello)}?tab=summaries`],
-      ["ticket-transcript", `harness://ticket/${k(seeded.hello)}?tab=transcript`],
-      ["ticket-details", `harness://ticket/${k(seeded.hello)}?tab=details`],
-      ["conductor-tickets", `harness://ticket/${k(seeded.conductor)}?tab=children`],
-      ["ticket-agents", `harness://ticket/${k(seeded.agents)}?tab=agents`],
-      ["ticket-subagent", `harness://ticket/${k(seeded.agents)}?tab=${encodeURIComponent(`agent:${seeded.nestedAgent.id}`)}`],
-      ["approval", `harness://ticket/${k(seeded.approval)}`],
-      ["approval-config", `harness://ticket/${k(seeded.configApproval)}`],
-      ["blocked", `harness://ticket/${k(seeded.blocked)}`],
-      ["planning", `harness://ticket/${k(seeded.plan)}`],
-      ["browser", `harness://ticket/${k(seeded.browse)}?tab=browser`, 3500],
-      ["changes", `harness://ticket/${k(seeded.changes)}?tab=plugin:git:changes`, 2500],
-      ["new-session", "harness://new"],
-      ["inbox", "harness://inbox"],
-      ["settings", "harness://settings"],
-      ["watcher-new", "harness://watcher"],
-      ["watcher-edit", `harness://watcher?id=${encodeURIComponent(seeded.watcher.id)}`],
-      ["project-settings", `harness://project/${seeded.project.id}`],
-      ["connect", "harness://connect"],
-    ];
-    const relaunch = () => coldOpen(udid);
-    for (const id of themeShots) {
-      const theme = findTheme(id)!;
-      await simctl("ui", udid, "appearance", theme.appearance);
-      await relaunch();
-      await openUrl(udid, `harness://settings?${theme.appearance}Theme=${id}`);
-      await Bun.sleep(2200);
-      // Scroll down to the Appearance pickers.
-      await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "2", "--udid", udid);
-      await Bun.sleep(1200);
-      await simctl("io", udid, "screenshot", join(shots, `settings-${id}.png`));
-      await relaunch();
-      // The board needs the connection and the first ticket list, not just the first frame.
-      await until("board loaded", async () => (await labels(udid)).some((l) => /^[A-Z]+-\d+ /.test(l)), 20000).catch(() => {});
-      await Bun.sleep(1500);
-      const file = join(shots, `board-${id}.png`);
-      await simctl("io", udid, "screenshot", file);
-      console.log(`  ${file}`);
-    }
-    if (themeShots.length) {
-      // Back to the defaults for the light/dark pass.
-      await relaunch();
-      await openUrl(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
-      await Bun.sleep(1500);
-    }
-    for (const theme of flag("interactions-only") ? [] : (["light", "dark"] as const)) {
-      await simctl("ui", udid, "appearance", theme);
-      for (const [name, url, wait] of screens) {
-        if (only && !only.includes(name)) continue;
-        const file = join(shots, `${name}-${theme}.png`);
-        await timed(`screen: ${name}-${theme}`, async () => {
-          await coldOpen(udid, url === "harness://board" ? "" : url);
-          // Images, a streamed browser frame or a diff can land after the labels settle.
-          await Bun.sleep(wait ?? 1000);
-          await simctl("io", udid, "screenshot", file);
-        });
-        if (await running(udid)) console.log(`  ${file}`);
-        else {
-          console.log(`✗ ${name} (${theme}): the app crashed opening ${url}`);
-          failed = true;
-        }
+/** --themes: per theme, the settings deep link applies it; then Settings and the board in it. */
+async function themeScreens(udid: string) {
+  for (const id of themeShots) {
+    const theme = findTheme(id)!;
+    await appearance(udid, theme.appearance);
+    await goto(udid, `harness://settings?${theme.appearance}Theme=${id}`);
+    await Bun.sleep(800);
+    // Scroll down to the Appearance pickers.
+    await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "1", "--udid", udid);
+    await Bun.sleep(900);
+    await shot(udid, `settings-${id}`);
+    await goto(udid, BOARD, (l) => onBoard(l) && l.some((x) => /^[A-Z]+-\d+ /.test(x)));
+    await Bun.sleep(600);
+    await shot(udid, `board-${id}`);
+  }
+  // Back to the defaults for the light/dark pass.
+  await goto(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
+  await Bun.sleep(600);
+}
+
+/** The screens on one simulator, each in light and dark. Returns the names the app crashed on. */
+async function shootScreens(udid: string, list: Screen[], browsed: Promise<unknown>): Promise<string[]> {
+  const crashed: string[] = [];
+  for (const s of list) {
+    if (s.browse) await timed("waiting for the browse ticket", () => browsed.catch(() => {}));
+    await timed(`screen: ${s.name}`, async () => {
+      const shown = await timed(`  goto: ${s.name}`, () => goto(udid, s.url, s.ready));
+      if (s.wait) await Bun.sleep(s.wait);
+      if (s.prepare) await s.prepare(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
+      const [, alive] = await Promise.all([timed(`  shoot: ${s.name}`, () => shootBoth(udid, s.name, s.redrawn && (() => s.redrawn!(udid)))), shown ? true : running(udid)]);
+      if (alive) console.log(`  ${join(shots, s.name)}-{light,dark}.png`);
+      else {
+        console.log(`✗ ${s.name}: the app crashed opening ${s.url}`);
+        crashed.push(s.name);
       }
-    }
-    await simctl("ui", udid, "appearance", "light");
+    });
+  }
+  return crashed;
+}
 
-    // ---------------------------------------------------------------- interactions (real taps)
-    if (hasAxe && !only) {
-      const results: [string, boolean, string][] = [];
-      const check = async (name: string, fn: () => Promise<string | boolean>) => {
-        try {
-          const r = await timed(`check: ${name}`, fn);
-          results.push([name, r !== false, typeof r === "string" ? r : ""]);
-        } catch (e) {
-          results.push([name, false, (e as Error).message.split("\n")[0]!]);
-        }
-      };
-      const fresh = (url: string) => coldOpen(udid, url);
-      await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
-        await fresh("");
-        const card = (l: string) => l.startsWith(`${seeded.hello.key} `);
-        // The card is in the tree before its column scrolls in (x≈416, off the right edge).
-        await until("card on screen", async () => {
-          await tapWhere(udid, (l) => l.startsWith("Review,"));
-          await Bun.sleep(600);
-          return ((await findElement(udid, card))?.frame.x ?? 999) < 100;
-        }, 15000);
-        await tapWhere(udid, card);
-        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes("Approve"), 8000).catch(async (e) => {
-          throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
-        });
-        await simctl("io", udid, "screenshot", join(shots, "card-tap-detail-light.png"));
-        // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
-        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
-        await until("back on the board", async () => ((l) => l.some(card) && !l.includes("Approve"))(await labels(udid)), 8000);
-        await simctl("io", udid, "screenshot", join(shots, "card-tap-back-light.png"));
-        return `${seeded.hello.key} → detail → board`;
-      });
-      await check("approval card: Allow once resumes the agent", async () => {
-        await fresh(`harness://ticket/${k(seeded.approval)}`);
-        await tapWhere(udid, "Allow once");
-        const t = await settle(seeded.approval.key, (x) => !x.pendingApproval, 15000);
-        return `${t.key} → ${t.status}`;
-      });
-      await check("Approve records the human review and auto-completes the ticket", async () => {
-        await fresh(`harness://ticket/${k(seeded.hello)}`);
-        await tapWhere(udid, "Approve");
-        const t = await settle(seeded.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
-        return `${t.key} human=${t.humanReview} → ${t.status}`;
-      });
+/**
+ * The real-tap checks, as chains that each run on one simulator; `seconds` (about what the chain
+ * takes on an idle Mac) balances them. Every check reaches its screen with goto.
+ */
+function interactionChains(s: Seeded): { seconds: number; run: (udid: string) => Promise<void> }[] {
+  const k = (t: Ticket) => encodeURIComponent(t.key);
+  const chain = (seconds: number, run: (udid: string) => Promise<void>) => ({ seconds, run });
+  return [
+    chain(8, async (udid) => {
       await check("composer answers a blocked ticket", async () => {
-        await fresh(`harness://ticket/${k(seeded.blocked)}`);
+        await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));
         await tapWhere(udid, (l) => l.startsWith("Message the agent"));
         await axe("type", "Use Happy Cog", "--udid", udid);
         await tapWhere(udid, "Send");
-        const t = await settle(seeded.blocked.key, (x) => x.status !== "blocked", 15000);
+        const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
         return `${t.key} → ${t.status}`;
       });
       await check("Start work moves a planning ticket to In progress", async () => {
-        await fresh(`harness://ticket/${k(seeded.plan)}`);
+        await goto(udid, `harness://ticket/${k(s.plan)}`, (l) => l.includes("Start work"));
         await tapWhere(udid, "Start work");
-        const t = await settle(seeded.plan.key, (x) => x.status !== "planning", 15000);
+        const t = await settle(s.plan.key, (x) => x.status !== "planning", 15000);
         return `${t.key} → ${t.status}`;
       });
+    }),
+    chain(7.5, async (udid) => {
+      const card = (l: string) => l.startsWith(`${s.hello.key} `);
+      await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
+        await goto(udid, BOARD);
+        // The card is in the tree before its column scrolls in (x≈416, off the right edge).
+        await until("card on screen", async () => {
+          await tapWhere(udid, (l) => l.startsWith("Review,"));
+          return ((await until("card", () => findElement(udid, card), 1500).catch(() => null))?.frame.x ?? 999) < 100;
+        }, 15000);
+        await tapWhere(udid, card);
+        moved(udid);
+        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes("Approve"), 8000).catch(async (e) => {
+          throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
+        });
+        await shot(udid, "card-tap-detail-light");
+        // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
+        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+        await until("back on the board", async () => ((l) => l.some(card) && !l.includes("Approve"))(await labels(udid)), 8000);
+        lastUrl.set(udid, BOARD);
+        await shot(udid, "card-tap-back-light");
+        return `${s.hello.key} → detail → board`;
+      });
+      await check("Approve records the human review and auto-completes the ticket", async () => {
+        await goto(udid, `harness://ticket/${k(s.hello)}`, (l) => l.includes("Approve"));
+        await tapWhere(udid, "Approve");
+        const t = await settle(s.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
+        return `${t.key} human=${t.humanReview} → ${t.status}`;
+      });
+    }),
+    chain(9, async (udid) => {
       await check("board context menu moves a card to Done", async () => {
-        await fresh("");
+        await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
-        await Bun.sleep(800);
-        await tapWhere(udid, (l) => l.startsWith(`${seeded.browse.key} `), { longPress: 1.2 });
-        await Bun.sleep(800);
+        await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.browse.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
+        await tapWhere(udid, (l) => l.startsWith(`${s.browse.key} `), { longPress: 1.2 });
         await tapWhere(udid, "Move to Done");
-        const t = await settle(seeded.browse.key, (x) => x.status === "done", 15000);
+        const t = await settle(s.browse.key, (x) => x.status === "done", 15000);
         return `${t.key} → ${t.status}`;
       });
-      await simctl("io", udid, "screenshot", join(shots, "after-interactions-light.png"));
-      for (const [name, ok, detail] of results) console.log(`${ok ? "✓" : "✗"} ${name}${detail ? ` — ${detail}` : ""}`);
-      if (results.some((r) => !r[1])) failed = true;
-    }
+      await check("approval card: Allow once resumes the agent", async () => {
+        await goto(udid, `harness://ticket/${k(s.approval)}`, (l) => l.includes("Allow once"));
+        await tapWhere(udid, "Allow once");
+        const t = await settle(s.approval.key, (x) => !x.pendingApproval, 15000);
+        return `${t.key} → ${t.status}`;
+      });
+    }),
+  ];
+}
+
+async function walk(udids: string[], s: Seeded): Promise<boolean> {
+  let ok = true;
+  if (themeShots.length) await timed("themes", () => themeScreens(udids[0]!));
+  if (!flag("interactions-only")) {
+    const list = screens(s).filter((x) => !only || only.includes(x.name));
+    const dealt = lanes(list, udids.length, (x) => 2.5 + (x.wait ?? 0) / 1000);
+    const crashed = (await timed("screens", () => Promise.all(udids.map((u, i) => shootScreens(u, dealt[i]!, s.browsed))))).flat();
+    if (crashed.length) ok = false;
   }
-  reportTimings();
-  console.log(failed ? "sim-check finished with failures" : "sim-check done");
+  // The checks change tickets the screens show, so they start once every screen is saved.
+  if (hasAxe && !only) {
+    await s.browsed.catch(() => {}); // Move to Done moves it out of Review
+    const chains = interactionChains(s).sort((a, b) => b.seconds - a.seconds); // longest first deals best
+    const byDevice = lanes(chains, udids.length, (c) => c.seconds);
+    await Promise.all(udids.map((u) => appearance(u, "light"))); // their shots are named -light
+    await timed("interactions", () => Promise.all(udids.map(async (u, i) => { for (const c of byDevice[i]!) await c.run(u); })));
+    await goto(udids[0]!, BOARD);
+    await appearance(udids[0]!, "light");
+    await shot(udids[0]!, "after-interactions-light");
+  }
+  return ok;
+}
+
+// ---------------------------------------------------------------- build
+async function buildApp() {
+  if (flag("no-build") && existsSync(appPath)) return;
+  // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
+  // module, so regenerate it whenever it doesn't link every native dependency.
+  if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {
+    console.log("syncing ios/ (expo prebuild, pod install)…");
+    await sh(["bunx", "expo", "prebuild", "--platform", "ios", "--no-install"], { env: { EXPO_NO_GIT_STATUS: "1" } });
+    await sh([join(here, "Tools", "pod.sh"), "install"], { cwd: join(here, "ios") });
+    await sh(["bun", "Tools/nativeDeps.ts", "check"]);
+  }
+  console.log("building Release (simulator)…");
+  await sh(["xcodebuild", "-workspace", "ios/Harness.xcworkspace", "-scheme", "Harness", "-configuration", "Release", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "-derivedDataPath", "build/dd", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build"]);
+}
+
+// ---------------------------------------------------------------- main
+let failed = false;
+try {
+  mkdirSync(shots, { recursive: true });
+  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000, 50));
+  token = readFileSync(join(home, "token"), "utf8").trim();
+  // The simulators boot, the app builds and the daemon seeds all at once.
+  // The app installs as soon as it's built and its simulator is up.
+  const pairUrl = buildPairUrl(base, token);
+  const pairAll = (udids: string[]) => timed("pair", () => Promise.all(udids.map((u) => pair(u, pairUrl))));
+  const devices = Promise.all([timed("simulators", () => pickDevices(shardCount)), timed("build", buildApp)]).then(([udids]) =>
+    timed("install", () => Promise.all(udids.map(install))).then(() => udids),
+  );
+  // The walk-through pairs as soon as its tickets exist, while their runs settle; the modes once seeded.
+  const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
+  const [udids, seeded, paged, sticky, typing, mentioned, media] = await Promise.all([
+    paired,
+    walkThrough ? timed("seed", seed) : null,
+    pagingOnly ? timed("seed paging", seedPaging) : null,
+    stickOnly ? timed("seed stick", seedStick) : null,
+    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up")) : null,
+    mentionsOnly ? timed("seed mentions", seedMentions) : null,
+    attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
+  ]);
+  if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
+  if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
+
+  if (!walkThrough) await pairAll(udids);
+
+  const udid = udids[0]!;
+  if (paged) await timed("mode: paging", () => pagingChecks(udid, paged));
+  if (sticky) await timed("mode: stick", () => stickChecks(udid, sticky));
+  if (typing) await timed("mode: keyboard", () => keyboardChecks(udid, typing));
+  if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
+  if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
+  if (seeded && !(await walk(udids, seeded))) failed = true;
+  if (results.some((r) => !r[1])) failed = true;
+  // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.
+  await Promise.all(udids.map((u) => Promise.all([appearance(u, "light"), flag("keep") ? null : simctl("terminate", u, BUNDLE).catch(() => {})])));
 } catch (e) {
   failed = true;
   console.error("sim-check failed:", (e as Error).message);
@@ -1066,10 +1108,20 @@ try {
   if (flag("keep")) {
     console.log(`--keep: daemon still running at ${base} (pid ${daemon.pid}); token in ${home}/token`);
   } else {
-    daemon.kill("SIGTERM");
-    await Promise.race([daemon.exited, Bun.sleep(8000)]);
+    await timed("daemon shutdown", async () => {
+      // The daemon closes its Chrome on SIGTERM, which can take a while; a Chrome killed mid-close
+      // leaks its code-sign clone, and one left running outlives this run (and its deleted home).
+      daemon.kill("SIGTERM");
+      if ((await Promise.race([daemon.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
+        console.log("the daemon didn't stop in 20 s; killing it and its Chrome");
+        daemon.kill("SIGKILL");
+        Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
+      }
+    });
     rmSync(home, { recursive: true, force: true });
     rmSync(scratch, { recursive: true, force: true });
   }
+  reportTimings();
+  console.log(failed ? "sim-check finished with failures" : "sim-check done");
 }
 process.exit(failed ? 1 : 0);
