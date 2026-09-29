@@ -45,8 +45,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
+import { buildPairUrl, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
+import { Database } from "bun:sqlite";
 
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
@@ -436,8 +437,30 @@ const TABLE_BRIEF = [
   "```",
 ].join("\n");
 
+/**
+ * Settings → Prompts: a working override of the review message, and a broken one of the Files
+ * section. The API refuses a template naming a variable the prompt doesn't have, so the broken one
+ * goes straight into the settings table, the way an app update that renamed {{shell}} would leave
+ * it. The service reads settings from the database on every request, so it shows up at once.
+ */
+async function seedPrompts() {
+  await api("PATCH", "/settings", {
+    prompts: { "run.review": "Review {{ticket}} carefully.\n\n## Brief\n{{brief}}\n\n{{#if summaries}}## Summaries\n{{summaries}}{{/if}}\n\nCheck the tests first, then the diff." },
+  });
+  const db = new Database(join(home, "harness.db"));
+  try {
+    db.exec("PRAGMA busy_timeout = 5000;");
+    const row = db.query("SELECT value FROM settings WHERE key = 'prompts'").get() as { value: string } | null;
+    const prompts = { ...(row ? (JSON.parse(row.value) as Record<string, unknown>) : {}), "system.files": "## Files\nRead files with {{readTool}}. Never use {{shellTool}} to edit files." };
+    db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run({ $v: JSON.stringify(prompts) });
+  } finally {
+    db.close();
+  }
+}
+
 async function seed() {
   await settings();
+  await seedPrompts();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
   const repo = join(scratch, "greeter");
   mkdirSync(join(repo, "src"), { recursive: true });
@@ -977,6 +1000,13 @@ function screens(s: Seeded): Screen[] {
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
+    // Settings → Prompts (seedPrompts): the list, a built-in prompt, the customized review message
+    // and the broken Files section.
+    { name: "settings-prompts", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Prompts, ")).then(() => Bun.sleep(500)) },
+    { name: "prompts", url: "harness://prompts", ready: hasLabel("Agent review") },
+    { name: "prompt-builtin", url: "harness://prompt/system.work", ready: hasLabel("Customize") },
+    { name: "prompt-customized", url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") },
+    { name: "prompt-broken", url: "harness://prompt/system.files", ready: (l) => l.some((x) => x.includes("isn't in effect")) },
     // Scrolled to the Base branch fields (General in Settings, Agents in the git project's settings).
     { name: "settings-base-branch", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
     { name: "project-settings-base-branch", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
@@ -1127,6 +1157,47 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, "Approve");
         const t = await settle(s.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
         return `${t.key} human=${t.humanReview} → ${t.status}`;
+      });
+    }),
+    chain(14, async (udid) => {
+      const override = async (id: string) => (await api<PromptEntry[]>("GET", "/prompts")).find((p) => p.id === id)!.override;
+      const field = (l: string) => l === "Work run instructions prompt";
+      // The header's glass buttons aren't in AXe's tree: Cancel sits where Back does, Save at the trailing edge.
+      const tapCancel = () => axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+      const tapSave = async () => axe("tap", "-x", String(Math.round((await tree(udid))[0]!.frame.width - 32)), "-y", "89", "--udid", udid);
+      await check("prompt editor: Customize, a bad variable shows inline and can't save, Cancel keeps the built-in", async () => {
+        await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
+        await tapWhere(udid, "Customize");
+        await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
+        await tapWhere(udid, field);
+        await axe("type", " {{brnch}}", "--udid", udid);
+        const error = await until("inline error", async () => (await labels(udid)).find((l) => l.startsWith("Unknown variable {{brnch}}")), 5000);
+        await shot(udid, "prompt-invalid-light");
+        await tapSave(); // disabled while invalid
+        await Bun.sleep(800);
+        if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
+        await tapCancel();
+        await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
+        moved(udid);
+        return error.slice(0, 60);
+      });
+      await check("prompt editor: Save stores the override, Reset to built-in (confirmed) clears it", async () => {
+        await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
+        await tapWhere(udid, "Customize");
+        await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
+        await tapWhere(udid, field);
+        await axe("type", " Mind the {{branch}}.", "--udid", udid);
+        await Bun.sleep(300);
+        await tapSave();
+        const saved = await until("override saved", async () => ((v) => (v?.includes("Mind the {{branch}}.") ? v : null))(await override("system.work")), 8000);
+        await until("Reset button", async () => (await labels(udid)).includes("Reset to built-in"), 5000);
+        await shot(udid, "prompt-saved-light");
+        await tapWhere(udid, "Reset to built-in");
+        await tapWhere(udid, "Reset"); // the confirm alert
+        await until("override cleared", async () => (await override("system.work")) === null, 8000);
+        await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
+        moved(udid);
+        return `saved ${saved.length} chars, then reset`;
       });
     }),
     chain(9, async (udid) => {
