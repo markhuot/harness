@@ -24,6 +24,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- A ticket with no summaries yet now opens on its Transcript tab, on the Mac and on iPhone, so you
+  see what the agent is doing instead of an empty Summaries tab. Tickets that have summaries still
+  open on Summaries.
 - When auto mode's classifier turns down one of an agent's commands, the agent now looks for a
   safer way to do the same thing and keeps going. It only stops to ask you when there's truly
   no other way. If it finishes another way, the ticket goes to review as usual, with a note
