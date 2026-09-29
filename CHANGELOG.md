@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260929.1932](https://github.com/markhuot/harness/releases/tag/app-20260929.1932) - 2026-09-29
+
 ### Added
 
 - You can skip the agent review for a ticket that doesn't need one, like a quick question. The
