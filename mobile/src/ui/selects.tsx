@@ -4,12 +4,11 @@
 // refused (a disabled driver, a failed save). Actions sit in their own section. Option lists come
 // from the shared helpers.
 
-import { useEffect, useSyncExternalStore } from "react";
 import { View } from "react-native";
 import { Button as SButton, Host, HStack, Image, Menu, ProgressView, Section, Text as SText, Toggle } from "@expo/ui/swift-ui";
 import { accessibilityLabel, controlSize, disabled as disabledMod, font, foregroundStyle, lineLimit } from "@expo/ui/swift-ui/modifiers";
-import { PERMISSION_MODE_LABELS, PERMISSION_MODES, type PermissionMode, type TriageChoice } from "@harness/shared";
-import { decodeChoice, driverModelChoices, encodeChoice, modelCacheFor, modelName, modelOptions, permissionModeLabel } from "@harness/shared/state";
+import { PERMISSION_MODE_LABELS, PERMISSION_MODES, type PermissionMode } from "@harness/shared";
+import { modelName, modelOptions, permissionModeLabel } from "@harness/shared/state";
 import { selectedLabel, type SelectOption } from "../lib/selectOptions";
 import { useTheme } from "../state/app";
 import { useStore } from "../state/store";
@@ -26,21 +25,13 @@ export interface SelectAction {
   onPress: () => void;
 }
 
-/** A titled group of options in a sectioned Select (no title → the options show without a heading). */
-export interface SelectSection<V extends string = string> {
-  title?: string;
-  options: SelectOption<V>[];
-}
-
 /**
  * A native select. `label` overrides the trigger text (defaults to the selected option's label);
- * `title` heads the option list; `actions` go in their own section below the options. `sections`
- * replaces the single option list with several headed groups (`options` is then ignored).
+ * `title` heads the option list; `actions` go in their own section below the options.
  */
 export function Select<V extends string>({
   value,
   options,
-  sections,
   onChange,
   label,
   placeholder = "Choose…",
@@ -52,8 +43,7 @@ export function Select<V extends string>({
   accessibilityName,
 }: {
   value: V;
-  options?: SelectOption<V>[];
-  sections?: SelectSection<V>[];
+  options: SelectOption<V>[];
   onChange: (v: V) => void;
   label?: string;
   placeholder?: string;
@@ -65,9 +55,9 @@ export function Select<V extends string>({
   accessibilityName?: string;
 }) {
   const { c, resolved } = useTheme();
-  const groups = (sections ?? [{ title, options: options ?? [] }]).filter((g) => g.options.length > 0);
-  const text = label ?? selectedLabel(groups.flatMap((g) => g.options), value, placeholder);
+  const text = label ?? selectedLabel(options, value, placeholder);
   const tint = disabled ? c.text3 : c.accent;
+  const hasOptions = options.length > 0;
   return (
     <View style={{ maxWidth: 280, opacity: disabled ? 0.6 : 1 }}>
       <Host matchContents colorScheme={resolved}>
@@ -86,9 +76,9 @@ export function Select<V extends string>({
             </HStack>
           }
         >
-          {groups.map((g, i) => (
-            <Section key={`${i}:${g.title ?? ""}`} title={g.title}>
-              {g.options.map((o) => (
+          {hasOptions && (
+            <Section title={title}>
+              {options.map((o) => (
                 <Toggle
                   key={o.value}
                   isOn={o.value === value}
@@ -104,7 +94,7 @@ export function Select<V extends string>({
                 </Toggle>
               ))}
             </Section>
-          ))}
+          )}
           {!!(problem || actions?.length) && (
             <Section title={problem ?? undefined}>
               {(actions ?? []).map((a) => (
@@ -152,56 +142,6 @@ export function ModelPicker({
       loading={loading && !data}
       problem={problem ? `Couldn't list models: ${problem}` : null}
       actions={[{ label: "Refresh model list", systemImage: "arrow.clockwise", onPress: () => void refresh() }]}
-    />
-  );
-}
-
-/**
- * The combined driver + model select (watchers): Default first, then each signed-in driver's
- * models under a heading with its name, or one flat list when only one driver shows. Loads the
- * model list of every driver it may show; `resolved` is what Default falls back to.
- */
-export function DriverModelPicker({
-  value,
-  resolved,
-  onChange,
-  defaultLabel,
-  title = "Model",
-  disabled,
-}: {
-  value: TriageChoice;
-  resolved: TriageChoice;
-  onChange: (c: TriageChoice) => void;
-  defaultLabel?: string;
-  title?: string;
-  disabled?: boolean;
-}) {
-  const { state, client, epoch } = useStore();
-  const cache = modelCacheFor(client);
-  // Re-render on any cache change; the lists themselves are read with cache.get below.
-  useSyncExternalStore(cache.subscribe, () => cache.version);
-  const ids = [...new Set([...state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id), value.driver, resolved.driver].filter((id): id is string => !!id))];
-  const key = ids.join(",");
-  useEffect(() => {
-    cache.syncEpoch(epoch);
-    for (const id of ids) void cache.load(id);
-  }, [cache, key, epoch]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lists = ids.map((id) => ({ id, ...cache.get(id) }));
-  const choices = driverModelChoices(state.drivers, Object.fromEntries(lists.map((l) => [l.id, l.data?.models])), value, resolved, { defaultLabel });
-  const failed = lists.find((l) => l.error ?? l.data?.error);
-  const problem = failed ? `Couldn't list ${state.drivers.find((d) => d.id === failed.id)?.name ?? failed.id} models: ${failed.error ?? failed.data?.error}` : null;
-  return (
-    <Select
-      value={encodeChoice(value)}
-      sections={[{ title, options: [choices.default] }, ...choices.groups.map((g) => ({ title: g.label ?? undefined, options: g.options }))]}
-      label={choices.selectedLabel}
-      onChange={(v) => onChange(decodeChoice(v))}
-      title={title}
-      accessibilityName={title}
-      disabled={disabled}
-      loading={lists.some((l) => l.loading && !l.data)}
-      problem={problem}
-      actions={[{ label: "Refresh model lists", systemImage: "arrow.clockwise", onPress: () => ids.forEach((id) => void cache.load(id, true)) }]}
     />
   );
 }

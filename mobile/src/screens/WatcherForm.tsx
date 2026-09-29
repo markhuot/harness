@@ -9,7 +9,7 @@ import { MONO } from "../theme/tokens";
 import { Segmented } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
 import { FormField, SSwitch, useInputStyle } from "../ui/settings";
-import { DriverModelPicker } from "../ui/selects";
+import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { buttonItem, primaryItemStyle } from "../ui/header";
 import { toDraft, watcherBody, type WatcherDraft as Draft } from "../lib/watcherDraft";
 
