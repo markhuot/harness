@@ -36,6 +36,7 @@ import type {
   WatcherBody,
   WatcherLive,
 } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo } from "@harness/shared";
 import {
   checkProjectKey,
   isConductor,
@@ -44,6 +45,7 @@ import {
   outputTitle,
   PERMISSION_MODES,
   PROJECT_COLORS,
+  resolveBaseBranch,
   resolvePermissionMode,
   TICKET_STATUSES,
   watcherDriver,
@@ -77,10 +79,30 @@ import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
-import { ensureWorktree, isGitRepo } from "./worktree";
+import {
+  branchExists,
+  branchForKey,
+  checkedOutElsewhere,
+  commitsNotIn,
+  currentBranch,
+  ensureWorktree,
+  isGitRepo,
+  isInside,
+  listBranches,
+  switchBranch,
+} from "./worktree";
 import { attachMentions, searchPaths } from "./files";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
-import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, validateModelId, validateModelMap, validateSettingsPatch } from "./settings";
+import {
+  applySettingsPatch,
+  mergeModelMap,
+  resolveSettings,
+  toPublicSettings,
+  validateBranchName,
+  validateModelId,
+  validateModelMap,
+  validateSettingsPatch,
+} from "./settings";
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
@@ -237,6 +259,13 @@ function validPermissionMode(value: unknown): PermissionMode | null {
   return value as PermissionMode;
 }
 
+const BASE_SOURCE_LABEL:Record<BaseBranchSource | "checkout", string> = {
+  ticket: "set on this ticket",
+  project: "inherited from the project",
+  settings: "inherited from Settings",
+  checkout: "the main checkout's branch, since the Settings default isn't in this repository",
+};
+
 /** Validate a ticket's worktree choice from a request body (null / omitted → the project's). */
 function validUseWorktree(value: unknown): boolean | null {
   if (value === undefined || value === null) return null;
@@ -298,6 +327,13 @@ export class Orchestrator {
   private autoModeRules: AutoModeRulesProvider;
   private classifierOption: Classifier | null | undefined;
   private classifierCache: { key: string; classifier: Classifier } | null = null;
+  /**
+   * `${project path}\0${settings base branch}` → the branch checked out in that checkout, for
+   * repos without the settings' branch (refreshBaseBranch; see baseBranchFor)
+   */
+  private baseFallback = new Map<string, string>();
+  /** Tickets whose complete run is about to be enqueued (enqueueComplete); they count as completing */
+  private startingComplete = new Set<string>();
 
   constructor(opts: OrchestratorOptions) {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
@@ -545,6 +581,7 @@ export class Orchestrator {
       requireHumanReview: body.requireHumanReview,
       autoComplete: body.autoComplete,
       color: body.color !== undefined ? validProjectColor(body.color) : null,
+      baseBranch: validateBranchName("baseBranch", body.baseBranch),
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     };
@@ -623,11 +660,12 @@ export class Orchestrator {
       }
     }
     const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
-    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, ...rest } = body;
+    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, baseBranch: rawBase, ...rest } = body;
     const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
+    const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest: { ...rest, color }, path, defaultModels };
+    return { newKey, permissionMode, rest: { ...rest, color, baseBranch }, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -697,6 +735,13 @@ export class Orchestrator {
     return searchPaths(project.path, q, clampLimit(limit, 50));
   }
 
+  /** The branch picker for a new session in `projectId`: local branches, most recent first (BranchInfo). */
+  projectBranches(projectId: string, q: string, limit?: number | string | null): Promise<BranchInfo[]> {
+    const project = this.store.projects.get(projectId);
+    if (!project) throw notFound(`Unknown project: ${projectId}`);
+    return listBranches(project.path, q, clampLimit(limit, 50));
+  }
+
   /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
   ticketFiles(key: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
     const found = this.store.tickets.lookup(key);
@@ -738,6 +783,12 @@ export class Orchestrator {
     const model = validateModelId("model", body.model);
     const permissionMode = validPermissionMode(body.permissionMode);
     const useWorktree = validUseWorktree(body.useWorktree);
+    const baseBranch = validateBranchName("baseBranch", body.baseBranch);
+    const requestedBranch = validateBranchName("branch", body.branch);
+    if (requestedBranch && !(useWorktree ?? project.useWorktrees)) {
+      throw badRequest(`branch ${requestedBranch} needs a worktree, but this ticket would run in the project checkout (useWorktree is off)`);
+    }
+    if (requestedBranch && project.isGit === false) throw badRequest(`branch ${requestedBranch} needs a git repository; ${project.path} isn't one`);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     let parentId: string | null = null;
     if (body.parentId) {
@@ -774,6 +825,8 @@ export class Orchestrator {
         workdir: null,
         model,
         useWorktree,
+        baseBranch,
+        requestedBranch,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -825,6 +878,23 @@ export class Orchestrator {
     }
     if (body.model !== undefined) patch.model = validateModelId("model", body.model);
     if (body.permissionMode !== undefined) patch.permissionMode = validPermissionMode(body.permissionMode);
+    if (body.baseBranch !== undefined) patch.baseBranch = validateBranchName("baseBranch", body.baseBranch);
+    if (body.branch !== undefined) {
+      const branch = validateBranchName("branch", body.branch);
+      // Before work starts, or once the complete run removed the worktree (a re-open recreates it on this branch).
+      if (ticket.workdir && existsSync(ticket.workdir)) {
+        throw conflict(
+          ticket.branch
+            ? `${ticket.key} already works in ${ticket.workdir} on branch ${ticket.branch}, so its branch can't be set from here. Its agent moves it with the update_branch tool: send it a message asking for the branch you want.`
+            : `${ticket.key} already works in the project checkout at ${ticket.workdir}, not a worktree of its own, so it has no branch to change.`,
+        );
+      }
+      const project = this.store.projects.get(ticket.projectId);
+      if (branch && project && !(ticket.useWorktree ?? project.useWorktrees)) {
+        throw badRequest(`branch ${branch} needs a worktree, but ${ticket.key} runs in the project checkout (useWorktree is off)`);
+      }
+      patch.requestedBranch = branch;
+    }
     if (body.dependsOn !== undefined) {
       const deps = this.validateDeps(body.dependsOn);
       if (deps.includes(ticket.key)) throw badRequest("A ticket cannot depend on itself");
@@ -948,7 +1018,7 @@ export class Orchestrator {
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
     this.addSummary(ticket.sessionId, ticket.id, "human", `Re-opened: ${notes}`);
-    return this.reopen(ticket, prompts.reopenPrompt(ticket, notes), "Re-opened by human");
+    return this.reopen(ticket, prompts.reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
   }
 
   /**
@@ -1038,8 +1108,25 @@ export class Orchestrator {
     if (ticket.status !== "review") throw conflict(`${ticket.key} must be in review to complete`);
     if (this.completing(ticket)) throw conflict(`${ticket.key} is already completing`);
     this.appendStatus(ticket.sessionId, null, "Completing");
-    this.enqueueRun(ticket.sessionId, "complete", prompts.completePrompt(ticket, body.instructions));
+    await this.enqueueComplete(ticket, body.instructions);
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * Enqueue the complete run once git has said what the base branch is (the prompt names it, and
+   * the fallback cache is empty after a restart). The ticket counts as completing meanwhile, so
+   * nothing is queued ahead of it.
+   */
+  private async enqueueComplete(ticket: Ticket, instructions?: string) {
+    this.startingComplete.add(ticket.id);
+    try {
+      await this.refreshBaseBranch(ticket);
+      const t = this.store.tickets.get(ticket.id);
+      if (!t || t.status !== "review") return;
+      this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, instructions));
+    } finally {
+      this.startingComplete.delete(ticket.id);
+    }
   }
 
   rerunAgentReview(key: string): Ticket {
@@ -1405,6 +1492,7 @@ export class Orchestrator {
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
       children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
+      base: await this.refreshBaseBranch(t),
       summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({
         author: s.author,
         body: s.body,
@@ -1557,6 +1645,8 @@ export class Orchestrator {
           model: input.model !== undefined ? input.model : input.driver ? null : own.model,
           permissionMode,
           useWorktree: input.useWorktree,
+          branch: input.branch,
+          baseBranch: input.baseBranch,
         }),
       );
     }
@@ -1573,6 +1663,8 @@ export class Orchestrator {
         model: input.model,
         permissionMode,
         useWorktree: input.useWorktree,
+        branch: input.branch,
+        baseBranch: input.baseBranch,
       }),
     );
   }
@@ -1592,6 +1684,8 @@ export class Orchestrator {
     if (input.driver !== undefined) body.driver = input.driver;
     if (input.model !== undefined) body.model = input.model;
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
+    if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
+    if (input.branch !== undefined) body.branch = input.branch;
     if (input.permissionMode !== undefined) {
       // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
       // around the approvals a human set up.
@@ -1764,6 +1858,7 @@ export class Orchestrator {
       autoComplete: p.autoComplete,
       permissionMode: p.permissionMode,
       color: p.color,
+      baseBranch: p.baseBranch ?? null,
     };
   }
 
@@ -2026,6 +2121,122 @@ export class Orchestrator {
     return resolvePermissionMode(fresh, p, this.settings()).mode;
   }
 
+  // =========================================================================
+  // Branches (DESIGN.md "Branches")
+  // =========================================================================
+
+  /**
+   * Effective base branch: ticket → project → settings. When nothing overrides the setting and
+   * the repo has no branch of that name (a "master" repo under the default "main"), it falls back
+   * to the branch checked out in the main checkout, which is what the harness always used before
+   * base branches existed. An explicit ticket or project base branch is taken as given.
+   */
+  baseBranchFor(ticket: Ticket | null, project?: Project | null): { branch: string; source: BaseBranchSource | "checkout" } {
+    const p = project !== undefined ? project : ticket ? this.store.projects.get(ticket.projectId) : null;
+    const r = resolveBaseBranch(ticket, p, this.settings());
+    if (r.source !== "settings" || !p) return r;
+    const head = this.baseFallback.get(`${p.path}\u0000${r.branch}`);
+    return head ? { branch: head, source: "checkout" } : r;
+  }
+
+  /**
+   * baseBranchFor, after asking git whether the settings' branch exists in the project (cached
+   * for the sync callers). Called wherever a run is about to start or a worktree is made.
+   */
+  async refreshBaseBranch(ticket: Ticket | null, project?: Project | null): Promise<{ branch: string; source: BaseBranchSource | "checkout" }> {
+    const p = project !== undefined ? project : ticket ? this.store.projects.get(ticket.projectId) : null;
+    const r = resolveBaseBranch(ticket, p, this.settings());
+    // Only the inherited setting can fall back; a folder outside git has nothing to ask.
+    if (r.source === "settings" && p && p.isGit !== false) {
+      // Outside a repo branchExists fails and currentBranch gives null: no fallback.
+      const head = (await branchExists(p.path, r.branch)) ? null : await currentBranch(p.path);
+      const key = `${p.path}\u0000${r.branch}`;
+      if (head) this.baseFallback.set(key, head);
+      else this.baseFallback.delete(key);
+    }
+    return this.baseBranchFor(ticket, p);
+  }
+
+  /** What the prompts need to know about the ticket's branches. */
+  private branchContext(ticket: Ticket | null, project: Project | null): prompts.BranchContext {
+    const base = this.baseBranchFor(ticket, project);
+    const ownsWorktree = !ticket?.workdir || isInside(ticket.workdir, this.paths.worktreesDir);
+    let leftover: prompts.BranchContext["leftover"] = null;
+    if (ticket?.branch && ticket.workdir && !ownsWorktree) {
+      // update_branch moved the ticket out of its harness worktree and left that one in place.
+      const old = join(this.paths.worktreesDir, ticket.key);
+      if (existsSync(old)) leftover = { path: old, branch: branchForKey(ticket.key) };
+    }
+    return { base: base.branch, baseSource: base.source, ownsWorktree, worktreesDir: this.paths.worktreesDir, leftover };
+  }
+
+  private completePromptFor(t: Ticket, instructions?: string): string {
+    const project = this.store.projects.get(t.projectId) ?? null;
+    return prompts.completePrompt(t, instructions, this.branchContext(t, project), project);
+  }
+
+  /**
+   * update_branch: re-point the run's own ticket (work and conductor runs). A branch checked out
+   * in another worktree moves the ticket (workdir and session cwd) into that worktree; any other
+   * branch is switched to in the ticket's worktree (created at its HEAD when new). Nothing is
+   * ever deleted: the old worktree and branch stay for the human to clean up.
+   */
+  async updateBranch_(ctx: ToolContext, input: { branch?: string; baseBranch?: string | null }): Promise<string> {
+    const t = this.boardActor(ctx, "update_branch");
+    if (input.branch === undefined && input.baseBranch === undefined) throw new Error("Nothing to update: pass branch, base_branch, or both.");
+    const patch: TicketPatch = {};
+    const done: string[] = [];
+    if (input.baseBranch !== undefined) {
+      patch.baseBranch = this.asToolSync(() => validateBranchName("base_branch", input.baseBranch));
+    }
+    if (input.branch !== undefined) {
+      const branch = this.asToolSync(() => validateBranchName("branch", input.branch, false))!;
+      const workdir = t.workdir;
+      if (!t.branch || !workdir || !existsSync(workdir)) {
+        throw new Error(
+          workdir && existsSync(workdir)
+            ? `${t.key} runs in the project checkout at ${workdir}, not a worktree of its own, so update_branch has nothing to re-point. Switch branches there with git only if the ticket asks for it.`
+            : `${t.key} has no worktree right now, so there is nothing to re-point.`,
+        );
+      }
+      const from = t.branch;
+      if (branch === from) {
+        done.push(`${t.key} is already on ${branch} in ${workdir}; nothing changed.`);
+      } else {
+        const holder = await checkedOutElsewhere(workdir, branch, workdir);
+        const unmerged = await commitsNotIn(workdir, from, branch, (await this.refreshBaseBranch(t)).branch);
+        const pending =
+          unmerged > 0
+            ? ` ${unmerged} commit${unmerged === 1 ? "" : "s"} on ${from} ${unmerged === 1 ? "isn't" : "aren't"} on ${branch}: integrate ${unmerged === 1 ? "it" : "them"}${holder ? ` in ${holder.path} (git -C ${holder.path} cherry-pick or merge ${from})` : ` (git cherry-pick or git merge ${from})`} before you finish, since completion merges ${branch}, not ${from}.`
+            : "";
+        if (holder) {
+          patch.workdir = holder.path;
+          patch.branch = branch;
+          patch.requestedBranch = branch;
+          this.store.sessions.update(t.sessionId, { cwd: holder.path });
+          done.push(
+            `${t.key} now uses branch ${branch} in the worktree at ${holder.path}, where it is checked out. Your next run starts there; for the rest of this run, work in that directory (git -C ${holder.path}, absolute paths).${pending} The old worktree at ${workdir} and branch ${from} are left in place for cleanup; nothing was deleted.`,
+          );
+        } else {
+          const { created } = await this.asTool(() => switchBranch(workdir, branch));
+          patch.branch = branch;
+          patch.requestedBranch = branch;
+          done.push(
+            `Switched the worktree at ${workdir} from ${from} to ${created ? `a new branch ${branch} at ${from}'s commit` : branch}.${created ? "" : pending} Branch ${from} is left in place for cleanup; nothing was deleted.`,
+          );
+        }
+      }
+    }
+    const u = this.store.tickets.update(t.id, patch)!;
+    const base = await this.refreshBaseBranch(u);
+    if (patch.baseBranch !== undefined) {
+      done.push(`Base branch: ${base.branch} (${BASE_SOURCE_LABEL[base.source]}); the work merges into it when the ticket completes.`);
+    }
+    this.touchSession(u.sessionId);
+    this.appendStatus(u.sessionId, ctx.runId, `Branch updated: ${u.branch ?? "none"}, base ${base.branch}`);
+    return done.join("\n");
+  }
+
   /** The classifier for settings.classifier (or the injected one); null → "off". */
   private classifier(): Classifier | null {
     if (this.classifierOption !== undefined) return this.classifierOption;
@@ -2165,7 +2376,14 @@ export class Orchestrator {
         workdir = project.path;
         if ((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path))) {
           try {
-            ({ workdir, branch } = await ensureWorktree({ repo: project.path, worktreesDir: this.paths.worktreesDir, key: ticket.key }));
+            ({ workdir, branch } = await ensureWorktree({
+              repo: project.path,
+              worktreesDir: this.paths.worktreesDir,
+              key: ticket.key,
+              // A re-opened ticket whose worktree was removed gets its branch back.
+              branch: ticket.requestedBranch ?? ticket.branch,
+              base: (await this.refreshBaseBranch(ticket, project)).branch,
+            }));
           } catch (err) {
             const reason = `Could not create worktree: ${errMsg(err)}`;
             this.addSummary(ticket.sessionId, ticket.id, "system", reason);
@@ -2236,7 +2454,7 @@ export class Orchestrator {
       return;
     }
     this.appendStatus(t.sessionId, null, "Both reviews approved: completing automatically");
-    this.enqueueRun(t.sessionId, "complete", prompts.completePrompt(t));
+    this.track(this.enqueueComplete(t));
   }
 
   /**
@@ -2252,6 +2470,7 @@ export class Orchestrator {
 
   /** A complete run is queued or running for the ticket. */
   private completing(t: Ticket): boolean {
+    if (this.startingComplete.has(t.id)) return true;
     return this.queue.runningFor(t.sessionId)?.kind === "complete" || this.queue.pendingFor(t.sessionId).some((j) => j.kind === "complete");
   }
 
@@ -2436,11 +2655,21 @@ export class Orchestrator {
         const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
         const children = ticket ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
         const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
+        if (ticket) await this.refreshBaseBranch(ticket, project);
         const req: RunRequest = {
           runId: run.id,
           kind: run.kind,
           prompt,
-          systemPrompt: prompts.systemPrompt({ kind: run.kind, project, ticket, session, parent, children, builtinTools: driver.hasBuiltinTools }),
+          systemPrompt: prompts.systemPrompt({
+            kind: run.kind,
+            project,
+            ticket,
+            session,
+            parent,
+            children,
+            builtinTools: driver.hasBuiltinTools,
+            branches: ticket ? this.branchContext(ticket, project) : undefined,
+          }),
           cwd,
           model,
           permissionMode: run.kind === "chat" ? "read_only" : this.permissionModeFor(ticket, project),
@@ -2648,6 +2877,7 @@ export class Orchestrator {
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
       submitForReview: (c, s, a) => this.submitForReview(c, s, a),
+      updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),

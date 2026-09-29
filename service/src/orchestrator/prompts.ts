@@ -9,7 +9,22 @@
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
 import type { Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
+import { harnessBranch, plannedBranch, resolveBaseBranch } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
+
+/** What the prompts say about branches (DESIGN.md "Branches"); the orchestrator works it out. */
+export interface BranchContext {
+  /** The effective base branch: what the ticket's work merges into when it completes */
+  base: string;
+  /** Where it came from: "ticket", "project", "settings", or "checkout" (the setting's branch isn't in the repo) */
+  baseSource: string;
+  /** The ticket's worktree is inside the harness worktrees dir, so the harness created it and may remove it */
+  ownsWorktree: boolean;
+  /** The harness worktrees folder, named in the completion rules */
+  worktreesDir?: string;
+  /** An earlier harness worktree of this ticket left on disk after update_branch moved it elsewhere */
+  leftover?: { path: string; branch: string | null } | null;
+}
 
 export interface PromptInfo {
   kind: RunKind;
@@ -20,7 +35,22 @@ export interface PromptInfo {
   children?: Ticket[];
   /** The driver brings its own file tools (claude-code's Read/Edit/Write); false → harness native tools. Default true. */
   builtinTools?: boolean;
+  /** Base branch and worktree ownership. Omitted: resolved from the ticket and project alone, worktree owned. */
+  branches?: BranchContext;
 }
+
+function branchesOf(ticket: Ticket | null, project: Project | null, branches?: BranchContext): BranchContext {
+  if (branches) return branches;
+  const r = resolveBaseBranch(ticket, project, null);
+  return { base: r.branch, baseSource: r.source, ownsWorktree: true };
+}
+
+const BASE_SOURCE: Record<string, string> = {
+  ticket: "set on this ticket",
+  project: "the project's base branch",
+  settings: "the default from Settings",
+  checkout: "the branch checked out in the main checkout, since the Settings default isn't in this repository",
+};
 
 function quote(s: string): string {
   return `"${s.replace(/\s+/g, " ").trim()}"`;
@@ -122,8 +152,8 @@ const boardChanges = (kind: RunKind) =>
     `You can change other tickets the way a person does on the board. ${
       kind === "conductor"
         ? "Beyond creating, starting and messaging your children (above), you"
-        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, child?, driver?, model? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. When the human asks for child tickets of this one, pass child true: the child starts on its own once its depends_on are done, and this ticket becomes its conductor, so you review it with `review_ticket` and finalize it with `complete_ticket` once its agent review is approved. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
-    } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on? }, move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
+        : "`create_ticket` { title, description, project_key?, depends_on?, start?, auto_start?, conductor?, child?, driver?, model?, base_branch?, branch? } files a new top-level ticket (in planning unless start is true) for work you find that is outside this ticket, with a self-contained brief. When the human asks for child tickets of this one, pass child true: the child starts on its own once its depends_on are done, and this ticket becomes its conductor, so you review it with `review_ticket` and finalize it with `complete_ticket` once its agent review is approved. `start_ticket` { key } starts one, and `message_ticket` { key, text } writes to its agent as a human would, for example to answer its question. You"
+    } can edit a card with \`update_ticket\` { key, title?, description?, driver?, model?, permission_mode?, depends_on?, base_branch?, branch? } (base_branch: what its work merges into; branch: the branch its worktree uses, only before it has one, since after that its own agent moves it with update_branch), move or reorder it with \`move_ticket\` { key, status, position? }, stop its agent with \`cancel_ticket\` { key }, and send a done ticket back with \`reopen_ticket\` { key, notes }.
 Limits, enforced by the harness: these never act on your own ticket (${kind === "work" ? "use block and submit_for_review" : "use submit_for_review"}). Tool approvals are a human's to answer, so a ticket waiting on one can't be messaged or moved. Nothing moves a ticket into or out of review: its own agent submits it and its reviewers decide (for your children, that's you with review_ticket and complete_ticket). Only a ticket still in planning can be moved straight to done. Permission modes can be made stricter, never looser: tickets you create run no looser than your own ticket, and you can't edit, message, start, re-open or move into a run a ticket whose mode is looser than yours (except to tighten its permission mode). Change another ticket only when your task calls for it, and say what you changed in your summary.`,
   );
 
@@ -174,11 +204,19 @@ function contextSection(info: PromptInfo): string {
   }
   lines.push(`Working directory: ${ticket?.workdir ?? session.cwd ?? project?.path ?? "(unknown)"}`);
   if (ticket) {
-    lines.push(
-      ticket.branch
-        ? `Git branch: ${ticket.branch} (a worktree dedicated to this ticket)`
-        : "Git branch: none (you are in the project checkout itself, not a dedicated worktree)",
-    );
+    const b = branchesOf(ticket, project, info.branches);
+    if (ticket.branch) {
+      lines.push(
+        b.ownsWorktree
+          ? `Git branch: ${ticket.branch} (a worktree dedicated to this ticket)`
+          : `Git branch: ${ticket.branch} (a worktree outside the harness that has this branch checked out; other tools and people may use it too)`,
+      );
+    } else if (!ticket.workdir && project?.isGit !== false && (ticket.useWorktree ?? project?.useWorktrees ?? true)) {
+      lines.push(`Git branch: ${plannedBranch(ticket)} once work starts (in a worktree dedicated to this ticket)`);
+    } else {
+      lines.push("Git branch: none (you are in the project checkout itself, not a dedicated worktree)");
+    }
+    if (project?.isGit !== false) lines.push(`Base branch: ${b.base} (${BASE_SOURCE[b.baseSource] ?? b.baseSource}); the work merges into it when the ticket completes`);
     if (ticket.dependsOn.length) lines.push(`Depends on: ${ticket.dependsOn.join(", ")}`);
     if (ticket.externalRef) {
       lines.push(`Mirrors external item: ${ticket.externalRef.key} from ${ticket.externalRef.source}${ticket.externalRef.url ? ` (${ticket.externalRef.url})` : ""}`);
@@ -199,9 +237,23 @@ When the human replies with feedback, revise and call \`update_plan\` again. Put
   );
 }
 
+/**
+ * update_branch (tools/ticket.ts): how an agent moves its ticket to another branch when the human
+ * asks, or changes what it merges into. Work and conductor runs of a ticket with a worktree.
+ */
+function branchSection(ticket: Ticket, b: BranchContext): string {
+  return section(
+    "Branches",
+    `This ticket's work is on \`${ticket.branch}\` and merges into \`${b.base}\` when the ticket completes. When the human asks for the work to live on another branch ("update the branch for this ticket to X"), move it with \`update_branch\` { branch }:
+* When X is checked out in another worktree (\`git worktree list\` shows where), the ticket moves into that worktree from your next run. Integrate your commits there first, working in that worktree with \`git -C <its path>\`: \`cherry-pick\` the commits of \`${ticket.branch}\` that aren't on \`${b.base}\`, or \`merge ${ticket.branch}\`. Then call \`update_branch\` and do the rest of this run's work in that worktree.
+* Otherwise it switches this worktree to X (creating X at your current commit when it doesn't exist). Commit your work first: git refuses to switch with uncommitted changes in the way.
+\`update_branch\` { base_branch } changes the branch the work merges into when the ticket completes. Neither ever deletes a branch or a worktree; don't delete them yourself either, the old ones are left for the human to clean up.`,
+  );
+}
+
 function workInstructions(ticket: Ticket | null): string {
   const git = ticket?.branch
-    ? `You are in a git worktree dedicated to this ticket, on branch \`${ticket.branch}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the merge happens when the ticket is completed.`
+    ? `You are in a git worktree dedicated to this ticket, on branch \`${ticket.branch}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the merge happens when the ticket is completed. To move the work to another branch, use \`update_branch\` (see Branches).`
     : `You are working directly in the project checkout, not a dedicated worktree. Do not commit, switch branches or push unless the ticket asks for it.`;
   return section(
     "This run: work",
@@ -216,10 +268,12 @@ Use \`post_summary\` for progress on long work. When a reviewer requests changes
   );
 }
 
-function reviewInstructions(ticket: Ticket | null): string {
-  const inspect = ticket?.branch
-    ? `Inspect the actual changes on branch \`${ticket.branch}\`: \`git log\` and \`git diff\` against the commit it branched from (\`git merge-base HEAD <base branch>\`), plus any uncommitted changes.`
-    : `Inspect the actual changes: \`git status\` and \`git diff\` in the working directory, and the files the summaries mention.`;
+function reviewInstructions(ticket: Ticket | null, b: BranchContext): string {
+  const inspect = !ticket?.branch
+    ? `Inspect the actual changes: \`git status\` and \`git diff\` in the working directory, and the files the summaries mention.`
+    : ticket.branch === b.base
+      ? `Inspect the actual changes: the work was committed straight onto the base branch \`${b.base}\`, so read \`git log\` for the commits the summaries describe and \`git show\` them, plus \`git status\` and \`git diff\` for uncommitted changes.`
+      : `Inspect the actual changes on branch \`${ticket.branch}\`: \`git log\` and \`git diff\` against the commit it branched from (\`git merge-base HEAD ${b.base}\`), plus any uncommitted changes.`;
   return section(
     "This run: review",
     `You are an independent reviewer. Another agent did this work and you start with none of its context. Judge the result against the brief, not against the author's summaries, which are claims to verify.
@@ -259,16 +313,52 @@ If they ask for a change or approve something (revise the plan, do the work, go 
   );
 }
 
-function completeInstructions(project: Project | null, ticket: Ticket | null): string {
+/** The clean-up half of a completion: only what the harness created is removed. */
+function cleanupSteps(ticket: Ticket & { branch: string }, b: BranchContext, main: string): [worktree: string, branch: string] {
+  const wt = ticket.workdir ?? "<worktree path>";
+  const steps: [string, string] = [
+    b.ownsWorktree
+      ? `remove the worktree (\`git -C ${main} worktree remove ${wt}\`)`
+      : `leave the worktree at ${wt} in place: the harness didn't create it`,
+    ticket.branch === b.base
+      ? `keep \`${ticket.branch}\`: it is the base branch`
+      : ticket.branch === harnessBranch(ticket.key)
+        ? `delete the merged branch (\`git -C ${main} branch -d ${ticket.branch}\`)`
+        : `keep \`${ticket.branch}\`: the harness didn't create it, so it isn't yours to delete`,
+  ];
+  return steps;
+}
+
+function completeInstructions(project: Project | null, ticket: Ticket | null, b: BranchContext): string {
   const main = project?.path ?? "the main project checkout";
-  const body = ticket?.branch
-    ? `The ticket was approved. Finalize it:
-1. In the worktree (${ticket.workdir ?? "the working directory"}), make sure there are no uncommitted changes; commit any that belong to the work to \`${ticket.branch}\`.
-2. From the main project checkout at ${main} (run \`git -C ${main} ...\` or cd there, not in the worktree), merge \`${ticket.branch}\` into the base branch checked out there (usually main).
-3. Resolve trivial conflicts yourself (lockfiles, formatting, adjacent edits). If a conflict needs a real decision, run \`git merge --abort\`, leave both branches as they were, and say so.
-4. After a successful merge, remove the worktree (\`git -C ${main} worktree remove ${ticket.workdir ?? "<worktree path>"}\`) and delete the merged branch (\`git -C ${main} branch -d ${ticket.branch}\`).
-Do not push unless the instructions ask for it.`
-    : `The ticket was approved. There is no ticket branch or worktree to merge. Do the wrap-up the instructions ask for (for example committing or cleaning up), and nothing more.`;
+  let body: string;
+  if (ticket?.branch) {
+    const t = ticket as Ticket & { branch: string };
+    const [worktreeStep, branchStep] = cleanupSteps(t, b, main);
+    const merge =
+      t.branch === b.base
+        ? [`2. \`${t.branch}\` is the base branch itself, so there is nothing to merge: the work is already on it.`]
+        : [
+            `2. Merge \`${t.branch}\` into the base branch \`${b.base}\`, working from wherever \`${b.base}\` is checked out, never in the ticket's worktree. Find it with \`git -C ${main} worktree list\`:
+   * \`${b.base}\` is checked out in a worktree (the main checkout at ${main}, or another one): merge there with \`git -C <that path> merge ${t.branch}\`.
+   * \`${b.base}\` isn't checked out anywhere: when it can fast-forward, update it without a checkout: \`git -C ${main} fetch . ${t.branch}:${b.base}\`. Otherwise add a temporary worktree (\`git -C ${main} worktree add <temporary folder> ${b.base}\`), merge there, and remove that temporary worktree afterwards.`,
+            `3. Resolve trivial conflicts yourself (lockfiles, formatting, adjacent edits). If a conflict needs a real decision, run \`git merge --abort\`, leave both branches as they were, and say so.`,
+          ];
+    const after = t.branch === b.base ? "Then" : "After a successful merge";
+    const leftover = b.leftover
+      ? `An earlier harness worktree of this ticket is still at ${b.leftover.path}${b.leftover.branch ? ` (branch \`${b.leftover.branch}\`)` : ""}, left behind when the ticket moved to \`${t.branch}\`. If its commits are all in \`${b.base}\`, remove it (\`git -C ${main} worktree remove ${b.leftover.path}\`${b.leftover.branch === harnessBranch(t.key) ? ` and \`git -C ${main} branch -d ${b.leftover.branch}\`, which refuses unmerged work` : ""}); otherwise leave it and say so.`
+      : null;
+    body = join(
+      `The ticket was approved. Finalize it:
+1. In the worktree (${t.workdir ?? "the working directory"}), make sure there are no uncommitted changes; commit any that belong to the work to \`${t.branch}\`.
+${merge.join("\n")}
+${merge.length + 2}. ${after}, ${worktreeStep}, and ${branchStep}.`,
+      leftover ?? "",
+      `Never delete a branch the harness didn't create (only \`${harnessBranch(t.key)}\` is the harness's), and never remove a worktree outside the harness worktrees folder${b.worktreesDir ? ` (${b.worktreesDir})` : ""}. Do not push unless the instructions ask for it.`,
+    );
+  } else {
+    body = `The ticket was approved. There is no ticket branch or worktree to merge. Do the wrap-up the instructions ask for (for example committing or cleaning up), and nothing more.`;
+  }
   return section(
     "This run: completion",
     `${body}
@@ -292,12 +382,12 @@ function conductorInstructions(children: Ticket[]): string {
     `You conduct this ticket: you do not write the code yourself. You break the goal into child tickets that other agents work on in parallel, then steer them to done.
 Planning the breakdown (first run, no children yet):
 1. Understand the goal; investigate the codebase read-only as needed.
-2. Create each child with \`create_ticket\` { title, description, depends_on?, auto_start? }. The child agent sees only its description, so make it self-contained: the goal, relevant files and context, constraints, and the definition of done.
+2. Create each child with \`create_ticket\` { title, description, depends_on?, auto_start?, base_branch?, branch? }. The child agent sees only its description, so make it self-contained: the goal, relevant files and context, constraints, and the definition of done.
 3. Prefer small, well-scoped tickets that can run in parallel. Add \`depends_on\` only for real ordering needs, listing keys returned by your earlier \`create_ticket\` calls (so create dependencies first). Children start automatically once all their dependencies are done, immediately if they have none. Pass \`auto_start\` false to hold one back, and start it later with \`start_ticket\`.
 4. Call \`post_summary\` with the breakdown, then end the run.
 Steering (later runs): you are re-invoked with a message whenever children change status. Handle every change, then end the run; do not wait or poll.
 * Child in review: a reviewer agent checks it first. Once its agent review is approved, you are its human reviewer: inspect it (\`get_ticket\`, the code) and call \`review_ticket\` { key, decision: "approve" | "request_changes", notes } with concrete notes.
-* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. Put everything the merge needs (such as a target branch other than main) in \`instructions\` up front: the complete run merges and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. The complete run merges the child into its base branch: when it belongs on a different branch than that, set it with \`update_ticket\` { key, base_branch } first (or pass \`base_branch\` to \`create_ticket\` up front). Put anything else the merge needs in \`instructions\` up front: the complete run merges and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
 * Child blocked: answer its question with \`message_ticket\` { key, text } when you can. When only the human can answer, say so in \`post_summary\`.
 * Use \`list_tickets\` and \`get_ticket\` to check state, and \`create_ticket\` for follow-up work you discover.
 When every child is done and the goal is met, call \`submit_for_review\` { summary } with the overall result. Never call it earlier.
@@ -357,10 +447,10 @@ export function systemPrompt(info: PromptInfo): string {
       instructions = workInstructions(info.ticket);
       break;
     case "review":
-      instructions = reviewInstructions(info.ticket);
+      instructions = reviewInstructions(info.ticket, branchesOf(info.ticket, info.project, info.branches));
       break;
     case "complete":
-      instructions = completeInstructions(info.project, info.ticket);
+      instructions = completeInstructions(info.project, info.ticket, branchesOf(info.ticket, info.project, info.branches));
       break;
     case "conductor":
       instructions = conductorInstructions(info.children ?? []);
@@ -378,6 +468,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && LIFECYCLE,
     instructions,
     kind === "work" && !!info.children?.length && childrenSection(info.children),
+    (kind === "work" || kind === "conductor") && !!info.ticket?.branch && branchSection(info.ticket, branchesOf(info.ticket, info.project, info.branches)),
     ticketRun && filesSection(kind, info.builtinTools ?? true),
     ticketRun && summariesSection(kind, browser),
     BOARD,
@@ -426,10 +517,19 @@ export function reviewPrompt(ticket: Ticket, summaries: Summary[], attachmentPat
   );
 }
 
-export function completePrompt(ticket: Ticket, instructions?: string): string {
-  const task = ticket.branch
-    ? `Merge branch \`${ticket.branch}\` into the base branch from the main project checkout (not the worktree), resolve trivial conflicts, then remove the worktree${ticket.workdir ? ` at ${ticket.workdir}` : ""} and delete the merged branch.`
-    : "There is no ticket branch or worktree to merge. Do the wrap-up in the instructions below; if there are none, confirm the working tree is in a sensible state and stop.";
+export function completePrompt(ticket: Ticket, instructions?: string, branches?: BranchContext, project: Project | null = null): string {
+  let task: string;
+  if (ticket.branch) {
+    const b = branchesOf(ticket, project, branches);
+    const [worktreeStep, branchStep] = cleanupSteps(ticket as Ticket & { branch: string }, b, project?.path ?? "<main checkout>");
+    const clean = `${worktreeStep.replace(/ \(`.*`\)$/, "")}, and ${branchStep.replace(/ \(`.*`\)$/, "")}`;
+    task =
+      ticket.branch === b.base
+        ? `Branch \`${ticket.branch}\` is the base branch itself, so there is nothing to merge: commit anything left over in the worktree, then ${clean}.`
+        : `Merge branch \`${ticket.branch}\` into the base branch \`${b.base}\` from wherever \`${b.base}\` is checked out (not the ticket's worktree${ticket.workdir ? ` at ${ticket.workdir}` : ""}), resolve trivial conflicts, then ${clean}.`;
+  } else {
+    task = "There is no ticket branch or worktree to merge. Do the wrap-up in the instructions below; if there are none, confirm the working tree is in a sensible state and stop.";
+  }
   return join(
     `${ticketLabel(ticket)} is approved. Finalize it.`,
     task,
@@ -469,9 +569,9 @@ export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "c
 }
 
 /** A done ticket sent back to in progress by the human. */
-export function reopenPrompt(ticket: Ticket, notes: string): string {
+export function reopenPrompt(ticket: Ticket, notes: string, base?: string): string {
   const where = ticket.branch
-    ? `The earlier work was probably merged when the ticket was completed, and the worktree may have been recreated on \`${ticket.branch}\` from the current base branch. Check \`git log\` to see what is already there before you change anything.`
+    ? `The earlier work was probably merged into ${base ? `\`${base}\`` : "the base branch"} when the ticket was completed, and the worktree may have been recreated on \`${ticket.branch}\`${ticket.branch === harnessBranch(ticket.key) ? ` from ${base ? `\`${base}\`` : "the base branch"}` : ""}. Check \`git log\` to see what is already there before you change anything.`
     : "Check the current state of the working tree before you change anything; the earlier work is already in it.";
   return join(
     `${ticketLabel(ticket)} was done, and the human has re-opened it.`,

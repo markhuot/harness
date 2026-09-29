@@ -170,6 +170,8 @@ export function ticketView(t: Ticket) {
     busy: t.busy,
     blockedReason: t.blockedReason,
     branch: t.branch,
+    requestedBranch: t.requestedBranch ?? null,
+    baseBranch: t.baseBranch ?? null,
   };
 }
 

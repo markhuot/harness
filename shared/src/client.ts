@@ -14,6 +14,7 @@ import type {
   MessageBody,
   ReopenBody,
   ApprovalBody,
+  BranchInfo,
   Project,
   Subagent,
   PublicSettings,
@@ -110,6 +111,10 @@ export class HarnessClient {
   /** Files and folders in the project folder matching `q`, for @-mentions in a new session. */
   projectFiles(id: string, q: string, limit?: number) {
     return this.request<FileMatch[]>("GET", `/projects/${id}/files${query({ q, limit })}`);
+  }
+  /** The project's local branches (most recent first) matching `q`, for the new-session branch picker. */
+  projectBranches(id: string, q?: string, limit?: number) {
+    return this.request<BranchInfo[]>("GET", `/projects/${id}/branches${query({ q: q || undefined, limit })}`);
   }
 
   // Tickets

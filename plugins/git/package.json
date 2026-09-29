@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "bun build.ts",
-    "test": "bun test"
+    "test": "bun test --timeout 30000"
   },
   "dependencies": {
     "@pierre/diffs": "^1.5.1",

@@ -41,7 +41,7 @@ export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string
 export const getTicket = defineTool<{ key: string; include_transcript?: number }>({
   name: "get_ticket",
   description:
-    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
+    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
@@ -60,6 +60,9 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
       children: d.children,
       driver: t.driver,
       model: t.model,
+      // baseBranch is the ticket's own override (null inherits); this is what it merges into.
+      effectiveBaseBranch: d.base.branch,
+      baseBranchSource: d.base.source,
       summaries: d.summaries,
       ...(d.transcript ? { transcript: d.transcript } : {}),
     });
@@ -93,7 +96,7 @@ export const searchTickets = defineTool<{ query: string; project_key?: string; l
 export const listProjects = defineTool<Record<string, never>>({
   name: "list_projects",
   description:
-    "List the local projects with their ticket key prefix, name, directory and settings (default driver and models, worktrees, human review, auto-complete, permission mode; null means the settings default).",
+    "List the local projects with their ticket key prefix, name, directory and settings (default driver and models, worktrees, human review, auto-complete, permission mode, base branch; null means the settings default).",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const projects = await ctx.ops.listProjects(ctx);

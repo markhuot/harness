@@ -110,12 +110,54 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Both approved | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
 | `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately. While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on `harness/<key>` first, from the base branch when the branch was deleted |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
 Review runs start from a **fresh** driver conversation (independent reviewer) and never
 write driver state back to the session. All other ticket runs resume the session's state.
+
+### Branches
+
+**Base branch** is what a ticket's work merges into when it completes, and where a new ticket
+branch starts. It resolves ticket → project → settings (`resolveBaseBranch` in
+`shared/src/branches.ts`; `Ticket.baseBranch`, `Project.baseBranch`, `Settings.baseBranch`,
+default `"main"`); null or `""` inherits. Every value must pass `git check-ref-format --branch`
+rules (`branchNameError`), or the request gets a 400. One fallback keeps older setups working:
+when nothing overrides the setting and the repo has no branch of that name (a `master` repo under
+the default `main`), the base is the branch checked out in the main checkout, which is what the
+harness always used before base branches (`Orchestrator.baseBranchFor`, source `"checkout"`). An
+explicit ticket or project base is taken as given.
+
+**Ticket branch.** `Ticket.requestedBranch` is the branch chosen for the ticket
+(`CreateTicketBody.branch`, `create_ticket`/`update_ticket` `branch`, `update_branch`); null means
+`harness/<key>`. `Ticket.branch` is the branch its worktree has checked out, set once the worktree
+exists: branch set ⇔ the ticket works in a git worktree of its own at `workdir`. `begin()` makes the
+worktree at `worktrees/<KEY>`: an existing branch is checked out as is, a new one is created from
+the base branch (`git worktree add -b <branch> <dir> <base>`). It blocks with "Could not create
+worktree: …" naming the branch and path when the branch is already checked out in another
+worktree, or naming the base when the base branch doesn't exist. `requestedBranch` can change
+(HTTP, `update_ticket`) only while the ticket has no worktree on disk. `plannedBranch(ticket)` is
+what clients show: the branch it uses, or will use. `GET /projects/:id/branches?q=&limit=`
+(`BranchInfo[]`: name, lastCommitAt, checkedOutAt) feeds the new-session branch picker.
+
+**Re-pointing** is the ticket's own agent's job (`update_branch`, work and conductor runs): a
+human tells it "use branch X for this ticket". When X is checked out in another worktree (a herdr
+worktree, say), `ticket.workdir` and the session cwd move there; the agent integrates its commits
+there first (cherry-pick or merge, with `git -C`), and the result counts commits still missing.
+Otherwise the ticket's worktree switches to X (`git switch`, `-c` at HEAD for a new name; git's
+refusal on a dirty tree comes back as the tool error). Nothing is deleted: the old harness worktree
+and branch stay for the human. claude-code resumes a session only from the directory it started
+in, so the driver copies the session transcript under the new workdir's project folder before
+`--resume` (`carrySession`); a session it can't find starts fresh as before.
+
+**Completion** (`completeInstructions` / `completePrompt`) merges the ticket branch into the base
+branch by name, from wherever the base is checked out (`git worktree list`): merge there when a
+worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a
+temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what
+the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is
+`harness/<key>`. A harness worktree left behind by `update_branch` is removed only once its commits
+are merged.
 
 Runs are serialized per session and limited globally by `settings.maxConcurrentRuns` (default 4).
 `ticket.busy` / `session.busy` is true while a run is queued or running.
@@ -214,11 +256,12 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work | `{ question }` |
 | `submit_for_review` | work, conductor | `{ summary, attachments?: string[] }` |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree? }`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`) |
+| `update_branch` | work, conductor | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -236,10 +279,10 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
-| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen? }` |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch? }` |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
@@ -359,8 +402,9 @@ client state, not service state.
 | Area | In the apps | Agent tool | Left out, and why |
 | --- | --- | --- | --- |
 | Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
-| Board | create a ticket (task or conductor, driver, model, permission mode, start or plan) | `create_ticket` | |
-| Board | edit title, brief, dependencies, driver, model, permission mode | `update_ticket` | permission modes only tighten |
+| Board | create a ticket (task or conductor, driver, model, permission mode, start or plan, branch picked from the project's branches, base branch) | `create_ticket` (`branch`, `base_branch`) | the branch list itself (`GET /projects/:id/branches`) has no tool: agents run `git branch` |
+| Board | edit title, brief, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree) | `update_ticket` | permission modes only tighten |
+| Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
@@ -369,8 +413,8 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, human review, auto-complete, color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
-| Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode | `update_settings` (gated), `get_settings` | |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, auto-complete, color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
 | Drivers | list drivers and models, refresh models | `list_drivers` | |
@@ -697,6 +741,7 @@ GET    /health                   → { ok, version, pid, build, stale } (see "Se
 POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
+GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
@@ -991,7 +1036,7 @@ by plugin id:
 | --- | --- |
 | `always` | every ticket |
 | `workdir` | `ticket.workdir` is set, exists, and `git rev-parse --is-inside-work-tree` is true there |
-| `worktree` | `ticket.branch` is set and `ticket.workdir` exists (a harness worktree) |
+| `worktree` | `ticket.branch` is set and `ticket.workdir` exists (the ticket's own worktree: a harness one, or the one `update_branch` moved it to) |
 
 When a tab's `when` doesn't hold and its plugin defines `showTab({ id, ticket, project }, ctx)`, the
 tab is offered if that returns `true` (a throw is logged and counts as `false`). The git plugin uses
@@ -1056,7 +1101,8 @@ Tab **Changes** (`when: "workdir"`, kept by `showTab` while a pin exists). Route
   with `status` ∈ `added | modified | deleted | renamed | untracked`.
   - **branch mode** (ticket has a branch): the diff runs from `merge-base(base, HEAD)` to the worktree
     **as it is on disk**, so committed, staged, unstaged and untracked (not ignored) changes all show.
-    `base` is the branch checked out at the project path, falling back to `main`/`master`.
+    `base` is the ticket's or project's `baseBranch` override when the repo has it, else the branch
+    checked out at the project path, falling back to `main`/`master`.
   - **workdir mode** (no branch): uncommitted + untracked changes against `HEAD` (or the empty tree in
     a repo without commits).
   - **pinned mode** (ticket has a branch, its workdir is gone): the diff saved while the worktree

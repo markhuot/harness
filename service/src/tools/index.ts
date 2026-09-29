@@ -9,7 +9,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
-import { block, postSummary, reviewDecision, submitForReview, updatePlan } from "./ticket";
+import { block, postSummary, reviewDecision, submitForReview, updateBranch, updatePlan } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -39,6 +39,7 @@ export const allTools: ToolDefinition[] = [
   updatePlan,
   block,
   submitForReview,
+  updateBranch,
   reviewDecision,
   ...boardTools,
   ...boardWriteTools,
@@ -66,11 +67,11 @@ export const allTools: ToolDefinition[] = [
  */
 const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
+  work: { harness: [postSummary, block, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
   review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postSummary, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postSummary, submitForReview, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postSummary, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },

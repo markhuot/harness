@@ -113,7 +113,7 @@ const session: Session = {
   updatedAt: 0,
 };
 
-const worktree = { branch: "harness/NYT-3", workdir: "/Users/me/.harness/worktrees/NYT-3" };
+const worktree = { branch: "harness/nyt-3", workdir: "/Users/me/.harness/worktrees/NYT-3" };
 
 function sys(kind: RunKind, t: Ticket | null = ticket(), extra: Partial<Parameters<typeof systemPrompt>[0]> = {}) {
   return systemPrompt({ kind, project, ticket: t, session, ...extra });
@@ -175,7 +175,7 @@ describe("systemPrompt context and kind-specific rules", () => {
   test("work in a worktree commits on the ticket branch", () => {
     const text = sys("work", ticket(worktree));
     expect(text).toContain("Commit your work to this branch");
-    expect(text).toContain("`harness/NYT-3`");
+    expect(text).toContain("`harness/nyt-3`");
   });
 
   test("work without a worktree does not commit by default", () => {
@@ -210,14 +210,90 @@ describe("systemPrompt context and kind-specific rules", () => {
     const text = sys("review", ticket(worktree));
     expect(text).toContain("`review_decision` exactly once");
     expect(text).toContain("Do not modify files");
-    expect(text).toContain("`harness/NYT-3`");
+    expect(text).toContain("`harness/nyt-3`");
   });
 
-  test("complete with a branch merges from the main checkout and removes the worktree", () => {
-    const text = sys("complete", ticket(worktree));
-    expect(text).toContain(`main project checkout at ${project.path}`);
+  test("complete with a harness branch merges into the base branch by name, then removes the worktree and the branch", () => {
+    const text = sys("complete", ticket(worktree), { branches: { base: "develop", baseSource: "project", ownsWorktree: true } });
+    expect(text).toContain("Merge `harness/nyt-3` into the base branch `develop`");
+    expect(text).toContain(`git -C ${project.path} worktree list`);
+    // develop not checked out anywhere: fast-forward without a checkout, or a temporary worktree.
+    expect(text).toContain(`git -C ${project.path} fetch . harness/nyt-3:develop`);
+    expect(text).toContain(`worktree add <temporary folder> develop`);
     expect(text).toContain(`worktree remove ${worktree.workdir}`);
-    expect(text).toContain("branch -d harness/NYT-3");
+    expect(text).toContain("branch -d harness/nyt-3");
+    expect(text).not.toContain("usually main");
+  });
+
+  test("complete on a branch the harness didn't create never deletes it", () => {
+    const text = sys("complete", ticket({ ...worktree, branch: "medl-1223-ai-app" }), { branches: { base: "main", baseSource: "settings", ownsWorktree: true } });
+    expect(text).toContain("Merge `medl-1223-ai-app` into the base branch `main`");
+    expect(text).not.toContain("branch -d medl-1223-ai-app");
+    expect(text).toContain("keep `medl-1223-ai-app`: the harness didn't create it");
+    const run = completePrompt(ticket({ ...worktree, branch: "medl-1223-ai-app" }), undefined, { base: "main", baseSource: "settings", ownsWorktree: true }, project);
+    expect(run).toContain("keep `medl-1223-ai-app`: the harness didn't create it");
+    expect(run).not.toContain("delete the merged branch");
+  });
+
+  test("complete in a worktree outside the harness leaves the worktree, and cleans up the harness one it left behind", () => {
+    const herdr = "/Users/me/herdr/medl";
+    const t = ticket({ branch: "medl-1223-ai-app", workdir: herdr });
+    const text = sys("complete", t, {
+      branches: { base: "main", baseSource: "settings", ownsWorktree: false, worktreesDir: "/Users/me/.harness/worktrees", leftover: { path: worktree.workdir, branch: "harness/nyt-3" } },
+    });
+    expect(text).not.toContain(`worktree remove ${herdr}`);
+    expect(text).toContain(`leave the worktree at ${herdr} in place`);
+    expect(text).toContain(`never remove a worktree outside the harness worktrees folder (/Users/me/.harness/worktrees)`);
+    // The leftover harness worktree is the harness's: removable once its commits are merged.
+    expect(text).toContain(`worktree remove ${worktree.workdir}`);
+    expect(text).toContain("branch -d harness/nyt-3");
+    expect(text).toContain("Git branch: medl-1223-ai-app (a worktree outside the harness");
+  });
+
+  test("complete when the ticket branch is the base branch has nothing to merge", () => {
+    const t = ticket({ ...worktree, branch: "develop" });
+    const b = { base: "develop", baseSource: "ticket", ownsWorktree: true };
+    const text = sys("complete", t, { branches: b });
+    expect(text).toContain("`develop` is the base branch itself, so there is nothing to merge");
+    expect(text).not.toContain("merge develop");
+    expect(text).not.toContain("fetch .");
+    expect(text).not.toContain("branch -d develop");
+    expect(text).toContain("keep `develop`: it is the base branch");
+    const run = completePrompt(t, undefined, b, project);
+    expect(run).toContain("nothing to merge");
+    expect(run).not.toContain("Merge branch");
+  });
+
+  test("context names the base branch and where it came from; review diffs against it by name", () => {
+    const text = sys("work", ticket(worktree), { branches: { base: "develop", baseSource: "project", ownsWorktree: true } });
+    expect(text).toContain("Base branch: develop (the project's base branch)");
+    const review = sys("review", ticket(worktree), { branches: { base: "develop", baseSource: "project", ownsWorktree: true } });
+    expect(review).toContain("`git merge-base HEAD develop`");
+    expect(review).not.toContain("<base branch>");
+    // Without branch info, a ticket override still wins over the default.
+    expect(sys("review", ticket({ ...worktree, baseBranch: "release" }))).toContain("`git merge-base HEAD release`");
+    expect(sys("review", ticket({ ...worktree, branch: "release" }), { branches: { base: "release", baseSource: "ticket", ownsWorktree: true } })).toContain("straight onto the base branch `release`");
+  });
+
+  test("a ticket that hasn't started names the branch it will get", () => {
+    expect(sys("plan", ticket({ status: "planning", requestedBranch: "medl-1223-ai-app" }))).toContain("Git branch: medl-1223-ai-app once work starts");
+    expect(sys("plan", ticket({ status: "planning" }))).toContain("Git branch: harness/nyt-3 once work starts");
+    expect(sys("plan", ticket({ status: "planning", useWorktree: false }))).toContain("Git branch: none");
+  });
+
+  test("work and conductor runs with a worktree learn update_branch; runs without one don't", () => {
+    const text = sys("work", ticket(worktree));
+    expect(text).toContain("`update_branch` { branch }");
+    expect(text).toContain("cherry-pick");
+    expect(sys("conductor", ticket({ ...worktree, kind: "conductor" }))).toContain("`update_branch`");
+    expect(sys("work", ticket({ workdir: project.path }))).not.toContain("## Branches");
+    expect(sys("complete", ticket(worktree))).not.toContain("update_branch");
+  });
+
+  test("conductors point merges into another branch at base_branch", () => {
+    const text = sys("conductor", ticket({ kind: "conductor" }));
+    expect(text).toContain("`update_ticket` { key, base_branch }");
+    expect(text).not.toContain("target branch other than main");
   });
 
   test("complete without a branch has nothing to merge", () => {
@@ -397,7 +473,7 @@ describe("run prompts", () => {
 
   test("completePrompt is branch-dependent and includes instructions", () => {
     const withBranch = completePrompt(ticket(worktree), "Merge into develop and push");
-    expect(withBranch).toContain("Merge branch `harness/NYT-3`");
+    expect(withBranch).toContain("Merge branch `harness/nyt-3`");
     expect(withBranch).toContain(worktree.workdir);
     expect(withBranch).toContain("Merge into develop and push");
     const without = completePrompt(ticket());

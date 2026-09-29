@@ -1,10 +1,10 @@
 import { toolsForRun } from "../tools/index";
 import { describe, expect, test } from "bun:test";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
-import { buildClaudeArgs, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
+import { buildClaudeArgs, carrySession, claudeProjectDir, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
 import type { DriverEvent, RunRequest } from "./types";
 import { tempDir } from "@harness/shared/testing";
 
@@ -63,6 +63,8 @@ function setup(
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
+    // Never touch the real ~/.claude (carrySession reads and writes the session store).
+    CLAUDE_CONFIG_DIR: join(dir, "claude-config"),
     FAKE_CLAUDE_RECORD: record,
     FAKE_CLAUDE_SCRIPT: scriptPath,
     ...opts.env,
@@ -516,6 +518,38 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(argValue(s.invocations()[0]!.argv, "--resume")).toBe("old-sess");
     expect(events[0]).toEqual({ type: "state", state: { sessionId: "old-sess", costUsd: 0.01 } });
     expect((events.find((e) => e.type === "usage") as { costUsd: number }).costUsd).toBeCloseTo(0.0023, 10);
+  });
+
+  test("a session started in another workdir is copied under the new one before --resume (update_branch moved the ticket)", async () => {
+    const s = setup({ script: [{ __echo_session: true }, success({ session_id: "sess-1" })] });
+    const config = join(s.dir, "claude-config");
+    const oldDir = claudeProjectDir(config, "/Users/me/.harness/worktrees/MEDL-1");
+    mkdirSync(join(oldDir, "sess-1", "subagents"), { recursive: true });
+    writeFileSync(join(oldDir, "sess-1.jsonl"), '{"type":"user"}\n');
+    writeFileSync(join(oldDir, "sess-1", "subagents", "a.jsonl"), "{}\n");
+    const cwd = tmp();
+    const { error } = await collect(s.driver.run(request({ cwd, state: { sessionId: "sess-1" } })));
+    expect(error).toBeNull();
+    expect(argValue(s.invocations()[0]!.argv, "--resume")).toBe("sess-1");
+    const newDir = claudeProjectDir(config, realpathSync(cwd));
+    expect(readFileSync(join(newDir, "sess-1.jsonl"), "utf8")).toBe('{"type":"user"}\n');
+    expect(existsSync(join(newDir, "sess-1", "subagents", "a.jsonl"))).toBe(true);
+    // Copied, not moved.
+    expect(existsSync(join(oldDir, "sess-1.jsonl"))).toBe(true);
+  });
+
+  test("carrySession: nothing to copy when the session is already under the workdir or can't be found", () => {
+    const config = join(tmp(), "cfg");
+    const cwd = tmp();
+    expect(carrySession(config, "nope", cwd)).toBe(false); // no projects folder at all
+    const here = claudeProjectDir(config, realpathSync(cwd));
+    mkdirSync(here, { recursive: true });
+    writeFileSync(join(here, "s2.jsonl"), "x");
+    expect(carrySession(config, "s2", cwd)).toBe(true);
+    expect(readdirSync(join(config, "projects"))).toEqual([basename(here)]);
+    expect(carrySession(config, "missing", cwd)).toBe(false);
+    // Session ids are file names: anything path-like is refused.
+    expect(carrySession(config, "../s2", cwd)).toBe(false);
   });
 
   test("a missing session is retried once without --resume, leaking nothing from the failed attempt", async () => {

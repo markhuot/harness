@@ -11,7 +11,20 @@ const depsProp = { type: "array", items: { type: "string" }, description: "Keys 
 const driverProp = { type: "string", minLength: 1, description: "Driver id, e.g. \"claude-code\". Defaults to the project's (a child: its parent's)." };
 const modelProp = { type: "string", description: "Model id for that driver. An empty string uses the driver's default." };
 
+const baseBranchProp = {
+  type: "string",
+  description: "Branch its work merges into when it completes (and a new branch starts from). \"inherit\" or \"\" uses the project's base branch.",
+};
+const branchProp = {
+  type: "string",
+  description:
+    "Branch for its worktree: an existing local branch is checked out as is (the ticket blocks if another worktree has it checked out); a new name is created from the base branch. \"\" means harness/<key>, the default.",
+};
+
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
+/** "inherit" / "" → null (inherit); undefined → unchanged. */
+const baseBranchInput = (b: string | undefined) => (b === undefined ? undefined : b.trim() === "inherit" ? null : b.trim() || null);
+const branchInput = (b: string | undefined) => (b === undefined ? undefined : b.trim() || null);
 
 export const createTicket = defineTool<{
   title: string;
@@ -25,6 +38,8 @@ export const createTicket = defineTool<{
   driver?: string;
   model?: string;
   use_worktree?: boolean;
+  base_branch?: string;
+  branch?: string;
 }>({
   name: "create_ticket",
   description:
@@ -49,6 +64,8 @@ export const createTicket = defineTool<{
         description:
           "Give the ticket its own git worktree and branch (true) or run it in the project directory (false). Omit to follow the project's setting, which is right almost always, a conductor's children included.",
       },
+      base_branch: baseBranchProp,
+      branch: branchProp,
     },
     ["title", "description"],
   ),
@@ -65,6 +82,8 @@ export const createTicket = defineTool<{
       driver: input.driver,
       model: modelInput(input.model),
       useWorktree: input.use_worktree,
+      baseBranch: baseBranchInput(input.base_branch),
+      branch: branchInput(input.branch),
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },
@@ -78,10 +97,12 @@ export const updateTicket = defineTool<{
   model?: string;
   permission_mode?: PermissionMode | "inherit";
   depends_on?: string[];
+  base_branch?: string;
+  branch?: string;
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode or dependencies. Only the fields you pass change; depends_on replaces the whole list. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, or branch. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -91,6 +112,8 @@ export const updateTicket = defineTool<{
       model: modelProp,
       permission_mode: { type: "string", enum: [...PERMISSION_MODES, "inherit"], description: "\"inherit\" uses the project's mode." },
       depends_on: depsProp,
+      base_branch: baseBranchProp,
+      branch: branchProp,
     },
     ["key"],
   ),
@@ -102,6 +125,8 @@ export const updateTicket = defineTool<{
       model: modelInput(input.model),
       permissionMode: input.permission_mode === undefined ? undefined : input.permission_mode === "inherit" ? null : input.permission_mode,
       dependsOn: input.depends_on,
+      baseBranch: baseBranchInput(input.base_branch),
+      branch: branchInput(input.branch),
     });
     return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, permissionMode: ticket.permissionMode })}`;
   },

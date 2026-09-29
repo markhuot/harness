@@ -178,7 +178,7 @@ export const listWatchers = defineTool<Record<string, never>>({
 export const getSettings = defineTool<Record<string, never>>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, and the network listen mode. The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, and the default base branch (baseBranch). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
   inputSchema: schema({}),
   async run(_input, ctx) {
     return json(await ctx.ops.getSettings(ctx));
@@ -294,6 +294,10 @@ const projectProps = {
     type: "string",
     description: `Key badge color: ${PROJECT_COLORS.map((c) => c.id).join(", ")}, or a custom "#rrggbb". Empty for the theme's accent.`,
   },
+  base_branch: {
+    type: "string",
+    description: "Branch this project's tickets merge into when they complete, and new ticket branches start from, e.g. \"develop\". Empty for the settings default.",
+  },
 };
 
 type ProjectToolInput = {
@@ -305,6 +309,7 @@ type ProjectToolInput = {
   permission_mode?: string;
   default_models?: Record<string, string | null>;
   color?: string;
+  base_branch?: string;
 };
 
 function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
@@ -319,6 +324,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;
   if (i.color !== undefined) body.color = i.color || null;
+  if (i.base_branch !== undefined) body.baseBranch = i.base_branch.trim() || null;
   return body;
 }
 
@@ -400,6 +406,7 @@ type SettingsInput = {
   watcher_driver?: string | null;
   watcher_models?: Record<string, string | null>;
   listen?: { mode: string; host?: string };
+  base_branch?: string;
 };
 
 function settingsPatch(i: SettingsInput): Record<string, unknown> {
@@ -413,6 +420,7 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
     watcherDriver: "watcher_driver",
     watcherModels: "watcher_models",
     listen: "listen",
+    baseBranch: "base_branch",
   };
   const out: Record<string, unknown> = {};
   for (const [to, from] of Object.entries(map)) if (i[from] !== undefined) out[to] = i[from];
@@ -435,6 +443,11 @@ export const updateSettings = defineGatedTool<SettingsInput>({
     listen: {
       type: "object",
       description: `Which networks can reach the service: {"mode": "localhost"} (this Mac only), "tailscale", "any" (every interface), or {"mode": "custom", "host": "<ip or hostname>"}.`,
+    },
+    base_branch: {
+      type: "string",
+      minLength: 1,
+      description: "Default base branch for projects and tickets that don't set one: what completed tickets merge into and new ticket branches start from. Default \"main\".",
     },
   }),
   describe: (i) => ({
