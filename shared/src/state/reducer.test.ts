@@ -5,6 +5,7 @@ import {
   dependencyStates,
   hasCustomDriver,
   initialState,
+  isReady,
   liveDelta,
   mergeById,
   reducer,
@@ -311,6 +312,13 @@ describe("board selectors", () => {
   test("position ties fall back to creation order; done is newest-first", () => {
     expect(boardColumns(base, null).planning.map((t) => t.id)).toEqual(["c", "b", "a"]);
     expect(boardColumns(base, null).done.map((t) => t.id)).toEqual(["e", "d"]);
+  });
+
+  test("isReady: a skipped agent review counts as passed; pending or changes requested doesn't", () => {
+    const r = (agentReview: Ticket["agentReview"], humanReview: Ticket["humanReview"] = "approved", status: Ticket["status"] = "review") =>
+      isReady(ticket("t", { status, agentReview, humanReview }));
+    expect([r("approved"), r("skipped")]).toEqual([true, true]);
+    expect([r("pending"), r("changes_requested"), r("skipped", "pending"), r("skipped", "approved", "in_progress")]).toEqual([false, false, false, false]);
   });
 
   test("dependency chips are done only when the named ticket is done; unknown keys stay pending", () => {

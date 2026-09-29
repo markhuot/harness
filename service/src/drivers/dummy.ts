@@ -224,7 +224,7 @@ export class DummyDriver implements Driver {
       }
       let acted = 0;
       for (const child of children) {
-        if (child.status !== "review" || child.agentReview !== "approved") continue;
+        if (child.status !== "review" || (child.agentReview !== "approved" && child.agentReview !== "skipped")) continue;
         if (child.humanReview === "pending") {
           yield* call("review_ticket", { key: child.key, decision: "approve", notes: "Approved by the dummy conductor." });
           yield* call("complete_ticket", { key: child.key });

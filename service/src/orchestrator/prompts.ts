@@ -139,7 +139,7 @@ function contextSection(info: PromptInfo, o: PromptOverrides | null | undefined)
 
 function childLine(t: Ticket): string {
   const deps = t.dependsOn.length ? `, depends on ${t.dependsOn.join(", ")}` : "";
-  const reviews = t.status === "review" ? `, agent review ${t.agentReview}, your review ${t.humanReview}` : "";
+  const reviews = t.status === "review" ? `, agent review ${t.agentReview}, your review ${t.humanReview}` : t.skipAgentReview ? ", skips the agent review" : "";
   const blocked = t.status === "blocked" && t.blockedReason ? `, asks: ${quote(t.blockedReason)}` : "";
   return `* ${ticketLabel(t)}: ${t.status}${reviews}${deps}${blocked}`;
 }
@@ -157,7 +157,11 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
     case "plan":
       return renderPrompt("system.plan", {}, o);
     case "work":
-      return renderPrompt("system.work", { branch: ticket?.branch ?? "" }, o);
+      return renderPrompt(
+        "system.work",
+        { branch: ticket?.branch ?? "", skipAgentReview: !!ticket?.skipAgentReview, canSkipReview: project?.requireHumanReview !== false },
+        o,
+      );
     case "review": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt("system.review", { branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase }, o);

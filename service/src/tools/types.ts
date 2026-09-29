@@ -114,6 +114,8 @@ export interface CreateTicketInput {
   branch?: string | null;
   /** Base branch override; null → inherit the project's. */
   baseBranch?: string | null;
+  /** Skip the agent review when it's submitted; refused for a project without human review. */
+  skipAgentReview?: boolean;
 }
 
 export interface UpdateTicketInput {
@@ -127,6 +129,8 @@ export interface UpdateTicketInput {
   baseBranch?: string | null;
   /** Branch for its worktree: refused once the ticket has a worktree (its agent uses update_branch). */
   branch?: string | null;
+  /** Ticket.skipAgentReview; true is refused for a project without human review. */
+  skipAgentReview?: boolean;
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -164,7 +168,8 @@ export interface HarnessOps {
   /** Move ticket to blocked with a question for the human. The run should end after this. */
   block(ctx: ToolContext, question: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
-  submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void>;
+  /** skipAgentReview sets the ticket's skipAgentReview first (true is refused without a human review). */
+  submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void>;
   /**
    * Work and conductor runs: re-point the run's own ticket to `branch` (into the worktree that has
    * it checked out, or by switching the ticket's worktree to it) and/or set its base branch

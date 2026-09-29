@@ -216,7 +216,7 @@ describe("config tools behind human approval", () => {
     const prompts = JSON.parse(text(full!.result)).prompts as { id: string; override: string | null; builtin: string }[];
     expect(prompts.find((p) => p.id === "system.plan")!.override).toContain("Plan briefly");
     expect(prompts.find((p) => p.id === "system.work")!.builtin).toContain("{{#if branch}}");
-    expect([bad!.result.isError, text(bad!.result)]).toEqual([true, "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}"]);
+    expect([bad!.result.isError, text(bad!.result)]).toEqual([true, "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}, {{skipAgentReview}}, {{canSkipReview}}"]);
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe(`Change settings: prompts={"system.work":null}`);
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();

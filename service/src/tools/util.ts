@@ -165,6 +165,7 @@ export function ticketView(t: Ticket) {
     status: t.status,
     agentReview: t.agentReview,
     humanReview: t.humanReview,
+    skipAgentReview: !!t.skipAgentReview,
     dependsOn: t.dependsOn,
     autoStart: t.autoStart,
     busy: t.busy,

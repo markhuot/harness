@@ -33,6 +33,7 @@ interface TicketRow {
   use_worktree: number | null;
   base_branch: string | null;
   requested_branch: string | null;
+  skip_agent_review: number;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -97,6 +98,7 @@ export interface NewTicket {
   useWorktree?: boolean | null;
   baseBranch?: string | null;
   requestedBranch?: string | null;
+  skipAgentReview?: boolean;
 }
 
 export type TicketPatch = Partial<{
@@ -119,6 +121,7 @@ export type TicketPatch = Partial<{
   model: string | null;
   baseBranch: string | null;
   requestedBranch: string | null;
+  skipAgentReview: boolean;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -140,6 +143,7 @@ const COLUMNS: Record<string, string> = {
   model: "model",
   baseBranch: "base_branch",
   requestedBranch: "requested_branch",
+  skipAgentReview: "skip_agent_review",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
@@ -191,6 +195,7 @@ export class TicketRepo {
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
       model: r.model ?? null,
       useWorktree: r.use_worktree === null || r.use_worktree === undefined ? null : bool(r.use_worktree),
+      skipAgentReview: bool(r.skip_agent_review ?? 0),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
@@ -422,9 +427,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, created_at, updated_at)
+           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $t, $t)`,
+           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $t, $t)`,
       )
       .run({
         id,
@@ -445,6 +450,7 @@ export class TicketRepo {
         useWorktree: input.useWorktree === null || input.useWorktree === undefined ? null : int(input.useWorktree),
         baseBranch: input.baseBranch ?? null,
         requestedBranch: input.requestedBranch ?? null,
+        skipAgentReview: int(input.skipAgentReview ?? false),
         t,
       });
     this.setDeps(id, input.dependsOn);

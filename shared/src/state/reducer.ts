@@ -17,7 +17,7 @@ import type {
   TranscriptEntry,
   Watcher,
 } from "../index";
-import { isConductor } from "../protocol";
+import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
 import { adjustDoneTotals, doneColumn, mergeTickets, pagingFromPage, reducePaging, type DonePaging, type PagingAction, type SearchState } from "./paging";
@@ -481,7 +481,7 @@ export function liveDelta(state: State, sessionId: string): { runId: string; tex
 }
 
 export function isReady(t: Ticket): boolean {
-  return t.status === "review" && t.agentReview === "approved" && t.humanReview === "approved";
+  return t.status === "review" && reviewPassed(t.agentReview) && t.humanReview === "approved";
 }
 
 export function sortedProjects(state: State): Project[] {
