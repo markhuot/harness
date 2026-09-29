@@ -46,7 +46,7 @@ let mock2: ReturnType<typeof Bun.spawn> | null = null;
 try {
   // Native context menus can't be clicked over CDP; this makes them pick "Project settings…".
   app = await launchApp({ baseUrl: base, token, env: { HARNESS_MENU_AUTOPICK: "settings,split-below" } });
-  const { cdp, js, exists, type, cmdEnter, clickText } = app;
+  const { cdp, js, exists, type, cmdEnter, clickText, screenshot } = app;
 
   // 1. Board renders every column and the seeded cards.
   await until("board", () => exists(".card"), 10000);
@@ -300,12 +300,170 @@ try {
       const marks = card.querySelectorAll(".card-reviews .badge-green").length; return marks === 2 ? { marks, ready: card.querySelectorAll(".badge-green").length > marks } : null; })()`),
   );
   check("a ready card shows both approved marks and no Ready badge", readyCard.marks === 2 && !readyCard.ready, JSON.stringify(readyCard));
+  const completeItems = await (async () => {
+    await js(`document.querySelector("[data-testid=complete-menu]").click()`);
+    const items = await until("complete menu", async () => {
+      const t = await js<string[]>(`[...document.querySelectorAll(".land-menu-complete button")].map(b => b.textContent.trim())`);
+      return t.length > 0 && t;
+    });
+    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await until("complete menu closed", async () => !(await exists(".land-menu-complete")));
+    return items;
+  })();
+  check(
+    "the Complete button offers the same choices as Approve",
+    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and…|Complete and take no action",
+    completeItems.join("|"),
+  );
   await clickText(".actions button", "Complete");
   await until("complete modal", () => exists(".modal"));
+  check("the Complete sheet has no Mark done switch (the menu's take no action replaces it)", !(await exists(".modal .switch")));
   await clickText(".modal-foot button", "Complete");
   const manualDone = await until("manual done", async () => (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "done", 10000);
   check("Complete runs the completion step and moves it to done", manualDone);
   await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: true });
+
+  // 4c. The Approve split button: its menu follows the checkout (a gh remote: merge / PR / …; plain
+  // git: no PR; no git: a plain Approve), "Approve and…" asks for instructions, "Approve and take
+  // no action" finishes without a run, and project settings pick the default.
+  {
+    type T = { key: string; status: string; agentReview: string; humanReview: string; busy: boolean; completionAction?: string | null; completionInstructions?: string | null };
+    const getT = async (key: string) => (await api<{ ticket: T }>("GET", `/tickets/${key}`)).ticket;
+    const all = await api<{ id: string; key: string }[]>("GET", "/projects");
+    const site = all.find((p) => p.key === "SITE")!;
+    const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: "/tmp/smoke-plain-git", key: "PLAIN", name: "plain-git" });
+    check("a git project without a PR host offers merge and custom", plain.completionActions?.join(",") === "merge,custom", String(plain.completionActions));
+    const [ghT, plainT, siteT] = await Promise.all(
+      [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, prompt: "Land me" })),
+    );
+    for (const t of [ghT!, plainT!, siteT!]) {
+      await until(`${t.key} ready for human review`, async () => {
+        const x = await getT(t.key);
+        return x.status === "review" && x.agentReview === "approved" && !x.busy;
+      }, 15000);
+    }
+    const menuItems = () => js<string[]>(`[...document.querySelectorAll(".land-menu-approve button")].map(b => b.textContent.trim())`);
+    const openApprove = async (key: string) => {
+      await js(`location.hash = "#/board/all/ticket/${key}"`);
+      await until(`${key} approve split`, () => exists(`[data-testid=approve-primary]`));
+      await until(`${key} header`, () => js<boolean>(`document.querySelector(".detail-key")?.textContent === ${JSON.stringify(key)}`));
+      return js<string>(`document.querySelector("[data-testid=approve-primary]").textContent.trim()`);
+    };
+    const openMenu = async () => {
+      await js(`document.querySelector("[data-testid=approve-menu]").click()`);
+      return until("approve menu", async () => {
+        const items = await menuItems();
+        return items.length > 0 && items;
+      });
+    };
+
+    // A gh remote: every choice, merge preselected.
+    const ghPrimary = await openApprove(ghT!.key);
+    check("gh project: the Approve primary reads Approve and merge", ghPrimary === "Approve and merge", ghPrimary);
+    const moreItems = async () => {
+      await js(`document.querySelector(".detail-titlebar button[title=More]").click()`);
+      const items = await until("more menu", async () => {
+        const t = await js<string[]>(`[...document.querySelectorAll(".menu button")].map(b => b.textContent.trim())`);
+        return t.length > 0 && t;
+      });
+      await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+      await until("more menu closed", async () => !(await exists(".menu")));
+      return items;
+    };
+    const inReviewMore = await moreItems();
+    check("the More menu has no Mark done while the ticket is in review", !inReviewMore.includes("Mark done") && inReviewMore.includes("Copy key"), inReviewMore.join(","));
+    const ghItems = await openMenu();
+    check(
+      "gh project: the Approve menu offers merge, open PR, Approve and…, then take no action after a separator",
+      ghItems.join("|") === "Approve and merge|Approve and open PR|Approve and…|Approve and take no action" && (await exists(".land-menu-approve hr")),
+      ghItems.join("|"),
+    );
+    await screenshot("/tmp/harness-86-mac-approve-menu.png");
+    await clickText(".land-menu-approve button", "Approve and…");
+    await until("Approve and… sheet", () => exists("[data-testid=land-sheet][data-action=custom]"));
+    check("the Approve and… sheet can't submit without instructions", await js<boolean>(`[...document.querySelectorAll(".modal-foot button")].find(b => b.textContent.includes("Approve")).disabled`));
+    await type(".modal .textarea", "Cherry-pick onto release/2.4 and tag it");
+    await cmdEnter();
+    const custom = await until("custom approval stored", async () => {
+      const x = await getT(ghT!.key);
+      return x.humanReview === "approved" && x;
+    });
+    check(
+      "Approve and… approves with action custom and the instructions",
+      custom.completionAction === "custom" && custom.completionInstructions === "Cherry-pick onto release/2.4 and tag it",
+      JSON.stringify({ action: custom.completionAction, instructions: custom.completionInstructions }),
+    );
+    check("the sheet closes after approving", !!(await until("sheet closed", async () => !(await exists("[data-testid=land-sheet]")))));
+
+    // Plain git: no PR choice; take no action approves and finishes without a run.
+    await openApprove(plainT!.key);
+    const plainItems = await openMenu();
+    check("plain git: the Approve menu has no open PR", plainItems.join("|") === "Approve and merge|Approve and…|Approve and take no action", plainItems.join("|"));
+    await clickText(".land-menu-approve button", "Approve and take no action");
+    const noAction = await until("take no action done", async () => {
+      const x = await getT(plainT!.key);
+      return x.status === "done" && x;
+    });
+    const plainSession = (await api<{ session: { id: string } }>("GET", `/tickets/${plainT!.key}`)).session.id;
+    const plainLog = await api<{ content: { type: string; text?: string } }[]>("GET", `/sessions/${plainSession}/transcript?after=0`);
+    check(
+      "Approve and take no action approves and marks it done with no completion run",
+      noAction.humanReview === "approved" && plainLog.some((e) => e.content.text === "Approved, no action taken") && !plainLog.some((e) => e.content.text?.startsWith("Finalize")),
+      noAction.humanReview,
+    );
+
+    // No git: a plain Approve that runs custom without asking; merge and PR are refused.
+    const sitePrimary = await openApprove(siteT!.key);
+    check("no git: the primary reads Approve", sitePrimary === "Approve", sitePrimary);
+    const siteItems = await openMenu();
+    check("no git: the menu offers only Approve and… and take no action", siteItems.join("|") === "Approve and…|Approve and take no action", siteItems.join("|"));
+    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    const refused = await api("POST", `/tickets/${siteT!.key}/review`, { decision: "approve", action: "merge" }).then(() => "accepted", (e: Error) => e.message);
+    check("approving a no-git ticket with merge is refused", refused !== "accepted" && /merge/.test(refused), refused);
+    await clickText("[data-testid=approve-primary]", "Approve");
+    const plainApprove = await until("plain Approve stored", async () => {
+      const x = await getT(siteT!.key);
+      return x.humanReview === "approved" && x;
+    });
+    check("a plain Approve sends custom without instructions", plainApprove.completionAction === "custom" && !plainApprove.completionInstructions, JSON.stringify(plainApprove.completionAction));
+
+    // Project settings: When approved lists what the checkout offers and PATCHes the default.
+    const whenApproved = `document.querySelector("#settings-project-agents [data-testid=completion-action]")`;
+    await js(`location.hash = "#/project/${nyProject.id}/settings"`);
+    await until("project settings", () => exists("#settings-project-agents"));
+    const ghOpts = await until("When approved options", async () => {
+      const o = await js<string[] | null>(`${whenApproved} ? [...${whenApproved}.options].map(o => o.textContent) : null`);
+      return o && o.length > 0 && o;
+    });
+    check("When approved offers Merge, Open PR, Custom for a gh project, Merge selected", ghOpts.join(",") === "Merge,Open PR,Custom" && (await js<string>(`${whenApproved}.value`)) === "merge", ghOpts.join(","));
+    await js(`(() => { const el = ${whenApproved}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, "pr"); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
+    const savedPr = await until("completionAction saved", async () => (await api<{ id: string; completionAction?: string }[]>("GET", "/projects")).find((p) => p.id === nyProject.id)?.completionAction === "pr");
+    check("picking Open PR PATCHes the project's completionAction", savedPr);
+    await api("PATCH", `/projects/${nyProject.id}`, { completionAction: "merge" });
+    await js(`location.hash = "#/project/${plain.id}/settings"`);
+    await until("plain settings", () => js<boolean>(`!!${whenApproved} && ${whenApproved}.options.length === 2`));
+    check("plain git: When approved offers Merge and Custom, with a gh hint", (await js<string>(`${whenApproved}.closest(".settings-row").textContent`)).includes("gh auth login"));
+    await js(`location.hash = "#/project/${site.id}/settings"`);
+    await until("site settings", () => exists("#settings-project-agents"));
+    check("no git: When approved is hidden (custom is the only choice)", !(await js<boolean>(`!!${whenApproved}`)));
+
+    // A done ticket that opened a pull request: a chip on its card, a link on the ticket.
+    await js(`location.hash = "#/board/${nyProject.id}"`);
+    const chip = await until("PR chip", () => js<string>(`document.querySelector('.card[data-key="NYTIMES-5"] [data-testid=card-pr]')?.textContent ?? ""`).then((t) => t && t));
+    check("a done card with a pull request shows a PR chip", chip === "PR #318", chip);
+    check("cards without a pull request have no chip", (await js<number>(`document.querySelectorAll("[data-testid=card-pr]").length`)) === 1);
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-5"`);
+    const link = await until("PR link", () => js<string>(`document.querySelector("[data-testid=pr-link]")?.textContent ?? ""`).then((t) => t && t));
+    check("the ticket shows its pull request next to the branch", link === "PR #318", link);
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-1"`);
+    await until("NYTIMES-1 header", () => js<boolean>(`document.querySelector(".detail-key")?.textContent === "NYTIMES-1"`));
+    const workingMore = await moreItems();
+    check("outside review the More menu still offers Mark done", workingMore.includes("Mark done"), workingMore.join(","));
+
+    await js(`location.hash = "#/board/all"`);
+    for (const t of [plainT!, siteT!]) await api("DELETE", `/tickets/${t.key}`);
+    await api("DELETE", `/projects/${plain.id}`);
+  }
 
   // 5. New session composer (⌘N path goes through the menu; use the #/compose route).
   await js(`location.hash = "#/board/all"`);
@@ -316,22 +474,23 @@ try {
   check("composer's project dropdown ends with Add project…", projectOpts.length > 1 && projectOpts.at(-1) === "Add project…", projectOpts.join(","));
   const headText = await js<string>(`document.querySelector(".new-session-head")?.textContent ?? ""`);
   check("composer header has no separate Add project button or New session label", !(await exists(".new-session-head button")) && !headText.includes("New session"), headText);
-  // 5a. Model dropdown: lists the selected driver's models (default first), refetches on driver change.
+  // 5a. Model combobox: one list of every driver's models under driver headings, the project
+  // driver's default first; picking another driver's model picks that driver too.
   const pick = (sel: string, value: string) =>
     js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
-  const modelOpts = (scope: string) => js<string[]>(`[...document.querySelectorAll("${scope} .model-select option")].map(o => o.textContent)`);
-  const ccOpts = await until("composer model options", async () => {
-    const o = await modelOpts(".modal-foot");
-    return o.includes("Sonnet 5") && o;
-  });
-  check("composer model dropdown lists the driver's models, default first and marked", ccOpts[0] === "Default (Opus 5.5)" && ccOpts.includes("Opus 5.5 · default"), ccOpts.join(","));
-  await pick(".modal-foot select.select:not([aria-label=Model])", "dummy");
-  const dummyOpts = await until("dummy model options", async () => {
-    const o = await modelOpts(".modal-foot");
+  await js(`document.querySelector(".modal-foot [data-testid=driver-model-select] .model-combo-trigger").click()`);
+  const comboRows = await until("composer model options", async () => {
+    const o = await js<string[]>(`[...document.querySelectorAll(".model-combo-list > *")].map(e => (e.classList.contains("model-combo-heading") ? "# " : "") + e.textContent)`);
     return o.includes("Dummy Slow") && o;
   });
-  check("switching driver refetches the model list", !dummyOpts.includes("Sonnet 5") && dummyOpts[0] === "Default (Dummy Fast)", dummyOpts.join(","));
-  await pick(".modal-foot select[aria-label=Model]", "dummy-slow");
+  check(
+    "composer model combobox lists every driver's models under headings, the default first",
+    comboRows[0] === "Default (Claude Code · Opus 5.5)" && comboRows.includes("# Claude Code") && comboRows.includes("# Dummy") && comboRows.indexOf("Sonnet 5") < comboRows.indexOf("# Dummy"),
+    comboRows.join(","),
+  );
+  await js(`[...document.querySelectorAll(".model-combo-option")].find(e => e.textContent === "Dummy Slow").click()`);
+  const picked = await until("combobox picked", () => js<string>(`document.querySelector(".modal-foot [data-testid=driver-model-select] .model-combo-trigger")?.textContent ?? ""`).then((t) => t.includes("Dummy Slow") && t));
+  check("picking another driver's model shows it on the trigger", !!picked, picked);
   const modeOpts = await js<string[]>(`[...document.querySelectorAll(".modal-foot [data-testid=permission-mode] option")].map(o => o.textContent)`);
   check("composer offers the permission modes, inheriting by default", modeOpts.join(",") === "Default · Auto,Auto,Ask,Read only", modeOpts.join(","));
   await pick(".modal-foot [data-testid=permission-mode]", "read_only");
