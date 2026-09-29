@@ -134,16 +134,22 @@ export function parseRange(header: string | null, size: number): { start: number
 
 const ATTACHMENT_CACHE = "private, max-age=31536000, immutable";
 
-function serveFile(req: Request, path: string, mimeType: string): Response {
+/**
+ * A file (or the Range of it asked for) as a response. The body is read into memory rather than
+ * handed over as a `Bun.file`: Bun's sendfile path can write the file ahead of the status line and
+ * headers on non-loopback sockets (LAN, Tailscale), so the phone got a headerless PNG and showed
+ * "Couldn't load". Video players ask for ranges, which keeps what's buffered small.
+ */
+export async function serveFile(req: Request, path: string, mimeType: string): Promise<Response> {
   const file = Bun.file(path);
   const size = file.size;
   const headers: Record<string, string> = { "content-type": mimeType, "cache-control": ATTACHMENT_CACHE, "accept-ranges": "bytes" };
   const range = parseRange(req.headers.get("range"), size);
   if (range === "unsatisfiable") return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
   const head = req.method === "HEAD";
-  if (!range) return new Response(head ? null : file, { status: 200, headers: { ...headers, "content-length": String(size) } });
+  if (!range) return new Response(head ? null : await file.bytes(), { status: 200, headers: { ...headers, "content-length": String(size) } });
   const length = range.end - range.start + 1;
-  return new Response(head ? null : file.slice(range.start, range.end + 1), {
+  return new Response(head ? null : await file.slice(range.start, range.end + 1).bytes(), {
     status: 206,
     headers: { ...headers, "content-length": String(length), "content-range": `bytes ${range.start}-${range.end}/${size}` },
   });

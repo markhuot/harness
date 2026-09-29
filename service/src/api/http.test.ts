@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { connect } from "node:net";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type HarnessEvent } from "@harness/shared";
 import { onTempCleanup } from "@harness/shared/testing";
@@ -8,7 +10,7 @@ import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, stubBrowser, tempHome } from "../testing/fakes";
 import { mp4, png } from "../testing/media";
 import { fakeContext, fakeSession } from "../tools/fakes";
-import { parseRange } from "./http";
+import { parseRange, serveFile } from "./http";
 
 let harness: Harness | null = null;
 afterEach(async () => {
@@ -610,6 +612,62 @@ describe("GET /attachments/:id", () => {
     for (const a of summary.attachments) expect((await fetch(client.attachmentUrl(a.id))).status).toBe(404);
     expect(readdirSync(h.paths.attachmentsDir)).toEqual([]);
   });
+});
+
+/** This machine's first non-loopback IPv4 address, where Bun's sendfile bug shows (loopback hides it). */
+const lanAddress = Object.values(networkInterfaces())
+  .flat()
+  .find((i) => i && i.family === "IPv4" && !i.internal)?.address;
+
+/**
+ * The raw bytes a server sends back for `GET path`: up to the end of a well-formed response's
+ * content-length body, or whatever arrived when the server closes or goes quiet (a garbled one).
+ */
+function rawGet(host: string, port: number, path: string, headers = ""): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let got = Buffer.alloc(0);
+    const done = () => {
+      clearTimeout(quiet);
+      sock.destroy();
+      resolve(got);
+    };
+    let quiet = setTimeout(done, 1000);
+    const sock = connect(port, host, () => sock.write(`GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n${headers}\r\n`));
+    sock.on("data", (d) => {
+      got = Buffer.concat([got, d]);
+      clearTimeout(quiet);
+      quiet = setTimeout(done, 1000);
+      const split = got.indexOf("\r\n\r\n");
+      const length = split < 0 ? null : /\r\ncontent-length: *(\d+)/i.exec(got.subarray(0, split).toString());
+      if (length && got.length - split - 4 >= Number(length[1])) done();
+    });
+    sock.on("end", done);
+    sock.on("error", reject);
+  });
+}
+
+describe("serveFile over a non-loopback socket", () => {
+  test.skipIf(!lanAddress)("the status line and headers come before the file", async () => {
+    const dir = tempHome("harness-servefile-");
+    const body = Buffer.from(Array.from({ length: 64 * 1024 }, (_, i) => (i * 7) % 256));
+    const path = join(dir, "shot.png");
+    writeFileSync(path, body);
+    const server = Bun.serve({ hostname: lanAddress, port: 0, fetch: (req) => serveFile(req, path, "image/png") });
+    try {
+      // The old Bun.file body garbled nearly every response here, so a few rounds are plenty.
+      for (let i = 0; i < 4; i++) {
+        const whole = await rawGet(lanAddress!, server.port!, "/");
+        expect(whole.subarray(0, 15).toString()).toBe("HTTP/1.1 200 OK");
+        expect(whole.subarray(whole.indexOf("\r\n\r\n") + 4)).toEqual(body);
+
+        const part = await rawGet(lanAddress!, server.port!, "/", "Range: bytes=1000-1999\r\n");
+        expect(part.subarray(0, 12).toString()).toBe("HTTP/1.1 206");
+        expect(part.subarray(part.indexOf("\r\n\r\n") + 4)).toEqual(body.subarray(1000, 2000));
+      }
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
 });
 
 describe("parseRange", () => {

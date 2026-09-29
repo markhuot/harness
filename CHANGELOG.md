@@ -14,6 +14,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Stopping a watcher now stops everything its command started. A looping command such as
   `while true; do curl …; sleep 60; done` used to keep running after its watcher was disabled or
   deleted, and made the Harness service take 25 seconds to quit or restart.
+- Summary screenshots and videos load on the iPhone again. Over Tailscale or the local network,
+  the thumbnails and the full-screen viewer showed "Couldn't load" even though the Mac app showed
+  them.
 
 ## [app-20260928.2051](https://github.com/markhuot/harness/releases/tag/app-20260928.2051) - 2026-09-28
 
