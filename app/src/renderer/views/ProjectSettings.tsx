@@ -1,8 +1,8 @@
 // Project settings (#/project/<id>/settings): everything that belongs to one project — name,
-// identifier (ticket key prefix), color, folder, default driver, worktrees, human review, delete.
+// identifier (ticket key prefix), color, folder, default driver + model, worktrees, human review, delete.
 
 import { useEffect, useMemo, useState } from "react";
-import type { DriverInfo, Project } from "@harness/shared";
+import type { Project } from "@harness/shared";
 import { resolveBaseBranch } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { inheritedBaseLabel, previewProjectKey, tildify } from "@harness/shared/state";
@@ -12,7 +12,7 @@ import { BranchSelect } from "../components/BranchSelect";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
-import { ProjectModelRows } from "./settings/ModelSettings";
+import { ProjectModelRow } from "./settings/ModelSettings";
 import { ProjectPermissionRow } from "./settings/PermissionSettings";
 
 export function ProjectSettingsView() {
@@ -120,10 +120,7 @@ function ProjectSettings({ project }: { project: Project }) {
 
           <Section id="project-agents" title="Agents">
             <div className="card-surface settings-card">
-              <Row title="Default driver" sub="Used for new sessions in this project.">
-                <DriverSelect value={project.defaultDriver} drivers={state.drivers} fallback={state.settings?.defaultDriver} onChange={(v) => void save({ defaultDriver: v })} />
-              </Row>
-              <ProjectModelRows project={project} save={save} />
+              <ProjectModelRow project={project} save={save} />
               <ProjectPermissionRow project={project} save={save} />
               <Row title="Worktree per ticket" sub={<>Each ticket works on its own branch (harness/&lt;key&gt;) when the folder is a git repo.</>}>
                 <Switch ariaLabel="Worktree per ticket" checked={project.useWorktrees} onChange={(v) => void save({ useWorktrees: v })} />
@@ -165,20 +162,6 @@ function ProjectSettings({ project }: { project: Project }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function DriverSelect({ value, drivers, fallback, onChange }: { value: string | null; drivers: DriverInfo[]; fallback?: string; onChange: (v: string | null) => void }) {
-  const fallbackName = drivers.find((d) => d.id === fallback)?.name ?? fallback;
-  return (
-    <select className="select" value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
-      <option value="">Global default{fallbackName ? ` (${fallbackName})` : ""}</option>
-      {drivers.map((d) => (
-        <option key={d.id} value={d.id}>
-          {d.name}
-        </option>
-      ))}
-    </select>
   );
 }
 

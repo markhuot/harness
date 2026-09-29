@@ -91,7 +91,7 @@ export function ModelBadgeView({ name, model }: { name: string; model: string })
 }
 
 /**
- * A driver + model pick (watchers, the New session composer) as a combobox: the trigger shows the
+ * A driver + model pick (watchers, New session, ticket details, project and app defaults) as a combobox: the trigger shows the
  * pick; its popover has a type-ahead search over every signed-in driver's models, grouped under a
  * heading per driver (a flat list when only one driver shows). Default comes first.
  */
@@ -103,6 +103,8 @@ export function DriverModelSelect({
   disabled,
   autoWidth,
   compact,
+  onlyDriver,
+  inheritedModel,
 }: {
   value: TriageChoice;
   onChange: (choice: TriageChoice) => void;
@@ -114,11 +116,16 @@ export function DriverModelSelect({
   autoWidth?: boolean;
   /** Small inline variant (composer footer) */
   compact?: boolean;
+  /** List only this driver's models (a ticket mid-run keeps its driver) */
+  onlyDriver?: string;
+  /** What a driver picked without a model falls back to, named in its "<driver> default" entry */
+  inheritedModel?: (driver: string) => string | null;
 }) {
   const { state, client, epoch } = useStore();
   const cache = modelCacheFor(client);
   useSyncExternalStore(cache.subscribe, () => cache.version);
-  const ids = [...new Set([...state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id), ...(value.driver ? [value.driver] : [])])];
+  const signedIn = onlyDriver ? [onlyDriver] : state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id);
+  const ids = [...new Set([...signedIn, value.driver, resolved.driver].filter((id): id is string => !!id))];
   const key = ids.join(",");
   useEffect(() => {
     cache.syncEpoch(epoch);
@@ -127,7 +134,7 @@ export function DriverModelSelect({
 
   const lists = Object.fromEntries(ids.map((id) => [id, cache.get(id)]));
   const models = Object.fromEntries(ids.map((id) => [id, lists[id]!.data?.models as ModelInfo[] | undefined]));
-  const choices = driverModelChoices(state.drivers, models, value, resolved, { defaultLabel });
+  const choices = driverModelChoices(state.drivers, models, value, resolved, { defaultLabel, onlyDriver, inheritedModel });
   const loading = ids.some((id) => lists[id]!.loading && !lists[id]!.data);
   const driverNames = Object.fromEntries(state.drivers.map((d) => [d.id, d.name]));
   const problems = ids.flatMap((id) => {
