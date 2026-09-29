@@ -7,6 +7,7 @@ import type {
   DriverInfo,
   DriverModels,
   PermissionMode,
+  PromptEntry,
   PublicSettings,
   RunKind,
   Session,
@@ -283,6 +284,8 @@ export interface HarnessOps {
   listWatchers(ctx: ToolContext): Promise<Watcher[]>;
   /** Settings without secrets (anthropicApiKeySet instead of the key) */
   getSettings(ctx: ToolContext): Promise<PublicSettings>;
+  /** GET /prompts: every overridable prompt with its built-in text and override */
+  listPrompts(ctx: ToolContext): Promise<PromptEntry[]>;
   listDrivers(ctx: ToolContext): Promise<(DriverInfo & { models: DriverModels })[]>;
   createWatcher(ctx: ToolContext, input: WatcherFields & { name: string; command: string }, dryRun?: boolean): Promise<Watcher | null>;
   /** `ref` is a watcher id or its exact name */

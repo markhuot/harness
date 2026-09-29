@@ -197,6 +197,33 @@ describe("config tools behind human approval", () => {
     expect(h.orch.settings().anthropicApiKey).toBe("sk-secret-123");
   });
 
+  test("prompts: get_settings names the customized ones (text only with include_prompts); update_settings validates before a human is asked", async () => {
+    const h = scripted(async (req, call) => {
+      if (req.kind !== "work") return;
+      await call("get_settings", {});
+      await call("get_settings", { include_prompts: true });
+      await call("update_settings", { prompts: { "system.work": "On {{brnch}}" } });
+      await call("update_settings", { prompts: { "system.work": null } });
+    });
+    h.orch.updateSettings({ prompts: { "system.plan": "## This run: planning\nPlan briefly." } });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    await h.orch.idle();
+    const [plain, full, bad] = h.results;
+    const view = JSON.parse(text(plain!.result));
+    expect(view.customizedPrompts).toEqual(["system.plan"]);
+    expect(view.prompts).toBeUndefined();
+    expect(text(plain!.result)).not.toContain("Plan briefly");
+    const prompts = JSON.parse(text(full!.result)).prompts as { id: string; override: string | null; builtin: string }[];
+    expect(prompts.find((p) => p.id === "system.plan")!.override).toContain("Plan briefly");
+    expect(prompts.find((p) => p.id === "system.work")!.builtin).toContain("{{#if branch}}");
+    expect([bad!.result.isError, text(bad!.result)]).toEqual([true, "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}"]);
+    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe(`Change settings: prompts={"system.work":null}`);
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.orch.settings().prompts!["system.work"]).toBeNull();
+    expect(h.orch.settings().prompts!["system.plan"]).toContain("Plan briefly");
+  });
+
   test("update_settings applies the same validation as PATCH /settings once approved", async () => {
     const h = scripted(async (req, call) => {
       if (req.kind === "work") await call("update_settings", { permission_mode: "ask", max_concurrent_runs: 2 });

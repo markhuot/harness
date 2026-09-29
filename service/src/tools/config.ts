@@ -2,7 +2,7 @@
 // settings), plus deleting projects and tickets. Reads are open to every ticket run
 // and triage; every mutation is a gated tool (defineGatedTool): a human approves each call.
 
-import { commandLine, PERMISSION_MODES, PROJECT_COLORS, type Watcher } from "@harness/shared";
+import { commandLine, PERMISSION_MODES, PROJECT_COLORS, type PublicSettings, type Watcher } from "@harness/shared";
 import type { WatcherFields } from "./types";
 import { defineGatedTool, defineTool, json, schema } from "./util";
 
@@ -175,13 +175,29 @@ export const listWatchers = defineTool<Record<string, never>>({
   },
 });
 
-export const getSettings = defineTool<Record<string, never>>({
+/** Settings as the config tools show them: prompt overrides as the ids the user customized, since their text is long. */
+function settingsView(settings: PublicSettings): unknown {
+  const { prompts, ...rest } = settings;
+  const customizedPrompts = Object.entries(prompts ?? {})
+    .filter(([, text]) => text)
+    .map(([id]) => id);
+  return { ...rest, customizedPrompts };
+}
+
+export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, and the default base branch (baseBranch). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
-  inputSchema: schema({}),
-  async run(_input, ctx) {
-    return json(await ctx.ops.getSettings(ctx));
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
+  inputSchema: schema({
+    include_prompts: {
+      type: "boolean",
+      description: "Also list every overridable prompt (prompts): its id, where it's used, its variables, the built-in template and the user's override. Long; ask for it only to read or change a prompt.",
+    },
+  }),
+  async run(input, ctx) {
+    const view = settingsView(await ctx.ops.getSettings(ctx)) as Record<string, unknown>;
+    if (input.include_prompts === true) view.prompts = await ctx.ops.listPrompts(ctx);
+    return json(view);
   },
 });
 
@@ -407,6 +423,7 @@ type SettingsInput = {
   watcher_models?: Record<string, string | null>;
   listen?: { mode: string; host?: string };
   base_branch?: string;
+  prompts?: Record<string, string | null>;
 };
 
 function settingsPatch(i: SettingsInput): Record<string, unknown> {
@@ -421,6 +438,7 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
     watcherModels: "watcher_models",
     listen: "listen",
     baseBranch: "base_branch",
+    prompts: "prompts",
   };
   const out: Record<string, unknown> = {};
   for (const [to, from] of Object.entries(map)) if (i[from] !== undefined) out[to] = i[from];
@@ -449,6 +467,11 @@ export const updateSettings = defineGatedTool<SettingsInput>({
       minLength: 1,
       description: "Default base branch for projects and tickets that don't set one: what completed tickets merge into and new ticket branches start from. Default \"main\".",
     },
+    prompts: {
+      type: "object",
+      description:
+        "Prompt id → template text, replacing that built-in prompt for every run; null or \"\" goes back to the built-in (which keeps improving with updates). Merged per id. Templates use {{variable}} and {{#if variable}} … {{else if other}} … {{else}} … {{/if}}; unknown ids and variables are refused. get_settings with include_prompts lists the prompt ids with their variables, built-in text and current override.",
+    },
   }),
   describe: (i) => ({
     summary: `Change settings: ${fieldList(settingsPatch(i), [])}`,
@@ -460,7 +483,7 @@ export const updateSettings = defineGatedTool<SettingsInput>({
     return ctx.ops.updateSettings(ctx, patch, true);
   },
   async run(i, ctx) {
-    return `Settings updated.\n${json(await ctx.ops.updateSettings(ctx, settingsPatch(i)))}`;
+    return `Settings updated.\n${json(settingsView(await ctx.ops.updateSettings(ctx, settingsPatch(i))))}`;
   },
 });
 

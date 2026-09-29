@@ -1,6 +1,12 @@
-import type { ListenSetting, PublicSettings, Settings } from "@harness/shared";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES } from "@harness/shared";
+import type { ListenSetting, PromptId, PublicSettings, Settings } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
+import { isPromptId, promptTemplateError } from "./prompt-templates";
+
+/** Every prompt id unset: runs use the built-in prompts. */
+function unsetPrompts(): Record<PromptId, string | null> {
+  return Object.fromEntries(PROMPT_IDS.map((id) => [id, null])) as Record<PromptId, string | null>;
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   defaultDriver: "claude-code",
@@ -14,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   anthropicApiKey: null,
   listen: { mode: "localhost" },
   baseBranch: DEFAULT_BASE_BRANCH,
+  prompts: unsetPrompts(),
 };
 
 /**
@@ -49,11 +56,12 @@ export function toPublicSettings(s: Settings): PublicSettings {
 /** Merge stored values over defaults, ignoring unknown/invalid stored keys. */
 export function resolveSettings(stored: Record<string, unknown>): Settings {
   const out: Settings = { ...DEFAULT_SETTINGS };
+  const { prompts, ...rest } = pick(stored);
   try {
-    Object.assign(out, validateSettingsPatch(pick(stored)));
+    Object.assign(out, validateSettingsPatch(rest));
   } catch {
     // one bad stored value shouldn't take the whole service down; validate per key instead
-    for (const [k, v] of Object.entries(pick(stored))) {
+    for (const [k, v] of Object.entries(rest)) {
       try {
         Object.assign(out, validateSettingsPatch({ [k]: v }));
       } catch {}
@@ -62,6 +70,44 @@ export function resolveSettings(stored: Record<string, unknown>): Settings {
   out.defaultModels = mergeModelMap({}, out.defaultModels);
   out.reviewModels = mergeModelMap({}, out.reviewModels);
   out.watcherModels = mergeModelMap({}, out.watcherModels ?? {});
+  out.prompts = resolvePrompts(prompts);
+  return out;
+}
+
+/**
+ * Stored prompt overrides over every id unset. Ids this version doesn't have are dropped; an
+ * override that no longer validates (it names a variable the prompt lost, say) is kept, so the
+ * user's text survives, and runs use the built-in until it's fixed (renderPrompt, GET /prompts).
+ */
+function resolvePrompts(stored: unknown): Record<PromptId, string | null> {
+  const out = unsetPrompts();
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return out;
+  for (const [id, text] of Object.entries(stored as Record<string, unknown>)) {
+    if (isPromptId(id) && typeof text === "string" && text.trim()) out[id] = text;
+  }
+  return out;
+}
+
+/**
+ * { promptId: template | null }. null / blank → the built-in. Unknown ids and invalid templates are
+ * refused, except an override sent back exactly as `current` has it: clients may echo the whole
+ * settings object, and one that went stale in an update mustn't block saving other settings.
+ */
+export function validatePrompts(value: unknown, current?: Settings["prompts"]): Partial<Record<PromptId, string | null>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest("prompts must be an object of prompt id → template text or null");
+  const out: Partial<Record<PromptId, string | null>> = {};
+  for (const [id, text] of Object.entries(value as Record<string, unknown>)) {
+    if (!isPromptId(id)) throw badRequest(`Unknown prompt: ${id} (GET /prompts lists them)`);
+    if (text === null || (typeof text === "string" && !text.trim())) {
+      out[id] = null;
+      continue;
+    }
+    if (typeof text !== "string") throw badRequest(`prompts.${id} must be template text or null`);
+    if (current?.[id] === text) continue;
+    const error = promptTemplateError(id, text);
+    if (error) throw badRequest(`prompts.${id}: ${error}`);
+    out[id] = text;
+  }
   return out;
 }
 
@@ -70,7 +116,7 @@ function pick(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** Validate a PATCH /settings body. Unknown keys are rejected. */
-export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): Partial<Settings> {
+export function validateSettingsPatch(body: unknown, knownDrivers?: string[], current?: Settings): Partial<Settings> {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw badRequest("settings body must be an object");
   const out: Partial<Settings> = {};
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
@@ -117,6 +163,9 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
         break;
       case "baseBranch":
         out.baseBranch = validateBranchName("baseBranch", value, false)!;
+        break;
+      case "prompts":
+        out.prompts = validatePrompts(value, current?.prompts);
         break;
       case "anthropicApiKeySet":
         break; // echoed back from PublicSettings; ignore
@@ -178,5 +227,10 @@ export function applySettingsPatch(current: Settings, patch: Partial<Settings>):
   if (patch.defaultModels) out.defaultModels = mergeModelMap(current.defaultModels, patch.defaultModels);
   if (patch.reviewModels) out.reviewModels = mergeModelMap(current.reviewModels, patch.reviewModels);
   if (patch.watcherModels) out.watcherModels = mergeModelMap(current.watcherModels ?? {}, patch.watcherModels);
+  // Stored compactly: only the ids with an override (a null in the patch removes one).
+  if (patch.prompts) {
+    const merged = { ...current.prompts, ...patch.prompts };
+    out.prompts = Object.fromEntries(Object.entries(merged).filter(([, text]) => text)) as Settings["prompts"];
+  }
   return out;
 }

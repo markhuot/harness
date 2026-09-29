@@ -274,7 +274,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
-| `get_settings` | all | `{}` → public settings (`anthropicApiKeySet`, never the key) |
+| `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
 | `list_drivers` | all | `{}` → drivers with their models |
 | `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
@@ -282,7 +282,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
-| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch? }` |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor, chat | `{ url }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
@@ -415,6 +415,7 @@ client state, not service state.
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, auto-complete, color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
+| Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
 | Drivers | list drivers and models, refresh models | `list_drivers` | |
@@ -713,6 +714,38 @@ requested tab is kept so a deep link opens when the sub-agents arrive. It lists 
 its parents. An unknown id falls back to the list. In every transcript, a tool row that started a
 sub-agent links to its transcript.
 
+### Prompt overrides
+
+Every agent prompt is a template in `service/src/orchestrator/prompt-templates.ts` under a stable
+id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
+context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, board,
+board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
+and conductor start, review, complete, conductor update, changes requested, reopen, triage).
+`prompts.ts` works out each template's variables from the run (child lists, the summaries log,
+tool names and the fenced triage output are computed there), decides which sections a run gets,
+and joins them in order; none of that is overridable.
+
+`settings.prompts` maps id → template or null. Every id defaults to null, which means the
+built-in text that ships with the service, so an uncustomized install picks up prompt changes on
+update. PATCH /settings `{ prompts }` merges per id, and null or `""` resets one. The service
+refuses unknown ids, malformed templates and variables the prompt doesn't have with a 400, except
+for an override sent back exactly as stored (clients echo whole settings objects). Stored ids
+that no longer exist are dropped when settings resolve. A stored override that no longer
+validates (a variable the prompt lost in an update) is kept for the user to fix, reported as
+`overrideError` by `GET /prompts`, and ignored at render time in favour of the built-in.
+
+Templates (`shared/src/templates.ts`) have `{{name}}`, `{{#if name}}`, `{{else if name}}`,
+`{{else}}` and `{{/if}}`, with a non-empty string, true or a non-zero number as truthy. Text
+outside tags is copied exactly, and the rendered prompt is trimmed at both ends; a section that
+renders to nothing is left out. Values are inserted as text and never re-parsed.
+
+`GET /prompts` (`HarnessClient.listPrompts`) returns `PromptEntry[]` in `PROMPT_IDS` order:
+`{ id, group, label, description, variables: [{ name, description }], builtin, override,
+overrideError }`. The settings screens edit `override` starting from `builtin`.
+`prompts-builtin.test.ts` snapshots the built-in output for a matrix of inputs, so a template
+edit that changes a built-in prompt shows up as a snapshot diff (`bun test --update-snapshots`
+after an intended change).
+
 ### Dummy driver script
 
 Streams its text word by word (`HARNESS_DUMMY_DELAY_MS`, default 15ms; tests use 0).
@@ -755,6 +788,7 @@ GET    /watchers                 POST /watchers            PATCH/DELETE /watcher
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)
+GET    /prompts                  → PromptEntry[] (see "Prompt overrides")
 GET    /network                  → NetworkStatus           GET /pairing → PairingInfo (409 in localhost mode)
 POST   /token/rotate             → { token }; the old token is rejected at once, open sockets closed
 GET    /browser/:sessionId       POST /browser/:sessionId/navigate { url }

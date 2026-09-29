@@ -8,3 +8,4 @@ export * from "./watchers";
 export * from "./commandLine";
 export * from "./projectColors";
 export * from "./mentions";
+export * from "./templates";
