@@ -1,5 +1,5 @@
 import type { ListenSetting, PublicSettings, Settings } from "@harness/shared";
-import { CLASSIFIER_BACKENDS, LISTEN_MODES, PERMISSION_MODES } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES } from "@harness/shared";
 import { badRequest } from "./errors";
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -11,7 +11,24 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewModels: {},
   anthropicApiKey: null,
   listen: { mode: "localhost" },
+  baseBranch: DEFAULT_BASE_BRANCH,
 };
+
+/**
+ * A branch name from a request body, trimmed. null / "" → null (inherit) when `nullable`,
+ * otherwise refused. Invalid names (git check-ref-format --branch rules) are refused.
+ */
+export function validateBranchName(field: string, value: unknown, nullable = true): string | null {
+  if (value === undefined || value === null || (typeof value === "string" && !value.trim())) {
+    if (nullable) return null;
+    throw badRequest(`${field} must be a branch name`);
+  }
+  if (typeof value !== "string") throw badRequest(`${field} must be a branch name${nullable ? " or null" : ""}`);
+  const name = value.trim();
+  const error = branchNameError(name);
+  if (error) throw badRequest(`${field} "${name}" isn't a valid branch name: ${error}`);
+  return name;
+}
 
 /**
  * The pre-PermissionMode setting (claude-code CLI modes), still accepted from older clients.
@@ -87,6 +104,9 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[]): P
         break;
       case "listen":
         out.listen = validateListen(value);
+        break;
+      case "baseBranch":
+        out.baseBranch = validateBranchName("baseBranch", value, false)!;
         break;
       case "anthropicApiKeySet":
         break; // echoed back from PublicSettings; ignore

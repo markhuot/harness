@@ -68,6 +68,8 @@ export interface BoardTicketDetail {
   resolvedFrom: string | null;
   parent: string | null;
   children: string[];
+  /** The effective base branch and where it came from (ticket, project, settings, or the checkout's) */
+  base: { branch: string; source: string };
   /** attachments[].path: the stored copy, readable with a file tool */
   summaries: { author: string; body: string; createdAt: number; attachments: { name: string; kind: "image" | "video"; path: string }[] }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
@@ -107,6 +109,10 @@ export interface CreateTicketInput {
   model?: string | null;
   /** false → the project checkout, true → its own worktree; omitted → the project's setting. */
   useWorktree?: boolean;
+  /** Branch for its worktree (CreateTicketBody.branch); omitted → harness/<key>. */
+  branch?: string | null;
+  /** Base branch override; null → inherit the project's. */
+  baseBranch?: string | null;
 }
 
 export interface UpdateTicketInput {
@@ -116,6 +122,10 @@ export interface UpdateTicketInput {
   model?: string | null;
   permissionMode?: PermissionMode | null;
   dependsOn?: string[];
+  /** Base branch override; null → inherit the project's. */
+  baseBranch?: string | null;
+  /** Branch for its worktree: refused once the ticket has a worktree (its agent uses update_branch). */
+  branch?: string | null;
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -154,6 +164,12 @@ export interface HarnessOps {
   block(ctx: ToolContext, question: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
   submitForReview(ctx: ToolContext, summary: string, attachments?: string[]): Promise<void>;
+  /**
+   * Work and conductor runs: re-point the run's own ticket to `branch` (into the worktree that has
+   * it checked out, or by switching the ticket's worktree to it) and/or set its base branch
+   * (null → inherit). Never deletes branches or worktrees. Returns what changed, for the model.
+   */
+  updateBranch(ctx: ToolContext, input: { branch?: string; baseBranch?: string | null }): Promise<string>;
 
   // --- review runs ---
   /** Record the agent review decision. */
@@ -301,6 +317,8 @@ export interface ProjectView {
   permissionMode: PermissionMode | null;
   /** Key badge color: a preset id or "#rrggbb"; null → the theme's accent */
   color: string | null;
+  /** Base branch override; null → settings.baseBranch */
+  baseBranch: string | null;
 }
 
 export interface ApprovalMeta {

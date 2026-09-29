@@ -31,6 +31,8 @@ interface TicketRow {
   review_rejections: number;
   model: string | null;
   use_worktree: number | null;
+  base_branch: string | null;
+  requested_branch: string | null;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -93,6 +95,8 @@ export interface NewTicket {
   workdir: string | null;
   model?: string | null;
   useWorktree?: boolean | null;
+  baseBranch?: string | null;
+  requestedBranch?: string | null;
 }
 
 export type TicketPatch = Partial<{
@@ -113,6 +117,8 @@ export type TicketPatch = Partial<{
   allowedTools: string[];
   reviewRejections: number;
   model: string | null;
+  baseBranch: string | null;
+  requestedBranch: string | null;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -132,6 +138,8 @@ const COLUMNS: Record<string, string> = {
   allowedTools: "allowed_tools",
   reviewRejections: "review_rejections",
   model: "model",
+  baseBranch: "base_branch",
+  requestedBranch: "requested_branch",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
@@ -173,6 +181,8 @@ export class TicketRepo {
       externalRef: fromJson<ExternalRef | null>(r.external_ref, null),
       workdir: r.workdir,
       branch: r.branch,
+      requestedBranch: r.requested_branch ?? null,
+      baseBranch: r.base_branch ?? null,
       blockedReason: r.blocked_reason,
       permissionMode: (r.permission_mode as PermissionMode | null) ?? null,
       busy: bool(r.busy),
@@ -412,9 +422,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, created_at, updated_at)
+           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $t, $t)`,
+           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $t, $t)`,
       )
       .run({
         id,
@@ -433,6 +443,8 @@ export class TicketRepo {
         position: this.nextPosition(input.projectId),
         model: input.model ?? null,
         useWorktree: input.useWorktree === null || input.useWorktree === undefined ? null : int(input.useWorktree),
+        baseBranch: input.baseBranch ?? null,
+        requestedBranch: input.requestedBranch ?? null,
         t,
       });
     this.setDeps(id, input.dependsOn);

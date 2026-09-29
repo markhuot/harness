@@ -76,6 +76,22 @@ export const submitForReview = defineTool<{ summary: string; attachments?: strin
   },
 });
 
+export const updateBranch = defineTool<{ branch?: string; base_branch?: string }>({
+  name: "update_branch",
+  description:
+    "Change this ticket's own branches (update_ticket can't act on your own ticket). branch re-points the ticket to another branch: when that branch is checked out in another worktree, the ticket moves into that worktree (your next run works there; integrate your commits there first, e.g. with git -C <path> cherry-pick or merge); otherwise this ticket's worktree switches to it, creating it at the current commit when it doesn't exist (refused with git's message when uncommitted changes are in the way). base_branch sets the branch the work merges into when the ticket completes (\"inherit\" or \"\" uses the project's). Never deletes a branch or worktree: the old ones are left for cleanup.",
+  inputSchema: schema({
+    branch: { type: "string", minLength: 1, description: "Branch name to move the ticket to, e.g. \"medl-1223-ai-app\"." },
+    base_branch: { type: "string", description: "Branch to merge into on completion; \"inherit\" or \"\" uses the project's base branch." },
+  }),
+  async run({ branch, base_branch }, ctx) {
+    return ctx.ops.updateBranch(ctx, {
+      branch,
+      baseBranch: base_branch === undefined ? undefined : base_branch.trim() === "inherit" ? null : base_branch.trim() || null,
+    });
+  },
+});
+
 export const reviewDecision = defineTool<{ decision: "approve" | "request_changes"; notes: string }>({
   name: "review_decision",
   description:

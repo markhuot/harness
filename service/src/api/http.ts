@@ -191,6 +191,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
   add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
+  add("GET", "/projects/:id/branches", ({ params, url }) => o.projectBranches(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Tickets
   add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));

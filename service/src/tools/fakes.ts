@@ -83,6 +83,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     updatePlan: async () => {},
     block: async () => {},
     submitForReview: async () => {},
+    updateBranch: async () => "Branch updated.",
     reviewDecision: async () => {},
     createTicket: async (_ctx: ToolContext, input: { title: string; description: string; dependsOn?: string[]; autoStart?: boolean }) => {
       seq++;
@@ -109,6 +110,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       resolvedFrom: null,
       parent: "TEST-1",
       children: [],
+      base: { branch: "main", source: "settings" },
       summaries: [{ author: "agent", body: "did it", createdAt: 1 }],
     }),
     searchTickets: async () => ({ hits: [], nextCursor: null, total: 0 }),

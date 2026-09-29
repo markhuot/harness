@@ -210,6 +210,27 @@ describe("config tools behind human approval", () => {
     expect([h.orch.settings().permissionMode, h.orch.settings().maxConcurrentRuns]).toEqual(["ask", 2]);
   });
 
+  test("base_branch: bad names are refused before a human is asked; good ones apply to settings and projects once approved", async () => {
+    const h = scripted(async (req, call) => {
+      if (req.kind !== "work") return;
+      await call("update_settings", { base_branch: "not a branch" });
+      await call("update_project", { project_key: "PROJ", base_branch: "a..b" });
+      await call("list_projects", {});
+      await call("update_settings", { base_branch: "develop" });
+    });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    await h.orch.idle();
+    const [badSettings, badProject, list] = h.results;
+    expect([badSettings!.result.isError, text(badSettings!.result)]).toEqual([true, 'baseBranch "not a branch" isn\'t a valid branch name: a branch name can\'t contain spaces, control characters or any of ~ ^ : ? * [ \\']);
+    expect([badProject!.result.isError, text(badProject!.result)]).toEqual([true, `baseBranch "a..b" isn't a valid branch name: a branch name can't contain ..`]);
+    expect(JSON.parse(text(list!.result))[0]).toMatchObject({ key: "PROJ", baseBranch: null });
+    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe("Change settings: baseBranch=develop");
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    expect(h.orch.settings().baseBranch).toBe("develop");
+    expect(JSON.parse(text(h.results.find((r) => r.name === "update_settings" && !r.result.isError && text(r.result).startsWith("Settings updated"))!.result).split("\n").slice(1).join("\n"))).toMatchObject({ baseBranch: "develop" });
+  });
+
   test("mutating ops refuse runs without a human in the loop, whatever tool reaches them", async () => {
     const errors: string[] = [];
     const h = scripted(async (req) => {

@@ -29,8 +29,9 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
-    expect(props("update_ticket")).toEqual(["depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "start", "title", "use_worktree"]);
+    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "title"]);
+    expect(props("update_branch")).toEqual(["base_branch", "branch"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
@@ -283,10 +284,19 @@ describe("board tools → HarnessOps", () => {
 
   test("get_ticket reports an alias it resolved through", async () => {
     const ops = fakeOps({
-      getTicket: async () => ({ ticket: { ...fakeTicket({ key: "NEW-1" }), projectKey: "NEW" }, resolvedFrom: "OLD-1", parent: null, children: [], summaries: [] }),
+      getTicket: async () => ({
+        ticket: { ...fakeTicket({ key: "NEW-1", branch: "medl-1223-ai-app", requestedBranch: "medl-1223-ai-app" }), projectKey: "NEW" },
+        resolvedFrom: "OLD-1",
+        parent: null,
+        children: [],
+        base: { branch: "develop", source: "project" },
+        summaries: [],
+      }),
     });
     const r = JSON.parse(text(await tool("get_ticket").execute({ key: "OLD-1" }, fakeContext({ ops }))));
     expect(r).toMatchObject({ key: "NEW-1", resolvedFrom: "OLD-1" });
+    // The branches a client or agent needs: the worktree's, the chosen one, the override and what it merges into.
+    expect(r).toMatchObject({ branch: "medl-1223-ai-app", requestedBranch: "medl-1223-ai-app", baseBranch: null, effectiveBaseBranch: "develop", baseBranchSource: "project" });
   });
 
   test("search_tickets maps inputs and returns compact hits with nextCursor", async () => {

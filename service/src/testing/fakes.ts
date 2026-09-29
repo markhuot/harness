@@ -61,6 +61,7 @@ export interface RecordedCall {
   runId: string;
   kind: RunRequest["kind"];
   prompt: string;
+  systemPrompt: string;
   state: unknown;
   cwd: string;
   mcpUrl: string;
@@ -125,6 +126,7 @@ export class FakeDriver implements Driver {
       runId: req.runId,
       kind: req.kind,
       prompt: req.prompt,
+      systemPrompt: req.systemPrompt,
       state: req.state,
       cwd: req.cwd,
       mcpUrl: req.mcp.url,

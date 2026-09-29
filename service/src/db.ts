@@ -357,6 +357,14 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX summary_attachments_summary ON summary_attachments(summary_id, ord);
   `,
+  // 15: branches (DESIGN.md "Branches"). projects.base_branch / tickets.base_branch: the base
+  //     branch overrides (NULL inherits: ticket → project → settings.baseBranch).
+  //     tickets.requested_branch: the branch chosen for the ticket's worktree (NULL → harness/<key>).
+  `
+  ALTER TABLE projects ADD COLUMN base_branch TEXT;
+  ALTER TABLE tickets ADD COLUMN base_branch TEXT;
+  ALTER TABLE tickets ADD COLUMN requested_branch TEXT;
+  `,
 ];
 
 /**

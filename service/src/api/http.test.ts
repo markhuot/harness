@@ -10,6 +10,7 @@ import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, stubBrowser, tempHome } from "../testing/fakes";
 import { mp4, png } from "../testing/media";
 import { fakeContext, fakeSession } from "../tools/fakes";
+import { git as runGit } from "../orchestrator/worktree";
 import { parseRange, serveFile } from "./http";
 
 let harness: Harness | null = null;
@@ -528,6 +529,32 @@ describe("ticket paging + search over http", () => {
     ]);
     await expect(client.projectFiles("nope", "a")).rejects.toMatchObject({ status: 404 });
     await expect(client.ticketFiles("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
+  });
+
+  test("branch picker: /projects/:id/branches filters by q and caps by limit; base branches round-trip", async () => {
+    const { client, dir } = await boot();
+    const git = async (...args: string[]) => {
+      const r = await runGit(args, dir);
+      if (r.code !== 0) throw new Error(r.stderr);
+    };
+    await git("init", "-q", "-b", "main");
+    await git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init");
+    await git("branch", "medl-1223-ai-app");
+    const p = await client.createProject({ path: dir, baseBranch: "develop" });
+    expect(p.baseBranch).toBe("develop");
+    const all = await client.projectBranches(p.id);
+    expect(all.map((b) => b.name).sort()).toEqual(["main", "medl-1223-ai-app"]);
+    expect(all.find((b) => b.name === "main")!.checkedOutAt).not.toBeNull();
+    expect(typeof all[0]!.lastCommitAt).toBe("number");
+    expect((await client.projectBranches(p.id, "ai-APP")).map((b) => b.name)).toEqual(["medl-1223-ai-app"]);
+    expect(await client.projectBranches(p.id, "", 1)).toHaveLength(1);
+    await expect(client.projectBranches("nope")).rejects.toMatchObject({ status: 404 });
+    // Ticket fields over REST: chosen branch and base override; the settings default is public.
+    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false, branch: "medl-1223-ai-app", baseBranch: "release" });
+    expect([t.requestedBranch, t.baseBranch, t.branch]).toEqual(["medl-1223-ai-app", "release", null]);
+    expect((await client.updateTicket(t.key, { baseBranch: "" })).baseBranch).toBeNull();
+    expect((await client.getSettings()).baseBranch).toBe("main");
+    await expect(client.updateSettings({ baseBranch: "x..y" })).rejects.toMatchObject({ status: 400 });
   });
 });
 
