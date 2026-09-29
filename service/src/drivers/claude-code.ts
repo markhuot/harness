@@ -1,7 +1,7 @@
 // claude-code driver: wraps the `claude` CLI in print mode with stream-json output.
 // Harness tools reach the CLI through the run's MCP endpoint (--mcp-config).
 
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DriverInfo, ModelInfo, PermissionMode, Settings, SubagentStatus, ToolResultContent } from "@harness/shared";
@@ -54,6 +54,49 @@ export function cleanClaudeEnv(env: Record<string, string | undefined>): Record<
     out[k] = v;
   }
   return out;
+}
+
+/** Claude Code's config folder: $CLAUDE_CONFIG_DIR, else ~/.claude. */
+export function claudeConfigDir(env: Record<string, string | undefined>): string {
+  return env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), ".claude");
+}
+
+/** Where Claude Code keeps a working directory's sessions: its path with every non-alphanumeric character as "-". */
+export function claudeProjectDir(configDir: string, cwd: string): string {
+  return join(configDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"));
+}
+
+/**
+ * Claude Code resumes a session only from the working directory it was started in: its
+ * transcript lives under projects/<that directory>. When the ticket's workdir changed (update_branch
+ * moved it into another worktree), copy the session's transcript (and its folder of sub-agent
+ * transcripts, if any) into the new directory's project folder so --resume keeps the
+ * conversation. Copies, never moves: the original stays where it was. Returns whether the
+ * session is now under `cwd`'s project folder. When it can't be found, the driver's fresh-start
+ * retry takes over.
+ */
+export function carrySession(configDir: string, sessionId: string, cwd: string): boolean {
+  if (!/^[A-Za-z0-9-]+$/.test(sessionId)) return false;
+  let real = cwd;
+  try {
+    real = realpathSync(cwd); // the CLI files sessions under its resolved cwd (/private/var, not /var)
+  } catch {}
+  const target = claudeProjectDir(configDir, real);
+  const file = `${sessionId}.jsonl`;
+  if (existsSync(join(target, file))) return true;
+  const projects = join(configDir, "projects");
+  let dirs: string[];
+  try {
+    dirs = readdirSync(projects);
+  } catch {
+    return false;
+  }
+  const source = dirs.map((d) => join(projects, d)).find((d) => d !== target && existsSync(join(d, file)));
+  if (!source) return false;
+  mkdirSync(target, { recursive: true });
+  cpSync(join(source, file), join(target, file));
+  if (existsSync(join(source, sessionId))) cpSync(join(source, sessionId), join(target, sessionId), { recursive: true });
+  return true;
 }
 
 export function displayToolName(name: string): string {
@@ -575,6 +618,13 @@ export class ClaudeCodeDriver implements Driver {
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {
     const state = req.state as Partial<ClaudeCodeState> | null;
     const resume = typeof state?.sessionId === "string" && state.sessionId ? state.sessionId : null;
+    if (resume) {
+      try {
+        carrySession(claudeConfigDir(this.env), resume, req.cwd);
+      } catch {
+        // Couldn't copy it: --resume fails and the fresh-start retry below takes over.
+      }
+    }
     const grants = planGrants(req, this.opts.settings());
     // The exact rules go to every CLI invocation of this run; the grants are used up by it.
     for (const g of grants.applied) yield { type: "grant_applied", toolName: g.toolName, input: g.input };
@@ -587,8 +637,8 @@ export class ClaudeCodeDriver implements Driver {
     }
     const first = yield* this.attempt(req, resume);
     if (first === "retry-fresh") {
-      // Sessions are stored per working directory; after a worktree switch (or cleanup)
-      // the old session can't be resumed. Start a new conversation instead.
+      // Sessions are stored per working directory; carrySession copies one to a new workdir,
+      // but when it's gone (cleaned up, or never found) start a new conversation instead.
       const second = yield* this.attempt(req, null);
       if (second === "retry-fresh") throw new Error("claude could not start a conversation");
     }
