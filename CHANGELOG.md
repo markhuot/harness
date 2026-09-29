@@ -19,6 +19,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Summary screenshots and videos load on the iPhone again. Over Tailscale or the local network,
   the thumbnails and the full-screen viewer showed "Couldn't load" even though the Mac app showed
   them.
+- A message you sent with a table or a code block in it no longer hides the agent's replies. On
+  iPhone it filled with a long stretch of blank space, and the transcript opened in the middle of
+  it. On the Mac, the table squeezed its columns to a word or two per line in a narrow window.
+  Wide tables in messages, plans and summaries now scroll sideways instead.
 
 ## [app-20260928.2051](https://github.com/markhuot/harness/releases/tag/app-20260928.2051) - 2026-09-28
 

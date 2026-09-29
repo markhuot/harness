@@ -393,6 +393,34 @@ const ticketsUp = new Promise<void>((r) => (ticketsCreated = r));
 
 const REPLY_ITEMS = ["Keep plain main", "Ship it"];
 
+/**
+ * A brief like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
+ * fenced command. In a user bubble that shrank to fit, each of those laid out hundreds to thousands
+ * of points tall (see scrollsSideways in src/ui/Markdown.tsx), and the message buried the replies.
+ */
+const TABLE_BRIEF = [
+  "Speed up the simulator walk-through",
+  "",
+  "### Budget",
+  "| Phase | Budget | How |",
+  "|---|---|---|",
+  "| Daemon up and seed | ≤ 8 s, overlapping install | `HARNESS_DUMMY_DELAY_MS=1`; settle all tickets with `Promise.all`; take the browse ticket off the critical path; drop the 1.5 s sleep |",
+  "| Install, launch and pair | ≤ 6 s | Wait on conditions, not the `2500 + 4000` ms sleeps |",
+  "| 21 screens, both themes | ≤ 30 s | 2 simulators in parallel, warm links, wait for each screen's own label, both themes in one visit |",
+  "",
+  "### Where the time goes today",
+  "| Area | Cost | Why |",
+  "|---|---|---|",
+  "| 21 screens, light and dark | about 300 s | Every shot is a `coldOpen`: terminate, cold launch (about 4 s), then wait for the accessibility tree to stay unchanged for 800 ms (each `describe-ui` takes about 0.4 s). Then a fixed 1 s sleep (3.5 s for browser, 2.5 s for changes), then `running()`. That's 42 cold launches. |",
+  "| Seeding | tens of seconds | The dummy driver streams at 40 ms per word, about 3× its default. `settle(browse)` allows up to 90 s. `Bun.sleep(1500)` at the end. |",
+  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for a full dummy run and a reviewer run at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
+  "",
+  "Measure with:",
+  "```",
+  "time bun scripts/sim-check.ts --no-build --shards=2",
+  "```",
+].join("\n");
+
 async function seed() {
   await settings();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
@@ -427,6 +455,7 @@ async function seed() {
   const plan = await create(other.id, "Write a landing page for the install link", { start: false });
   // Sub-agents: two, the second starting a nested third (the dummy driver's /agents).
   const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
+  const tables = await create(other.id, TABLE_BRIEF);
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -454,6 +483,7 @@ async function seed() {
     settle(blocked.key, (t) => t.status === "blocked" && !t.busy),
     settle(plan.key, (t) => t.status === "planning" && !t.busy),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
+    settle(tables.key, (t) => t.status === "review" && !t.busy && t.agentReview === "approved"),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -467,7 +497,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, watcher, agents, nestedAgent };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -885,6 +915,7 @@ function screens(s: Seeded): Screen[] {
     { name: "ticket-summaries", url: `harness://ticket/${k(s.hello)}?tab=summaries` },
     { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
     { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
+    { name: "ticket-transcript-tables", url: `harness://ticket/${k(s.tables)}?tab=transcript`, ready: (l) => l.some((x) => x.startsWith("Run finished (review)")) },
     { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
     { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
     { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },
@@ -967,6 +998,25 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const chain = (seconds: number, run: (udid: string) => Promise<void>) => ({ seconds, run });
   return [
+    chain(4, async (udid) => {
+      await check("a brief with wide tables leaves the replies after it on screen", async () => {
+        const last = (l: string) => l.startsWith("Run finished (review)");
+        await goto(udid, `harness://ticket/${k(s.tables)}?tab=transcript`, (l) => l.some(last));
+        const all = await nodes(udid);
+        const H = all[0]!.frame.height;
+        const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send");
+        const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H;
+        // The transcript opens at the bottom, so the reviewer's last row sits just above the composer.
+        const end = await until("the last row on screen", async () => ((n) => (n && n.frame.y >= 0 && n.frame.y + n.frame.height <= bottom + 1 ? n : null))(await findElement(udid, last)), 6000).catch(async () => {
+          const n = await findElement(udid, last);
+          throw new Error(n ? `"${n.AXLabel}" at y=${Math.round(n.frame.y)}, below the list's bottom (${Math.round(bottom)})` : "no Run finished row");
+        });
+        // A long cell keeps a readable width (up to MAX_COL) instead of a word or two per line.
+        const cell = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Every shot is a"));
+        if (cell && cell.frame.width < 150) throw new Error(`the long cell is ${Math.round(cell.frame.width)} pt wide`);
+        return `last row at y=${Math.round(end.frame.y)} of ${Math.round(bottom)}${cell ? `; long cell ${Math.round(cell.frame.width)}×${Math.round(cell.frame.height)} pt` : ""}`;
+      });
+    }),
     chain(8, async (udid) => {
       await check("composer answers a blocked ticket", async () => {
         await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));

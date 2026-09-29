@@ -46,6 +46,13 @@ function Inline({ tokens, base }: { tokens: InlineToken[]; base: StyleProp<TextS
   );
 }
 
+/**
+ * Whether `text` has a block that scrolls sideways (a table or fenced code). Such markdown needs a
+ * container with a definite width: in a shrink-to-fit one (alignItems: "flex-end" with a maxWidth)
+ * Yoga measures the scroll content almost zero wide, and the block lays out thousands of points tall.
+ */
+export const scrollsSideways = (text: string) => parseBlocks(text).some((b) => b.t === "table" || b.t === "code");
+
 export function Markdown({ text, size = 15, color }: { text: string; size?: number; color?: string }) {
   const c = useColors();
   const base: TextStyle = { fontSize: size, lineHeight: Math.round(size * 1.45), color: color ?? c.text };

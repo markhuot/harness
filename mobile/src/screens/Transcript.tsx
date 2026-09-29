@@ -28,7 +28,7 @@ import { useStore } from "../state/store";
 import { MONO, RADIUS } from "../theme/tokens";
 import { Empty, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
-import { Markdown } from "../ui/Markdown";
+import { Markdown, scrollsSideways } from "../ui/Markdown";
 import { useStickToBottom } from "../ui/stickToBottom";
 
 const timeOf = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -166,7 +166,8 @@ const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry
         return (
           <View style={{ alignItems: "flex-end", gap: 4 }}>
             <Who icon="user" label="You" time={time} />
-            <View style={{ backgroundColor: c.accentSoft, borderRadius: 14, borderTopRightRadius: 4, padding: 11, maxWidth: "92%" }}>
+            {/* Shrinks to fit a short message; a table or code block needs a definite width (scrollsSideways). */}
+            <View style={[{ backgroundColor: c.accentSoft, borderRadius: 14, borderTopRightRadius: 4, padding: 11 }, scrollsSideways(ct.text) ? { width: "92%" } : { maxWidth: "92%" }]}>
               <Markdown text={ct.text} />
             </View>
           </View>

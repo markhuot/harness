@@ -691,14 +691,18 @@ kbd {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+/* Natural width, scrolling inside .md-table: auto layout would squeeze every column to fit the
+   message, a word or two per line. Cells cap at 240px (the iOS app's MAX_COL) and wrap there. */
 .md table {
   border-collapse: collapse;
+  width: max-content;
   min-width: 100%;
   font-size: 12.5px;
   line-height: 1.45;
 }
 .md th,
 .md td {
+  max-width: 240px;
   padding: 5px 10px;
   text-align: left;
   vertical-align: top;
