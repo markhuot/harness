@@ -304,6 +304,15 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(sys("work", ticket(worktree), { children: [child] })).toContain("it merges into this ticket's branch `harness/nyt-3`");
   });
 
+  test("a task parent on its own branch commits its work before completing a child; in the checkout it isn't told to", () => {
+    const child = ticket({ key: "NYT-4", title: "Part", status: "review" });
+    const commitFirst = "Commit your own work first: the child merges into your worktree, and uncommitted changes there can block the merge";
+    expect(sys("work", ticket(worktree), { children: [child] })).toContain(commitFirst);
+    const inCheckout = sys("work", ticket(), { children: [child] });
+    expect(inCheckout).toContain("Your child tickets");
+    expect(inCheckout).not.toContain(commitFirst);
+  });
+
   const prTarget = { host: "github.com", remote: "origin", repo: "github.com/nytimes/web" };
   const prBranches = { base: "main", baseSource: "settings", ownsWorktree: true, worktreesDir: "/Users/me/.harness/worktrees", pullRequest: prTarget };
 

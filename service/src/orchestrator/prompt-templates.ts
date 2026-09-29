@@ -309,7 +309,7 @@ Then call one of these and stop. When the output holds several separate items (f
     template: `## Your child tickets
 This ticket conducts child tickets. You are re-invoked with a message whenever one changes status: handle every change, then end the run; do not wait or poll.
 * Child in review: once its agent review is approved, you are its human reviewer. Inspect it and call \`review_ticket\` { key, decision, notes }.
-* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it{{#if branch}}: it merges into this ticket's branch \`{{branch}}\`{{/if}}.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it{{#if branch}}: it merges into this ticket's branch \`{{branch}}\`. Commit your own work first: the child merges into your worktree, and uncommitted changes there can block the merge{{/if}}.
 * Child blocked: answer it with \`message_ticket\` { key, text } when you can.
 \`submit_for_review\` is refused until every child is done.
 {{children}}`,
