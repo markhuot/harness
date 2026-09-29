@@ -6,10 +6,10 @@
 import { closePane, updatePanes } from "../state/panes";
 import { focusPaneBy } from "./paneFocus";
 
-const closers = new Map<string, () => void>();
+const closers = new Map<string, (keyboard: boolean) => void>();
 
 /** A draft editor takes over closing its pane. Returns the unregister. */
-export function registerDraftCloser(leafId: string, close: () => void): () => void {
+export function registerDraftCloser(leafId: string, close: (keyboard: boolean) => void): () => void {
   closers.set(leafId, close);
   return () => {
     if (closers.get(leafId) === close) closers.delete(leafId);
@@ -25,7 +25,7 @@ export const hasDraftCloser = (leafId: string) => closers.has(leafId);
  */
 export function requestClosePane(scope: string, leafId: string, keyboard = false) {
   const draft = closers.get(leafId);
-  if (draft) return draft();
+  if (draft) return draft(keyboard);
   if (keyboard) focusPaneBy(scope, (s) => closePane(s, leafId));
   else updatePanes(scope, (s) => closePane(s, leafId));
 }

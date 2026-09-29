@@ -6,7 +6,6 @@ import { Icon } from "./components/Icon";
 import { Sidebar } from "./views/Sidebar";
 import { InboxView } from "./views/Inbox";
 import { SettingsView } from "./views/Settings";
-import { NewSessionModal } from "./views/NewSession";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { PaneWorkspace } from "./components/PaneWorkspace";
@@ -134,7 +133,7 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
 }
 
 function Shell() {
-  const { route, state, openTerminal, navigate } = useStore();
+  const { route, state, openTerminal, openCompose, navigate } = useStore();
   const layout = useLayout();
   const appRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -142,24 +141,22 @@ function Shell() {
     if (w === null) appRef.current?.style.removeProperty("--sidebar-width");
     else appRef.current?.style.setProperty("--sidebar-width", `${w}px`);
   };
-  // false = closed; otherwise open, optionally preselecting a project ("New session in X").
-  const [composer, setComposerState] = useState<false | { projectId: string | null }>(false);
-  const setComposer = useCallback((open: boolean, projectId: string | null = null) => setComposerState(open ? { projectId } : false), []);
   // The palette remembers where the focus was, so its commands act there (and focus goes back).
   const [palette, setPalette] = useState<Element | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
 
   useEffect(() => {
-    // #/compose opens the composer on top of the board (handy for links, tests and screenshots).
+    // #/compose opens a New session pane on the All projects board (handy for links, tests and screenshots).
     const compose = () => {
       if (location.hash !== "#/compose") return;
-      location.hash = "#/board/all";
-      setComposer(true);
+      history.replaceState(history.state, "", "#/board/all");
+      dispatchEvent(new HashChangeEvent("hashchange"));
+      openCompose();
     };
     compose();
     addEventListener("hashchange", compose);
     return () => removeEventListener("hashchange", compose);
-  }, []);
+  }, [openCompose]);
 
   // Every shortcut and menu command goes through the registry (state/keys.ts).
   useKeyboardDispatcher();
@@ -167,7 +164,7 @@ function Shell() {
   useCommands(GLOBAL_OWNER, {
     palette: () => setPalette((open) => (open ? null : commandOrigin() ?? document.body)),
     shortcuts: () => setShortcuts((open) => !open),
-    "new-session": () => setComposer(true),
+    "new-session": () => openCompose(),
     // A terminal needs the desktop app's PTYs.
     "new-terminal": !!window.harness && (() => openTerminal()),
     board: () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" }),
@@ -186,7 +183,7 @@ function Shell() {
         <Sidebar
           ref={sidebarRef}
           collapsed={layout.sidebarCollapsed}
-          onNewSession={(projectId) => setComposer(true, projectId ?? null)}
+          onNewSession={(projectId) => openCompose(projectId ?? null)}
           onNewTerminal={openTerminal}
         />
         {!layout.sidebarCollapsed && (
@@ -236,7 +233,6 @@ function Shell() {
       >
         <Icon name="sidebar" />
       </button>
-      {composer && <NewSessionModal initialProjectId={composer.projectId} onClose={() => setComposer(false)} />}
       {palette && <CommandPalette origin={palette} onClose={() => setPalette(null)} onShortcuts={() => setShortcuts(true)} />}
       {shortcuts && <ShortcutsOverlay onClose={() => setShortcuts(false)} />}
     </div>

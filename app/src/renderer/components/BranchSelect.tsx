@@ -26,7 +26,6 @@ export function BranchSelect({
   newLabel,
   label = "Branch",
   disabled,
-  compact,
 }: {
   projectId: string;
   value: string | null;
@@ -39,8 +38,6 @@ export function BranchSelect({
   /** aria-label of the trigger */
   label?: string;
   disabled?: boolean;
-  /** Small inline variant (composer footer) */
-  compact?: boolean;
 }) {
   const { client } = useStore();
   const now = useNow();
@@ -172,7 +169,6 @@ export function BranchSelect({
     }
   };
 
-  const triggerStyle = compact ? { width: "auto", maxWidth: 280, minHeight: 26, height: 26, fontSize: 12 } : undefined;
   const triggerWidth = triggerRef.current?.getBoundingClientRect().width ?? 0;
   const shown = value ?? defaultLabel;
 
@@ -187,7 +183,6 @@ export function BranchSelect({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         title={shown}
-        style={triggerStyle}
         disabled={disabled}
         onClick={() => (open ? close(false) : show())}
         onKeyDown={(e) => {

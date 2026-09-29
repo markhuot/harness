@@ -110,16 +110,23 @@ const SPLITS: { id: string; label: string; zone: DropZone }[] = [
 /**
  * Right-click (or the context-menu key on a focused card or row): Open, or open in a new split in
  * the `scope` workspace beside the pane `fromPaneId` (a child row's own pane), else the focused
- * pane, else the board.
+ * pane, else the board. `discard` adds Discard draft (a draft's card).
  * The keyboard way to do what dragging does. Outside Electron the browser's own menu shows.
  */
-export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey: string, open: () => void, fromPaneId: string | null = null) {
+export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey: string, open: () => void, fromPaneId: string | null = null, discard?: () => void) {
   const bridge = window.harness;
   if (!bridge?.showContextMenu) return;
   e.preventDefault();
   e.stopPropagation();
-  const choice = await bridge.showContextMenu([{ id: "open", label: "Open" }, { type: "separator" }, ...SPLITS.map(({ id, label }) => ({ id, label }))]);
+  const choice = await bridge.showContextMenu([
+    { id: "open", label: "Open" },
+    { type: "separator" },
+    ...SPLITS.map(({ id, label }) => ({ id, label })),
+    // A draft card: throw it away (the delete of a draft).
+    ...(discard ? [{ type: "separator" as const }, { id: "discard", label: "Discard draft…" }] : []),
+  ]);
   if (choice === "open") return open();
+  if (choice === "discard") return discard?.();
   const split = SPLITS.find((s) => s.id === choice);
   if (split) updatePanes(scope, (s) => applyDrop(s, { kind: "ticket", ticketKey }, splitTarget(s, fromPaneId, ticketKey), split.zone));
 }

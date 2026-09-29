@@ -19,7 +19,6 @@ export function ModelSelect({
   defaultLabel,
   plainDefault,
   disabled,
-  compact,
   showRefresh,
 }: {
   driver: string;
@@ -31,8 +30,6 @@ export function ModelSelect({
   /** First option shows just defaultLabel (e.g. "Same as work") */
   plainDefault?: boolean;
   disabled?: boolean;
-  /** Small inline variant (composer footer) */
-  compact?: boolean;
   showRefresh?: boolean;
 }) {
   const { client, epoch } = useStore();
@@ -40,14 +37,12 @@ export function ModelSelect({
   const models = data?.models;
   const options = modelOptions(models, value, { inherited, defaultLabel, plainDefault });
   const problem = error ?? data?.error ?? null;
-  const style = compact ? { width: "auto", maxWidth: 220, minHeight: 26, height: 26, fontSize: 12 } : undefined;
   return (
     <span className="model-select row" style={{ gap: 4, alignItems: "center" }} data-driver={driver}>
       <select
         className="select"
         aria-label="Model"
         title={problem ? `Couldn't list models: ${problem}` : "Model"}
-        style={style}
         value={value ?? ""}
         disabled={disabled || !driver}
         onChange={(e) => onChange(e.target.value || null)}
@@ -102,7 +97,6 @@ export function DriverModelSelect({
   defaultLabel,
   disabled,
   autoWidth,
-  compact,
   onlyDriver,
   inheritedModel,
 }: {
@@ -114,8 +108,6 @@ export function DriverModelSelect({
   disabled?: boolean;
   /** Size to the picked label instead of filling the row (settings rows) */
   autoWidth?: boolean;
-  /** Small inline variant (composer footer) */
-  compact?: boolean;
   /** List only this driver's models (a ticket mid-run keeps its driver) */
   onlyDriver?: string;
   /** What a driver picked without a model falls back to, named in its "<driver> default" entry */
@@ -246,10 +238,7 @@ export function DriverModelSelect({
     }
   };
 
-  const triggerStyle = {
-    ...(compact ? { width: "auto", maxWidth: 260, minHeight: 26, height: 26, fontSize: 12 } : {}),
-    ...(autoWidth ? { width: "auto", maxWidth: 360, flex: "none" } : {}),
-  };
+  const triggerStyle = autoWidth ? { width: "auto", maxWidth: 360, flex: "none" } : undefined;
   const triggerWidth = triggerRef.current?.getBoundingClientRect().width ?? 0;
 
   return (

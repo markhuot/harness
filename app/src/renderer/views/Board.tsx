@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { isConductor, TICKET_STATUSES, type Ticket } from "@harness/shared";
-import { useStore } from "../state/store";
+import { useAction, useStore } from "../state/store";
 import {
   boardColumns,
   canLoadMoreSearch,
@@ -41,7 +41,16 @@ type CardSelection = "focused" | "open" | null;
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
 export function BoardPane() {
-  const { state, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
+  const { state, client, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
+  const act = useAction();
+  // A draft's delete is Discard; it asks only when there's a prompt to lose.
+  const discardDraft = useCallback(
+    (t: Ticket) => {
+      if (t.description.trim() && !confirm(`Discard the draft ${t.key}? Its prompt and settings are deleted.`)) return;
+      void act(() => client.deleteTicket(t.key), `${t.key} discarded`);
+    },
+    [act, client],
+  );
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
@@ -247,6 +256,7 @@ export function BoardPane() {
                     related={!!hoverConductor && t.parentId === hoverConductor}
                     onHoverConductor={setHoverConductor}
                     onOpen={openCard}
+                    onDiscard={discardDraft}
                   />
                 ))}
                 {tickets.length === 0 && !(status === "done" && paging?.nextCursor) && (
@@ -317,6 +327,7 @@ const TicketCard = memo(function TicketCard({
   onOpen,
   related,
   onHoverConductor,
+  onDiscard,
 }: {
   ticket: Ticket;
   state: State;
@@ -327,6 +338,8 @@ const TicketCard = memo(function TicketCard({
   onOpen: (key: string) => void;
   related: boolean;
   onHoverConductor: (id: string | null) => void;
+  /** Discard a draft (its card's delete) */
+  onDiscard: (t: Ticket) => void;
 }) {
   const deps = dependencyStates(state, t);
   const children = isConductor(t) ? childrenOf(state, t.id) : [];
@@ -337,10 +350,12 @@ const TicketCard = memo(function TicketCard({
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
   const scope = usePaneScope();
+  const draft = !!t.draft;
+  const discard = () => onDiscard(t);
 
   return (
     <article
-      className={`card ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
+      className={`card ${draft ? "draft" : ""} ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
@@ -348,9 +363,9 @@ const TicketCard = memo(function TicketCard({
       onClick={() => onOpen(t.key)}
       // Drag onto a half of the board or an open ticket to open it in a split there.
       {...dragProps(t.key, t.title)}
-      onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key))}
+      onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}
       role="button"
-      aria-label={`${t.key} ${t.title || "Untitled"}`}
+      aria-label={`${draft ? "Draft " : ""}${t.key} ${t.title || "Untitled"}`}
       tabIndex={isCursor ? 0 : -1}
       data-pane-autofocus={isCursor || undefined}
       // Enter is board.open (the dispatcher); Space, as on any button, does the same.
@@ -358,7 +373,13 @@ const TicketCard = memo(function TicketCard({
     >
       <div className="card-top">
         {showProject && project && <ProjectKey project={project} size="sm" />}
+        {draft && <Icon name="edit" size={11} className="card-draft-icon" />}
         <span className="card-key">{t.key}</span>
+        {draft && (
+          <span className="badge draft-badge" data-testid="card-draft" title="A draft: it runs once you start it or plan it">
+            Draft
+          </span>
+        )}
         {parent && (
           <span className="card-parent-chip" title={`Part of ${parent.key} · ${parent.title}`}>
             ↳ {parent.key}

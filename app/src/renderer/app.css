@@ -1257,10 +1257,60 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex-direction: column;
 }
 
-/* ------------------------------------------------------------------ new session */
+/* ------------------------------------------------------------------ new session / drafts */
 
-.new-session-head {
-  padding-bottom: 2px;
+/* A draft's pane (views/DraftEditor.tsx): a New session, or a saved draft. Accent-tinted header and
+   a dashed accent outline, so it reads as not-yet-real next to launched tickets. */
+.draft-pane {
+  position: relative;
+}
+.draft-pane::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.draft-titlebar {
+  background: var(--accent-soft);
+  gap: 7px;
+}
+.draft-icon {
+  color: var(--accent);
+  flex: none;
+}
+.draft-title {
+  color: var(--text);
+  white-space: nowrap;
+}
+.draft-badge {
+  flex: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  height: 16px;
+}
+.draft-saving {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.draft-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 20px 0;
+  overflow-y: auto;
+}
+.draft-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .project-picker {
   display: flex;
@@ -1269,6 +1319,7 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   padding: 2px 4px 2px 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  min-width: 0;
 }
 .select.bare {
   border: 0;
@@ -1279,48 +1330,12 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   font-weight: 500;
   box-shadow: none !important;
 }
-/* The footer's pickers (kind, driver, model, permissions) wrap; the actions stay right-aligned. */
-.new-session-foot {
-  flex-wrap: wrap;
-  row-gap: 8px;
-}
-/* Own row under the pickers: the switches on the left, the submit button on the right. */
-.new-session-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-basis: 100%;
-}
-/* Own row under the pickers: the ticket's branch, its base branch, and a hint about the pick. */
-.new-session-branches {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  flex-basis: 100%;
-  min-width: 0;
-  font-size: 12px;
-}
-.new-session-branch-hint {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.new-session-branch-hint.warn {
-  color: var(--amber, var(--red));
-}
-.new-session-options {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-right: auto;
-}
-.new-session-prompt {
+/* The prompt fills whatever the pane has left. */
+.draft-prompt {
+  flex: 1 1 auto;
   width: 100%;
-  min-height: 150px;
-  max-height: 50vh;
-  resize: vertical;
+  min-height: 120px;
+  resize: none;
   border: 0;
   outline: 0;
   background: transparent;
@@ -1328,8 +1343,82 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   line-height: 1.55;
   padding: 4px 0;
 }
-.new-session-prompt::placeholder {
+.draft-prompt::placeholder {
   color: var(--text-3);
+}
+.draft-options {
+  flex: none;
+  border-top: 1px solid var(--border);
+  padding: 8px 0 4px;
+}
+.draft-options-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: left;
+}
+.draft-options-toggle:hover {
+  color: var(--text);
+}
+.draft-options-label {
+  font-weight: 500;
+  flex: none;
+}
+.draft-options-summary {
+  color: var(--text-3);
+  min-width: 0;
+}
+.draft-options-summary::before {
+  content: "· ";
+}
+.draft-options-alert {
+  color: var(--amber, var(--red));
+  flex: none;
+}
+.draft-options .ticket-settings {
+  margin: 6px 0 4px;
+}
+.draft-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+/* Plan first is the quieter choice. */
+.draft-foot .btn-ghost {
+  color: var(--text-2);
+}
+
+/* The ticket settings rows (components/TicketSettings.tsx), in Details and a draft's Options. */
+.props > .branch-hint {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: -4px;
+}
+.props > .branch-hint.warn {
+  color: var(--amber, var(--red));
+}
+.props > .branch-hint.error {
+  color: var(--red);
+}
+.props .deps-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.props .deps-row .input {
+  max-width: 240px;
 }
 .card-reviews {
   display: inline-flex;

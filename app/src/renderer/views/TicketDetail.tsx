@@ -43,6 +43,7 @@ import { landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../s
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
+import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
@@ -127,8 +128,14 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   // Summaries stays there.
   const openedOn = useRef<string | null>(paneTab !== "summaries" ? ticketKey : null);
   const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
+  const draft = !!ticket?.draft;
   useEffect(() => {
     if (openedOn.current === ticketKey) return;
+    // A draft's pane has no tabs; submitting it picks the tab it goes to.
+    if (draft) {
+      openedOn.current = ticketKey;
+      return;
+    }
     if (paneTab !== "summaries") {
       openedOn.current = ticketKey;
       return;
@@ -137,7 +144,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
     if (!t) return;
     openedOn.current = ticketKey;
     if (t !== "summaries") updatePanes(scope, (s) => setPaneTab(s, paneId, t));
-  }, [ticketKey, paneTab, summaries, scope, paneId]);
+  }, [ticketKey, paneTab, summaries, scope, paneId, draft]);
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {
@@ -201,6 +208,9 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
       </aside>
     );
   }
+
+  // A draft is edited, not worked on: the New session editor instead of the tabs.
+  if (ticket.draft) return <DraftEditor paneId={paneId} ticket={ticket} zoomed={zoomed} />;
 
   const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
