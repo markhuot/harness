@@ -69,6 +69,18 @@ export function cleanClaudeEnv(env: Record<string, string | undefined>): Record<
   return out;
 }
 
+/**
+ * The environment for an agent run: cleanClaudeEnv plus MCP_CONNECTION_NONBLOCKING=0, unless the
+ * user set it. With stream-json input the CLI starts the first turn while claude.ai connectors
+ * (hc-jira, Rovo, ...) are still "pending", so a triage agent that answers in one turn never sees
+ * their tools and reports the MCP as unavailable, or as needing auth, since a plugin's duplicate
+ * of a connector is listed as unauthenticated until the connector list arrives. "0" holds the
+ * first turn until the connectors connect (up to MCP_CONNECT_TIMEOUT_MS; about a second).
+ */
+export function claudeRunEnv(env: Record<string, string | undefined>): Record<string, string> {
+  return { MCP_CONNECTION_NONBLOCKING: "0", ...cleanClaudeEnv(env) };
+}
+
 /** Claude Code's config folder: $CLAUDE_CONFIG_DIR, else ~/.claude. */
 export function claudeConfigDir(env: Record<string, string | undefined>): string {
   return env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), ".claude");
@@ -709,7 +721,7 @@ export class ClaudeCodeDriver implements Driver {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
-      env: cleanClaudeEnv(this.env),
+      env: claudeRunEnv(this.env),
     });
     const onAbort = () => {
       proc.kill("SIGTERM");

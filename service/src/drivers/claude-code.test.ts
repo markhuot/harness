@@ -494,6 +494,15 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(inv!.env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();
     expect(inv!.env.CLAUDE_CODE_USE_BEDROCK).toBe("0");
     expect(inv!.env.HARNESS_MARKER).toBe("yes");
+    // The first turn waits for claude.ai connectors instead of starting without their tools.
+    expect(inv!.env.MCP_CONNECTION_NONBLOCKING).toBe("0");
+  });
+
+  test("a user's own MCP_CONNECTION_NONBLOCKING reaches the run unchanged", async () => {
+    const s = setup({ script: [init("sess-1"), success()], env: { MCP_CONNECTION_NONBLOCKING: "1" } });
+    const { error } = await collect(s.driver.run(request({ tools: toolsForRun("work", s.driver) })));
+    expect(error).toBeNull();
+    expect(s.invocations()[0]!.env.MCP_CONNECTION_NONBLOCKING).toBe("1");
   });
 
   test("error result yields an error event and throws", async () => {
