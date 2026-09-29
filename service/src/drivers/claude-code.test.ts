@@ -49,9 +49,13 @@ interface Setup {
   record: string;
   driver: ClaudeCodeDriver;
   invocations(): { argv: string[]; stdin: string; cwd: string; env: Record<string, string> }[];
+  /** The fake's __mark lines: whether stdin was closed at that point of the script */
+  marks(): { label: string; stdinClosed: boolean }[];
 }
 
-function setup(opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number } = {}): Setup {
+function setup(
+  opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number; backgroundWaitMs?: number } = {},
+): Setup {
   const dir = tmp();
   const record = join(dir, "record.ndjson");
   const scriptPath = join(dir, "script.ndjson");
@@ -68,18 +72,21 @@ function setup(opts: { script?: unknown[]; env?: Record<string, string>; setting
     bin: opts.bin ?? FAKE,
     env,
     loginUrlTimeoutMs: opts.loginUrlTimeoutMs,
+    backgroundWaitMs: opts.backgroundWaitMs,
   });
+  const ndjson = (file: string) =>
+    existsSync(file)
+      ? readFileSync(file, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l))
+      : [];
   return {
     dir,
     record,
     driver,
-    invocations: () =>
-      existsSync(record)
-        ? readFileSync(record, "utf8")
-            .split("\n")
-            .filter(Boolean)
-            .map((l) => JSON.parse(l))
-        : [],
+    invocations: () => ndjson(record),
+    marks: () => ndjson(record + ".marks"),
   };
 }
 
@@ -117,7 +124,7 @@ describe("buildClaudeArgs", () => {
 
   test("work run: settings permission mode (ask → acceptEdits), mcp config, allowed tools, system prompt, no model/resume", () => {
     const args = buildClaudeArgs(req, { ...baseSettings, permissionMode: "ask" }, null);
-    expect(args.slice(0, 5)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
+    expect(args.slice(0, 7)).toEqual(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]);
     expect(argValue(args, "--permission-mode")).toBe("acceptEdits");
     expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
     expect(argValue(args, "--append-system-prompt")).toBe("SYS");
@@ -373,6 +380,84 @@ describe("StreamJsonParser", () => {
 
 // ---------------------------------------------------------------------------
 
+// Shapes recorded from claude 2.1.284 (trimmed).
+const bashCall = (id: string, command: string, extra: Record<string, unknown> = {}) => ({
+  type: "assistant",
+  message: { content: [{ type: "tool_use", id, name: "Bash", input: { command, ...extra } }] },
+});
+const toolResult = (id: string, text: string) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] } });
+const taskStarted = (taskId: string, callId: string, description: string, taskType = "local_bash") => ({
+  type: "system",
+  subtype: "task_started",
+  task_id: taskId,
+  tool_use_id: callId,
+  description,
+  task_type: taskType,
+});
+const taskDone = (taskId: string, callId: string, status = "completed") => ({ type: "system", subtype: "task_notification", task_id: taskId, tool_use_id: callId, status });
+const BG = (taskId: string) => `Command running in background with ID: ${taskId}. Output is being written to: /tmp/x/tasks/${taskId}.output.`;
+const TIMED_OUT = (taskId: string) =>
+  `Command did not complete within its 120s timeout and was moved to the background (ID: ${taskId}). Output is being written to: /tmp/x/tasks/${taskId}.output. You will be notified when it completes.`;
+
+describe("StreamJsonParser background tasks", () => {
+  test("a background command runs until its notification; a foreground one ends with its result", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    [bashCall("c1", "bun test", { run_in_background: true }), taskStarted("b1", "c1", "Run tests"), toolResult("c1", BG("b1"))].forEach((m) => p.handle(m));
+    [bashCall("c2", "composer show"), taskStarted("b2", "c2", "Show deps"), toolResult("c2", "php ^8.2")].forEach((m) => p.handle(m));
+    expect([...p.runningTasks.values()]).toEqual(["Run tests"]);
+    p.handle(taskDone("b1", "c1"));
+    expect(p.runningTasks.size).toBe(0);
+  });
+
+  // HARNESS-81: the suite hit Bash's 120s timeout, was moved to the background, and was killed.
+  test("a command moved to the background by its timeout keeps running", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    [bashCall("c1", "bun test"), taskStarted("b1", "c1", "Run suites"), toolResult("c1", TIMED_OUT("b1"))].forEach((m) => p.handle(m));
+    expect([...p.runningTasks.keys()]).toEqual(["b1"]);
+    p.handle({ type: "system", subtype: "task_updated", task_id: "b1", patch: { status: "running" } });
+    expect(p.runningTasks.size).toBe(1);
+    p.handle({ type: "system", subtype: "task_updated", task_id: "b1", patch: { status: "killed" } });
+    expect(p.runningTasks.size).toBe(0);
+  });
+
+  test("a Monitor and an async agent keep running past their tool results", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "m1", name: "Monitor", input: { command: "until …; done" } }] } });
+    p.handle(taskStarted("bm", "m1", "Wait for flag"));
+    p.handle(toolResult("m1", "Monitor started (task bm, expires in 5m unless the source ends first)."));
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "Mac UI", prompt: "p" } }] } });
+    p.handle(taskStarted("ta", "a1", "Mac UI", "local_agent"));
+    p.handle(toolResult("a1", "Async agent launched successfully. agentId: ta"));
+    expect([...p.runningTasks.values()]).toEqual(["Wait for flag", "Mac UI"]);
+  });
+
+  test("only a top-level finishing tool marks the run finished", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "d", prompt: "p" } }] } });
+    p.handle({ type: "assistant", parent_tool_use_id: "a1", message: { content: [{ type: "tool_use", id: "x", name: "mcp__harness__submit_for_review", input: {} }] } });
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "y", name: "mcp__harness__post_summary", input: {} }] } });
+    expect(p.finished).toBe(false);
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "z", name: "mcp__harness__block", input: { question: "?" } }] } });
+    expect(p.finished).toBe(true);
+  });
+
+  test("a second turn in the same process is charged only its own cost", () => {
+    const p = new StreamJsonParser({ sessionId: "sess-1", costUsd: 1 }, { requested: "auto", mode: "auto" });
+    const first = [{ ...init(), permissionMode: "default" }, success({ total_cost_usd: 1.5 })].flatMap((m) => p.handle(m));
+    const second = [{ ...init(), permissionMode: "default" }, success({ total_cost_usd: 1.75 })].flatMap((m) => p.handle(m));
+    const cost = (evs: DriverEvent[]) => (evs.find((e) => e.type === "usage") as { costUsd: number }).costUsd;
+    expect(cost(first)).toBeCloseTo(0.5, 10);
+    expect(cost(second)).toBeCloseTo(0.25, 10);
+    // The mode downgrade is reported on the first turn only.
+    expect(first.filter((e) => e.type === "status")).toHaveLength(1);
+    expect(second.filter((e) => e.type === "status")).toHaveLength(0);
+  });
+});
+
 describe("ClaudeCodeDriver.run (fake binary)", () => {
   test("spawns with argv, stdin prompt, cwd and a cleaned env; streams parsed events", async () => {
     const s = setup({
@@ -476,6 +561,107 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     const { error } = await collect(s.driver.run(request({ signal: ac.signal })));
     expect((error as Error).name).toBe("AbortError");
     expect(s.invocations()).toHaveLength(0);
+  });
+
+  test("the prompt goes in as a stream-json user message", async () => {
+    const s = setup({ script: [init(), success()] });
+    await collect(s.driver.run(request({ prompt: "Hi" })));
+    const argv = s.invocations()[0]!.argv;
+    expect(argValue(argv, "--input-format")).toBe("stream-json");
+    expect(s.invocations()[0]!.stdin).toBe("Hi");
+  });
+
+  // HARNESS-81: the agent moved its test run to the background and ended the turn to wait for
+  // it; closing stdin at that result made the CLI kill the run and the ticket went to review.
+  test("a turn that ends with a background task keeps the CLI alive until the task's turn finishes", async () => {
+    const s = setup({
+      script: [
+        init(),
+        bashCall("c1", "bun test"),
+        taskStarted("b1", "c1", "Run suites"),
+        toolResult("c1", TIMED_OUT("b1")),
+        { type: "assistant", message: { content: [{ type: "text", text: "I'll be notified when the background test run completes." }] } },
+        success({ result: "I'll be notified when the background test run completes.", total_cost_usd: 0.01 }),
+        { __sleep: 200 },
+        { __mark: "after first turn" },
+        taskDone("b1", "c1"),
+        init(),
+        { type: "assistant", message: { content: [{ type: "text", text: "All suites pass." }] } },
+        success({ result: "All suites pass.", total_cost_usd: 0.03 }),
+      ],
+    });
+    const { events, error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull(); // the fake exits 7 if stdin is never closed
+    expect(s.marks()).toEqual([{ label: "after first turn", stdinClosed: false }]);
+    expect(events.filter((e) => e.type === "status")).toEqual([
+      { type: "status", text: "Waiting for a background task to finish (Run suites), up to 30 min." },
+    ]);
+    expect(events.filter((e) => e.type === "text").map((e) => (e as { text: string }).text)).toEqual([
+      "I'll be notified when the background test run completes.",
+      "All suites pass.",
+    ]);
+    const costs = events.filter((e) => e.type === "usage").map((e) => (e as { costUsd: number }).costUsd);
+    expect(costs[0]).toBeCloseTo(0.01, 10);
+    expect(costs[1]).toBeCloseTo(0.02, 10);
+  });
+
+  test("a turn that submitted ends even with a background dev server still running", async () => {
+    const s = setup({
+      script: [
+        init(),
+        bashCall("c1", "bun run dev", { run_in_background: true }),
+        taskStarted("b1", "c1", "Start dev server"),
+        toolResult("c1", BG("b1")),
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "s1", name: "mcp__harness__submit_for_review", input: { summary: "Done" } }] } },
+        success(),
+        { __until_stdin_closed: true },
+        { __mark: "after result" },
+        taskDone("b1", "c1", "stopped"),
+      ],
+    });
+    const { events, error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(s.marks()).toEqual([{ label: "after result", stdinClosed: true }]);
+    expect(events.some((e) => e.type === "status")).toBe(false);
+  });
+
+  test("an error result ends the turn even with a background task running", async () => {
+    const s = setup({
+      script: [init(), bashCall("c1", "sleep 99", { run_in_background: true }), taskStarted("b1", "c1", "Sleep"), toolResult("c1", BG("b1")), success({ is_error: true, result: "API Error: 529" }), { __until_stdin_closed: true }, { __mark: "after" }],
+    });
+    const { error } = await collect(s.driver.run(request()));
+    expect((error as Error).message).toBe("API Error: 529");
+    expect(s.marks()).toEqual([{ label: "after", stdinClosed: true }]);
+  });
+
+  test("a background task that never finishes ends the turn after the wait limit", async () => {
+    const s = setup({
+      backgroundWaitMs: 300,
+      script: [
+        init(),
+        bashCall("c1", "tail -f log", { run_in_background: true }),
+        taskStarted("b1", "c1", "Follow log"),
+        toolResult("c1", BG("b1")),
+        success(),
+        { __sleep: 100 },
+        { __mark: "before limit" },
+        { __until_stdin_closed: true },
+        { __mark: "after limit" },
+        taskDone("b1", "c1", "stopped"),
+      ],
+    });
+    const started = Date.now();
+    const { events, error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(s.marks()).toEqual([
+      { label: "before limit", stdinClosed: false },
+      { label: "after limit", stdinClosed: true },
+    ]);
+    expect(events.filter((e) => e.type === "status").map((e) => (e as { text: string }).text)).toEqual([
+      "Waiting for a background task to finish (Follow log), up to 1s.",
+      "Background tasks were still running after 1s, so the turn ended and they were stopped.",
+    ]);
   });
 });
 
