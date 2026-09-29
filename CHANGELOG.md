@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260929.0234](https://github.com/markhuot/harness/releases/tag/app-20260929.0234) - 2026-09-29
+
 ### Fixed
 
 - On iPhone, a bulleted or numbered list in your own message now shows its text in the transcript.
