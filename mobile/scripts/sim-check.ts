@@ -1028,8 +1028,17 @@ function screens(s: Seeded): Screen[] {
     // A ticket in review whose agent review was skipped: the muted mark in the header, and the
     // switch (on) on its Details tab.
     { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
+    // Details' one Model picker (driver + model) with its sheet open.
+    {
+      name: "ticket-details-model",
+      url: `harness://ticket/${k(s.quick)}?tab=details`,
+      seconds: 7,
+      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Model, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
+    },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
+    // Settings → Models: the Default model picker above a review model per driver.
+    { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Default model, ")).then(() => Bun.sleep(500)) },
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
@@ -1250,6 +1259,23 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         moved(udid);
         if (!saved?.endsWith("then the diff.{{brief}}Z")) throw new Error(`expected the text to end "then the diff.{{brief}}Z", got ${JSON.stringify(saved)}`);
         return `ends ${JSON.stringify(saved.slice(-24))}`;
+      });
+    }),
+    chain(8, async (udid) => {
+      const openModels = async () => {
+        await goto(udid, `harness://ticket/${k(s.quick)}?tab=details`, (l) => l.some((x) => x.startsWith("Model, ")));
+        await tapWhere(udid, (l) => l.startsWith("Model, "));
+        await until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000);
+      };
+      await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
+        await openModels();
+        await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
+        const picked = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        await openModels();
+        await tapWhere(udid, (l) => l.startsWith("Default"));
+        const cleared = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === null, 8000);
+        moved(udid);
+        return `${picked.driver}/${picked.model} → ${cleared.driver}/${cleared.model ?? "default"}`;
       });
     }),
     chain(9, async (udid) => {
