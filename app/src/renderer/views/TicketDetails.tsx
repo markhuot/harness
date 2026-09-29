@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { isTicketKey } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { depChipTitle, dependencyStates, dependentsOf, inheritedBaseLabel, inheritedModel, newTicketBranchLabel } from "@harness/shared/state";
+import { depChipTitle, dependencyStates, dependentsOf, inheritedBaseLabel, inheritedModel, newTicketBranchLabel, ticketChoice, ticketChoicePatch, ticketResolvedChoice } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { driverLabel, relativeTime, StatusDot, Switch, useNow } from "../components/bits";
 import { skipReviewHint } from "../state/newSession";
-import { ModelSelect } from "../components/ModelSelect";
+import { DriverModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import { useOpenTicket } from "../components/paneContext";
@@ -132,31 +132,15 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
       </div>
 
       <dl className="props">
-        <dt>Driver</dt>
-        <dd>
-          <select
-            className="select"
-            value={ticket.driver}
-            disabled={!editable || ticket.busy}
-            onChange={(e) => void act(() => client.updateTicket(ticket.key, { driver: e.target.value }))}
-          >
-            {!state.drivers.some((d) => d.id === ticket.driver) && <option value={ticket.driver}>{ticket.driver}</option>}
-            {state.drivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-                {!d.available ? " (unavailable)" : ""}
-              </option>
-            ))}
-          </select>
-        </dd>
         <dt>Model</dt>
-        <dd title="Applies from the next run">
-          <ModelSelect
-            driver={ticket.driver}
-            value={ticket.model}
+        <dd title={ticket.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run"}>
+          <DriverModelSelect
+            value={ticketChoice(ticket, project, state.settings)}
+            resolved={ticketResolvedChoice(project, state.settings)}
             disabled={!editable}
-            inherited={inheritedModel(ticket.driver, "ticket", state.projects[ticket.projectId], state.settings)}
-            onChange={(m) => void act(() => client.updateTicket(ticket.key, { model: m }))}
+            onlyDriver={ticket.busy ? ticket.driver : undefined}
+            inheritedModel={(d) => inheritedModel(d, "ticket", project, state.settings)}
+            onChange={(c) => void act(() => client.updateTicket(ticket.key, ticketChoicePatch(c, project, state.settings)))}
           />
         </dd>
         <dt>Permissions</dt>

@@ -34,6 +34,11 @@ describe("comboRows", () => {
   test("nothing matching leaves no rows", () => {
     expect(comboRows(def, groups, "zzz")).toEqual([]);
   });
+
+  test("without a Default (a ticket mid-run) the rows start at the models", () => {
+    expect(comboRows(null, groups, "").map((r) => r.label)).toEqual(["Claude Code", "Opus 5.5", "Sonnet 5", "Dummy", "Dummy Fast"]);
+    expect(comboRows(null, groups, "opus").map((r) => r.label)).toEqual(["Claude Code", "Opus 5.5"]);
+  });
 });
 
 describe("active option", () => {

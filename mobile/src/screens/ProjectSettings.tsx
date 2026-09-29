@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import type { Project } from "@harness/shared";
-import { inheritedBaseLabel, inheritedModel, previewProjectKey } from "@harness/shared/state";
-import { branchNameError, PERMISSION_MODE_LABELS, resolveBaseBranch } from "@harness/shared";
+import { inheritedBaseLabel, inheritedModel, previewProjectKey, projectChoice, projectChoicePatch } from "@harness/shared/state";
+import { branchNameError, DEFAULT_TRIAGE_CHOICE, PERMISSION_MODE_LABELS, resolveBaseBranch } from "@harness/shared";
 import { useApp, useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
@@ -14,8 +14,8 @@ import { Button, Empty, ProjectKey } from "../ui/kit";
 import { ProjectColorPicker } from "../ui/ProjectColor";
 import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
-import { driverOptions } from "../lib/selectOptions";
+import { PermissionPicker } from "../ui/selects";
+import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { confirm } from "../ui/pick";
 
 export function ProjectSettingsScreen() {
@@ -73,7 +73,6 @@ function ProjectSettings({ project }: { project: Project }) {
     if (!(await confirm("Change the project folder?", `Agents start new runs in ${p}.`, "Change", false))) return setPath(project.path);
     await save({ path: p }, "Project folder updated");
   };
-  const fallbackName = state.drivers.find((d) => d.id === state.settings?.defaultDriver)?.name ?? state.settings?.defaultDriver;
   const inherited = state.settings?.permissionMode ?? "auto";
 
   return (
@@ -92,25 +91,15 @@ function ProjectSettings({ project }: { project: Project }) {
         </SRow>
       </Group>
       <Group title="Agents">
-        <SRow title="Default driver" sub="Used for new sessions in this project.">
-          <Select
-            value={project.defaultDriver ?? ""}
-            options={driverOptions(state.drivers, { none: `Global default${fallbackName ? ` (${fallbackName})` : ""}` })}
-            onChange={(v) => void save({ defaultDriver: v || null })}
-            placeholder={project.defaultDriver ?? "Global default"}
-            title="Default driver"
-            accessibilityName="Default driver"
+        <SRow title="Default model" sub="Used for new sessions in this project. Global default follows the app setting.">
+          <DriverModelPicker
+            value={projectChoice(project, state.settings)}
+            resolved={state.settings ? { driver: state.settings.defaultDriver, model: inheritedModel(state.settings.defaultDriver, "project", project, state.settings) } : DEFAULT_TRIAGE_CHOICE}
+            defaultLabel="Global default"
+            inheritedModel={(d) => inheritedModel(d, "project", project, state.settings)}
+            onChange={(choice) => void save(projectChoicePatch(choice, project))}
+            title="Default model"
           />
-        </SRow>
-        <SRow title="Default models" sub="Per driver. Default follows the global setting." stacked>
-          <View style={{ gap: 8 }}>
-            {state.drivers.map((d) => (
-              <View key={d.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <Text style={{ color: c.text2, fontSize: 14 }}>{d.name}</Text>
-                <ModelPicker driver={d.id} value={project.defaultModels?.[d.id] ?? null} inherited={inheritedModel(d.id, "project", project, state.settings)} onChange={(m) => void save({ defaultModels: { [d.id]: m } })} />
-              </View>
-            ))}
-          </View>
         </SRow>
         <SRow title="Permission mode" sub={`${PERMISSION_MODE_LABELS[project.permissionMode ?? inherited].description} Tickets can override it.`}>
           <PermissionPicker value={project.permissionMode} inherited={inherited} onChange={(m) => void save({ permissionMode: m })} />

@@ -9,6 +9,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A ticket's Details tab on the Mac and iPhone now has one searchable Model menu in place of its
+  separate Driver and Model menus, the same menu New session uses. Picking Opus under Claude Code
+  sets both at once, and Default puts the ticket back on its project's driver and model. While a
+  run is going, the menu lists only the ticket's current driver's models, so you can still switch
+  the model for the next run.
+- Settings → Models and each project's settings have a single Default model menu in place of the
+  Default driver menu and the per-driver default model rows. Picking a model there sets the
+  default driver too and clears the default models saved for other drivers. The agent review
+  model is still set per driver.
+
 ## [app-20260929.1932](https://github.com/markhuot/harness/releases/tag/app-20260929.1932) - 2026-09-29
 
 ### Added

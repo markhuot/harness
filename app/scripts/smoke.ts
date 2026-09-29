@@ -316,22 +316,28 @@ try {
   check("composer's project dropdown ends with Add project…", projectOpts.length > 1 && projectOpts.at(-1) === "Add project…", projectOpts.join(","));
   const headText = await js<string>(`document.querySelector(".new-session-head")?.textContent ?? ""`);
   check("composer header has no separate Add project button or New session label", !(await exists(".new-session-head button")) && !headText.includes("New session"), headText);
-  // 5a. Model dropdown: lists the selected driver's models (default first), refetches on driver change.
+  // 5a. Model combobox: Default first, then each signed-in driver's models under its name.
   const pick = (sel: string, value: string) =>
     js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
-  const modelOpts = (scope: string) => js<string[]>(`[...document.querySelectorAll("${scope} .model-select option")].map(o => o.textContent)`);
-  const ccOpts = await until("composer model options", async () => {
-    const o = await modelOpts(".modal-foot");
-    return o.includes("Sonnet 5") && o;
-  });
-  check("composer model dropdown lists the driver's models, default first and marked", ccOpts[0] === "Default (Opus 5.5)" && ccOpts.includes("Opus 5.5 · default"), ccOpts.join(","));
-  await pick(".modal-foot select.select:not([aria-label=Model])", "dummy");
-  const dummyOpts = await until("dummy model options", async () => {
-    const o = await modelOpts(".modal-foot");
-    return o.includes("Dummy Slow") && o;
-  });
-  check("switching driver refetches the model list", !dummyOpts.includes("Sonnet 5") && dummyOpts[0] === "Default (Dummy Fast)", dummyOpts.join(","));
-  await pick(".modal-foot select[aria-label=Model]", "dummy-slow");
+  const comboClose = () => js(`document.querySelector(".model-combo") && window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
+  /** Open the combined Model combobox inside `scope` and list its rows ("# Driver" for headings). */
+  const comboRows = async (scope: string) => {
+    await comboClose();
+    await js(`document.querySelector(${JSON.stringify(`${scope} [data-testid=driver-model-select] button`)}).click()`);
+    return until(`${scope} model rows`, () =>
+      js<string[]>(`[...document.querySelectorAll(".model-combo-list > *")].map(e => (e.classList.contains("model-combo-heading") ? "# " : "") + e.textContent)`).then((r) => r.length > 0 && r),
+    );
+  };
+  /** Pick the open combobox's option whose label starts with `label`. */
+  const comboPick = (label: string) =>
+    js<boolean>(`(() => { const el = [...document.querySelectorAll(".model-combo-option")].find(e => e.textContent.startsWith(${JSON.stringify(label)})); if (!el) return false; el.click(); return true; })()`);
+  const ccRows = await comboRows(".modal-foot");
+  check(
+    "composer model combobox: Default first, then models under each signed-in driver",
+    ccRows[0]!.startsWith("Default (") && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
+    ccRows.join(","),
+  );
+  check("composer combobox picks a driver + model in one go", await comboPick("Dummy Slow"));
   const modeOpts = await js<string[]>(`[...document.querySelectorAll(".modal-foot [data-testid=permission-mode] option")].map(o => o.textContent)`);
   check("composer offers the permission modes, inheriting by default", modeOpts.join(",") === "Default · Auto,Auto,Ask,Read only", modeOpts.join(","));
   await pick(".modal-foot [data-testid=permission-mode]", "read_only");
@@ -350,23 +356,54 @@ try {
   const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
   check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
   await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
-  await until("details model select", () => exists(".props .model-select select"));
-  await pick(".props .model-select select", "");
-  const cleared = await until("model cleared", async () => (await api<{ ticket: { model: string | null } }>("GET", `/tickets/${created.key}`)).ticket.model === null);
-  check("Details model select PATCHes the ticket (Default → null)", cleared);
-  await pick(".props [data-testid=permission-mode]", "");
-  const modeCleared = await until("mode cleared", async () => (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${created.key}`)).ticket.permissionMode === null);
-  check("Details permission select PATCHes the ticket (Default → null)", modeCleared);
+  check("Details has one Model combobox (no Driver select)", (await until("details model combobox", () => exists(".props [data-testid=driver-model-select]"))) && !(await exists(".props select.select:not([data-testid])")));
+  const busyRows = await comboRows(".props");
+  check("mid-run the Model combobox keeps the ticket's driver (its models only, no Default)", busyRows.join(",") === "Dummy Fast,Dummy Slow", busyRows.join(","));
+  await comboClose();
+  // Between runs: a planning ticket on Dummy lists every driver, and Default moves it back to the project's.
+  const idle = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Pick a model between runs", start: false, driver: "dummy", model: "dummy-slow" });
+  await until("plan run finished", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${idle.key}`)).ticket.busy, 15000);
+  await js(`location.hash = "#/board/all/ticket/${idle.key}/details"`);
+  await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=driver-model-select]")`));
+  const idleRows = await comboRows(".props");
+  check("between runs it lists every signed-in driver with Default first", idleRows[0]!.startsWith("Default (") && idleRows.includes("# Claude Code") && idleRows.includes("# Dummy"), idleRows.join(","));
+  await comboPick("Default");
+  const cleared = await until("model cleared", async () => {
+    const t = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${idle.key}`)).ticket;
+    return t.model === null && t.driver === "claude-code" && t;
+  });
+  check("Details Default puts the ticket back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
   check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
+  await api("PATCH", `/tickets/${idle.key}`, { permissionMode: "ask" });
+  await until("mode shown", () => js<boolean>(`document.querySelector(".props [data-testid=permission-mode]")?.value === "ask"`));
+  await pick(".props [data-testid=permission-mode]", "");
+  const modeCleared = await until("mode cleared", async () => (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${idle.key}`)).ticket.permissionMode === null);
+  check("Details permission select PATCHes the ticket (Default → null)", modeCleared);
+  await comboRows(".props");
+  await comboPick("Dummy Fast");
+  const repicked = await until("repicked", async () => {
+    const t = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${idle.key}`)).ticket;
+    return t.driver === "dummy" && t.model === "dummy-fast" && t;
+  });
+  check("Details picks another driver + model in one go", !!repicked, JSON.stringify(repicked));
   const cardBadge = await js<string>(`document.querySelector('.card[data-key="NYTIMES-1"] .model-badge')?.textContent ?? ""`);
   check("board card shows a non-default model", cardBadge === "Sonnet 5", cardBadge);
   await js(`location.hash = "#/settings/models"`);
-  await until("model settings", () => exists("[data-testid=model-settings-claude-code] select"));
+  await until("model settings", () => exists("#settings-models [data-testid=driver-model-select]"));
+  await comboRows("#settings-models");
+  await comboPick("Haiku 4.5");
+  const savedDefault = await until("settings default model", async () => {
+    const st = await api<{ defaultDriver: string; defaultModels: Record<string, string | null> }>("GET", "/settings");
+    return st.defaultDriver === "claude-code" && st.defaultModels["claude-code"] === "haiku";
+  });
+  check("Settings → Models saves the default driver + model from one combobox", savedDefault);
+  await comboRows("#settings-models");
+  await comboPick("Driver default");
+  await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string | null> }>("GET", "/settings")).defaultModels["claude-code"]);
   await pick("[data-testid=model-settings-claude-code] select", "haiku");
-  const savedDefault = await until("settings default model", async () => (await api<{ defaultModels: Record<string, string> }>("GET", "/settings")).defaultModels["claude-code"] === "haiku");
-  check("Settings → Models saves a per-driver default", savedDefault);
+  const savedReview = await until("review model", async () => (await api<{ reviewModels: Record<string, string | null> }>("GET", "/settings")).reviewModels["claude-code"] === "haiku");
+  check("Settings → Models still saves a per-driver review model", savedReview);
   await pick("[data-testid=model-settings-claude-code] select", "");
-  await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string> }>("GET", "/settings")).defaultModels["claude-code"]);
   await js(`location.hash = "#/settings/permissions"`);
   await until("permission settings", () => exists("#settings-permissions [data-testid=permission-mode]"));
   await pick("#settings-permissions [data-testid=permission-mode]", "ask");

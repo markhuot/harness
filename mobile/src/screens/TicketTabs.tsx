@@ -24,6 +24,9 @@ import {
   relativeTime,
   shortToolName,
   STATUS_LABEL,
+  ticketChoice,
+  ticketChoicePatch,
+  ticketResolvedChoice,
 } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -33,8 +36,8 @@ import { Icon } from "../ui/Icon";
 import { AttachmentRow } from "../ui/Attachments";
 import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
-import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
-import { driverOptions } from "../lib/selectOptions";
+import { PermissionPicker } from "../ui/selects";
+import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { skipReviewHint } from "../lib/newSession";
 import { useStickToBottom } from "../ui/stickToBottom";
 import { BranchPicker } from "../ui/BranchPicker";
@@ -307,19 +310,15 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
       </Field>
 
       <Card>
-        <Prop label="Driver">
-          <Select
-            value={ticket.driver}
-            options={driverOptions(state.drivers, { unavailable: "mark" })}
-            onChange={(d) => void act(() => client.updateTicket(ticket.key, { driver: d }))}
-            placeholder={ticket.driver}
-            title="Changing the driver clears the ticket's model."
-            accessibilityName="Driver"
-            disabled={!editable || ticket.busy}
+        <Prop label="Model" hint={ticket.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run"}>
+          <DriverModelPicker
+            value={ticketChoice(ticket, project, state.settings)}
+            resolved={ticketResolvedChoice(project, state.settings)}
+            disabled={!editable}
+            onlyDriver={ticket.busy ? ticket.driver : undefined}
+            inheritedModel={(d) => inheritedModel(d, "ticket", project, state.settings)}
+            onChange={(choice) => void act(() => client.updateTicket(ticket.key, ticketChoicePatch(choice, project, state.settings)))}
           />
-        </Prop>
-        <Prop label="Model" hint="Applies from the next run">
-          <ModelPicker driver={ticket.driver} value={ticket.model} disabled={!editable} inherited={inheritedModel(ticket.driver, "ticket", project, state.settings)} onChange={(m) => void act(() => client.updateTicket(ticket.key, { model: m }))} />
         </Prop>
         <Prop label="Permissions" hint="Applies from the next tool call">
           <PermissionPicker value={ticket.permissionMode} disabled={!editable} inherited={resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode} onChange={(m) => void act(() => client.updateTicket(ticket.key, { permissionMode: m }))} />

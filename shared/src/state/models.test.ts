@@ -1,6 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import type { DriverModels, ModelInfo } from "../index";
-import { decodeChoice, driverModelChoices, encodeChoice, filterChoiceGroups, inheritedModel, ModelListCache, modelOptions, ticketModelBadge } from "./models";
+import {
+  decodeChoice,
+  driverModelChoices,
+  encodeChoice,
+  filterChoiceGroups,
+  inheritedModel,
+  ModelListCache,
+  modelOptions,
+  projectChoice,
+  projectChoicePatch,
+  projectDriver,
+  settingsChoice,
+  settingsChoicePatch,
+  ticketChoice,
+  ticketChoicePatch,
+  ticketModelBadge,
+  ticketResolvedChoice,
+} from "./models";
 
 const MODELS: ModelInfo[] = [
   { id: "opus", name: "Opus 5.5", default: true },
@@ -138,7 +155,7 @@ describe("driverModelChoices (combined driver + model select)", () => {
     const c = driverModelChoices(one, models, { driver: "claude-code", model: "opus" }, { driver: "claude-code", model: "opus" });
     expect(c.groups).toHaveLength(1);
     expect(c.groups[0]!.label).toBeNull();
-    expect(c.default.label).toBe("Default (Opus)");
+    expect(c.default!.label).toBe("Default (Opus)");
     expect(c.selectedLabel).toBe("Opus");
   });
 
@@ -155,6 +172,25 @@ describe("driverModelChoices (combined driver + model select)", () => {
     const b = driverModelChoices(drivers, models, { driver: "claude-code", model: "claude-x-1" }, resolved);
     expect(b.groups[0]!.options.at(-1)!.label).toBe("claude-x-1 (custom)");
     expect(b.groups[1]!.options.some((o) => o.label.includes("custom"))).toBe(false);
+  });
+
+  test("onlyDriver lists that driver alone; Default stays only when it resolves there", () => {
+    const same = driverModelChoices(drivers, models, { driver: "claude-code", model: "opus" }, resolved, { onlyDriver: "claude-code" });
+    expect(same.groups.map((g) => g.driver)).toEqual(["claude-code"]);
+    expect(same.groups[0]!.label).toBeNull();
+    expect(same.default?.label).toBe("Default (Sonnet)");
+    const other = driverModelChoices(drivers, models, { driver: "anthropic-api", model: null }, resolved, { onlyDriver: "anthropic-api" });
+    expect(other.default).toBeNull();
+    expect(other.groups.flatMap((g) => g.options.map((o) => o.label))).toEqual(["Anthropic API default (Sonnet 5)", "Sonnet 5"]);
+    expect(other.selectedLabel).toBe("Anthropic API default (Sonnet 5)");
+    // A locked driver that isn't signed in still shows (the ticket already runs on it)
+    expect(driverModelChoices(drivers, models, { driver: "codex", model: "luna" }, resolved, { onlyDriver: "codex" }).groups.map((g) => g.driver)).toEqual(["codex"]);
+  });
+
+  test("a driver's default entry names what it inherits when told, not the list's default", () => {
+    const c = driverModelChoices(drivers, models, { driver: "claude-code", model: null }, { driver: "anthropic-api", model: null }, { inheritedModel: (d) => (d === "claude-code" ? "opus" : null) });
+    expect(c.groups[0]!.options[0]!.label).toBe("Claude Code default (Opus)");
+    expect(c.default!.label).toBe("Default (Anthropic API · Sonnet 5)");
   });
 
   test("encode/decode round-trip; Default is the empty value", () => {
@@ -185,5 +221,60 @@ describe("filterChoiceGroups (type-ahead)", () => {
   test("a flat group (no label) still matches its driver through driverNames", () => {
     const flat = [{ ...groups[0]!, label: null }];
     expect(filterChoiceGroups(flat, "claude", { "claude-code": "Claude Code" })[0]!.options).toHaveLength(2);
+  });
+});
+
+describe("ticket / project / settings picks", () => {
+  const settings = { defaultDriver: "claude-code", defaultModels: { "claude-code": "sonnet" } as Record<string, string | null> };
+  const project = { defaultDriver: "codex", defaultModels: { codex: "luna", "claude-code": "opus" } };
+  const plain = { defaultDriver: null, defaultModels: {} };
+
+  test("projectDriver: the project's own, else the settings'", () => {
+    expect(projectDriver(project, settings)).toBe("codex");
+    expect(projectDriver(plain, settings)).toBe("claude-code");
+    expect(projectDriver(null, null)).toBe("");
+  });
+
+  test("a ticket on its project's driver without a model shows as Default; anything else as its pick", () => {
+    expect(ticketChoice({ driver: "codex", model: null }, project, settings)).toEqual({ driver: null, model: null });
+    expect(ticketChoice({ driver: "codex", model: "luna" }, project, settings)).toEqual({ driver: "codex", model: "luna" });
+    // Another driver without a model is a real pick, not Default
+    expect(ticketChoice({ driver: "claude-code", model: null }, project, settings)).toEqual({ driver: "claude-code", model: null });
+  });
+
+  test("a ticket's Default resolves to the project's driver and the model it inherits there", () => {
+    expect(ticketResolvedChoice(project, settings)).toEqual({ driver: "codex", model: "luna" });
+    expect(ticketResolvedChoice(plain, settings)).toEqual({ driver: "claude-code", model: "sonnet" });
+    expect(ticketResolvedChoice(null, null)).toEqual({ driver: null, model: null });
+  });
+
+  test("picking Default moves a ticket back to its project's driver and clears its model", () => {
+    expect(ticketChoicePatch({ driver: null, model: null }, project, settings)).toEqual({ driver: "codex", model: null });
+    expect(ticketChoicePatch({ driver: "claude-code", model: "opus" }, project, settings)).toEqual({ driver: "claude-code", model: "opus" });
+    expect(ticketChoicePatch({ driver: null, model: null }, null, null)).toEqual({ model: null });
+  });
+
+  test("a project shows its pinned driver's model, a model for the settings' driver, or Default", () => {
+    expect(projectChoice(project, settings)).toEqual({ driver: "codex", model: "luna" });
+    expect(projectChoice({ defaultDriver: "codex", defaultModels: {} }, settings)).toEqual({ driver: "codex", model: null });
+    expect(projectChoice({ defaultDriver: null, defaultModels: { "claude-code": "opus" } }, settings)).toEqual({ driver: "claude-code", model: "opus" });
+    expect(projectChoice({ defaultDriver: null, defaultModels: { codex: "luna" } }, settings)).toEqual({ driver: null, model: null });
+  });
+
+  test("a project pick keeps only that driver's model; Default clears the driver and every model", () => {
+    expect(projectChoicePatch({ driver: "claude-code", model: "haiku" }, project)).toEqual({ defaultDriver: "claude-code", defaultModels: { codex: null, "claude-code": "haiku" } });
+    expect(projectChoicePatch({ driver: null, model: null }, project)).toEqual({ defaultDriver: null, defaultModels: { codex: null, "claude-code": null } });
+  });
+
+  test("settings show Default until the default driver has a model", () => {
+    expect(settingsChoice(settings)).toEqual({ driver: "claude-code", model: "sonnet" });
+    expect(settingsChoice({ defaultDriver: "codex", defaultModels: { "claude-code": "sonnet" } })).toEqual({ driver: null, model: null });
+  });
+
+  test("a settings pick sets the driver with only its model; Default keeps the driver and clears models", () => {
+    const s = { defaultDriver: "claude-code", defaultModels: { "claude-code": "sonnet", codex: "luna" } };
+    expect(settingsChoicePatch({ driver: "codex", model: null }, s)).toEqual({ defaultDriver: "codex", defaultModels: { "claude-code": null, codex: null } });
+    expect(settingsChoicePatch({ driver: "codex", model: "luna-2" }, s)).toEqual({ defaultDriver: "codex", defaultModels: { "claude-code": null, codex: "luna-2" } });
+    expect(settingsChoicePatch({ driver: null, model: null }, s)).toEqual({ defaultDriver: "claude-code", defaultModels: { "claude-code": null, codex: null } });
   });
 });

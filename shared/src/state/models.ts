@@ -3,7 +3,7 @@
 // wraps ModelListCache in its own hook (useSyncExternalStore).
 
 import type { DriverInfo, DriverModels, ModelInfo, Project, PublicSettings } from "../protocol";
-import type { TriageChoice } from "../watchers";
+import { DEFAULT_TRIAGE_CHOICE, replaceModels, type TriageChoice } from "../watchers";
 import type { HarnessClient } from "../client";
 
 export interface ModelOption {
@@ -82,8 +82,8 @@ export interface ChoiceGroup {
 }
 
 export interface ChoiceOptions {
-  /** The Default option (value ""), naming what it resolves to */
-  default: ModelOption;
+  /** The Default option (value ""), naming what it resolves to; null when it isn't offered (see onlyDriver) */
+  default: ModelOption | null;
   groups: ChoiceGroup[];
   /** Label of the picked option (for triggers that show text, like the iOS menu) */
   selectedLabel: string;
@@ -96,23 +96,28 @@ type ChoiceDriver = Pick<DriverInfo, "id" | "name" | "available" | "authenticate
  * group of their models; the picked driver is kept even when it isn't signed in, so the select
  * never hides the current value. With a single group the heading is dropped and the models show as
  * a flat list. `resolved` is what Default falls back to (driver + model; model null → the driver's
- * listed default). A driver picked without a model gets a "<driver> default" entry, and a model the
- * list doesn't have is kept as "(custom)".
+ * listed default). A driver picked without a model gets a "<driver> default" entry (naming
+ * `inheritedModel(driver)` when given, else the list's default), and a model the list doesn't have
+ * is kept as "(custom)". `onlyDriver` lists that one driver alone (a ticket mid-run can change its
+ * model but not its driver); Default is then only offered when it resolves to that driver.
  */
 export function driverModelChoices(
   drivers: ChoiceDriver[],
   models: Record<string, ModelInfo[] | undefined>,
   value: TriageChoice,
   resolved: TriageChoice,
-  opts: { defaultLabel?: string } = {},
+  opts: { defaultLabel?: string; onlyDriver?: string; inheritedModel?: (driver: string) => string | null } = {},
 ): ChoiceOptions {
-  const shown = drivers.filter((d) => (d.available && d.authenticated) || d.id === value.driver);
-  if (value.driver && !shown.some((d) => d.id === value.driver)) shown.push({ id: value.driver, name: value.driver, available: false, authenticated: false });
+  const only = opts.onlyDriver;
+  const shown = only ? drivers.filter((d) => d.id === only) : drivers.filter((d) => (d.available && d.authenticated) || d.id === value.driver);
+  const keep = only ?? value.driver;
+  if (keep && !shown.some((d) => d.id === keep)) shown.push({ id: keep, name: keep, available: false, authenticated: false });
   const flat = shown.length <= 1;
   const name = (id: string) => drivers.find((d) => d.id === id)?.name ?? id;
   const defaultModelName = (driver: string, model: string | null) => {
     const list = models[driver];
-    return model ? modelName(list, model) : list?.find((m) => m.default)?.name;
+    const id = model ?? opts.inheritedModel?.(driver) ?? null;
+    return id ? modelName(list, id) : list?.find((m) => m.default)?.name;
   };
 
   const groups: ChoiceGroup[] = shown.map((d) => {
@@ -129,17 +134,78 @@ export function driverModelChoices(
 
   const label = opts.defaultLabel ?? "Default";
   const parts = resolved.driver ? [flat && shown[0]?.id === resolved.driver ? null : name(resolved.driver), defaultModelName(resolved.driver, resolved.model)].filter(Boolean) : [];
-  const def: ModelOption = { value: "", label: parts.length ? `${label} (${parts.join(" · ")})` : label };
+  const def: ModelOption | null = only && resolved.driver !== only ? null : { value: "", label: parts.length ? `${label} (${parts.join(" · ")})` : label };
 
   const picked = encodeChoice(value);
-  const all = [def, ...groups.flatMap((g) => g.options)];
+  const all = [...(def ? [def] : []), ...groups.flatMap((g) => g.options)];
   const pickedOption = all.find((o) => o.value === picked);
   const selectedLabel = !pickedOption
-    ? def.label
+    ? (def?.label ?? label)
     : pickedOption === def || flat || !value.model
       ? pickedOption.label
       : `${name(value.driver!)} · ${pickedOption.label}`;
   return { default: def, groups, selectedLabel };
+}
+
+// ---------------------------------------------------------------------------
+// The combined select on tickets, projects and settings: what it shows and what a pick saves
+// ---------------------------------------------------------------------------
+
+type ModelSettings = Pick<PublicSettings, "defaultDriver" | "defaultModels">;
+type ModelProject = Pick<Project, "defaultDriver" | "defaultModels">;
+
+/** The driver a project's new tickets use: its own default, else the settings default. */
+export function projectDriver(project: Pick<Project, "defaultDriver"> | null | undefined, settings: Pick<PublicSettings, "defaultDriver"> | null | undefined): string {
+  return project?.defaultDriver || settings?.defaultDriver || "";
+}
+
+/** What a ticket's Default resolves to: the project's driver with the model it would inherit there. */
+export function ticketResolvedChoice(project: ModelProject | null | undefined, settings: ModelSettings | null | undefined): TriageChoice {
+  const driver = projectDriver(project, settings);
+  return driver ? { driver, model: inheritedModel(driver, "ticket", project, settings) } : DEFAULT_TRIAGE_CHOICE;
+}
+
+/**
+ * A ticket's pick in the combined select. It always has a driver, so it shows as Default only
+ * when it sits on its project's driver without a model of its own.
+ */
+export function ticketChoice(ticket: { driver: string; model: string | null }, project: ModelProject | null | undefined, settings: ModelSettings | null | undefined): TriageChoice {
+  if (!ticket.model && ticket.driver === projectDriver(project, settings)) return DEFAULT_TRIAGE_CHOICE;
+  return { driver: ticket.driver, model: ticket.model };
+}
+
+/** The ticket PATCH for a pick. Default puts it back on the project's driver with no model of its own. */
+export function ticketChoicePatch(choice: TriageChoice, project: ModelProject | null | undefined, settings: ModelSettings | null | undefined): { driver?: string; model: string | null } {
+  const driver = choice.driver ?? projectDriver(project, settings);
+  return driver ? { driver, model: choice.model } : { model: null };
+}
+
+/**
+ * A project's default pick. A pinned driver shows with its model. Without one, a model stored for
+ * the settings' driver still shows as that pick; otherwise Default (inherit both from settings).
+ */
+export function projectChoice(project: ModelProject, settings: ModelSettings | null | undefined): TriageChoice {
+  if (project.defaultDriver) return { driver: project.defaultDriver, model: project.defaultModels?.[project.defaultDriver] || null };
+  const driver = settings?.defaultDriver;
+  const model = driver ? project.defaultModels?.[driver] : null;
+  return driver && model ? { driver, model } : DEFAULT_TRIAGE_CHOICE;
+}
+
+/** The project PATCH for a pick: the driver, and a models map holding only that driver's model. */
+export function projectChoicePatch(choice: TriageChoice, project: ModelProject): { defaultDriver: string | null; defaultModels: Record<string, string | null> } {
+  return { defaultDriver: choice.driver, defaultModels: replaceModels(project.defaultModels, choice) };
+}
+
+/** Settings' default pick. The driver is always set, so Default means that driver's own default model. */
+export function settingsChoice(settings: ModelSettings): TriageChoice {
+  const model = settings.defaultModels[settings.defaultDriver] || null;
+  return model ? { driver: settings.defaultDriver, model } : DEFAULT_TRIAGE_CHOICE;
+}
+
+/** The settings PATCH for a pick. Default keeps the driver and clears the models. */
+export function settingsChoicePatch(choice: TriageChoice, settings: ModelSettings): { defaultDriver: string; defaultModels: Record<string, string | null> } {
+  const driver = choice.driver ?? settings.defaultDriver;
+  return { defaultDriver: driver, defaultModels: replaceModels(settings.defaultModels, { driver, model: choice.model }) };
 }
 
 /**

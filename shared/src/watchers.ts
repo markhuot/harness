@@ -76,8 +76,8 @@ export function watcherChoice(w: Pick<Watcher, "driver" | "models"> | null | und
   return model ? { driver, model } : DEFAULT_TRIAGE_CHOICE;
 }
 
-/** Every stored driver gets null (cleared); `keep` then sets one. */
-function replaceModels(current: Record<string, string | null | undefined> | undefined, keep: TriageChoice): Record<string, string | null> {
+/** Every stored driver gets null (cleared); `keep` then sets one. A PATCH body for a per-driver models map. */
+export function replaceModels(current: Record<string, string | null | undefined> | undefined, keep: TriageChoice): Record<string, string | null> {
   const out: Record<string, string | null> = Object.fromEntries(Object.keys(current ?? {}).map((k) => [k, null]));
   if (keep.driver) out[keep.driver] = keep.model;
   return out;

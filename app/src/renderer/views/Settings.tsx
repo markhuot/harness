@@ -63,7 +63,7 @@ export function SettingsView() {
           <AppearanceSection />
           <DriversSection />
           {state.settings ? (
-            <GeneralSection settings={state.settings} drivers={state.drivers} />
+            <GeneralSection settings={state.settings} />
           ) : (
             <Section id="general" title="General">
               <div className="card-surface empty">
@@ -215,7 +215,7 @@ export function DraftInput({ value, onCommit, placeholder, type = "text", classN
   );
 }
 
-function GeneralSection({ settings, drivers }: { settings: PublicSettings; drivers: DriverInfo[] }) {
+function GeneralSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
   const [apiKey, setApiKey] = useState("");
@@ -232,20 +232,9 @@ function GeneralSection({ settings, drivers }: { settings: PublicSettings; drive
     }
   };
 
-  const driverOptions = drivers.some((d) => d.id === settings.defaultDriver) ? drivers : [...drivers, { id: settings.defaultDriver, name: settings.defaultDriver } as DriverInfo];
-
   return (
     <Section id="general" title="General">
       <div className="card-surface settings-card">
-        <Row title="Default driver" sub="Used for new sessions unless the project overrides it.">
-          <select className="select" value={settings.defaultDriver} onChange={(e) => save({ defaultDriver: e.target.value })}>
-            {driverOptions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </Row>
         <Row title="Max concurrent runs" sub="Agent runs across all sessions. Extra runs wait in the queue.">
           <DraftInput
             type="number"

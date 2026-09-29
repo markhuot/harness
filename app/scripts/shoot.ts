@@ -103,6 +103,17 @@ const openBranchCombo = (q: string, pick = false) => `(async () => {
   await wait(400);
   if (${pick}) [...document.querySelectorAll(".branch-combo .model-combo-option")].find((o) => o.querySelector(".mono"))?.click();
 })()`;
+// Opens the driver + model combobox inside `scope` once it renders.
+const openCombo = (scope: string) => `(async () => {
+  let t = null;
+  for (let i = 0; i < 40 && !t; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    t = document.querySelector(${JSON.stringify(`${scope} .model-combo-trigger`)});
+  }
+  t?.scrollIntoView({ block: "center" });
+  t?.click();
+})()`;
+
 // Settings → Prompts: opens a prompt's editor and scrolls it into view; `then` runs after (with
 // `area`, the editor's textarea, and `wait`), e.g. to type into it.
 const openPrompt = (id: string, then = "") => `(async () => {
@@ -131,6 +142,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
   // A ticket in planning: its branch can still change (no worktree yet).
   { name: "details-planning", route: "#/board/all/ticket/NYTIMES-2/details" },
+  // Its one Model combobox (driver + model) open.
+  { name: "details-model", route: "#/board/all/ticket/NYTIMES-2/details", setup: openCombo(".props") },
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },
   { name: "inbox", route: "#/inbox" },
   { name: "inbox-watcher-error", route: "#/inbox", setup: `document.querySelector(".watcher-error")?.click()` },
@@ -155,6 +168,10 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "branch-picked", route: "#/compose", setup: openBranchCombo("medl", true) },
   { name: "branch-picker-new", route: "#/compose", setup: openBranchCombo("feature/new-login") },
   { name: "permissions", route: "#/settings/permissions" },
+  // Settings → Models: one Default model combobox, then a review model per driver.
+  { name: "settings-models", route: "#/settings/models" },
+  { name: "settings-models-open", route: "#/settings/models", setup: openCombo("#settings-models") },
+  { name: "project-model-open", route: `#/project/${hello}/settings`, setup: openCombo("[data-testid=project-models]") },
   // Prompts: the list, a built-in prompt, a customized one, a draft that doesn't validate, the
   // compare view, and a stored override that no longer validates (mock-service seeds both).
   { name: "prompts", route: "#/settings/prompts" },

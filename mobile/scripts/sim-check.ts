@@ -975,6 +975,8 @@ interface Screen {
   browse?: boolean;
   /** Taps to make before the shot. */
   prepare?: (udid: string) => Promise<unknown>;
+  /** Taps after the shot, to close what prepare opened (a sheet a deep link doesn't dismiss). */
+  after?: (udid: string) => Promise<unknown>;
   /** Waits out the redraw after the appearance flips, for a screen slower than FLIP_MS (a plugin's WebView reloads). */
   redrawn?: (udid: string) => Promise<unknown>;
 }
@@ -1028,8 +1030,19 @@ function screens(s: Seeded): Screen[] {
     // A ticket in review whose agent review was skipped: the muted mark in the header, and the
     // switch (on) on its Details tab.
     { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
+    // Details' one Model picker (driver + model) with its sheet open.
+    {
+      name: "ticket-details-model",
+      url: `harness://ticket/${k(s.quick)}?tab=details`,
+      seconds: 7,
+      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Model, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
+      // The sheet is a Modal, which the next screen's deep link would leave on top.
+      after: (udid) => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
+    },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
+    // Settings → Models: the Default model picker above a review model per driver.
+    { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Default model, ")).then(() => Bun.sleep(500)) },
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
@@ -1091,6 +1104,7 @@ async function shootScreens(udid: string, list: Screen[], browsed: Promise<unkno
       if (s.wait) await Bun.sleep(s.wait);
       if (s.prepare) await s.prepare(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
       const [, alive] = await Promise.all([timed(`  shoot: ${s.name}`, () => shootBoth(udid, s.name, s.redrawn && (() => s.redrawn!(udid)))), shown ? true : running(udid)]);
+      if (s.after) await s.after(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
       if (alive) console.log(`  ${join(shots, s.name)}-{light,dark}.png`);
       else {
         console.log(`✗ ${s.name}: the app crashed opening ${s.url}`);
@@ -1250,6 +1264,23 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         moved(udid);
         if (!saved?.endsWith("then the diff.{{brief}}Z")) throw new Error(`expected the text to end "then the diff.{{brief}}Z", got ${JSON.stringify(saved)}`);
         return `ends ${JSON.stringify(saved.slice(-24))}`;
+      });
+    }),
+    chain(8, async (udid) => {
+      const openModels = async () => {
+        await goto(udid, `harness://ticket/${k(s.quick)}?tab=details`, (l) => l.some((x) => x.startsWith("Model, ")));
+        await tapWhere(udid, (l) => l.startsWith("Model, "));
+        await until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000);
+      };
+      await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
+        await openModels();
+        await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
+        const picked = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        await openModels();
+        await tapWhere(udid, (l) => l.startsWith("Default"));
+        const cleared = await settle(s.quick.key, (x) => x.driver === "dummy" && x.model === null, 8000);
+        moved(udid);
+        return `${picked.driver}/${picked.model} → ${cleared.driver}/${cleared.model ?? "default"}`;
       });
     }),
     chain(9, async (udid) => {

@@ -8,15 +8,14 @@ import { rovingIndex, type RovingMove } from "./useRovingList";
 export type ComboRow = { kind: "heading"; driver: string; label: string } | { kind: "option"; value: string; label: string };
 
 /**
- * The popover's rows for `query`: Default first (hidden while a query is typed unless every word
+ * The popover's rows for `query`: Default first when offered (hidden while a query is typed unless every word
  * of it is in Default's label), then each group's heading (none for a flat, unlabelled group) and
  * its matching options.
  */
-export function comboRows(def: ModelOption, groups: ChoiceGroup[], query: string, driverNames: Record<string, string> = {}): ComboRow[] {
+export function comboRows(def: ModelOption | null, groups: ChoiceGroup[], query: string, driverNames: Record<string, string> = {}): ComboRow[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const rows: ComboRow[] = [];
-  const defLabel = def.label.toLowerCase();
-  if (words.every((w) => defLabel.includes(w))) rows.push({ kind: "option", value: def.value, label: def.label });
+  if (def && words.every((w) => def.label.toLowerCase().includes(w))) rows.push({ kind: "option", value: def.value, label: def.label });
   for (const g of filterChoiceGroups(groups, query, driverNames)) {
     if (g.label !== null) rows.push({ kind: "heading", driver: g.driver, label: g.label });
     for (const o of g.options) rows.push({ kind: "option", value: o.value, label: o.label });

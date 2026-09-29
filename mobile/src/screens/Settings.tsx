@@ -5,7 +5,7 @@ import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput,
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, promptCounts, promptsSummary, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
-import { CLASSIFIER_LABELS, inheritedModel, modelName, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
+import { CLASSIFIER_LABELS, modelName, settingsChoice, settingsChoicePatch, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { useDriverModels } from "../state/models";
@@ -16,7 +16,6 @@ import { Icon } from "../ui/Icon";
 import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
 import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
 import { DriverModelPicker } from "../ui/DriverModelPicker";
-import { driverOptions } from "../lib/selectOptions";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { PROMPTS_INTRO, usePrompts } from "./Prompts";
@@ -288,7 +287,7 @@ function DriversSection() {
 }
 
 function GeneralSection({ settings }: { settings: PublicSettings }) {
-  const { state, client, toast } = useStore();
+  const { client, toast } = useStore();
   const act = useAction();
   const c = useColors();
   const inputStyle = useInputStyle();
@@ -305,9 +304,6 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
   };
   return (
     <Group title="General">
-      <SRow title="Default driver" sub="Used for new sessions unless the project overrides it.">
-        <Select value={settings.defaultDriver} options={driverOptions(state.drivers)} onChange={(v) => void save({ defaultDriver: v })} placeholder={settings.defaultDriver} title="Default driver" accessibilityName="Default driver" />
-      </SRow>
       <SRow title="Max concurrent runs" sub="Agent runs across all sessions. Extra runs wait in the queue.">
         <DraftField
           value={String(settings.maxConcurrentRuns)}
@@ -358,22 +354,20 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
 function ModelsSection({ settings }: { settings: PublicSettings }) {
   const { state, client } = useStore();
   const act = useAction();
-  const c = useColors();
-  const saveMap = (field: "defaultModels" | "reviewModels", driver: string, model: string | null) => void act(() => client.updateSettings({ [field]: { [driver]: model } }));
   return (
     <Group title="Models" footer="Tickets and projects can pick their own model; these apply when they don't.">
+      <SRow title="Default model" sub="Used for new sessions unless the project or ticket picks its own.">
+        <DriverModelPicker
+          value={settingsChoice(settings)}
+          resolved={{ driver: settings.defaultDriver, model: null }}
+          defaultLabel="Driver default"
+          onChange={(choice) => void act(() => client.updateSettings(settingsChoicePatch(choice, settings)))}
+          title="Default model"
+        />
+      </SRow>
       {state.drivers.map((d, i) => (
-        <SRow key={d.id} title={d.name} stacked last={i === state.drivers.length - 1}>
-          <View style={{ gap: 8 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <Text style={{ color: c.text2, fontSize: 14 }}>Default</Text>
-              <ModelPicker driver={d.id} value={settings.defaultModels[d.id] ?? null} inherited={inheritedModel(d.id, "settings", null, settings)} onChange={(m) => saveMap("defaultModels", d.id, m)} />
-            </View>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <Text style={{ color: c.text2, fontSize: 14 }}>Agent review</Text>
-              <ModelPicker driver={d.id} value={settings.reviewModels[d.id] ?? null} defaultLabel="Same as work" plainDefault onChange={(m) => saveMap("reviewModels", d.id, m)} title="Review model" />
-            </View>
-          </View>
+        <SRow key={d.id} title={d.name} sub="Model for agent review runs" last={i === state.drivers.length - 1}>
+          <ModelPicker driver={d.id} value={settings.reviewModels[d.id] ?? null} defaultLabel="Same as work" plainDefault onChange={(m) => void act(() => client.updateSettings({ reviewModels: { [d.id]: m } }))} title="Review model" />
         </SRow>
       ))}
     </Group>
