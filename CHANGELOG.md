@@ -18,6 +18,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   and resetting a prompt goes back to the built-in. Harness refuses a prompt that names a variable
   it doesn't have (a typo like `{{brnch}}`), so a mistake never reaches an agent. Agents can also
   change a prompt for you, after you approve it.
+- On the Mac, Settings → Prompts lists every agent prompt, split into system prompt sections and
+  run messages, and marks each one Built-in or Customized. Open a prompt to read its built-in
+  text, click Customize to edit a copy, and save with Save or ⌘S. The editor lists the variables
+  the prompt can use (click one to insert it), flags a mistake like `{{brnch}}` as you type, and
+  can show what you changed next to the built-in. Reset to built-in puts the prompt back on the
+  text that updates with the app. If an app update leaves one of your prompts naming a variable
+  that no longer exists, the prompt shows "Not in use" and explains that runs use the built-in
+  until you fix or reset it.
 - Each watcher can now pick the model its triage agent runs on. The watcher form's driver menu
   is now a single Model menu that lists every signed-in driver's models under that driver's name,
   so picking Opus under Claude Code sets both at once. With only one driver signed in, the menu is

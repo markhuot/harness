@@ -103,6 +103,23 @@ const openBranchCombo = (q: string, pick = false) => `(async () => {
   await wait(400);
   if (${pick}) [...document.querySelectorAll(".branch-combo .model-combo-option")].find((o) => o.querySelector(".mono"))?.click();
 })()`;
+// Settings → Prompts: opens a prompt's editor and scrolls it into view; `then` runs after (with
+// `area`, the editor's textarea, and `wait`), e.g. to type into it.
+const openPrompt = (id: string, then = "") => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let row = null;
+  for (let i = 0; i < 40 && !row; i++) {
+    await wait(100);
+    row = document.querySelector('[data-prompt="${id}"]');
+  }
+  row?.click();
+  await wait(200);
+  const type = (el, text) => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(el, text); el.dispatchEvent(new Event("input", { bubbles: true })); };
+  const area = () => document.querySelector("[data-testid=prompt-text]");
+  ${then}
+  await wait(150);
+  row?.scrollIntoView({ block: "start" });
+})()`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -136,6 +153,33 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "branch-picked", route: "#/compose", setup: openBranchCombo("medl", true) },
   { name: "branch-picker-new", route: "#/compose", setup: openBranchCombo("feature/new-login") },
   { name: "permissions", route: "#/settings/permissions" },
+  // Prompts: the list, a built-in prompt, a customized one, a draft that doesn't validate, the
+  // compare view, and a stored override that no longer validates (mock-service seeds both).
+  { name: "prompts", route: "#/settings/prompts" },
+  { name: "prompt-builtin", route: "#/settings/prompts", setup: openPrompt("system.work") },
+  { name: "prompt-customized", route: "#/settings/prompts", setup: openPrompt("run.review") },
+  { name: "prompt-invalid", route: "#/settings/prompts", setup: openPrompt("run.review", `type(area(), area().value.replace("{{brief}}", "{{breif}}"));`) },
+  {
+    name: "prompt-compare",
+    route: "#/settings/prompts",
+    setup: openPrompt("run.review", `document.querySelector("[data-testid=prompt-compare]")?.click();`),
+  },
+  { name: "prompt-broken", route: "#/settings/prompts", setup: openPrompt("system.files") },
+  // Save and reset go through PATCH /settings and the reloaded catalog: Introduction turns
+  // Customized, then back to Built-in (so the mock ends as it started for the next theme's shots).
+  {
+    name: "prompt-saved",
+    route: "#/settings/prompts",
+    setup: openPrompt(
+      "system.intro",
+      `[...document.querySelectorAll("[data-testid=prompt-editor] button")].find((b) => b.textContent?.includes("Customize"))?.click(); await wait(100); type(area(), area().value + "\\n\\nKeep replies short."); await wait(100); document.querySelector("[data-testid=prompt-save]")?.click(); await wait(600);`,
+    ),
+  },
+  {
+    name: "prompt-reset",
+    route: "#/settings/prompts",
+    setup: `window.confirm = () => true; ${openPrompt("system.intro", `[...document.querySelectorAll("[data-testid=prompt-editor] button")].find((b) => b.textContent?.includes("Reset"))?.click(); await wait(600);`)}`,
+  },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },
   { name: "error", route: "#/board/all" },

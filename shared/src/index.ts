@@ -9,3 +9,4 @@ export * from "./commandLine";
 export * from "./projectColors";
 export * from "./mentions";
 export * from "./templates";
+export * from "./prompts";
