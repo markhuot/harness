@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, ModelInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, settingsWatcherChoice,settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";

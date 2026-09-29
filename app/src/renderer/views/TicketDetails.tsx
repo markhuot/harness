@@ -200,10 +200,8 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
                 />
               </dd>
             ) : (
-              <dd className="mono selectable">
-                {plannedBranch(ticket)}
-                {!ticket.branch && <span className="muted"> · when work starts</span>}
-              </dd>
+              // Read-only once the worktree exists (or the ticket is done), so no "when work starts" note.
+              <dd className="mono selectable">{plannedBranch(ticket)}</dd>
             )}
             <dt>Base branch</dt>
             {editable ? (
