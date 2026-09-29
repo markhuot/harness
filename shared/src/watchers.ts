@@ -1,6 +1,6 @@
 // Watcher helpers shared by the service and clients.
 
-import type { Watcher } from "./protocol";
+import type { Settings, Watcher } from "./protocol";
 
 const SAFE_WORD = /^[A-Za-z0-9_\-.,/:=@%+~]+$/;
 
@@ -33,4 +33,21 @@ export function outputTitle(text: string): string {
   const flat = line.replace(/\s+/g, " ").trim();
   if (!flat) return "Watcher output";
   return flat.length > OUTPUT_TITLE_MAX ? flat.slice(0, OUTPUT_TITLE_MAX - 1).trimEnd() + "…" : flat;
+}
+
+type TriageSettings = Pick<Settings, "defaultDriver" | "defaultModels" | "watcherDriver" | "watcherModels">;
+
+/** The driver a watcher's triage sessions run on: its own, else settings.watcherDriver, else settings.defaultDriver. */
+export function watcherDriver(w: Pick<Watcher, "driver"> | null | undefined, settings: Pick<Settings, "defaultDriver" | "watcherDriver">): string {
+  return w?.driver || settings.watcherDriver || settings.defaultDriver;
+}
+
+/**
+ * The model a watcher's triage sessions use on `driver`. Precedence (first set wins): the
+ * watcher's models[driver], settings.watcherModels[driver], settings.defaultModels[driver];
+ * null → the driver's own default. Pass `watcher: null` for what a watcher without its own
+ * model falls back to (and for injected output, which has no watcher).
+ */
+export function watcherModel(driver: string, w: Pick<Watcher, "models"> | null | undefined, settings: Partial<TriageSettings> | null | undefined): string | null {
+  return w?.models?.[driver] || settings?.watcherModels?.[driver] || settings?.defaultModels?.[driver] || null;
 }

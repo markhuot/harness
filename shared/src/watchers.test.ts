@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { outputTitle, OUTPUT_TITLE_MAX, shellQuote, watcherCommandLine } from "./watchers";
+import { outputTitle, OUTPUT_TITLE_MAX, shellQuote, watcherCommandLine, watcherDriver, watcherModel } from "./watchers";
 
 describe("watcherCommandLine", () => {
   test("a shell watcher's command is used as is", () => {
@@ -37,5 +37,24 @@ describe("outputTitle", () => {
 
   test("blank output gets a placeholder", () => {
     expect(outputTitle("  \n\t")).toBe("Watcher output");
+  });
+});
+
+describe("watcherDriver / watcherModel", () => {
+  const settings = { defaultDriver: "claude-code", watcherDriver: null, defaultModels: { "claude-code": "haiku" }, watcherModels: {} as Record<string, string | null> };
+
+  test("the watcher's driver wins, then settings.watcherDriver, then the default driver", () => {
+    expect(watcherDriver({ driver: "anthropic-api" }, { ...settings, watcherDriver: "dummy" })).toBe("anthropic-api");
+    expect(watcherDriver({ driver: null }, { ...settings, watcherDriver: "dummy" })).toBe("dummy");
+    expect(watcherDriver({ driver: null }, settings)).toBe("claude-code");
+    expect(watcherDriver(null, { defaultDriver: "claude-code" })).toBe("claude-code");
+  });
+
+  test("model precedence: watcher, then watcher default, then global default, then null", () => {
+    const s = { ...settings, watcherModels: { "claude-code": "sonnet" } };
+    expect(watcherModel("claude-code", { models: { "claude-code": "opus" } }, s)).toBe("opus");
+    expect(watcherModel("claude-code", { models: {} }, s)).toBe("sonnet");
+    expect(watcherModel("claude-code", null, settings)).toBe("haiku");
+    expect(watcherModel("anthropic-api", { models: { "claude-code": "opus" } }, s)).toBeNull();
   });
 });
