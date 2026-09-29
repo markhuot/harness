@@ -11,6 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- You can skip the agent review for a ticket that doesn't need one, like a quick question. The
+  New session window on the Mac and iPhone has a "Skip agent review" option, and a ticket's
+  Details tab lets you turn it on or off later. When the agent submits the ticket, it goes to
+  Review with the agent review marked as skipped and waits only on you, so your approval
+  finishes it without waiting for a reviewer agent. The agent can also skip its own review when
+  you ask for no bot review or when it only answered a question, as long as the project still
+  requires your review.
+
 - You can rewrite the instructions Harness gives its agents. Each part of the built-in prompts
   (the work, review and completion rules, the ticket lifecycle, the triage instructions, and the
   rest) can be replaced with your own text, and it applies to every run from then on. A prompt you

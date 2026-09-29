@@ -80,6 +80,10 @@ you answer.
 - Leave "Start immediately" on to skip planning.
 - A ticket moves to Review when the agent submits it. An independent agent reviewer
   then runs, and you give your own review.
+- Tick **Skip agent review** in New session (or on the ticket's Details tab) for tickets that
+  don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
+  only on you. The agent can also skip its own review when you ask it to, or when it only
+  answered a question, as long as the project requires your review.
 - Once both reviews approve, a final agent step runs on its own and moves the ticket to
   Done. If the ticket was worked in a git worktree, that step merges the branch. Turn off
   **Complete when approved** in project settings to press **Complete** yourself instead.
