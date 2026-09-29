@@ -41,6 +41,12 @@ export interface Project {
   /** Permission mode for this project's tickets (null → settings.permissionMode) */
   permissionMode: PermissionMode | null;
   /**
+   * Branch this project's tickets merge into when they complete, and new ticket branches start
+   * from (DESIGN.md "Branches"). null → settings.baseBranch. Resolve with `resolveBaseBranch`.
+   * The service always sends it; optional only so older payloads type-check.
+   */
+  baseBranch?: string | null;
+  /**
    * Color of the project's key badge: a preset id from PROJECT_COLORS ("blue") or a custom
    * "#rrggbb". null → the theme's accent.
    */
@@ -117,8 +123,27 @@ export interface Ticket {
   externalRef: ExternalRef | null;
   /** Directory the agent runs in (project path or a worktree) */
   workdir: string | null;
-  /** Git branch when running in a worktree */
+  /**
+   * The git branch checked out in the ticket's worktree, set once the worktree exists. The
+   * invariant: branch set ⇔ the ticket works in a git worktree of its own at `workdir` (a harness
+   * worktree or, after `update_branch`, another worktree that has the branch checked out). null
+   * while the ticket hasn't started, or when it runs in the project checkout itself.
+   * The branch a ticket will use or uses: `plannedBranch(ticket)` (DESIGN.md "Branches").
+   */
   branch: string | null;
+  /**
+   * The branch chosen for the ticket (CreateTicketBody.branch, update_branch). When work starts
+   * the worktree checks it out: an existing local branch as is, a new name created from the base
+   * branch. null → harness/<key> (`harnessBranch`). Kept after the worktree exists, so a re-opened
+   * ticket whose worktree was removed gets the same branch back. Optional so older payloads type-check.
+   */
+  requestedBranch?: string | null;
+  /**
+   * Base branch override: what this ticket's work merges into when it completes (and where a new
+   * branch starts). null → project → settings; resolve with `resolveBaseBranch`. Optional so
+   * older payloads type-check.
+   */
+  baseBranch?: string | null;
   /**
    * Per-ticket worktree choice, applied when work starts: true → its own worktree, false → the
    * project checkout, null → the project's useWorktrees. Optional only so older payloads type-check.
@@ -427,6 +452,12 @@ export interface Settings {
   /** Stored API key for the anthropic-api driver (never sent back to clients in full) */
   anthropicApiKey: string | null;
   /**
+   * Default base branch (projects and tickets may override it): what completed tickets merge into
+   * and new ticket branches start from. A valid git branch name; default "main". The service
+   * always sends it; optional so clients tolerate an older service without it.
+   */
+  baseBranch?: string;
+  /**
    * Which addresses the service listens on (DESIGN.md "Network"). The service always sends it
    * (default { mode: "localhost" }); optional so clients tolerate an older service without it.
    */
@@ -583,6 +614,8 @@ export interface CreateProjectBody {
   permissionMode?: PermissionMode | null;
   /** Per-driver default models; PATCH merges per driver, null clears one */
   defaultModels?: Record<string, string | null>;
+  /** A valid branch name; null or "" → inherit settings.baseBranch */
+  baseBranch?: string | null;
 }
 
 export interface CreateTicketBody {
@@ -600,6 +633,15 @@ export interface CreateTicketBody {
   start?: boolean;
   /** Worktree for this ticket: false → the project checkout (null / omitted → project.useWorktrees) */
   useWorktree?: boolean | null;
+  /**
+   * The branch the ticket's worktree checks out (Ticket.requestedBranch). null / omitted / "" →
+   * harness/<key>. An existing local branch is checked out as is (the ticket blocks if another
+   * worktree has it checked out); a new name is created from the base branch. Needs a worktree:
+   * refused with useWorktree false. Pick names from GET /projects/:id/branches.
+   */
+  branch?: string | null;
+  /** Base branch override (Ticket.baseBranch); null / "" → inherit the project's */
+  baseBranch?: string | null;
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;
@@ -618,12 +660,37 @@ export interface UpdateTicketBody {
   model?: string | null;
   /** Applies from the next tool call / run; null → inherit from the project / settings */
   permissionMode?: PermissionMode | null;
+  /** Base branch override; null / "" → inherit the project's. Applies from the next run. */
+  baseBranch?: string | null;
+  /**
+   * The branch for the ticket's worktree (see CreateTicketBody.branch). Only while the ticket has
+   * no worktree (409 once it has one: its agent re-points it with the update_branch tool).
+   */
+  branch?: string | null;
   dependsOn?: string[];
   position?: number;
 }
 
 export interface MessageBody {
   text: string;
+}
+
+/**
+ * One local branch of a project's repository, from GET /projects/:id/branches?q=&limit=
+ * (ApiClient.projectBranches), for the new-session branch picker. Most recent commit first; `q`
+ * filters case-insensitively (substring matches first, then names containing q's characters in
+ * order); `limit` defaults to 50 (max 200). A project that isn't a git repo gives [].
+ */
+export interface BranchInfo {
+  /** Short name, e.g. "main", "medl-1223-ai-app", "harness/web-3" */
+  name: string;
+  /** Committer date of the branch tip (ms) */
+  lastCommitAt: number;
+  /**
+   * Path of a worktree that has the branch checked out (the main checkout included), else null.
+   * A new ticket can't take a branch that is checked out elsewhere: it would block.
+   */
+  checkedOutAt: string | null;
 }
 
 export interface HumanReviewBody {
@@ -695,7 +762,8 @@ export interface ApiError {
  * When a plugin tab shows on a ticket (evaluated by the service in GET /tickets/:key/tabs):
  * - "always":   every ticket
  * - "workdir":  ticket.workdir is set, exists on disk, and is inside a git work tree
- * - "worktree": ticket.branch is set and ticket.workdir exists on disk (a harness worktree)
+ * - "worktree": ticket.branch is set and ticket.workdir exists on disk (the ticket's own git
+ *               worktree: a harness worktree, or the one update_branch re-pointed it to)
  */
 export type TicketTabWhen = "always" | "workdir" | "worktree";
 
