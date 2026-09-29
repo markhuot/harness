@@ -74,6 +74,8 @@ let settings: PublicSettings = {
   classifier: "claude-cli",
   defaultModels: {},
   reviewModels: {},
+  watcherDriver: null,
+  watcherModels: {},
   anthropicApiKeySet: false,
   listen: { mode: "localhost" },
 };
@@ -801,6 +803,7 @@ function seed() {
     prompt: "Dispatch review requests for harness to HARNESS.",
     mode: "interval",
     intervalSec: 300,
+    models: { "claude-code": "sonnet" },
     lastRunAt: now() - 60_000,
     live: { state: "waiting", since: now() - 58_000, nextRunAt: now() + 240_000, failures: 0 },
   };
@@ -1300,6 +1303,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         intervalSec: body.intervalSec ?? 60,
         enabled: body.enabled ?? true,
         driver: body.driver ?? null,
+        models: mergeModels({}, body.models),
         lastRunAt: null,
         lastError: null,
         createdAt: now(),
@@ -1349,7 +1353,9 @@ async function route(req: Request, url: URL): Promise<Response> {
     }
     if (method === "PATCH") {
       const wasEnabled = w.enabled;
-      Object.assign(w, await readBody(req), { id: w.id, updatedAt: now() });
+      const { models, ...patch } = await readBody(req);
+      Object.assign(w, patch, { id: w.id, updatedAt: now() });
+      if (models !== undefined) w.models = mergeModels(w.models ?? {}, models);
       if (wasEnabled !== w.enabled) w.live = w.enabled ? { state: "running", since: now(), nextRunAt: null, failures: 0 } : { state: "stopped", since: now(), nextRunAt: null, failures: 0 };
       broadcast({ kind: "watcher.upserted", watcher: w });
       return ok(w);
@@ -1383,12 +1389,12 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, defaultModels, reviewModels, listen, ...rest } = body;
+      const { anthropicApiKey, defaultModels, reviewModels, watcherModels, listen, ...rest } = body;
       if (listen !== undefined) {
         settings.listen = applyListen(listen);
         networkError = null;
       }
-      settings = { ...settings, ...rest, defaultModels: mergeModels(settings.defaultModels, defaultModels), reviewModels: mergeModels(settings.reviewModels, reviewModels) };
+      settings = { ...settings, ...rest, defaultModels: mergeModels(settings.defaultModels, defaultModels), reviewModels: mergeModels(settings.reviewModels, reviewModels), watcherModels: mergeModels(settings.watcherModels ?? {}, watcherModels) };
       if (anthropicApiKey !== undefined) {
         settings.anthropicApiKeySet = !!anthropicApiKey;
         const d = drivers.find((x) => x.id === "anthropic-api")!;
