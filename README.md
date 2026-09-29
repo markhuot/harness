@@ -84,15 +84,23 @@ you answer.
   don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
   only on you. The agent can also skip its own review when you ask it to, or when it only
   answered a question, as long as the project requires your review.
-- Once both reviews approve, a final agent step runs on its own and moves the ticket to
-  Done. If the ticket was worked in a git worktree, that step merges the branch. Turn off
-  **Complete when approved** in project settings to press **Complete** yourself instead.
-  You can also mark the ticket done without an agent run.
+- The **Approve** button picks how the work lands: **Approve and merge** (merge the ticket's
+  branch into its base branch), **Approve and open PR** (push the branch and open a GitHub pull
+  request, which ends the ticket), **Approve and…** (your own instructions for the agent), or
+  **Approve and take no action** (done, with no agent run). **When approved** in project
+  settings sets the default. Open PR needs the [GitHub CLI](https://cli.github.com) logged into
+  the repo's host (`gh auth login`, with `--hostname` for GitHub Enterprise) and push access, and
+  only shows up when both are in place.
+- Once both reviews approve, a final agent step runs on its own, lands the work the way you
+  chose, and moves the ticket to Done. Turn off **Complete when approved** in project settings
+  to press **Complete** yourself instead.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
   Any ticket can become one: ask a ticket's agent for child tickets and it creates them
-  under itself, then reviews and completes them the same way.
+  under itself, then reviews and completes them the same way. Children branch from the
+  conductor's branch and merge back into it, so the goal lands in one piece when you approve the
+  conductor.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in

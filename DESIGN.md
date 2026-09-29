@@ -106,9 +106,9 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
-| Human `POST /review {approve}` | `humanReview=approved` |
+| Human `POST /review {approve, action?, instructions?}` | the choice (`completionAction`, `completionInstructions`) is stored on the ticket first, 400 for an action the ticket doesn't offer (see "Completion"); `humanReview=approved` |
 | Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
-| `POST /complete` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run ("finalize: merge the worktree branch / clean up" + instructions); on success → `done`. `skipAgent` → `done` immediately. While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
+| `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
 | `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
@@ -150,10 +150,13 @@ fails with an error saying a human can turn it off on the ticket. Humans can set
 
 ### Branches
 
-**Base branch** is what a ticket's work merges into when it completes, and where a new ticket
-branch starts. It resolves ticket → project → settings (`resolveBaseBranch` in
-`shared/src/branches.ts`; `Ticket.baseBranch`, `Project.baseBranch`, `Settings.baseBranch`,
-default `"main"`); null or `""` inherits. Every value must pass `git check-ref-format --branch`
+**Base branch** is what a ticket's work lands on when it completes, and where a new ticket
+branch starts. It resolves ticket → parent → project → settings (`resolveBaseBranch` in
+`shared/src/branches.ts`; `Ticket.baseBranch`, the parent ticket's `branch`, `Project.baseBranch`,
+`Settings.baseBranch`, default `"main"`); null or `""` inherits. The parent step (source
+`"parent"`) applies to a child whose parent works in a worktree of its own and isn't done
+(`Orchestrator.branchParent`): children branch from the conductor's branch and merge back into it,
+so a conductor lands as one branch (see "Conductor"). Every value must pass `git check-ref-format --branch`
 rules (`branchNameError`), or the request gets a 400. One fallback keeps older setups working:
 when nothing overrides the setting and the repo has no branch of that name (a `master` repo under
 the default `main`), the base is the branch checked out in the main checkout, which is what the
@@ -182,16 +185,62 @@ and branch stay for the human. claude-code resumes a session only from the direc
 in, so the driver copies the session transcript under the new workdir's project folder before
 `--resume` (`carrySession`); a session it can't find starts fresh as before.
 
-**Completion** (`completeInstructions` / `completePrompt`) merges the ticket branch into the base
-branch by name, from wherever the base is checked out (`git worktree list`): merge there when a
-worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a
-temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what
-the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is
-`harness/<key>`. A harness worktree left behind by `update_branch` is removed only once its commits
-are merged.
+**Completion** is covered in the next section.
 
 Runs are serialized per session and limited globally by `settings.maxConcurrentRuns` (default 4).
-`ticket.busy` / `session.busy` is true while a run is queued or running.
+`ticket.busy` / `session.busy` is true while a run is queued or running. A queued job may also
+carry a `lock` (`RunQueue`): jobs sharing one never run at once, whatever their sessions. Merge
+completions lock on where they merge (`merge:<parent id>` for a child on its parent's branch,
+`merge:<project id>` otherwise), so sibling merges into one worktree don't collide on
+`index.lock`.
+
+### Completion
+
+How an approved ticket's work lands is chosen per approval (`CompletionAction`, shared
+`completion.ts`). Each action has its own pair of prompts, overridable like every other:
+
+| Action | Prompts | What the complete run does |
+| --- | --- | --- |
+| `merge` ("Approve and merge") | `system.complete_merge`, `run.complete_merge` | Merges the ticket branch into the base branch by name, from wherever the base is checked out (`git worktree list`): merge there when a worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is `harness/<key>`, deleted from the worktree that has the base checked out (`branch -d` checks against what's checked out where it runs). A harness worktree left behind by `update_branch` is removed only once its commits are merged. |
+| `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url }`, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
+| `custom` ("Approve and…") | `system.complete_custom`, `run.complete_custom` | Commits leftovers, then does what the approver's instructions say, merging, pushing or deleting nothing they don't ask for. With no instructions (the plain "Approve" of a folder outside git) it's a light wrap-up. |
+
+**What a project offers** (`Project.completionActions`, worked out on every read like `isGit`):
+`custom` only outside git; `merge` and `custom` in a git repo; `pr` as well when
+`Project.pullRequestHost` is set. That takes three checks, all file reads (`store/remotes.ts`,
+cached for 2 s per path): `gh` is on the daemon's PATH; the repo's git config (following a
+worktree's `.git` file to the common dir) has a remote, `origin` or the only one, whose URL parses
+to a host and `owner/repo`; and gh's `hosts.yml` (`$GH_CONFIG_DIR`, `$XDG_CONFIG_HOME/gh`, else
+`~/.config/gh`) lists that host, or `GH_TOKEN`/`GITHUB_TOKEN` is set for github.com. So github.com
+and GitHub Enterprise hosts work alike, and Bitbucket, GitLab and hosts gh isn't logged into get no
+PR option.
+
+**The project default** (`Project.completionAction`, migration 18, default `merge`) is what the
+Approve button preselects and what completes a ticket nobody picks for (human review off, a
+conductor's `complete_ticket` without `action`, auto-complete). `create_project` /
+`update_project` / `PATCH /projects/:id` refuse a default the project doesn't offer; a stored
+default the project stops offering (gh logged out, the remote removed) falls back to merge, then
+custom (`projectCompletionDefault`).
+
+**The choice** is stored on the ticket (`Ticket.completionAction`, `completionInstructions`) when
+it's approved (`POST /review`, `review_ticket`) or completed (`POST /complete`,
+`complete_ticket`), because a human approval can come before the agent review finishes. A new
+action without instructions drops the old instructions. `completionOptions` (shared) decides what
+a ticket may do and what's preselected: a child on its parent's branch only merges; otherwise the
+offered actions, preselecting the ticket's earlier choice, then `pr` for a ticket that already has
+a `pullRequestUrl` (a re-approval updates the same pull request), then the project default. An
+action the ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
+ticket, so the run's system prompt and first message agree.
+
+**Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
+`pr` one) sets `Ticket.pullRequestUrl`, which the apps link to. A `pr` complete run that ends
+without recording one blocks the ticket ("Completion ended without opening a pull request")
+instead of moving it to done. After a re-open, `run.reopen` points the agent at the pull request's
+review comments, and the next `pr` completion pushes to the same branch and updates it. The
+harness doesn't follow the pull request after that: review and merge happen on GitHub.
+
+**Approve and take no action** is `POST /complete { skipAgent: true }`, the same as Mark done: no
+run, and the worktree and branch stay as they are. In review it also records the human approval.
 
 ### Conductor
 
@@ -206,7 +255,11 @@ parent's `ticket.upserted`, so the apps show the rollup, badge and Tickets tab a
 takes its first child. Children default to `autoStart: true`: they start as soon as all `dependsOn` are done
 (immediately if none). Whenever a child changes status the orchestrator enqueues one
 (coalesced) run of the parent's own kind (conductor or work) with `conductorUpdatePrompt`. The conductor acts as the human reviewer
-for its children (`review_ticket`) and completes them (`complete_ticket`). So in the app a
+for its children (`review_ticket`) and completes them (`complete_ticket`). When the parent works in
+a worktree of its own, its children branch from its branch and merge back into it (the `"parent"`
+base branch source, "Branches"): they only complete with `merge` (`pr` and `custom` get a 400), and
+the whole goal lands on the base branch, by the parent's own merge, pull request or custom
+completion, only when the parent completes. So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
 with the human review pending is the conductor's to act on (it stays dimmed on the board and
 isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
@@ -294,14 +347,15 @@ Harness tools (always exposed, via MCP for claude-code):
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
-| `list_projects` | all | `{}` → each project's key, name, path and settings |
+| `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
 | `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
-| `review_ticket` | work, conductor | `{ key, decision, notes }`: only the caller's own children |
-| `complete_ticket` | work, conductor | `{ key, instructions? }`: only the caller's own children |
+| `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
+| `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
+| `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
 | `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
@@ -310,7 +364,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, permission_mode?, default_models?, color?, base_branch? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
@@ -445,11 +499,11 @@ client state, not service state.
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
-| Board | approve a review, request changes, re-run the agent review, complete or mark done | parents only, for their own children: `review_ticket`, `complete_ticket` | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
+| Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, auto-complete, color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, auto-complete, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
@@ -756,7 +810,11 @@ Every agent prompt is a template in `service/src/orchestrator/prompt-templates.t
 id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
 context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, board,
 board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
-and conductor start, review, complete, conductor update, changes requested, reopen, triage).
+and conductor start, review, the three completions, conductor update, changes requested, reopen,
+triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and
+`run.complete_merge` when the pull request and custom completions arrived (`RENAMED_PROMPT_IDS`):
+migration 18 moves stored overrides to the new ids, and settings read or sent under an old id apply
+to the new one.
 `prompts.ts` works out each template's variables from the run (child lists, the summaries log,
 tool names and the fenced triage output are computed there), decides which sections a run gets,
 and joins them in order; none of that is overridable.
@@ -792,7 +850,7 @@ Directives are read from the run prompt:
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
 | work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
-| complete | text + `post_summary("Completed.")` |
+| complete | text + `post_summary("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 | triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key is the first `KEY-123` in the fenced output. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
@@ -1308,9 +1366,9 @@ Settings, project settings, or on the board route the pane workspace.
   - *Two tiers.* ⌘ chords work everywhere, text fields and the browser canvas included. Every
     other key (hjkl, Enter, g/G, `/`, `?`, `i`, 1–9, ⌃hjkl, Escape) only moves you around. Those
     keys fire only outside text fields, the canvas, terminals and overlays (a modal, a menu, the
-    palette), and they never change a ticket. Actions (Start work, Approve, Request changes,
-    Complete, Re-run review, Cancel run, Mark done, Re-open, Copy key, Delete) have no keys at
-    all. `keys.test.ts` fails if one gets a bare key. They're reached from their buttons and from
+    palette), and they never change a ticket. Actions (Start work, Approve, Approve and take no
+    action, Request changes, Complete, Re-run review, Cancel run, Mark done, Re-open, Copy key,
+    Delete) have no keys at all. `keys.test.ts` fails if one gets a bare key. They're reached from their buttons and from
     the ⌘K palette.
   - *Areas.* An element that owns commands carries `data-keys-scope` (`board`, `ticket`, `list`,
     `sidebar`, or several) and `data-keys-owner` (a unique id). Components register handlers for

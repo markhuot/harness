@@ -9,6 +9,34 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Approve button on a ticket in review now asks how the work should land. "Approve and
+  merge" merges the ticket's branch into its base branch, as approving always did. "Approve and
+  open PR" pushes the branch and opens a GitHub pull request, and the ticket is done once the pull
+  request is open (your team reviews and merges it on GitHub). "Approve and…" lets you write your
+  own instructions for the agent, like "cherry-pick this onto release-2.4". "Approve and take no
+  action" approves the ticket and marks it done without running an agent. The same choices are
+  on the Complete button when you complete tickets yourself, on the Mac and iPhone.
+- Open PR shows up only for projects whose git remote is on a host the GitHub CLI (`gh`) is
+  logged into, including GitHub Enterprise. Projects on Bitbucket or GitLab, or without a remote,
+  get merge and your own instructions, and a folder that isn't a git repository gets a plain
+  Approve plus "Approve and…".
+- A ticket that opened a pull request links to it from its header and from its card on the
+  board. If you re-open the ticket to address review comments, approving it again pushes the new
+  commits to the same pull request.
+- Project settings have a "When approved" choice for what the Approve button does by default.
+  It's also what happens when nobody picks, such as when the project doesn't require your review
+  or a conductor completes its child tickets.
+
+### Changed
+
+- A conductor's child tickets now start from the conductor's branch and merge back into it, so
+  the whole goal stays on one branch until you approve the conductor itself.
+- The completion prompts in Settings → Prompts are now split into merge, pull request and custom
+  versions. If you had customized the completion prompt, your text carries over to the merge
+  version.
+
 ## [app-20260929.1932](https://github.com/markhuot/harness/releases/tag/app-20260929.1932) - 2026-09-29
 
 ### Added
