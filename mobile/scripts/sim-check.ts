@@ -1,7 +1,8 @@
 // Simulator walk-through against a REAL daemon on a throwaway HARNESS_HOME:
 //   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=1)
 //   2. seeds a project with a hello-world ticket, a conductor with children, a /browse ticket,
-//      an approval, a blocked question, a plan-first ticket and a git-worktree ticket with changes,
+//      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes and
+//      a draft (a New session saved before launch),
 //      while it builds the Release app for the simulator (skip with --no-build)
 //   3. on --shards simulators at once (default 3, named "sim-check 1", "sim-check 2", … and created
 //      on first use), installs the app and pairs it via `simctl openurl harness://pair?…`
@@ -511,6 +512,8 @@ async function seed() {
   const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
   // Another one, approved by the human while the project doesn't complete on its own: waiting on Complete.
   const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
+  // A New session saved as a draft: a dashed card in Planning that reopens in the editor, never run.
+  const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -555,7 +558,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -800,7 +803,9 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     }
     await Bun.sleep(600);
     await shot(udid, "keyboard-new-session");
-    const button = (await nodes(udid)).find((n) => n.AXLabel === "Start session" || n.AXLabel === "Plan first");
+    // Plan first sits under Start session: the last thing on the sheet.
+    const all = await nodes(udid);
+    const button = all.find((n) => n.AXLabel === "Plan first") ?? all.find((n) => n.AXLabel === "Start session");
     if (!button) throw new Error("no Start session / Plan first button");
     const gap = Math.round(top - bottomOf(button));
     if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
@@ -860,7 +865,8 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await until("list closed", async () => !(await has("README.md")), 4000);
     await tapWhere(udid, "Start session");
     moved(udid);
-    const t = await until("ticket created", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key), 10000);
+    // The draft is saved while it's typed; wait for it to launch.
+    const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key && !x.draft), 10000);
     if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
     return `${t.key}: ${t.description}`;
@@ -990,6 +996,20 @@ interface Screen {
   /** Waits out the redraw after the appearance flips, for a screen slower than FLIP_MS (a plugin's WebView reloads). */
   redrawn?: (udid: string) => Promise<unknown>;
 }
+/** New session's Options disclosure ("Options", or "Options, <what differs>"). */
+const isOptions = (l: string) => l === "Options" || l.startsWith("Options, ");
+/** Opens New session's Options (collapsed on open) and waits for its first row. */
+async function openOptions(udid: string) {
+  await tapWhere(udid, isOptions);
+  await until("options open", async () => (await labels(udid)).some((l) => l.startsWith("Model, ")), 5000);
+  await Bun.sleep(400);
+}
+/** The sheet's Cancel (xmark) header item; the glass header items may be missing from AXe's tree. */
+async function tapHeaderCancel(udid: string) {
+  const el = await findElement(udid, (l) => l === "Cancel");
+  if (el) await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(el.frame.y + el.frame.height / 2)), "--udid", udid);
+  else await axe("tap", "-x", "36", "-y", "89", "--udid", udid);
+}
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
@@ -1011,20 +1031,34 @@ function screens(s: Seeded): Screen[] {
     // when the appearance flips.
     { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
     { name: "new-session", url: "harness://new" },
-    // The git project's New session with the branch sheet open, searching "re": Create re, then
-    // release/v2 (checked out in another worktree).
+    // The git project's New session with Options open: the TicketSettings rows Details shows.
+    { name: "new-session-options", url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 6, prepare: (udid) => openOptions(udid) },
+    // The same, with the branch sheet open, searching "re": Create re, then release/v2 (checked
+    // out in another worktree).
     {
       name: "new-session-branch",
       url: `harness://new?projectId=${s.project.id}`,
-      ready: (l) => l.some((x) => x.startsWith("Branch, ")),
-      seconds: 6,
+      ready: (l) => l.some(isOptions),
+      seconds: 7,
       prepare: (udid) =>
-        tapWhere(udid, (l) => l.startsWith("Branch, "))
+        openOptions(udid)
+          .then(() => tapWhere(udid, (l) => l.startsWith("Branch, ")))
           .then(() => until("branch sheet", async () => (await labels(udid)).includes("Search branches"), 5000))
           // The field takes focus as the sheet finishes sliding up; typing before that drops keys.
           .then(() => Bun.sleep(800))
           .then(() => axe("type", "re", "--udid", udid))
           .then(() => until("branch rows", async () => (await labels(udid)).some((x) => x.startsWith("release/v2")), 5000)),
+      // The sheet is a Modal, which the next screen's deep link would leave on top.
+      after: (udid) => tapWhere(udid, "Cancel").then(() => until("branch sheet closed", async () => !(await labels(udid)).includes("Search branches"), 5000)),
+    },
+    // The seeded draft reopened, then Cancel: the Save draft / Discard draft / Keep editing sheet.
+    {
+      name: "new-session-cancel",
+      url: `harness://new?key=${k(s.draft)}`,
+      ready: (l) => l.some(isOptions),
+      seconds: 6,
+      prepare: (udid) => tapHeaderCancel(udid).then(() => until("cancel sheet", async () => (await labels(udid)).includes("Discard draft"), 5000)).then(() => Bun.sleep(500)),
+      after: (udid) => tapWhere(udid, "Keep editing").then(() => Bun.sleep(400)),
     },
     // Scrolled down past the plan to the Branch and Base branch rows.
     {
@@ -1035,8 +1069,8 @@ function screens(s: Seeded): Screen[] {
         await Bun.sleep(700);
       },
     },
-    // The git project's New session scrolled to Skip agent review, below the branch fields.
-    { name: "new-session-skip-review", url: `harness://new?projectId=${s.project.id}`, seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
+    // The git project's New session with Options open, scrolled to Skip agent review.
+    { name: "new-session-skip-review", url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 8, prepare: (udid) => openOptions(udid).then(() => scrollTo(udid, (l) => l === "Skip agent review")).then(() => Bun.sleep(500)) },
     // A ticket in review whose agent review was skipped: the muted mark in the header, and the
     // switch (on) on its Details tab.
     { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
@@ -1095,6 +1129,8 @@ function screens(s: Seeded): Screen[] {
     { name: "connect", url: "harness://connect" },
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
+    // Planning with the seeded draft's dashed card (Draft badge, no run).
+    { name: "board-draft", url: BOARD, seconds: 6, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Planning,")).then(() => until("draft card", () => findElement(udid, (l) => l.startsWith(`${s.draft.key} `) && l.endsWith(", draft")), 8000)).then(() => Bun.sleep(700)) },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
   ];
 }
