@@ -139,12 +139,16 @@ const MOCK_BRANCHES: BranchInfo[] = [
   { name: "release/2026-09", lastCommitAt: Date.now() - 21 * 86400_000, checkedOutAt: null },
 ];
 
-/** The service's branch filter: case-insensitive substring matches first, then in-order letters. */
-function filterBranches(q: string, limit: number): BranchInfo[] {
+/**
+ * The service's branch filter: case-insensitive substring matches first, then in-order letters.
+ * `main` is what the project directory itself has checked out (a draft picking it runs there, with no worktree).
+ */
+function filterBranches(q: string, limit: number, projectPath: string): BranchInfo[] {
+  const all = MOCK_BRANCHES.map((b) => (b.name === "main" ? { ...b, checkedOutAt: projectPath } : b));
   const needle = q.toLowerCase();
-  if (!needle) return MOCK_BRANCHES.slice(0, limit);
-  const sub = MOCK_BRANCHES.filter((b) => b.name.toLowerCase().includes(needle));
-  const fuzzy = MOCK_BRANCHES.filter((b) => !sub.includes(b) && new RegExp([...needle].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")).test(b.name.toLowerCase()));
+  if (!needle) return all.slice(0, limit);
+  const sub = all.filter((b) => b.name.toLowerCase().includes(needle));
+  const fuzzy = all.filter((b) => !sub.includes(b) && new RegExp([...needle].map((ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")).test(b.name.toLowerCase()));
   return [...sub, ...fuzzy].slice(0, limit);
 }
 
@@ -1025,6 +1029,29 @@ function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDeta
   };
 }
 
+/** PATCH projectId on a draft: it takes the other project's next key, and the old one resolves as an alias. */
+function moveDraft(t: Ticket, projectId: string) {
+  const to = projects.get(projectId);
+  if (!to) throw new HttpError(400, "Unknown projectId");
+  const from = projects.get(t.projectId);
+  keyAliases.set(t.key, t.id);
+  t.key = `${to.key}-${to.nextSeq++}`;
+  t.projectId = to.id;
+  t.requestedBranch = null;
+  t.baseBranch = null;
+  t.useWorktree = null;
+  t.workdir = to.path;
+  if (from) broadcast({ kind: "project.upserted", project: from });
+  broadcast({ kind: "project.upserted", project: to });
+  const s = sessions.get(t.sessionId);
+  if (s) {
+    s.key = t.key;
+    s.cwd = to.path;
+    s.updatedAt = now();
+    broadcast({ kind: "session.upserted", session: s });
+  }
+}
+
 function setStatus(t: Ticket, status: TicketStatus) {
   if (t.status === status) return;
   t.status = status;
@@ -1102,15 +1129,17 @@ function workRun(t: Ticket, prompt: string) {
 function createTicket(body: Record<string, any>): Ticket {
   const project = projects.get(body.projectId);
   if (!project) throw new HttpError(400, "Unknown projectId");
-  if (typeof body.prompt !== "string" || !body.prompt.trim()) throw new HttpError(400, "prompt is required");
+  const draft = body.draft === true;
+  if (typeof body.prompt !== "string" || (!draft && !body.prompt.trim())) throw new HttpError(400, "prompt is required");
   const key: string = body.key ?? `${project.key}-${project.nextSeq++}`;
   if (byKey(key)) throw new HttpError(409, `Ticket ${key} already exists`);
   broadcast({ kind: "project.upserted", project });
   const id = newId("tkt");
   const driver = body.driver ?? project.defaultDriver ?? settings.defaultDriver;
-  const title: string = body.title ?? body.prompt.split("\n")[0]!.slice(0, 80);
+  const title: string = body.title ?? draftTitle(body.prompt);
   const session = makeSession(key, "ticket", id, driver, project.path, title, now());
-  const start = body.start ?? true;
+  // A draft is saved in planning and never runs until it's submitted.
+  const start = !draft && (body.start ?? true);
   const worktree = (body.useWorktree ?? project.useWorktrees) && project.isGit !== false;
   const t: Ticket = {
     id,
@@ -1134,6 +1163,7 @@ function createTicket(body: Record<string, any>): Ticket {
     requestedBranch: worktree ? body.branch || null : null,
     baseBranch: body.baseBranch || null,
     useWorktree: body.useWorktree ?? null,
+    draft,
     blockedReason: null,
     permissionMode: body.permissionMode ?? null,
     busy: false,
@@ -1147,6 +1177,29 @@ function createTicket(body: Record<string, any>): Ticket {
   tickets.set(t.id, t);
   broadcast({ kind: "session.upserted", session });
   upsertTicket(t);
+  if (draft) {
+    appendEntry(t.sessionId, null, "system", { type: "status", text: "Draft saved" });
+    return t;
+  }
+  launchTicket(t, start);
+  return t;
+}
+
+/** A ticket's title from its prompt: the first line (a blank draft is "Untitled draft"). */
+function draftTitle(prompt: string): string {
+  return prompt.trim().split("\n")[0]!.slice(0, 80) || "Untitled draft";
+}
+
+/** Start a new (or just submitted) ticket's first run: work (start) or a plan. */
+function launchTicket(t: Ticket, start: boolean) {
+  const project = projects.get(t.projectId)!;
+  const worktree = (t.useWorktree ?? project.useWorktrees) && project.isGit !== false;
+  if (start && worktree) {
+    t.workdir = `/Users/markhuot/.harness/worktrees/${t.key}`;
+    t.branch = t.requestedBranch || `harness/${t.key.toLowerCase()}`;
+  }
+  const title = t.title;
+  const body = { prompt: t.description };
   appendEntry(t.sessionId, null, "user", { type: "text", text: body.prompt });
   if (start) {
     simulateRun(t, t.kind === "conductor" ? "conductor" : "work", body.prompt, `Hello from the mock driver! You said: "${body.prompt}"`, (cur) => {
@@ -1157,7 +1210,6 @@ function createTicket(body: Record<string, any>): Ticket {
       addSummary(cur.sessionId, cur.id, "agent", `Drafted a plan:\n\n1. Investigate\n2. Implement\n3. Test`);
     });
   }
-  return t;
 }
 
 async function readBody(req: Request): Promise<Record<string, any>> {
@@ -1228,7 +1280,7 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (!p) throw new HttpError(404, "Project not found");
     if (c === "branches" && method === "GET") {
       if (p.isGit === false) return ok([]);
-      return ok(filterBranches(url.searchParams.get("q") ?? "", Math.min(200, Number(url.searchParams.get("limit")) || 50)));
+      return ok(filterBranches(url.searchParams.get("q") ?? "", Math.min(200, Number(url.searchParams.get("limit")) || 50), p.path));
     }
     if (method === "PATCH") {
       const { key: rawKey, nextSeq: _n, completionActions: _ca, pullRequestHost: _ph, isGit: _g, ...body } = await readBody(req);
@@ -1291,10 +1343,24 @@ async function route(req: Request, url: URL): Promise<Response> {
       if (method === "GET") return ok(ticketDetail(t, found.alias));
       if (method === "PATCH") {
         const body = await readBody(req);
+        // kind, useWorktree and projectId only change while it's a draft; a draft's status doesn't.
+        for (const k of ["kind", "useWorktree", "projectId"] as const) {
+          if (body[k] !== undefined && !t.draft) throw new HttpError(409, `${t.key} isn't a draft; ${k} is fixed once a ticket launches`);
+        }
+        if (t.draft && body.status && body.status !== t.status) throw new HttpError(409, `${t.key} is a draft; submit it to start it`);
+        if (body.projectId !== undefined && body.projectId !== t.projectId) moveDraft(t, body.projectId);
+        if (body.kind !== undefined) t.kind = body.kind;
+        if (body.useWorktree !== undefined) {
+          t.useWorktree = body.useWorktree;
+          const project = projects.get(t.projectId)!;
+          if (!(t.useWorktree ?? project.useWorktrees) && body.branch === undefined) t.requestedBranch = null;
+        }
         if (body.driver !== undefined && body.driver !== t.driver && body.model === undefined) t.model = null;
         for (const k of ["title", "description", "driver", "dependsOn", "position"] as const) {
           if (body[k] !== undefined) (t as any)[k] = body[k];
         }
+        // A draft's title follows its prompt.
+        if (t.draft && body.description !== undefined && body.title === undefined) t.title = draftTitle(t.description);
         if (body.model !== undefined) t.model = body.model || null;
         if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
         if (body.baseBranch !== undefined) t.baseBranch = body.baseBranch || null;
@@ -1328,6 +1394,17 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET" && c === "summaries") return ok(summaries.filter((s) => s.ticketId === t.id));
     if (method === "POST") {
       const body = await readBody(req);
+      if (c === "submit") {
+        if (!t.draft) throw new HttpError(409, `${t.key} isn't a draft`);
+        if (!t.description.trim()) throw new HttpError(400, "A draft needs a prompt before it's submitted");
+        t.draft = false;
+        const start = body.start === true;
+        if (start) setStatus(t, "in_progress");
+        upsertTicket(t);
+        launchTicket(t, start);
+        return ok(t);
+      }
+      if (t.draft) throw new HttpError(409, `${t.key} is a draft; submit it first`);
       switch (c) {
         case "start":
           setStatus(t, "in_progress");
