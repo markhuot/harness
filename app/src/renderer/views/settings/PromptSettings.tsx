@@ -6,13 +6,15 @@ import type { PromptEntry, PromptId } from "@harness/shared";
 import {
   brokenOverrideMessage,
   groupPrompts,
-  HarnessApiError,
   insertText,
   lineDiff,
   PROMPT_STATE_LABELS,
+  promptCounts,
   promptDraftDirty,
   promptDraftError,
+  promptErrorLine,
   promptSavePatch,
+  promptsLoadError,
   promptStartText,
   promptState,
 } from "@harness/shared";
@@ -36,7 +38,7 @@ export function PromptsSection() {
       setPrompts(await client.listPrompts());
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof HarnessApiError && e.status === 404 ? "This service doesn't support prompt overrides yet. Update Harness to customize prompts." : errorText(e));
+      setLoadError(promptsLoadError(e));
     }
   }, [client]);
 
@@ -53,8 +55,7 @@ export function PromptsSection() {
     setOpen((cur) => (cur === id ? null : id));
   };
 
-  const customized = prompts?.filter((p) => promptState(p) !== "builtin").length ?? 0;
-  const broken = prompts?.filter((p) => promptState(p) === "broken").length ?? 0;
+  const { customized, broken } = promptCounts(prompts ?? []);
 
   return (
     <Section
@@ -203,8 +204,7 @@ function PromptEditor({ entry, dirtyRef, onSaved }: { entry: PromptEntry; dirtyR
 
   const shown = draft ?? entry.builtin;
   const error = serverError ?? liveError;
-  // A broken override's banner already says what's wrong until the text changes.
-  const errorLine = state === "broken" && !serverError && draft === entry.override ? null : error;
+  const errorLine = promptErrorLine(entry, draft, serverError);
 
   return (
     <div

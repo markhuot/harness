@@ -27,7 +27,8 @@
 //      follows new content at the bottom, stays put once scrolled up, and follows again after
 //      scrolling back down; the Summaries tab opens at the bottom and follows
 //
-//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it and the
+//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
+//      prompt editor keeps its cursor above it as the text grows, and the
 //      New session sheet scrolls to its last button above it. Needs the simulator's software
 //      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
 //
@@ -45,8 +46,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, reviewPassed, type Project, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
+import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
+import { Database } from "bun:sqlite";
 
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
@@ -436,8 +438,30 @@ const TABLE_BRIEF = [
   "```",
 ].join("\n");
 
+/**
+ * Settings → Prompts: a working override of the review message, and a broken one of the Files
+ * section. The API refuses a template naming a variable the prompt doesn't have, so the broken one
+ * goes straight into the settings table, the way an app update that renamed {{shell}} would leave
+ * it. The service reads settings from the database on every request, so it shows up at once.
+ */
+async function seedPrompts() {
+  await api("PATCH", "/settings", {
+    prompts: { "run.review": "Review {{ticket}} carefully.\n\n## Brief\n{{brief}}\n\n{{#if summaries}}## Summaries\n{{summaries}}{{/if}}\n\nCheck the tests first, then the diff." },
+  });
+  const db = new Database(join(home, "harness.db"));
+  try {
+    db.exec("PRAGMA busy_timeout = 5000;");
+    const row = db.query("SELECT value FROM settings WHERE key = 'prompts'").get() as { value: string } | null;
+    const prompts = { ...(row ? (JSON.parse(row.value) as Record<string, unknown>) : {}), "system.files": "## Files\nRead files with {{readTool}}. Never use {{shellTool}} to edit files." };
+    db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run({ $v: JSON.stringify(prompts) });
+  } finally {
+    db.close();
+  }
+}
+
 async function seed() {
   await settings();
+  await seedPrompts();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
   const repo = join(scratch, "greeter");
   mkdirSync(join(repo, "src"), { recursive: true });
@@ -772,6 +796,30 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
     return `"${button.AXLabel}" ends ${gap}pt above the keyboard`;
   });
+
+  // The editor is a growing multiline field inside a scroll view; typing at its end has to keep
+  // scrolling the view so the cursor (the field's last line) stays above the keyboard.
+  await check("prompt editor follows the cursor above the keyboard as the text grows", async () => {
+    const isField = (l: string) => l === "Agent review prompt";
+    await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
+    const start = await until("editor field", () => findElement(udid, isField), 5000);
+    // Near its last line puts the cursor at the end of the text.
+    await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
+    const top = await until("keyboard up", keyboardTop, 8000);
+    for (let i = 0; i < 16; i++) await axe("key", "40", "--udid", udid); // return
+    await axe("type", "End of the prompt.", "--udid", udid);
+    await Bun.sleep(900);
+    await shot(udid, "keyboard-prompt");
+    const field = await findElement(udid, isField);
+    if (!field) throw new Error("the editor field is gone from the screen");
+    const gap = Math.round(top - bottomOf(field));
+    if (gap < 0) throw new Error(`the field's last line ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
+    if (gap > 120) throw new Error(`the field ends ${gap}pt above the keyboard: the view didn't follow the cursor down`);
+    // Drop the edit: Cancel sits where Back does.
+    await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+    moved(udid);
+    return `grew to ${Math.round(field.frame.height)}pt; its end is ${gap}pt above the keyboard`;
+  });
 }
 
 /** --mentions: a project with a few files, and a ticket in review to message. */
@@ -985,6 +1033,13 @@ function screens(s: Seeded): Screen[] {
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
+    // Settings → Prompts (seedPrompts): the list, a built-in prompt, the customized review message
+    // and the broken Files section.
+    { name: "settings-prompts", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Prompts, ")).then(() => Bun.sleep(500)) },
+    { name: "prompts", url: "harness://prompts", ready: hasLabel("Agent review") },
+    { name: "prompt-builtin", url: "harness://prompt/system.work", ready: hasLabel("Customize") },
+    { name: "prompt-customized", url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") },
+    { name: "prompt-broken", url: "harness://prompt/system.files", ready: (l) => l.some((x) => x.includes("isn't in effect")) },
     // Scrolled to the Base branch fields (General in Settings, Agents in the git project's settings).
     { name: "settings-base-branch", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
     { name: "project-settings-base-branch", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
@@ -1137,6 +1192,66 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${t.key} human=${t.humanReview} → ${t.status}`;
       });
     }),
+    chain(14, async (udid) => {
+      const override = async (id: string) => (await api<PromptEntry[]>("GET", "/prompts")).find((p) => p.id === id)!.override;
+      const field = (l: string) => l === "Work run instructions prompt";
+      // The header's glass buttons aren't in AXe's tree: Cancel sits where Back does, Save at the trailing edge.
+      const tapCancel = () => axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+      const tapSave = async () => axe("tap", "-x", String(Math.round((await tree(udid))[0]!.frame.width - 32)), "-y", "89", "--udid", udid);
+      await check("prompt editor: Customize, a bad variable shows inline and can't save, Cancel keeps the built-in", async () => {
+        await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
+        await tapWhere(udid, "Customize");
+        await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
+        await tapWhere(udid, field);
+        await axe("type", " {{brnch}}", "--udid", udid);
+        const error = await until("inline error", async () => (await labels(udid)).find((l) => l.startsWith("Unknown variable {{brnch}}")), 5000);
+        await shot(udid, "prompt-invalid-light");
+        await tapSave(); // disabled while invalid
+        await Bun.sleep(800);
+        if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
+        await tapCancel();
+        await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
+        moved(udid);
+        return error.slice(0, 60);
+      });
+      await check("prompt editor: Save stores the override, Reset to built-in (confirmed) clears it", async () => {
+        await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
+        await tapWhere(udid, "Customize");
+        await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
+        await tapWhere(udid, field);
+        await axe("type", " Mind the {{branch}}.", "--udid", udid);
+        await Bun.sleep(300);
+        await tapSave();
+        const saved = await until("override saved", async () => ((v) => (v?.includes("Mind the {{branch}}.") ? v : null))(await override("system.work")), 8000);
+        await until("Reset button", async () => (await labels(udid)).includes("Reset to built-in"), 5000);
+        await shot(udid, "prompt-saved-light");
+        await tapWhere(udid, "Reset to built-in");
+        await tapWhere(udid, "Reset"); // the confirm alert
+        await until("override cleared", async () => (await override("system.work")) === null, 8000);
+        await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
+        moved(udid);
+        return `saved ${saved.length} chars, then reset`;
+      });
+      // The seeded review message is short, so its end and its variables share the screen.
+      await check("prompt editor: a tapped variable goes in at the cursor, and the next key follows it", async () => {
+        const seeded = await override("run.review");
+        await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
+        const el = await until("editor field", () => findElement(udid, (l) => l === "Agent review prompt"), 5000);
+        // Its last line, past the end of the text: the cursor goes to the end.
+        await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width - 20)), "-y", String(Math.round(el.frame.y + el.frame.height - 16)), "--udid", udid);
+        await Bun.sleep(400);
+        await tapWhere(udid, (l) => l.startsWith("{{brief}}"));
+        await Bun.sleep(500);
+        await axe("type", "Z", "--udid", udid);
+        await Bun.sleep(300);
+        await tapSave();
+        const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000);
+        await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
+        moved(udid);
+        if (!saved?.endsWith("then the diff.{{brief}}Z")) throw new Error(`expected the text to end "then the diff.{{brief}}Z", got ${JSON.stringify(saved)}`);
+        return `ends ${JSON.stringify(saved.slice(-24))}`;
+      });
+    }),
     chain(9, async (udid) => {
       await check("board context menu moves a card to Done", async () => {
         await goto(udid, BOARD);
@@ -1217,7 +1332,7 @@ try {
     walkThrough ? timed("seed", seed) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
     stickOnly ? timed("seed stick", seedStick) : null,
-    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up")) : null,
+    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
     mentionsOnly ? timed("seed mentions", seedMentions) : null,
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
   ]);

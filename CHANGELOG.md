@@ -33,6 +33,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   text that updates with the app. If an app update leaves one of your prompts naming a variable
   that no longer exists, the prompt shows "Not in use" and explains that runs use the built-in
   until you fix or reset it.
+- On iPhone, Settings → Prompts lists the same prompts, grouped the same way, with a Built-in,
+  Customized or Not in use badge on each. Tap a prompt to read its built-in text and the
+  variables it can use, then tap Customize to edit a copy and Save it from the top bar. Mistakes
+  like `{{brnch}}` show up under the text as you type, and nothing you typed is lost if the Mac
+  refuses the save. Tapping a variable inserts it at the cursor, Compare with built-in shows what
+  you changed, and Reset to built-in asks first, then puts the prompt back on the text that
+  updates with the app. A prompt that an app update left naming a missing variable says so, both
+  in the list and when you open it.
 - Each watcher can now pick the model its triage agent runs on. The watcher form's driver menu
   is now a single Model menu that lists every signed-in driver's models under that driver's name,
   so picking Opus under Claude Code sets both at once. With only one driver signed in, the menu is
