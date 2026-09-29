@@ -43,3 +43,8 @@ test("a single driver's flat group keeps a null heading, and no match leaves not
   expect(choiceSections(flat, "", names)[1]!.title).toBeNull();
   expect(choiceSections(choices, "gpt", names)).toEqual([]);
 });
+
+test("without a Default (a ticket mid-run) only the driver sections show", () => {
+  expect(choiceSections({ default: null, groups }, "", names).map((x) => x.key)).toEqual(["claude-code", "openrouter"]);
+  expect(choiceSections({ default: null, groups }, "llama", names).map((x) => x.key)).toEqual(["openrouter"]);
+});

@@ -1,5 +1,5 @@
 // Rows for the searchable Model sheet (the combined driver + model picker): the Default option,
-// then one section per driver, narrowed by the type-ahead query. Kept free of React Native so it
+// (when offered), then one section per driver, narrowed by the type-ahead query. Kept free of React Native so it
 // can be unit tested.
 import { filterChoiceGroups, type ChoiceOptions, type ModelOption } from "@harness/shared/state";
 
@@ -17,10 +17,11 @@ export interface ChoiceSection {
  */
 export function choiceSections(choices: Pick<ChoiceOptions, "default" | "groups">, query: string, driverNames: Record<string, string> = {}): ChoiceSection[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const showDefault = !words.length || words.every((w) => choices.default.label.toLowerCase().includes(w));
+  const def = choices.default;
+  const showDefault = !!def && (!words.length || words.every((w) => def.label.toLowerCase().includes(w)));
   const groups = filterChoiceGroups(choices.groups, query, driverNames);
   return [
-    ...(showDefault ? [{ key: "", title: null, data: [choices.default] }] : []),
+    ...(showDefault ? [{ key: "", title: null, data: [def!] }] : []),
     ...groups.map((g) => ({ key: g.driver, title: g.label, data: g.options })),
   ];
 }

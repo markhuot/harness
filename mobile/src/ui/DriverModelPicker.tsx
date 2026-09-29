@@ -1,4 +1,5 @@
-// The combined driver + model picker (watchers, the Triage default, New session). A SwiftUI Menu
+// The combined driver + model picker (watchers, the Triage default, New session, ticket details,
+// the project and app default models). A SwiftUI Menu
 // can't search, so the trigger looks like the other selects (label in the accent colour plus the
 // ⌃⌄ glyph) but opens a page sheet: a type-ahead field over a virtualised list with Default first,
 // then each signed-in driver's models under a sticky heading (one flat list when only one driver
@@ -20,11 +21,12 @@ import { haptic } from "./haptics";
  * Model lists for every driver the picker may show (installed and signed in, plus the picked and
  * the resolved driver), through the shared cache. Re-renders on any cache change.
  */
-function useChoiceModels(value: TriageChoice, resolved: TriageChoice) {
+function useChoiceModels(value: TriageChoice, resolved: TriageChoice, onlyDriver?: string) {
   const { state, client, epoch } = useStore();
   const cache = modelCacheFor(client);
   useSyncExternalStore(cache.subscribe, () => cache.version);
-  const ids = [...new Set([...state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id), value.driver, resolved.driver].filter((id): id is string => !!id))];
+  const signedIn = onlyDriver ? [onlyDriver] : state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id);
+  const ids = [...new Set([...signedIn, value.driver, resolved.driver].filter((id): id is string => !!id))];
   const key = ids.join(",");
   useEffect(() => {
     cache.syncEpoch(epoch);
@@ -49,6 +51,8 @@ export function DriverModelPicker({
   defaultLabel,
   title = "Model",
   disabled,
+  onlyDriver,
+  inheritedModel,
 }: {
   value: TriageChoice;
   /** What Default falls back to (driver + model) */
@@ -57,11 +61,15 @@ export function DriverModelPicker({
   defaultLabel?: string;
   title?: string;
   disabled?: boolean;
+  /** List only this driver's models (a ticket mid-run keeps its driver) */
+  onlyDriver?: string;
+  /** What a driver picked without a model falls back to, named in its "<driver> default" entry */
+  inheritedModel?: (driver: string) => string | null;
 }) {
   const { c } = useTheme();
   const [open, setOpen] = useState(false);
-  const lists = useChoiceModels(value, resolved);
-  const choices = driverModelChoices(lists.drivers, lists.models, value, resolved, { defaultLabel });
+  const lists = useChoiceModels(value, resolved, onlyDriver);
+  const choices = driverModelChoices(lists.drivers, lists.models, value, resolved, { defaultLabel, onlyDriver, inheritedModel });
   const tint = disabled ? c.text3 : c.accent;
   return (
     <>
