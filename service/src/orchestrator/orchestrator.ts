@@ -71,7 +71,7 @@ import { applySettingsPatch, mergeModelMap, resolveSettings, toPublicSettings, v
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
-import { PermissionGate } from "../permissions/gate";
+import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { cleanClaudeEnv, resolveClaudeBin } from "../drivers/claude-code";
@@ -1899,6 +1899,13 @@ export class Orchestrator {
     // Gated harness tools are never allowed wholesale, even if a name ended up in allowedTools.
     const onceOnly = !!meta.onceOnly || GATED_TOOL_NAMES.has(toolName);
     if (!onceOnly && t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
+    if (meta.viaPromptTool && !onceOnly && this.permissionModeFor(t) === "auto") {
+      // An auto-mode ticket whose run is in ask mode only to deliver a grant (planGrants): judge
+      // the rest of its calls as auto mode would, instead of sending every one to a human. The
+      // gate asks a human (meta.source set, so no loop) only when the classifier can't decide.
+      const d = await this.gate.judge(toolName, input, this.gateEnv(ctx, t, "auto"));
+      return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
+    }
     if (t.pendingApproval) return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE }; // one request at a time
     this.openApproval(t, ctx.runId, toolName, input, onceOnly ? { ...meta, onceOnly } : meta);
     return { behavior: "deny", message: APPROVAL_PENDING_MESSAGE };
@@ -1942,10 +1949,11 @@ export class Orchestrator {
 
   /**
    * After a succeeded work/complete/conductor run: the driver's own permission system denied a
-   * call without asking (Claude Code's auto-mode classifier) and the call never went through.
-   * The run's last such denial becomes a pending approval: attached to the agent's block if it
-   * blocked; if it submitted anyway (it usually does, reporting the denial), the ticket goes from
-   * review to blocked instead of starting a review of work that couldn't be done.
+   * call without asking (Claude Code's auto-mode classifier, or a deferred soft_deny of the
+   * PermissionGate) and the call never went through. The agent is told to find another way
+   * first, so a run that submitted is reviewed as usual, with the denied calls noted in a
+   * summary. Otherwise the run's last denial becomes a pending approval: attached to the
+   * agent's block if it blocked, or blocking the ticket if the run just ended.
    * A denial of a tool the human already allows on the ticket is retried with the exact call
    * pre-approved instead (bounded by MAX_AUTO_RETRIES). Returns true when it handled the run.
    */
@@ -1954,7 +1962,15 @@ export class Orchestrator {
     if (!denial || !APPROVABLE_RUNS.includes(run.kind)) return false;
     const t = this.store.tickets.get(ticket.id);
     if (!t || t.pendingApproval || this.permissionModeFor(t) === "read_only") return false;
-    if (t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && (run.kind === "complete" || active.submitted))) return false;
+    if (active.submitted && t.status === "review") {
+      // The agent found another way and submitted: the review goes ahead, and the denied calls
+      // are on record for the reviewer and the human.
+      const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
+      const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
+      this.addSummary(t.sessionId, t.id, "system", `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}:\n${lines.join("\n")}`);
+      return false;
+    }
+    if (t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && run.kind === "complete")) return false;
     const key = grantKey(denial.toolName, denial.input);
     // The exact rule for this call was passed and it was still denied: next time, ask instead.
     if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
@@ -2025,19 +2041,30 @@ export class Orchestrator {
     // Plan, triage and chat runs are read-only for every driver (claude-code runs plan runs in
     // --permission-mode plan, chat runs in dontAsk).
     const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
-    return this.gate.check(toolName, input, {
+    return this.gate.check(toolName, input, this.gateEnv(ctx, ticket ?? null, mode));
+  }
+
+  private gateEnv(ctx: ToolContext, ticket: Ticket | null, mode: PermissionMode): GateEnv {
+    const active = this.active.get(ctx.runId);
+    return {
       mode,
       runKind: ctx.runKind,
       cwd: ctx.cwd,
       signal: ctx.signal,
       isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
+      // A soft denial is the agent's to work around first; surfaceDenial turns the run's last
+      // one into a card if the run ends stuck on it (runs that can hold a card only).
+      defer:
+        active && ticket && APPROVABLE_RUNS.includes(ctx.runKind)
+          ? (tool, i, reason) => active.denials.push({ toolName: tool, input: i, reason })
+          : undefined,
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
         ticket: ticket ? { key: ticket.key, title: ticket.title, brief: ticket.description } : null,
         transcript: this.recentTranscript(ctx.session.id),
       }),
-    });
+    };
   }
 
   /** Transcript status entry for a permission decision (rendered as an audit row). */

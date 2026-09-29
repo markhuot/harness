@@ -444,7 +444,7 @@ describe("dummy /approve directive", () => {
     const { events, error } = await collect(driver, req);
     expect(error).toBeNull();
     expect(calls(events)[0]).toMatchObject({ name: "permission_prompt", input: { tool_name: "Bash", input: { command: "git init" } } });
-    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["Bash", { command: "git init" }]);
+    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["Bash", { command: "git init" }, { viaPromptTool: true }]);
     expect(texts(events)).toContain("Approved Bash");
     expect(calls(events).map((c) => c.name)).toEqual(["permission_prompt", "submit_for_review"]);
   });
@@ -454,7 +454,7 @@ describe("dummy /approve directive", () => {
     const { events, error } = await collect(driver, req);
     expect(error).toBeNull();
     expect(calls(events).map((c) => c.name)).toEqual(["permission_prompt"]);
-    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["WebFetch", {}]);
+    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["WebFetch", {}, { viaPromptTool: true }]);
     expect(ops.calls.some((c) => c.method === "submitForReview")).toBe(false);
     expect(texts(events)).not.toContain("Approved WebFetch");
   });
@@ -462,7 +462,7 @@ describe("dummy /approve directive", () => {
   test("non-JSON input is passed as a command", async () => {
     const { req, ops } = approveReq("/approve Bash rm -rf build");
     await collect(driver, req);
-    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["Bash", { command: "rm -rf build" }]);
+    expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["Bash", { command: "rm -rf build" }, { viaPromptTool: true }]);
   });
 
   test("without permission_prompt in the tool list it stops instead of submitting", async () => {

@@ -103,7 +103,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending`, `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
-| Work/complete/conductor run ends after a Claude Code classifier denial | status `blocked` with a classifier `pendingApproval` (see "Permissions"), even if the agent submitted |
+| Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve}` | `humanReview=approved` |
@@ -455,16 +455,19 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
 - `cleanClaudeEnv` strips what a parent Claude Code session leaks (`CLAUDECODE`, `CLAUDE_PID`,
   `CLAUDE_EFFORT`, `AI_AGENT`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_*` except user config).
 
-**Classifier denials → approval cards.** The orchestrator collects a work/complete/conductor
-run's `permission_denied` events, dropping any whose exact call (`grantKey`) later succeeded in
-the same run. When the run succeeds and a denial is left, the last one becomes a
-`pendingApproval` (`source: "classifier"`, `reason` = the classifier's reason, tool + input of
-the denied tool_use):
-- the agent called `block` (the system prompt tells work runs to; complete/conductor runs are
-  told to stop): the approval is attached to that block, its question stays `blockedReason`;
-- the agent submitted anyway (measured: sonnet reports the denial and calls
-  `submit_for_review`): review → blocked with the card, no review run;
-- otherwise in_progress (or review, for a complete run) → blocked, as `requestApproval` does.
+**Classifier denials → approval cards.** A classifier denial doesn't stop the run. The
+system prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer
+route to the same goal if there is one (not the same action reworded or moved to another tool),
+and to block (complete/conductor runs: stop) only when nothing else gets the task done. The
+orchestrator collects a work/complete/conductor run's `permission_denied` events and the
+PermissionGate's deferred soft denials, dropping any whose exact call (`grantKey`) later
+succeeded in the same run. When the run succeeds and a denial is left:
+- the agent submitted (a work or conductor run): it got there another way, so the review goes
+  ahead; a system summary lists the denied calls and their reasons for the reviewer and human;
+- otherwise the last denial becomes a `pendingApproval` (`source: "classifier"`, `reason` = the
+  classifier's reason, tool + input of the denied tool_use). If the agent called `block`, the
+  approval is attached to that block and its question stays `blockedReason`; if not,
+  in_progress (or review, for a complete run) → blocked, as `requestApproval` does.
 - The tool is already in `ticket.allowedTools` (auto mode ignores bare `Bash`, below): no
   card; the call gets a one-time grant and the run is resumed ("…the human allows Bash on this
   ticket. Retry it now"), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
@@ -488,6 +491,11 @@ independent and start fresh), nor plan/triage runs or read_only tickets. claude-
   classifier denial, so such a run uses `acceptEdits` instead, with the notice "Claude Code
   can't pre-approve … so this turn runs in ask mode". A call whose exact rule was passed and
   still denied is remembered (in memory) and its next grant goes this way (`viaPrompt`).
+  The ticket is still in auto mode, so every other call the CLI then asks the prompt tool about
+  (`ApprovalMeta.viaPromptTool`) goes through the harness classifier (`PermissionGate.judge`)
+  before a human, the same way as for native-tool drivers: allow → runs, soft_deny → denied to
+  the agent and deferred, hard_deny → denied. Without this, one "Allow once" on a piped command
+  sent every later `cat` or `ls` in that run to a human (MEDL-1).
 
 Measured against claude 2.1.283 (`--permission-mode dontAsk` to isolate rule matching, then
 auto): `Bash(<cmd>)` with spaces, quotes, `&&`, `;`, `||`, backticks, escaped parens and
@@ -514,10 +522,13 @@ read_file/list_files, per call:
 2. `read_only` → deny anything else (grants don't apply).
 3. Edits inside the workdir (not `.git/`) → allow.
 4. Human grants (`ticket.allowedTools`, one-time grants) → allow.
-5. `ask` → `requestApproval` (source `policy`). `auto` → the classifier: `allow` → run;
-   `soft_deny` → `requestApproval` with the classifier's reason (source `classifier`);
-   `hard_deny` → deny with the reason. Timeout (60s), error or `classifier: "off"` →
-   `requestApproval`, never allow.
+5. `ask` → `requestApproval` (source `policy`). `auto` → the classifier (`judge`): `allow` →
+   run; `soft_deny` → denied to the agent with the reason and a nudge to find a safer way
+   (`CLASSIFIER_DENIED…`), and recorded as a run denial (`GateEnv.defer`), so it becomes a card
+   only if the run ends stuck on it (see "Classifier denials"). Without `defer` (a context with
+   no active approvable run) it goes to `requestApproval` with the classifier's reason (source
+   `classifier`). `hard_deny` → deny with the reason. Timeout (60s), error or
+   `classifier: "off"` → `requestApproval`, never allow.
 
 Every decision on a gated call is appended as a transcript status entry with
 `content.permission` (tool, input summary, decision allow/ask/deny, reason, source,

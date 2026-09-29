@@ -91,13 +91,17 @@ Show your work. ${tools} \`attachments\`: paths to image or video files (png, jp
 }
 
 const APPROVALS_BODY = `Some tool calls need a human's approval first. If a tool call is denied pending human approval, stop immediately: don't retry it, don't work around it with another tool, and don't call any other tool. The ticket is blocked until the human decides, and you will be resumed in this conversation with their answer.`;
-const CLASSIFIER_DENIALS = (next: string) =>
-  `If a permission classifier denies a call you need (e.g. "denied by the Claude Code auto mode classifier"), don't retry it or work around it, and don't submit for review: ${next} The human sees the denied call and can approve it; you are resumed with the answer and an approved retry is allowed.`;
+const CLASSIFIER_DENIALS = (ask: string) =>
+  `A permission classifier denial (e.g. "denied by the Claude Code auto mode classifier" or "Permission denied by the auto-mode classifier") is different: it doesn't end your turn and no human has been asked yet. Rethink the step instead of stopping. Ask what the denied call was for and whether a safer route gets you to the same goal: a non-destructive command in place of a destructive one (a new branch or \`git merge --ff-only\` instead of \`git reset --hard\`), a narrower command, the risky part split out of a compound command, a different tool that fits, or skipping a step the task doesn't need. If one exists, take it and keep working. Don't retry the denied call, and don't reword it or move the same action into another tool just to get it past the classifier: the new route has to be genuinely safer, not the same action in disguise. When you finish another way, say in your summary which call was denied and what you did instead. Only when no reasonable route is left and the task can't be done without that call: ${ask} Don't submit work that the denied call was needed for. The human sees the last denied call and can approve it; you are resumed with the answer and an approved retry is allowed.`;
 /** Tool approvals for a run kind: work runs can block, complete/conductor runs just stop. */
 const approvals = (kind: RunKind) =>
   section(
     "Tool approvals",
-    `${APPROVALS_BODY}\n${CLASSIFIER_DENIALS(kind === "work" ? "call \`block\` saying what the call is for." : "stop and end your turn, saying what the call is for.")}`,
+    `${APPROVALS_BODY}\n${CLASSIFIER_DENIALS(
+      kind === "work"
+        ? "call `block`, saying what the denied call is for and what you tried instead."
+        : "stop and end your turn, saying what the denied call is for and what you tried instead.",
+    )}`,
   );
 
 const BROWSER = section(

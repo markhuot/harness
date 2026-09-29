@@ -3,7 +3,7 @@ import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionDecisionLog, PermissionMode } from "@harness/shared";
 import type { Classifier, ClassifierDecision, ClassifierRequest } from "./classifier";
-import { insideWorkdir, PermissionGate, type GateEnv } from "./gate";
+import { CLASSIFIER_DENIED, CLASSIFIER_DENIED_NEXT, insideWorkdir, PermissionGate, type GateEnv } from "./gate";
 import { tempDir } from "@harness/shared/testing";
 
 function fakeClassifier(answer: ClassifierDecision | ((req: ClassifierRequest, signal: AbortSignal) => Promise<ClassifierDecision>)) {
@@ -165,7 +165,23 @@ describe("PermissionGate auto mode (classifier)", () => {
     ]);
   });
 
-  test("soft_deny goes to the human with the classifier's reason on the card", async () => {
+  test("soft_deny with defer: denied to the agent with the reason and a nudge to rethink, remembered, no human yet", async () => {
+    const deferred: unknown[] = [];
+    const h = env("auto", { defer: (tool, input, reason) => deferred.push({ tool, input, reason }) });
+    const d = await gate(fakeClassifier({ decision: "soft_deny", reason: "installs a package the agent chose" })).check("bash", { command: "npm install left-pad" }, h.env);
+    expect(d).toEqual({ behavior: "deny", message: `${CLASSIFIER_DENIED}installs a package the agent chose.${CLASSIFIER_DENIED_NEXT}` });
+    expect(deferred).toEqual([{ tool: "bash", input: { command: "npm install left-pad" }, reason: "installs a package the agent chose" }]);
+    expect(h.approvals).toHaveLength(0);
+    expect(h.logs[0]).toMatchObject({ decision: "deny", source: "classifier", backend: "fake" });
+  });
+
+  test("a classifier reason that already ends a sentence isn't given a second full stop", async () => {
+    const h = env("auto", { defer: () => {} });
+    const d = await gate(fakeClassifier({ decision: "soft_deny", reason: "Rewrites history." })).check("bash", { command: "git rebase main" }, h.env);
+    expect((d as { message: string }).message).toStartWith(`${CLASSIFIER_DENIED}Rewrites history. Don't retry`);
+  });
+
+  test("soft_deny without defer goes to the human with the classifier's reason on the card", async () => {
     const h = env("auto");
     const d = await gate(fakeClassifier({ decision: "soft_deny", reason: "installs a package the agent chose" })).check("bash", { command: "npm install left-pad" }, h.env);
     expect(d).toEqual({ behavior: "deny", message: "PENDING" });
