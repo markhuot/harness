@@ -68,6 +68,22 @@ const holdDrag = (cardKey: string, paneId: string, fx: number, fy: number) => `(
 })()`;
 // Opens the first watcher's edit form and keeps the Watchers section in view.
 const editWatcher = `document.querySelector("#settings-watchers .settings-row button[title=Edit]")?.click(); setTimeout(() => document.getElementById("settings-watchers")?.scrollIntoView({ block: "start" }), 50)`;
+// Opens the first watcher's edit form, then its Model combobox, typing `q` into the search.
+const openModelCombo = (q: string) => `(async () => {
+  ${editWatcher};
+  let trigger = null;
+  for (let i = 0; i < 40 && !trigger; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    trigger = document.querySelector("[data-testid=watcher-model] .model-combo-trigger");
+  }
+  trigger?.click();
+  await new Promise((r) => setTimeout(r, 200));
+  const input = document.querySelector(".model-combo-search");
+  if (input && ${JSON.stringify(q)}) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, ${JSON.stringify(q)});
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+})()`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -84,22 +100,15 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "appearance", route: "#/settings/appearance" },
   { name: "watchers", route: "#/settings/watchers" },
   { name: "watcher-edit", route: "#/settings/watchers", setup: editWatcher },
-  // The combined Model select drawn as a listbox, so its driver <optgroup>s show in the capture.
-  {
-    name: "watcher-model-groups",
-    route: "#/settings/watchers",
-    setup: `(async () => {
-      ${editWatcher};
-      await new Promise((r) => setTimeout(r, 1000));
-      const s = document.querySelector("[data-testid=watcher-model] select");
-      if (s) Object.assign(s, { size: s.options.length + s.querySelectorAll("optgroup").length }), Object.assign(s.style, { height: "auto", backgroundImage: "none" });
-    })()`,
-  },
+  // The driver + model combobox open in the watcher form, then with a query typed.
+  { name: "model-combobox-open", route: "#/settings/watchers", setup: openModelCombo("") },
+  { name: "model-combobox-search", route: "#/settings/watchers", setup: openModelCombo("son") },
   { name: "project", route: `#/project/${hello}/settings` },
   { name: "approval", route: "#/board/all/ticket/HARNESS-9" },
   { name: "approval-config", route: "#/board/all/ticket/HARNESS-20" },
   { name: "compose", route: "#/compose" },
   { name: "compose-nogit", route: "#/compose", setup: pickProject("SITE") },
+  { name: "new-session", route: "#/compose", setup: `(async () => { let t = null; for (let i = 0; i < 40 && !t; i++) { await new Promise((r) => setTimeout(r, 100)); t = document.querySelector(".new-session-foot .model-combo-trigger"); } t?.click(); })()` },
   { name: "permissions", route: "#/settings/permissions" },
   { name: "audit", route: "#/board/all/ticket/HARNESS-9/transcript" },
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },

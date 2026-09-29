@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PermissionMode, TicketKind } from "@harness/shared";
+import type { PermissionMode, TicketKind, TriageChoice } from "@harness/shared";
 import { resolvePermissionMode } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { composerProject, inheritedModel, newSessionPlaceholder, sortedProjects } from "@harness/shared/state";
 import { MOD, Modal, Switch } from "../components/bits";
-import { ModelSelect } from "../components/ModelSelect";
+import { DriverModelSelect } from "../components/ModelSelect";
 import { PermissionModeSelect } from "../components/PermissionModeSelect";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
@@ -33,10 +33,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const [kind, setKind] = useState<TicketKind>("task");
   const project = state.projects[projectId];
   const defaultDriver = project?.defaultDriver ?? state.settings?.defaultDriver ?? state.drivers[0]?.id ?? "";
-  const [driver, setDriver] = useState(defaultDriver);
-  // null = inherit (project → settings → driver default). Model ids are per driver: reset on switch.
-  const [model, setModel] = useState<string | null>(null);
-  useEffect(() => setModel(null), [driver]);
+  // Driver + model in one pick. Default follows the project's driver and model (then the settings').
+  const [choice, setChoice] = useState<TriageChoice>({ driver: null, model: null });
   // null = inherit (project → settings)
   const [permissionMode, setPermissionMode] = useState<PermissionMode | null>(null);
   const inheritedMode = resolvePermissionMode(null, project, state.settings ?? { permissionMode: "auto" }).mode;
@@ -44,13 +42,8 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => (projectId ? client.projectFiles(projectId, q) : Promise.resolve([])), [client, projectId]);
 
-  // Driver follows the project default until the user picks one explicitly.
-  const touchedDriver = useRef(false);
-  useEffect(() => {
-    if (!touchedDriver.current) setDriver(defaultDriver);
-  }, [defaultDriver]);
-
-  // Same for the worktree switch, which only shows for git projects (elsewhere there's no worktree to make).
+  // The worktree switch follows the project default until it's flipped. It only shows for git
+  // projects (elsewhere there's no worktree to make).
   const projectWorktrees = project?.useWorktrees ?? true;
   const [worktree, setWorktree] = useState(projectWorktrees);
   const touchedWorktree = useRef(false);
@@ -71,7 +64,7 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
     if (!prompt.trim() || !projectId || busy) return;
     setBusy(true);
     const useWorktree = canWorktree ? worktree : null;
-    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: driver || undefined, model, permissionMode, useWorktree }));
+    const t = await act(() => client.createTicket({ projectId, prompt: prompt.trim(), start, kind, driver: choice.driver ?? (defaultDriver || undefined), model: choice.model, permissionMode, useWorktree }));
     setBusy(false);
     if (!t) return;
     try {
@@ -131,23 +124,12 @@ export function NewSessionModal({ onClose, initialProjectId = null }: { onClose:
             Conductor
           </button>
         </div>
-        <select
-          className="select"
-          style={{ width: "auto", minHeight: 26, height: 26, fontSize: 12 }}
-          value={driver}
-          onChange={(e) => {
-            touchedDriver.current = true;
-            setDriver(e.target.value);
-          }}
-        >
-          {state.drivers.map((d) => (
-            <option key={d.id} value={d.id} disabled={!d.available}>
-              {d.name}
-              {!d.authenticated ? " · not signed in" : ""}
-            </option>
-          ))}
-        </select>
-        <ModelSelect compact driver={driver} value={model} onChange={setModel} inherited={inheritedModel(driver, "ticket", project, state.settings)} />
+        <DriverModelSelect
+          compact
+          value={choice}
+          onChange={setChoice}
+          resolved={{ driver: defaultDriver || null, model: defaultDriver ? inheritedModel(defaultDriver, "ticket", project, state.settings) : null }}
+        />
         <PermissionModeSelect compact value={permissionMode} inherited={inheritedMode} onChange={setPermissionMode} />
         <div className="new-session-actions">
           <div className="new-session-options">
