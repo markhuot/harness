@@ -5,6 +5,13 @@
 
 import type { PromptEntry, PromptGroup, PromptId, Settings } from "./protocol";
 import { templateError } from "./templates";
+import { HarnessApiError } from "./client";
+
+/** What to show when GET /prompts fails: a service from before prompt overrides answers 404. */
+export function promptsLoadError(e: unknown): string {
+  if (e instanceof HarnessApiError && e.status === 404) return "This service doesn't support prompt overrides yet. Update Harness to customize prompts.";
+  return e instanceof Error ? e.message : String(e);
+}
 
 export const PROMPT_GROUPS: { group: PromptGroup; title: string; description: string }[] = [
   { group: "system", title: "System prompt", description: "Sections of a run's system prompt. Harness picks which sections a run gets and puts them in order." },
@@ -32,6 +39,31 @@ export const PROMPT_STATE_LABELS: Record<PromptState, string> = {
   customized: "Customized",
   broken: "Not in use",
 };
+
+/** For a list header: prompts with a stored override (broken ones included), and how many of those are broken. */
+export function promptCounts(entries: readonly Pick<PromptEntry, "override" | "overrideError">[]): { customized: number; broken: number } {
+  const states = entries.map(promptState);
+  return { customized: states.filter((s) => s !== "builtin").length, broken: states.filter((s) => s === "broken").length };
+}
+
+/** One line for a Settings row: "All built-in", "2 customized" or "2 customized · 1 not in use". */
+export function promptsSummary(entries: readonly Pick<PromptEntry, "override" | "overrideError">[]): string {
+  const { customized, broken } = promptCounts(entries);
+  if (!customized) return "All built-in";
+  return broken ? `${customized} customized · ${broken} ${PROMPT_STATE_LABELS.broken.toLowerCase()}` : `${customized} customized`;
+}
+
+/**
+ * The error line under the editor: the service's 400, else the live check of `draft` (null while
+ * showing the built-in read-only). A broken override's banner already says what's wrong, so the
+ * line stays empty until the user changes the stored text.
+ */
+export function promptErrorLine(entry: Pick<PromptEntry, "variables" | "override" | "overrideError">, draft: string | null, serverError: string | null): string | null {
+  if (serverError) return serverError;
+  if (draft === null) return null;
+  if (promptState(entry) === "broken" && draft === entry.override) return null;
+  return promptDraftError(entry, draft);
+}
 
 /** Why the broken override isn't used, for the editor. */
 export function brokenOverrideMessage(entry: Pick<PromptEntry, "overrideError">): string {

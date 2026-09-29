@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { PromptEntry } from "./protocol";
-import { groupPrompts, insertText, lineDiff, promptDraftDirty, promptDraftError, promptSavePatch, promptState } from "./prompts";
+import { HarnessApiError } from "./client";
+import { groupPrompts, insertText, lineDiff, promptCounts, promptDraftDirty, promptDraftError, promptErrorLine, promptSavePatch, promptsLoadError, promptsSummary, promptState } from "./prompts";
 
 const entry = (over: Partial<PromptEntry>): PromptEntry => ({
   id: "system.work",
@@ -89,4 +90,30 @@ test("lineDiff keeps shared lines, marks changes, and rebuilds both sides", () =
     { type: "del", text: "x" },
     { type: "add", text: "" },
   ]);
+});
+
+test("counts: broken overrides count as customized and as broken; built-ins count as neither", () => {
+  expect(promptCounts([entry({}), entry({ override: "Mine" }), entry({ override: "{{brnch}}", overrideError: "Unknown variable" })])).toEqual({ customized: 2, broken: 1 });
+  expect(promptCounts([entry({}), entry({ overrideError: "stale" })])).toEqual({ customized: 0, broken: 0 });
+  expect(promptsSummary([entry({})])).toBe("All built-in");
+  expect(promptsSummary([entry({ override: "Mine" }), entry({})])).toBe("1 customized");
+  expect(promptsSummary([entry({ override: "Mine" }), entry({ override: "x", overrideError: "bad" })])).toBe("2 customized · 1 not in use");
+});
+
+test("error line: the service's error wins, a broken override's untouched text defers to its banner, edits are checked live", () => {
+  const broken = entry({ override: "On {{brnch}}", overrideError: "Unknown variable {{brnch}}" });
+  expect(promptErrorLine(broken, broken.override, null)).toBeNull();
+  expect(promptErrorLine(broken, broken.override, "prompts.system.work: bad")).toBe("prompts.system.work: bad");
+  expect(promptErrorLine(broken, "On {{brnch}}!", null)).toContain("{{brnch}}");
+  expect(promptErrorLine(broken, "On {{branch}}", null)).toBeNull();
+  // Read-only built-in: nothing to check.
+  expect(promptErrorLine(entry({}), null, null)).toBeNull();
+  // A customized (not broken) override is checked even when untouched.
+  expect(promptErrorLine(entry({ override: "{{nope}}" }), "{{nope}}", null)).toContain("{{nope}}");
+});
+
+test("load error: only a 404 means an older service; other failures keep their own message", () => {
+  expect(promptsLoadError(new HarnessApiError(404, "Not found"))).toContain("doesn't support prompt overrides");
+  expect(promptsLoadError(new HarnessApiError(500, "database is locked"))).toBe("database is locked");
+  expect(promptsLoadError(new Error("Network request failed"))).toBe("Network request failed");
 });
