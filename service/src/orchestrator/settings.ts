@@ -1,5 +1,5 @@
 import type { ListenSetting, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -82,7 +82,13 @@ export function resolveSettings(stored: Record<string, unknown>): Settings {
 function resolvePrompts(stored: unknown): Record<PromptId, string | null> {
   const out = unsetPrompts();
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return out;
-  for (const [id, text] of Object.entries(stored as Record<string, unknown>)) {
+  const entries = Object.entries(stored as Record<string, unknown>);
+  // An override saved under a prompt's old id applies to its new one (unless that has its own).
+  for (const [old, id] of Object.entries(RENAMED_PROMPT_IDS)) {
+    const text = (stored as Record<string, unknown>)[old];
+    if (typeof text === "string" && text.trim() && !(stored as Record<string, unknown>)[id]) out[id] = text;
+  }
+  for (const [id, text] of entries) {
     if (isPromptId(id) && typeof text === "string" && text.trim()) out[id] = text;
   }
   return out;
@@ -96,7 +102,9 @@ function resolvePrompts(stored: unknown): Record<PromptId, string | null> {
 export function validatePrompts(value: unknown, current?: Settings["prompts"]): Partial<Record<PromptId, string | null>> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest("prompts must be an object of prompt id → template text or null");
   const out: Partial<Record<PromptId, string | null>> = {};
-  for (const [id, text] of Object.entries(value as Record<string, unknown>)) {
+  for (const [sent, text] of Object.entries(value as Record<string, unknown>)) {
+    // A renamed prompt's old id (an older client, a saved settings file) means its new one.
+    const id = RENAMED_PROMPT_IDS[sent] ?? sent;
     if (!isPromptId(id)) throw badRequest(`Unknown prompt: ${id} (GET /prompts lists them)`);
     if (text === null || (typeof text === "string" && !text.trim())) {
       out[id] = null;

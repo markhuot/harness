@@ -43,7 +43,9 @@ describe("tool catalogue", () => {
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
     expect(props("submit_for_review")).toEqual(["attachments", "skip_agent_review", "summary"]);
-    expect(props("complete_ticket")).toEqual(["instructions", "key"]);
+    expect(props("complete_ticket")).toEqual(["action", "instructions", "key"]);
+    expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
+    expect(props("record_pull_request")).toEqual(["url"]);
     expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
     expect(props("get_ticket")).toEqual(["include_transcript", "key"]);
     expect(props("search_tickets")).toEqual(["cursor", "limit", "project_key", "query"]);
@@ -217,12 +219,16 @@ describe("conductor tools → HarnessOps", () => {
     const rv = await tool("review_ticket").execute({ key: "TEST-2", decision: "approve", notes: "ok" }, ctx);
     await tool("complete_ticket").execute({ key: "TEST-2", instructions: "merge into main" }, ctx);
     await tool("complete_ticket").execute({ key: "TEST-2" }, ctx);
+    await tool("complete_ticket").execute({ key: "TEST-2", action: "pr" }, ctx);
+    await tool("review_ticket").execute({ key: "TEST-2", decision: "approve", notes: "ok", action: "custom" }, ctx);
     expect(ops.calls.slice(1)).toEqual([
       { method: "startTicket", args: ["TEST-2"] },
       { method: "messageTicket", args: ["TEST-2", "use postgres"] },
-      { method: "reviewTicket", args: ["TEST-2", "approve", "ok"] },
-      { method: "completeTicket", args: ["TEST-2", "merge into main"] },
-      { method: "completeTicket", args: ["TEST-2", undefined] },
+      { method: "reviewTicket", args: ["TEST-2", "approve", "ok", undefined] },
+      { method: "completeTicket", args: ["TEST-2", "merge into main", undefined] },
+      { method: "completeTicket", args: ["TEST-2", undefined, undefined] },
+      { method: "completeTicket", args: ["TEST-2", undefined, "pr"] },
+      { method: "reviewTicket", args: ["TEST-2", "approve", "ok", "custom"] },
     ]);
     expect(text(rv)).toContain("human review: approved");
   });

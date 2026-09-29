@@ -1,4 +1,4 @@
-// Run queue: FIFO, serialized per session, globally limited to `limit()` concurrent runs.
+// Run queue: FIFO, serialized per session and per lock, globally limited to `limit()` concurrent runs.
 
 import type { RunKind } from "@harness/shared";
 
@@ -6,6 +6,11 @@ export interface QueuedJob {
   runId: string;
   sessionId: string;
   kind: RunKind;
+  /**
+   * Jobs sharing a lock never run at the same time, whatever their sessions (complete runs that
+   * merge into the same checkout: sibling children into their parent's worktree).
+   */
+  lock?: string;
 }
 
 export class RunQueue {
@@ -72,7 +77,7 @@ export class RunQueue {
     const limit = Math.max(1, this.opts.limit());
     for (let i = 0; i < this.pending.length && this.running.size < limit; ) {
       const job = this.pending[i]!;
-      if (this.running.has(job.sessionId)) {
+      if (this.running.has(job.sessionId) || (job.lock && this.lockHeld(job.lock))) {
         i++;
         continue;
       }
@@ -81,6 +86,11 @@ export class RunQueue {
       this.running.set(job.sessionId, { job, done });
     }
     this.checkIdle();
+  }
+
+  private lockHeld(lock: string): boolean {
+    for (const r of this.running.values()) if (r.job.lock === lock) return true;
+    return false;
   }
 
   private async start(job: QueuedJob): Promise<void> {

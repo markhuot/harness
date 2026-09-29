@@ -303,7 +303,13 @@ const projectProps = {
   default_driver: { type: "string", description: "Driver for new tickets (see list_drivers); empty for the settings default." },
   use_worktrees: { type: "boolean", description: "Give each ticket its own git worktree and branch (git repos only). Default true." },
   require_human_review: { type: "boolean", description: "Tickets wait for a human review after the agent review. Default true." },
-  auto_complete: { type: "boolean", description: "Complete (merge) tickets as soon as both reviews approve. Default false." },
+  auto_complete: { type: "boolean", description: "Complete tickets as soon as both reviews approve. Default true." },
+  completion_action: {
+    type: "string",
+    enum: ["merge", "pr", "custom"],
+    description:
+      "What approving a ticket does by default: \"merge\" its branch into the base branch, \"pr\" (push and open a GitHub pull request; needs a remote gh is logged into), or \"custom\" (the approver's instructions). Default merge.",
+  },
   permission_mode: permissionModeProp,
   default_models: modelMapProp,
   color: {
@@ -312,7 +318,7 @@ const projectProps = {
   },
   base_branch: {
     type: "string",
-    description: "Branch this project's tickets merge into when they complete, and new ticket branches start from, e.g. \"develop\". Empty for the settings default.",
+    description: "Branch this project's tickets land on when they complete, and new ticket branches start from, e.g. \"develop\". Empty for the settings default.",
   },
 };
 
@@ -322,6 +328,7 @@ type ProjectToolInput = {
   use_worktrees?: boolean;
   require_human_review?: boolean;
   auto_complete?: boolean;
+  completion_action?: string;
   permission_mode?: string;
   default_models?: Record<string, string | null>;
   color?: string;
@@ -337,6 +344,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.use_worktrees !== undefined) body.useWorktrees = i.use_worktrees;
   if (i.require_human_review !== undefined) body.requireHumanReview = i.require_human_review;
   if (i.auto_complete !== undefined) body.autoComplete = i.auto_complete;
+  if (i.completion_action !== undefined) body.completionAction = i.completion_action;
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;
   if (i.color !== undefined) body.color = i.color || null;

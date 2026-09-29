@@ -36,16 +36,20 @@ import type {
   WatcherBody,
   WatcherLive,
 } from "@harness/shared";
-import type { BaseBranchSource, BranchInfo, PromptEntry } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, PromptEntry } from "@harness/shared";
 import {
   checkProjectKey,
+  completionOptions,
+  isCompletionAction,
   isConductor,
   isTicketKey,
   normalizeProjectColor,
+  offeredCompletionActions,
   outputTitle,
   PERMISSION_MODES,
   PROJECT_COLORS,
   resolveBaseBranch,
+  resolveCompletionAction,
   resolvePermissionMode,
   reviewPassed,
   PROMPT_IDS,
@@ -55,6 +59,7 @@ import {
 } from "@harness/shared";
 import type { Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
+import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
@@ -180,6 +185,8 @@ interface ActiveRun {
   appliedGrants: Set<string>;
   /** ids of the one-time grants handed to this run (RunRequest.grants.once) */
   offeredGrants: number[];
+  /** The agent recorded a pull request during this run (record_pull_request) */
+  pullRequest?: boolean;
 }
 
 interface TriageMeta {
@@ -264,6 +271,7 @@ function validPermissionMode(value: unknown): PermissionMode | null {
 
 const BASE_SOURCE_LABEL:Record<BaseBranchSource | "checkout", string> = {
   ticket: "set on this ticket",
+  parent: "the parent ticket's branch",
   project: "inherited from the project",
   settings: "inherited from Settings",
   checkout: "the main checkout's branch, since the Settings default isn't in this repository",
@@ -280,6 +288,13 @@ function validUseWorktree(value: unknown): boolean | null {
 function validBoolean(name: string, value: unknown): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw badRequest(`${name} must be true or false`);
+  return value;
+}
+
+/** Validate a completion action from a request body (omitted / null → undefined). */
+function validCompletionAction(name: string, value: unknown): CompletionAction | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isCompletionAction(value)) throw badRequest(`${name} must be one of merge, pr, custom`);
   return value;
 }
 
@@ -617,10 +632,24 @@ export class Orchestrator {
       autoComplete: body.autoComplete,
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
+      completionAction: this.validProjectCompletion(path, body.completionAction),
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     };
     return { input, mode: validPermissionMode(body.permissionMode) };
+  }
+
+  /** A project's default completion action, which the project at `path` must offer. */
+  private validProjectCompletion(path: string, value: unknown): CompletionAction | undefined {
+    const action = validCompletionAction("completionAction", value);
+    if (!action) return undefined;
+    const isGit = insideGitCheckout(path);
+    const offered = offeredCompletionActions({ isGit, pullRequestHost: isGit ? (cachedPullRequestTarget(path)?.host ?? null) : null });
+    if (!offered.includes(action)) {
+      const why = action === "pr" ? "needs a git remote on a host gh is logged into (gh auth login)" : "needs a git repository";
+      throw badRequest(`completionAction "${action}" isn't offered by this project: it ${why}. Offered: ${offered.join(", ")}`);
+    }
+    return action;
   }
 
   /** Resolve (and ~-expand) a project directory, which must exist. */
@@ -695,12 +724,13 @@ export class Orchestrator {
       }
     }
     const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
-    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, baseBranch: rawBase, ...rest } = body;
+    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, baseBranch: rawBase, completionAction: rawAction, ...rest } = body;
     const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
+    const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest: { ...rest, color, baseBranch }, path, defaultModels };
+    return { newKey, permissionMode, rest: { ...rest, color, baseBranch, completionAction }, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -1073,7 +1103,40 @@ export class Orchestrator {
 
   humanReview(key: string, body: HumanReviewBody): Ticket {
     const ticket = this.requireTicket(key);
-    return this.applyReview(ticket, body.decision, body.notes ?? "", "human");
+    return this.applyReview(ticket, body.decision, body.notes ?? "", "human", body);
+  }
+
+  /** The parent whose branch a child lands on: one working in a worktree of its own, not done yet. */
+  private branchParent(t: Pick<Ticket, "parentId"> | null): Ticket | null {
+    if (!t?.parentId) return null;
+    const parent = this.store.tickets.get(t.parentId);
+    return parent?.branch && parent.status !== "done" ? parent : null;
+  }
+
+  /**
+   * The completion action a request picked for `t` (DESIGN.md "Completion"), validated against
+   * what the ticket offers: 400 for anything else. Omitted → undefined (keep the earlier choice).
+   */
+  private requestedCompletion(t: Ticket, value: unknown): CompletionAction | undefined {
+    const action = validCompletionAction("action", value);
+    if (!action) return undefined;
+    const r = resolveCompletionAction(action, t, this.store.projects.get(t.projectId), this.branchParent(t));
+    if (r.error !== null) throw badRequest(`${t.key}: ${r.error}`);
+    return r.action;
+  }
+
+  /** Keep the approver's choice on the ticket until the completion runs. */
+  private storeCompletionChoice(t: Ticket, choice: { action?: unknown; instructions?: unknown }): Ticket {
+    const action = this.requestedCompletion(t, choice.action);
+    if (choice.instructions !== undefined && choice.instructions !== null && typeof choice.instructions !== "string") {
+      throw badRequest("instructions must be text");
+    }
+    const instructions = typeof choice.instructions === "string" ? choice.instructions.trim() || null : undefined;
+    if (action === undefined && instructions === undefined) return t;
+    // A new action without instructions drops the earlier action's instructions.
+    const patch: TicketPatch = { completionInstructions: instructions ?? (action !== undefined ? null : t.completionInstructions ?? null) };
+    if (action !== undefined) patch.completionAction = action;
+    return this.store.tickets.update(t.id, patch)!;
   }
 
   private resetRejections(ticket: Ticket) {
@@ -1122,8 +1185,15 @@ export class Orchestrator {
     return this.store.tickets.get(t.id)!;
   }
 
-  private applyReview(ticket: Ticket, decision: "approve" | "request_changes", notes: string, by: "human" | "conductor"): Ticket {
+  private applyReview(
+    ticket: Ticket,
+    decision: "approve" | "request_changes",
+    notes: string,
+    by: "human" | "conductor",
+    choice: { action?: unknown; instructions?: unknown } = {},
+  ): Ticket {
     if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
+    if (decision === "approve") ticket = this.storeCompletionChoice(ticket, choice);
     this.resetRejections(ticket);
     if (decision === "approve") {
       const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
@@ -1139,16 +1209,23 @@ export class Orchestrator {
   }
 
   async completeTicket(key: string, body: CompleteBody = {}): Promise<Ticket> {
-    const ticket = this.requireTicket(key);
+    let ticket = this.requireTicket(key);
     if (ticket.status === "done") throw conflict(`${ticket.key} is already done`);
     if (body.skipAgent) {
-      this.transition(ticket, "done", { blockedReason: null }, "Marked done");
+      // "Approve and take no action": no completion run. In review it counts as the approval.
+      if (ticket.status === "review") {
+        this.notCompleting(ticket, "marked done");
+        this.transition(ticket, "done", { blockedReason: null, humanReview: "approved" }, "Approved, no action taken");
+      } else {
+        this.transition(ticket, "done", { blockedReason: null }, "Marked done");
+      }
       return this.store.tickets.get(ticket.id)!;
     }
     if (ticket.status !== "review") throw conflict(`${ticket.key} must be in review to complete`);
     if (this.completing(ticket)) throw conflict(`${ticket.key} is already completing`);
+    ticket = this.storeCompletionChoice(ticket, body);
     this.appendStatus(ticket.sessionId, null, "Completing");
-    await this.enqueueComplete(ticket, body.instructions);
+    await this.enqueueComplete(ticket);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1157,16 +1234,32 @@ export class Orchestrator {
    * the fallback cache is empty after a restart). The ticket counts as completing meanwhile, so
    * nothing is queued ahead of it.
    */
-  private async enqueueComplete(ticket: Ticket, instructions?: string) {
+  private async enqueueComplete(ticket: Ticket) {
     this.startingComplete.add(ticket.id);
     try {
       await this.refreshBaseBranch(ticket);
-      const t = this.store.tickets.get(ticket.id);
+      let t = this.store.tickets.get(ticket.id);
       if (!t || t.status !== "review") return;
-      this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, instructions));
+      // The action this completion runs with: the stored choice while the ticket still offers it,
+      // else the default (a project that lost its gh login merges instead of failing). Written
+      // back so the run's system prompt picks the same completion prompts.
+      const action = completionOptions(t, this.store.projects.get(t.projectId), this.branchParent(t)).defaultAction;
+      if (action !== t.completionAction) t = this.store.tickets.update(t.id, { completionAction: action })!;
+      this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, t.completionInstructions ?? undefined), this.completeLock(t));
     } finally {
       this.startingComplete.delete(ticket.id);
     }
+  }
+
+  /**
+   * Complete runs that merge into the same place run one at a time: siblings merging into their
+   * parent's worktree, or tickets merging into the project's base branch. PR and custom
+   * completions don't share a checkout with anyone.
+   */
+  private completeLock(t: Ticket): string | undefined {
+    if (t.completionAction && t.completionAction !== "merge") return undefined;
+    const parent = this.branchParent(t);
+    return parent ? `merge:${parent.id}` : `merge:${t.projectId}`;
   }
 
   /**
@@ -1890,21 +1983,41 @@ export class Orchestrator {
     return t;
   }
 
-  async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string): Promise<Ticket> {
+  async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string, action?: CompletionAction): Promise<Ticket> {
     const child = this.childOf(this.conductorOf(ctx, "review_ticket"), key);
     try {
-      return this.applyReview(child, decision, notes ?? "", "conductor");
+      return this.applyReview(child, decision, notes ?? "", "conductor", { action });
     } catch (err) {
       throw new Error(errMsg(err));
     }
   }
 
-  async completeTicket_(ctx: ToolContext, key: string, instructions?: string): Promise<Ticket> {
+  async completeTicket_(ctx: ToolContext, key: string, instructions?: string, action?: CompletionAction): Promise<Ticket> {
     const child = this.childOf(this.conductorOf(ctx, "complete_ticket"), key);
     if (child.status !== "review" || !reviewPassed(child.agentReview) || child.humanReview !== "approved") {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
-    return this.completeTicket(child.key, { instructions });
+    try {
+      return await this.completeTicket(child.key, { instructions, action });
+    } catch (err) {
+      throw new Error(errMsg(err));
+    }
+  }
+
+  /** record_pull_request: the pull request a "pr" completion opened (or updated). */
+  async recordPullRequest(ctx: ToolContext, url: string): Promise<string> {
+    const t = this.ctxTicket(ctx);
+    if (ctx.runKind !== "complete" || t.completionAction !== "pr") {
+      throw new Error("record_pull_request is only for completion runs that open a pull request");
+    }
+    const u = String(url ?? "").trim();
+    if (!/^https?:\/\/\S+$/.test(u)) throw new Error("url must be the pull request's http(s) link, as gh printed it");
+    const updated = this.store.tickets.update(t.id, { pullRequestUrl: u })!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: updated });
+    this.appendStatus(t.sessionId, ctx.runId, `Pull request: ${u}`);
+    const a = this.ctxActive(ctx);
+    if (a) a.pullRequest = true;
+    return `Recorded ${u} on ${t.key}.`;
   }
 
   /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
@@ -1971,6 +2084,9 @@ export class Orchestrator {
       permissionMode: p.permissionMode,
       color: p.color,
       baseBranch: p.baseBranch ?? null,
+      completionAction: p.completionAction ?? "merge",
+      completionActions: p.completionActions ?? offeredCompletionActions(p),
+      pullRequestHost: p.pullRequestHost ?? null,
     };
   }
 
@@ -2245,7 +2361,7 @@ export class Orchestrator {
    */
   baseBranchFor(ticket: Ticket | null, project?: Project | null): { branch: string; source: BaseBranchSource | "checkout" } {
     const p = project !== undefined ? project : ticket ? this.store.projects.get(ticket.projectId) : null;
-    const r = resolveBaseBranch(ticket, p, this.settings());
+    const r = resolveBaseBranch(ticket, p, this.settings(), this.branchParent(ticket));
     if (r.source !== "settings" || !p) return r;
     const head = this.baseFallback.get(`${p.path}\u0000${r.branch}`);
     return head ? { branch: head, source: "checkout" } : r;
@@ -2257,7 +2373,7 @@ export class Orchestrator {
    */
   async refreshBaseBranch(ticket: Ticket | null, project?: Project | null): Promise<{ branch: string; source: BaseBranchSource | "checkout" }> {
     const p = project !== undefined ? project : ticket ? this.store.projects.get(ticket.projectId) : null;
-    const r = resolveBaseBranch(ticket, p, this.settings());
+    const r = resolveBaseBranch(ticket, p, this.settings(), this.branchParent(ticket));
     // Only the inherited setting can fall back; a folder outside git has nothing to ask.
     if (r.source === "settings" && p && p.isGit !== false) {
       // Outside a repo branchExists fails and currentBranch gives null: no fallback.
@@ -2279,7 +2395,8 @@ export class Orchestrator {
       const old = join(this.paths.worktreesDir, ticket.key);
       if (existsSync(old)) leftover = { path: old, branch: branchForKey(ticket.key) };
     }
-    return { base: base.branch, baseSource: base.source, ownsWorktree, worktreesDir: this.paths.worktreesDir, leftover };
+    const pullRequest = project && ticket?.completionAction === "pr" ? cachedPullRequestTarget(project.path) : null;
+    return { base: base.branch, baseSource: base.source, ownsWorktree, worktreesDir: this.paths.worktreesDir, leftover, pullRequest };
   }
 
   private completePromptFor(t: Ticket, instructions?: string): string {
@@ -2665,7 +2782,7 @@ export class Orchestrator {
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
 
-  private enqueueRun(sessionId: string, kind: RunKind, prompt: string): Run {
+  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     const driver = ticket?.driver ?? session.driver;
@@ -2673,7 +2790,7 @@ export class Orchestrator {
     this.bus.emit({ kind: "run.upserted", run });
     this.append(sessionId, run.id, "user", { type: "text", text: prompt });
     this.touchSession(sessionId);
-    this.queue.enqueue({ runId: run.id, sessionId, kind });
+    this.queue.enqueue({ runId: run.id, sessionId, kind, lock });
     return run;
   }
 
@@ -2971,7 +3088,15 @@ export class Orchestrator {
         break;
       }
       case "complete":
-        if (ticket.status !== "done") this.transition(ticket, "done", { blockedReason: null }, "Completed");
+        if (ticket.status === "done") break;
+        if (ticket.completionAction === "pr" && !active.pullRequest) {
+          // The PR completion's whole result is the pull request: without one, the work hasn't landed.
+          const reason = "Completion ended without opening a pull request. Check the last summary for what went wrong (gh login, push access), then complete the ticket again.";
+          this.addSummary(ticket.sessionId, ticket.id, "system", reason);
+          this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: no pull request");
+          break;
+        }
+        this.transition(ticket, "done", { blockedReason: null }, "Completed");
         break;
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
@@ -3013,8 +3138,9 @@ export class Orchestrator {
       cancelTicket: (c, k) => this.cancelTicket_(c, k),
       reopenTicket: (c, k, n) => this.reopenTicket_(c, k, n),
       // --- conductor ---
-      reviewTicket: (c, k, d, n) => this.reviewTicket_(c, k, d, n),
-      completeTicket: (c, k, i) => this.completeTicket_(c, k, i),
+      reviewTicket: (c, k, d, n, a) => this.reviewTicket_(c, k, d, n, a),
+      completeTicket: (c, k, i, a) => this.completeTicket_(c, k, i, a),
+      recordPullRequest: (c, u) => this.recordPullRequest(c, u),
       // --- triage ---
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
       declineWork: (c, r, title) => this.declineWork(c, r, title),

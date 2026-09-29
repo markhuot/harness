@@ -566,7 +566,9 @@ export const PROMPT_IDS = [
   "system.plan",
   "system.work",
   "system.review",
-  "system.complete",
+  "system.complete_merge",
+  "system.complete_pr",
+  "system.complete_custom",
   "system.conductor",
   "system.chat",
   "system.triage",
@@ -582,13 +584,24 @@ export const PROMPT_IDS = [
   "run.work_start",
   "run.conductor_start",
   "run.review",
-  "run.complete",
+  "run.complete_merge",
+  "run.complete_pr",
+  "run.complete_custom",
   "run.conductor_update",
   "run.changes_requested",
   "run.reopen",
   "run.triage",
 ] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];
+
+/**
+ * Prompt ids that were renamed, old → new. Overrides saved under an old id still apply (the
+ * service migrates stored ones and maps any it's sent).
+ */
+export const RENAMED_PROMPT_IDS: Record<string, PromptId> = {
+  "system.complete": "system.complete_merge",
+  "run.complete": "run.complete_merge",
+};
 export type PromptGroup = "system" | "run";
 
 export interface PromptVariable {

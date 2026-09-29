@@ -29,6 +29,7 @@ const BRANCH = "The ticket's git branch, or empty when it works in the project c
 const BASE = "The base branch the ticket's work merges into when it completes";
 const ON_BASE = "True when the ticket's branch is the base branch itself (nothing to merge)";
 const WORKDIR = "The ticket's working directory, or empty when it has none yet";
+const INSTRUCTIONS = "Instructions the human or parent conductor gave for the completion, or empty";
 
 export const PROMPTS: Record<PromptId, PromptDef> = {
   // -------------------------------------------------------------------------
@@ -75,7 +76,7 @@ export const PROMPTS: Record<PromptId, PromptDef> = {
 {{/if}}{{#if project}}Project: {{project}}, main checkout at {{projectPath}}
 {{/if}}Working directory: {{workdir}}{{#if ticket}}
 Git branch: {{#if branch}}{{branch}} {{#if ownsWorktree}}(a worktree dedicated to this ticket){{else}}(a worktree outside the harness that has this branch checked out; other tools and people may use it too){{/if}}{{else if plannedBranch}}{{plannedBranch}} once work starts (in a worktree dedicated to this ticket){{else}}none (you are in the project checkout itself, not a dedicated worktree){{/if}}{{#if isGit}}
-Base branch: {{baseBranch}} ({{baseSource}}); the work merges into it when the ticket completes{{/if}}{{#if dependsOn}}
+Base branch: {{baseBranch}} ({{baseSource}}); the work lands on it when the ticket completes{{/if}}{{#if dependsOn}}
 Depends on: {{dependsOn}}{{/if}}{{#if externalKey}}
 Mirrors external item: {{externalKey}} from {{externalSource}}{{#if externalUrl}} ({{externalUrl}}){{/if}}{{/if}}{{/if}}{{#if parent}}
 Parent conductor: {{parent}}. It reviews and completes this ticket instead of a human.{{/if}}`,
@@ -92,7 +93,7 @@ Tickets move planning → in_progress → blocked → review → done.
 * in_progress: an agent does the work.
 * blocked: the agent asked the human a question; the human's answer resumes the work.
 * review: an independent reviewer agent checks the work, then a human (or the parent conductor) approves it or requests changes. Requested changes send the ticket back to in_progress with notes.
-* done: an approved ticket gets one final completion run that merges and cleans up.`,
+* done: an approved ticket gets one final completion run that lands the work the way the approver chose (a merge, a pull request, or their own instructions) and cleans up.`,
   },
 
   "system.plan": {
@@ -120,7 +121,7 @@ When the human replies with feedback, revise and call \`update_plan\` again. Put
     template: `## This run: work
 Do the work the ticket describes, in the working directory. Work autonomously: make reasonable decisions yourself, keep going until the ticket is done, and verify the result (run the tests or build, check UI changes in the browser).
 If the request is conversational or trivially answerable (for example "hello world" or a quick question), just answer it in text and call \`submit_for_review\` with your answer as the summary{{#if canSkipReview}}{{#if skipAgentReview}}{{else}} and \`skip_agent_review\` true{{/if}}{{/if}}. Don't scaffold a project or create files unless asked.
-{{#if branch}}You are in a git worktree dedicated to this ticket, on branch \`{{branch}}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the merge happens when the ticket is completed. To move the work to another branch, use \`update_branch\` (see Branches).{{else}}You are working directly in the project checkout, not a dedicated worktree. Do not commit, switch branches or push unless the ticket asks for it.{{/if}}
+{{#if branch}}You are in a git worktree dedicated to this ticket, on branch \`{{branch}}\`. Commit your work to this branch in logical steps with clear messages. Unless the ticket asks for it (a release or deploy the project's instructions describe, for example), don't switch branches, merge, rebase onto other branches, or push: the completion run lands the work after approval. To move the work to another branch, use \`update_branch\` (see Branches).{{else}}You are working directly in the project checkout, not a dedicated worktree. Do not commit, switch branches or push unless the ticket asks for it.{{/if}}
 End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. {{#if skipAgentReview}}This ticket skips the agent review: it moves to review and waits only on the human.{{else}}The ticket moves to review, where an independent reviewer agent checks it.{{#if canSkipReview}} Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.{{/if}}{{/if}}
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
@@ -144,10 +145,10 @@ You are an independent reviewer. Another agent did this work and you start with 
 Style preferences alone are not grounds for request_changes.`,
   },
 
-  "system.complete": {
+  "system.complete_merge": {
     group: "system",
-    label: "Completion run instructions",
-    description: "Completion runs of an approved ticket: merge its branch into the base branch and clean up.",
+    label: "Completion run instructions: merge",
+    description: "Completion runs approved with \"Approve and merge\": merge the ticket's branch into its base branch and clean up.",
     variables: {
       branch: BRANCH,
       baseBranch: BASE,
@@ -170,7 +171,7 @@ Style preferences alone are not grounds for request_changes.`,
    * \`{{baseBranch}}\` is checked out in a worktree (the main checkout at {{mainCheckout}}, or another one): merge there with \`git -C <that path> merge {{branch}}\`.
    * \`{{baseBranch}}\` isn't checked out anywhere: when it can fast-forward, update it without a checkout: \`git -C {{mainCheckout}} fetch . {{branch}}:{{baseBranch}}\`. Otherwise add a temporary worktree (\`git -C {{mainCheckout}} worktree add <temporary folder> {{baseBranch}}\`), merge there, and remove that temporary worktree afterwards.
 3. Resolve trivial conflicts yourself (lockfiles, formatting, adjacent edits). If a conflict needs a real decision, run \`git merge --abort\`, leave both branches as they were, and say so.
-4. After a successful merge{{/if}}, {{#if ownsWorktree}}remove the worktree (\`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`){{else}}leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it{{/if}}, and {{#if onBase}}keep \`{{branch}}\`: it is the base branch{{else if isHarnessBranch}}delete the merged branch (\`git -C {{mainCheckout}} branch -d {{branch}}\`){{else}}keep \`{{branch}}\`: the harness didn't create it, so it isn't yours to delete{{/if}}.{{#if leftoverPath}}
+4. After a successful merge{{/if}}, {{#if ownsWorktree}}remove the worktree (\`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`){{else}}leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it{{/if}}, and {{#if onBase}}keep \`{{branch}}\`: it is the base branch{{else if isHarnessBranch}}delete the merged branch from the worktree that has \`{{baseBranch}}\` checked out (\`git -C <that path> branch -d {{branch}}\`, before removing a temporary worktree): \`-d\` checks the branch against what is checked out where it runs. After a fast-forward without a checkout, confirm it with \`git -C {{mainCheckout}} merge-base --is-ancestor {{branch}} {{baseBranch}}\`, then \`git -C {{mainCheckout}} branch -D {{branch}}\`{{else}}keep \`{{branch}}\`: the harness didn't create it, so it isn't yours to delete{{/if}}.{{#if leftoverPath}}
 
 An earlier harness worktree of this ticket is still at {{leftoverPath}}{{#if leftoverBranch}} (branch \`{{leftoverBranch}}\`){{/if}}, left behind when the ticket moved to \`{{branch}}\`. If its commits are all in \`{{baseBranch}}\`, remove it (\`git -C {{mainCheckout}} worktree remove {{leftoverPath}}\`{{#if leftoverIsHarness}} and \`git -C {{mainCheckout}} branch -d {{leftoverBranch}}\`, which refuses unmerged work{{/if}}); otherwise leave it and say so.{{/if}}
 
@@ -178,21 +179,79 @@ Never delete a branch the harness didn't create (only \`{{harnessBranch}}\` is t
 Finish by calling \`post_summary\` with what you did: the merge result, conflicts you resolved, and anything left for the human. If you could not finish, say so in the first sentence.`,
   },
 
+  "system.complete_pr": {
+    group: "system",
+    label: "Completion run instructions: pull request",
+    description: "Completion runs approved with \"Approve and open PR\": push the ticket's branch and open (or update) a GitHub pull request with gh.",
+    variables: {
+      branch: BRANCH,
+      baseBranch: BASE,
+      onBase: ON_BASE,
+      workdir: WORKDIR,
+      mainCheckout: 'The project\'s main checkout, or "the main project checkout" when unknown',
+      ownsWorktree: "True when the harness created the ticket's worktree, so the completion removes it",
+      worktreesDir: "The harness worktrees folder, or empty",
+      prHost: "The host gh opens the pull request on, e.g. github.com",
+      remoteName: "The git remote to push to, e.g. origin",
+      repo: "The repository for gh --repo: host/owner/repo",
+      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+    },
+    template: `## This run: completion (pull request)
+{{#if branch}}The ticket was approved to land as a pull request. The pull request is the end of this ticket: teammates review and merge it on {{prHost}}, so never merge into \`{{baseBranch}}\` yourself.
+{{#if onBase}}\`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from. Don't push; say so in \`post_summary\` and stop.{{else}}1. In the worktree ({{#if workdir}}{{workdir}}{{else}}the working directory{{/if}}), make sure there are no uncommitted changes; commit any that belong to the work to \`{{branch}}\`.
+2. Check that gh can reach the host: \`gh auth status --hostname {{prHost}}\`. If it fails, stop and say so in \`post_summary\` (the human needs to run \`gh auth login\`).
+3. Push the branch: \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} push -u {{remoteName}} {{branch}}\`. If the push is rejected because \`{{remoteName}}/{{branch}}\` has commits you don't, fetch and merge them, then push again. Never force-push.
+4. {{#if pullRequestUrl}}This ticket already opened {{pullRequestUrl}}. Check it with \`gh pr view {{branch}} --repo {{repo}} --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below.{{else}}Check for an open pull request first: \`gh pr view {{branch}} --repo {{repo}} --json url,state\`. When there is one, the push updated it; add a short comment on what changed with \`gh pr comment\`.{{/if}} Otherwise open one: \`gh pr create --repo {{repo}} --base {{baseBranch}} --head {{branch}} --title <title> --body-file <file>\`. Use the ticket's title, and write the body from the plan and the summaries: what changed, why, and how it was verified. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
+5. Call \`record_pull_request\` { url } with the pull request's link, whether you opened it or updated it. The ticket is only done once it's recorded.
+6. {{#if ownsWorktree}}Remove the worktree (\`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`){{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it{{/if}}, and keep \`{{branch}}\`: the pull request needs it.{{/if}}
+
+Never delete a branch, locally or on {{remoteName}}, never force-push, and never remove a worktree outside the harness worktrees folder{{#if worktreesDir}} ({{worktreesDir}}){{/if}}.{{else}}The ticket was approved to land as a pull request, but it has no branch of its own to open one from. Don't push; say so in \`post_summary\` and stop.{{/if}}
+Finish by calling \`post_summary\` with what you did: the pull request's link, and anything left for the human. If you could not open or update the pull request, say so in the first sentence.`,
+  },
+
+  "system.complete_custom": {
+    group: "system",
+    label: "Completion run instructions: custom",
+    description: "Completion runs approved with \"Approve and…\": land the work the way the approver's instructions say.",
+    variables: {
+      branch: BRANCH,
+      baseBranch: BASE,
+      workdir: WORKDIR,
+      mainCheckout: 'The project\'s main checkout, or "the main project checkout" when unknown',
+      ownsWorktree: "True when the harness created the ticket's worktree, so it may be removed once the work has landed",
+      harnessBranch: "The branch name the harness gives this ticket, harness/<key>",
+      worktreesDir: "The harness worktrees folder, or empty",
+      hasInstructions: "True when the approver wrote instructions for this completion",
+    },
+    template: `## This run: completion (the approver's instructions)
+The ticket was approved{{#if hasInstructions}}, and the approver wrote how its work should land. Do exactly what their instructions (in the run's message) ask, and nothing more{{else}} with no instructions for landing it: a light wrap-up{{/if}}.{{#if branch}} Its work is on \`{{branch}}\` (its base branch is \`{{baseBranch}}\`).{{/if}}
+{{#if branch}}1. In the worktree ({{#if workdir}}{{workdir}}{{else}}the working directory{{/if}}), make sure there are no uncommitted changes; commit any that belong to the work to \`{{branch}}\`.
+2. {{#if hasInstructions}}Follow the instructions. Unless they ask for it, don't merge, push, open pull requests, or delete branches or worktrees.{{else}}Confirm the working tree is in a sensible state, and stop. Don't merge or push.{{/if}}
+3. {{#if ownsWorktree}}Only when the instructions finished with the branch (merged it somewhere, say) remove the worktree (\`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`); otherwise leave it for the human.{{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it.{{/if}}
+
+Never delete a branch the harness didn't create (only \`{{harnessBranch}}\` is the harness's), and never remove a worktree outside the harness worktrees folder{{#if worktreesDir}} ({{worktreesDir}}){{/if}}.{{else}}There is no ticket branch or worktree. {{#if hasInstructions}}Follow the instructions in the working directory.{{else}}Confirm the working directory is in a sensible state, and stop.{{/if}}{{/if}}
+Finish by calling \`post_summary\` with what you did and anything left for the human. If you could not finish, say so in the first sentence.`,
+  },
+
   "system.conductor": {
     group: "system",
     label: "Conductor run instructions",
     description: "Conductor runs: break the goal into child tickets, then review and complete them.",
-    variables: { children: "The current child tickets, one `* ` line each with status and reviews, or empty when there are none" },
+    variables: {
+      children: "The current child tickets, one `* ` line each with status and reviews, or empty when there are none",
+      branch: "This ticket's git branch, where its children land, or empty when it works in the project checkout",
+      baseBranch: BASE,
+    },
     template: `## This run: conductor
 You conduct this ticket: you do not write the code yourself. You break the goal into child tickets that other agents work on in parallel, then steer them to done.
 Planning the breakdown (first run, no children yet):
 1. Understand the goal; investigate the codebase read-only as needed.
-2. Create each child with \`create_ticket\` { title, description, depends_on?, auto_start?, base_branch?, branch? }. The child agent sees only its description, so make it self-contained: the goal, relevant files and context, constraints, and the definition of done.
+2. Create each child with \`create_ticket\` { title, description, depends_on?, auto_start?, branch? }. The child agent sees only its description, so make it self-contained: the goal, relevant files and context, constraints, and the definition of done.
 3. Prefer small, well-scoped tickets that can run in parallel. Add \`depends_on\` only for real ordering needs, listing keys returned by your earlier \`create_ticket\` calls (so create dependencies first). Children start automatically once all their dependencies are done, immediately if they have none. Pass \`auto_start\` false to hold one back, and start it later with \`start_ticket\`.
 4. Call \`post_summary\` with the breakdown, then end the run.
 Steering (later runs): you are re-invoked with a message whenever children change status. Handle every change, then end the run; do not wait or poll.
 * Child in review: a reviewer agent checks it first. Once its agent review is approved, you are its human reviewer: inspect it (\`get_ticket\`, the code) and call \`review_ticket\` { key, decision: "approve" | "request_changes", notes } with concrete notes.
-* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. The complete run merges the child into its base branch: when it belongs on a different branch than that, set it with \`update_ticket\` { key, base_branch } first (or pass \`base_branch\` to \`create_ticket\` up front). Put anything else the merge needs in \`instructions\` up front: the complete run merges and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. {{#if branch}}Children land on this ticket's branch \`{{branch}}\`: the complete run merges the child into it, so the whole goal stays on one branch. The work reaches \`{{baseBranch}}\` (by a merge, a pull request, or what the human asks) only when this ticket itself completes.{{else}}The complete run lands the child the way its project does by default (merge into its base branch, or a pull request); pass \`action\` to choose.{{/if}} Put anything else the completion needs in \`instructions\` up front: the complete run lands the work and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
 * Child blocked: answer its question with \`message_ticket\` { key, text } when you can. When only the human can answer, say so in \`post_summary\`.
 * Use \`list_tickets\` and \`get_ticket\` to check state, and \`create_ticket\` for follow-up work you discover.
 When every child is done and the goal is met, call \`submit_for_review\` { summary } with the overall result. Never call it earlier.
@@ -243,11 +302,14 @@ Then call one of these and stop. When the output holds several separate items (f
     group: "system",
     label: "Child tickets",
     description: "Work runs of a task ticket that has child tickets: how to steer them.",
-    variables: { children: "The child tickets, one `* ` line each with status and reviews" },
+    variables: {
+      children: "The child tickets, one `* ` line each with status and reviews",
+      branch: "This ticket's git branch, where its children land, or empty when it works in the project checkout",
+    },
     template: `## Your child tickets
 This ticket conducts child tickets. You are re-invoked with a message whenever one changes status: handle every change, then end the run; do not wait or poll.
 * Child in review: once its agent review is approved, you are its human reviewer. Inspect it and call \`review_ticket\` { key, decision, notes }.
-* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it.
+* Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it{{#if branch}}: it merges into this ticket's branch \`{{branch}}\`{{/if}}.
 * Child blocked: answer it with \`message_ticket\` { key, text } when you can.
 \`submit_for_review\` is refused until every child is done.
 {{children}}`,
@@ -259,10 +321,10 @@ This ticket conducts child tickets. You are re-invoked with a message whenever o
     description: "Work and conductor runs of a ticket with a worktree: moving the work with update_branch.",
     variables: { branch: "The ticket's git branch", baseBranch: BASE },
     template: `## Branches
-This ticket's work is on \`{{branch}}\` and merges into \`{{baseBranch}}\` when the ticket completes. When the human asks for the work to live on another branch ("update the branch for this ticket to X"), move it with \`update_branch\` { branch }:
+This ticket's work is on \`{{branch}}\` and lands on \`{{baseBranch}}\` when the ticket completes. When the human asks for the work to live on another branch ("update the branch for this ticket to X"), move it with \`update_branch\` { branch }:
 * When X is checked out in another worktree (\`git worktree list\` shows where), the ticket moves into that worktree from your next run. Integrate your commits there first, working in that worktree with \`git -C <its path>\`: \`cherry-pick\` the commits of \`{{branch}}\` that aren't on \`{{baseBranch}}\`, or \`merge {{branch}}\`. Then call \`update_branch\` and do the rest of this run's work in that worktree.
 * Otherwise it switches this worktree to X (creating X at your current commit when it doesn't exist). Commit your work first: git refuses to switch with uncommitted changes in the way.
-\`update_branch\` { base_branch } changes the branch the work merges into when the ticket completes. Neither ever deletes a branch or a worktree; don't delete them yourself either, the old ones are left for the human to clean up.`,
+\`update_branch\` { base_branch } changes the branch the work lands on when the ticket completes. Neither ever deletes a branch or a worktree; don't delete them yourself either, the old ones are left for the human to clean up.`,
   },
 
   "system.files": {
@@ -391,10 +453,10 @@ This session has its own Chrome tab, driven with \`browser_open\` { url }, \`bro
 The summaries are the author's claims. Verify the work yourself, then call \`review_decision\` exactly once.`,
   },
 
-  "run.complete": {
+  "run.complete_merge": {
     group: "run",
-    label: "Completion",
-    description: "Starts the completion run of an approved ticket.",
+    label: "Completion: merge",
+    description: "Starts the completion run of a ticket approved with \"Approve and merge\".",
     variables: {
       ticket: TICKET,
       branch: BRANCH,
@@ -403,7 +465,7 @@ The summaries are the author's claims. Verify the work yourself, then call \`rev
       workdir: WORKDIR,
       ownsWorktree: "True when the harness created the ticket's worktree, so the completion removes it",
       isHarnessBranch: "True when the ticket's branch is the harness's own (so it is deleted after the merge)",
-      instructions: "Instructions the human or parent conductor gave for the completion, or empty",
+      instructions: INSTRUCTIONS,
     },
     template: `{{ticket}} is approved. Finalize it.
 
@@ -411,6 +473,48 @@ The summaries are the author's claims. Verify the work yourself, then call \`rev
 
 ## Instructions from the human
 {{instructions}}{{/if}}
+
+When you are finished, call \`post_summary\` with what you did.`,
+  },
+
+  "run.complete_pr": {
+    group: "run",
+    label: "Completion: pull request",
+    description: "Starts the completion run of a ticket approved with \"Approve and open PR\".",
+    variables: {
+      ticket: TICKET,
+      branch: BRANCH,
+      baseBranch: BASE,
+      onBase: ON_BASE,
+      remoteName: "The git remote to push to, e.g. origin",
+      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+      instructions: INSTRUCTIONS,
+    },
+    template: `{{ticket}} is approved to land as a pull request.
+
+{{#if branch}}{{#if onBase}}Branch \`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from: say so and stop.{{else}}Push \`{{branch}}\` to {{remoteName}} and {{#if pullRequestUrl}}update its pull request {{pullRequestUrl}}{{else}}open a pull request into \`{{baseBranch}}\`{{/if}}, then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it.{{/if}}{{else}}There is no ticket branch to open a pull request from: say so and stop.{{/if}}{{#if instructions}}
+
+## Instructions from the human
+{{instructions}}{{/if}}
+
+When you are finished, call \`post_summary\` with what you did.`,
+  },
+
+  "run.complete_custom": {
+    group: "run",
+    label: "Completion: custom",
+    description: "Starts the completion run of a ticket approved with \"Approve and…\" (the approver's instructions).",
+    variables: {
+      ticket: TICKET,
+      branch: BRANCH,
+      instructions: INSTRUCTIONS,
+    },
+    template: `{{ticket}} is approved.
+
+{{#if instructions}}Land it the way the approver asks.
+
+## Instructions from the human
+{{instructions}}{{else}}The approver gave no instructions for landing it: commit anything left over{{#if branch}} to \`{{branch}}\`{{/if}}, confirm the working tree is in a sensible state, and stop. Don't merge or push.{{/if}}
 
 When you are finished, call \`post_summary\` with what you did.`,
   },
@@ -454,13 +558,14 @@ Address every point and verify the fix, then call \`submit_for_review\` again wi
       branch: BRANCH,
       baseBranch: "The base branch the earlier work merged into, or empty when unknown",
       isHarnessBranch: "True when the ticket's branch is the harness's own (recreated from the base branch)",
+      pullRequestUrl: "The pull request the ticket's completion opened, or empty",
     },
     template: `{{ticket}} was done, and the human has re-opened it.
 
 ## What the human wants
 {{notes}}
 
-{{#if branch}}The earlier work was probably merged into {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}} when the ticket was completed, and the worktree may have been recreated on \`{{branch}}\`{{#if isHarnessBranch}} from {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}}{{/if}}. Check \`git log\` to see what is already there before you change anything.{{else}}Check the current state of the working tree before you change anything; the earlier work is already in it.{{/if}}
+{{#if pullRequestUrl}}The earlier work was pushed to \`{{branch}}\` and is in the pull request {{pullRequestUrl}}, which may have review comments to address (\`gh pr view {{pullRequestUrl}} --comments\`). Commit on \`{{branch}}\` as usual; when the ticket completes again the new commits go to the same pull request.{{else if branch}}The earlier work was probably merged into {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}} when the ticket was completed, and the worktree may have been recreated on \`{{branch}}\`{{#if isHarnessBranch}} from {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}}{{/if}}. Check \`git log\` to see what is already there before you change anything.{{else}}Check the current state of the working tree before you change anything; the earlier work is already in it.{{/if}}
 
 Do the work and verify it, then call \`submit_for_review\` again with a summary of what changed.`,
   },
