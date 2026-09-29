@@ -477,3 +477,41 @@ describe("summary attachments", () => {
     expect(s.summaries.attachment("kept")).not.toBeNull();
   });
 });
+
+describe("migration 18: completion actions", () => {
+  function upTo17() {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 17).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    return db;
+  }
+
+  test("existing projects default to merge; tickets have no choice or pull request yet", () => {
+    const db = upTo17();
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    migrate(db);
+    const s = new Store(db);
+    expect(s.projects.get("p1")!.completionAction).toBe("merge");
+    const t = ticketFor(s, "p1", "OLD-1");
+    expect(t).toMatchObject({ completionAction: null, completionInstructions: null, pullRequestUrl: null });
+    const u = s.tickets.update(t.id, { completionAction: "pr", completionInstructions: "label it", pullRequestUrl: "https://github.com/a/b/pull/1" })!;
+    expect(u).toMatchObject({ completionAction: "pr", completionInstructions: "label it", pullRequestUrl: "https://github.com/a/b/pull/1" });
+    expect(s.projects.update("p1", { completionAction: "custom" })!.completionAction).toBe("custom");
+    expect(s.projects.update("p1", { name: "renamed" })!.completionAction).toBe("custom");
+  });
+
+  test("saved overrides of the renamed completion prompts move to their new ids, without clobbering a newer one", () => {
+    const db = upTo17();
+    const put = (value: unknown) => db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run({ v: JSON.stringify(value) });
+    put({ "system.complete": "old system", "run.complete": "old run", "system.work": "work" });
+    migrate(db);
+    expect(new Store(db).settings.all().prompts).toEqual({ "system.complete_merge": "old system", "run.complete_merge": "old run", "system.work": "work" });
+
+    const db2 = upTo17();
+    db2.query("INSERT INTO settings (key, value) VALUES ('prompts', $v)").run({ v: JSON.stringify({ "system.complete": "old", "system.complete_merge": "new" }) });
+    migrate(db2);
+    expect(new Store(db2).settings.all().prompts).toEqual({ "system.complete_merge": "new" });
+  });
+});

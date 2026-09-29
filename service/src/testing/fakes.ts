@@ -233,6 +233,10 @@ export class FakeDriver implements Driver {
       }
       case "complete": {
         yield { type: "text", text: "Finalized." };
+        // A pull request completion records one, unless its instructions say [no-pr].
+        if (ctx.ticket?.completionAction === "pr" && !p.includes("[no-pr]")) {
+          await ops.recordPullRequest(ctx, `https://github.com/acme/web/pull/${ctx.ticket.key.split("-").pop()}`);
+        }
         await ops.postSummary(ctx, "Completed.");
         return;
       }
