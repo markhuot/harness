@@ -88,6 +88,11 @@ export function watcherArgv(w: Pick<Watcher, "command" | "args">, shell: string)
   return [shell, ["-lc", w.command]];
 }
 
+/**
+ * Spawns the watcher in a process group of its own and stops the whole group. Killing only the
+ * shell leaves what it's running (`sleep 60` in a loop, a `curl`) alive and holding the output
+ * pipes open, so the run never ends: stopping the watcher, or the service, hangs on it.
+ */
 export const bunSpawn: SpawnFn = (cmd, args, opts) => {
   const proc = Bun.spawn([cmd, ...args], {
     cwd: opts.cwd,
@@ -95,12 +100,19 @@ export const bunSpawn: SpawnFn = (cmd, args, opts) => {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    detached: true,
   });
   return {
     stdout: proc.stdout,
     stderr: proc.stderr,
     exited: proc.exited,
-    kill: () => proc.kill(),
+    kill: () => {
+      try {
+        process.kill(-proc.pid, "SIGTERM");
+      } catch {
+        proc.kill(); // the group is gone already
+      }
+    },
   };
 };
 

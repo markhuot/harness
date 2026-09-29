@@ -7,7 +7,8 @@
 //   <MentionList mentions={m} />
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent, type TextInputSelectionChangeEventData } from "react-native";
-import { activeMention, insertMention, type FileMatch } from "@harness/shared";
+import { insertMention, type FileMatch } from "@harness/shared";
+import { mentionAt, NO_CARET, onPick, onSelection, selectionProp, type Caret } from "../lib/mentionCaret";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
 import { Icon } from "./Icon";
@@ -26,11 +27,9 @@ export interface FileMentions {
 
 /** `search` must be stable (useCallback): a new one re-runs the lookup. */
 export function useFileMentions(value: string, setValue: (v: string) => void, search: (query: string) => Promise<FileMatch[]>): FileMentions {
-  const [caret, setCaret] = useState<number | null>(null);
-  // Set after a pick so the caret lands after the mention; released on the next selection change.
-  const [forced, setForced] = useState<number | null>(null);
+  const [caret, setCaret] = useState<Caret>(NO_CARET);
   const [matches, setMatches] = useState<FileMatch[]>([]);
-  const mention = caret === null || caret > value.length ? null : activeMention(value, caret);
+  const mention = mentionAt(value, caret);
   const query = mention?.query ?? null;
 
   useEffect(() => {
@@ -58,15 +57,13 @@ export function useFileMentions(value: string, setValue: (v: string) => void, se
       haptic("select");
       const next = insertMention(value, mention, m.path);
       setValue(next.text);
-      setCaret(next.caret);
-      setForced(next.caret);
+      setCaret(onPick(next.caret));
     },
     inputProps: {
-      selection: forced === null ? undefined : { start: forced, end: forced },
+      selection: selectionProp(caret),
       onSelectionChange: (e) => {
         const { start, end } = e.nativeEvent.selection;
-        setCaret(start === end ? start : null);
-        if (forced !== null && start === forced) setForced(null);
+        setCaret((c) => onSelection(c, start, end));
       },
     },
   };
