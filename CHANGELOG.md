@@ -9,7 +9,27 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- You can tell a ticket's agent to move its work to another branch ("update the branch for this
+  ticket to medl-1223-ai-app"). The agent brings its commits over and the ticket switches to that
+  branch. If the branch is already checked out in another worktree, the ticket moves into that
+  worktree and keeps its conversation. The old worktree and branch are left for you to clean up.
+- Settings, projects and tickets now have a base branch: the branch a finished ticket merges
+  into, and the one a new ticket branch starts from. It defaults to `main`, a project can set its
+  own, and a single ticket can override both. Agents can set a ticket's or project's base branch
+  for you, and the Changes tab compares against a project's or ticket's base branch when one is set.
+
 ### Changed
+
+- New ticket branches now start from the base branch instead of whatever happens to be checked
+  out in the project folder, and finished tickets merge into the base branch by name. A repository
+  without a `main` branch (and no base branch set) keeps the old behaviour and uses the branch
+  checked out in the project folder.
+- When a ticket can't get its branch (another worktree already has it checked out, or the base
+  branch doesn't exist), it moves to Blocked with a message naming the branch and folder.
+- When a ticket finishes, the agent only removes the branch and folder the harness made for it.
+  Your own branches and worktrees stay put.
 
 - When auto mode's classifier turns down one of an agent's commands, the agent now looks for a
   safer way to do the same thing and keeps going. It only stops to ask you when there's truly
