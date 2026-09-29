@@ -29,8 +29,19 @@ export interface TerminalContent {
   cwd: string;
   title?: string;
 }
+/**
+ * A New session before anything is saved (views/DraftEditor.tsx). `id` names it (at most one leaf
+ * per id); `projectId` presets the project ("New session in <project>"). Never stored: an empty
+ * New session isn't worth restoring, and one with anything in it is already a draft ticket, whose
+ * pane (a "ticket" leaf) is stored like any other.
+ */
+export interface ComposeContent {
+  kind: "compose";
+  id: string;
+  projectId?: string | null;
+}
 /** What a pane shows. */
-export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent;
+export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent | ComposeContent;
 export interface PaneLeaf {
   type: "leaf";
   id: string;
@@ -113,17 +124,27 @@ export const ticketLeafByKey = (root: PaneNode, key: string): PaneLeaf | null =>
   leaves(root).find((l) => l.content.kind === "ticket" && l.content.ticketKey === key) ?? null;
 export const terminalLeafBySession = (root: PaneNode, sessionId: string): PaneLeaf | null =>
   leaves(root).find((l) => l.content.kind === "terminal" && l.content.sessionId === sessionId) ?? null;
+export const composeLeafById = (root: PaneNode, id: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "compose" && l.content.id === id) ?? null;
 
-/** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a terminal session), if any. */
+/** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a terminal session, a New session), if any. */
 function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
-  if (content.kind === "board") return boardLeaf(root);
-  return content.kind === "ticket" ? ticketLeafByKey(root, content.ticketKey) : terminalLeafBySession(root, content.sessionId);
+  switch (content.kind) {
+    case "board":
+      return boardLeaf(root);
+    case "ticket":
+      return ticketLeafByKey(root, content.ticketKey);
+    case "terminal":
+      return terminalLeafBySession(root, content.sessionId);
+    case "compose":
+      return composeLeafById(root, content.id);
+  }
 }
 
-/** How menus and drag chips name a pane: "the board", a ticket's key, a terminal's title or folder. */
+/** How menus and drag chips name a pane: "the board", a ticket's key, a terminal's title or folder, "New session". */
 export function paneLabel(content: PaneContent): string {
   if (content.kind === "board") return "the board";
   if (content.kind === "ticket") return content.ticketKey;
+  if (content.kind === "compose") return "New session";
   return content.title || cwdName(content.cwd);
 }
 
@@ -239,10 +260,16 @@ export function normalize(
   let sawBoard = false;
   const keys = new Set<string>();
   const sessions = new Set<string>();
+  const composes = new Set<string>();
   let root =
     s.root &&
     prune(s.root, (l) => {
       if (l.content.kind === "board") return sawBoard ? false : (sawBoard = true);
+      if (l.content.kind === "compose") {
+        if (composes.has(l.content.id)) return false;
+        composes.add(l.content.id);
+        return true;
+      }
       if (l.content.kind === "terminal") {
         if (sessions.has(l.content.sessionId) || claimedSessions.has(l.content.sessionId)) return false;
         sessions.add(l.content.sessionId);
@@ -272,7 +299,12 @@ export function checkPanes(state: PaneState): string[] {
   if (boards !== 1) errors.push(`${boards} board leaves`);
   const keys = new Set<string>();
   const sessions = new Set<string>();
+  const composes = new Set<string>();
   for (const l of all) {
+    if (l.content.kind === "compose") {
+      if (composes.has(l.content.id)) errors.push(`New session ${l.content.id} is open twice`);
+      composes.add(l.content.id);
+    }
     if (l.content.kind === "terminal") {
       if (sessions.has(l.content.sessionId)) errors.push(`terminal ${l.content.sessionId} is open twice`);
       sessions.add(l.content.sessionId);
@@ -438,6 +470,40 @@ export function openTerminal(state: PaneState, content: TerminalContent, fromLea
   return dock(state, null, splitTarget(state, fromLeafId), "right", content);
 }
 
+let composeCounter = 0;
+
+/** A new New session pane's content, under an id no other New session has (optionally preset to a project). */
+export function newComposeContent(projectId: string | null = null): ComposeContent {
+  return { kind: "compose", id: `n${++composeCounter}`, ...(projectId ? { projectId } : {}) };
+}
+
+/**
+ * Open a New session pane beside `fromLeafId`, else the focused pane, else the board, exactly
+ * where openTerminal puts a terminal. Every call opens another one (several drafts can be written
+ * at once); `content` defaults to a fresh one.
+ */
+export function openCompose(state: PaneState, fromLeafId: string | null = null, content: ComposeContent = newComposeContent()): PaneState {
+  const existing = composeLeafById(state.root, content.id);
+  if (existing) return focusPane(state, existing.id);
+  return dock(state, null, splitTarget(state, fromLeafId), "right", content);
+}
+
+/**
+ * A New session was saved as the draft `ticketKey`: its pane shows the ticket from now on, in
+ * place (same leaf id, same size, same focus). If that ticket is already open in another pane,
+ * the New session pane closes and the focus goes there instead.
+ */
+export function composeToTicket(state: PaneState, composeId: string, ticketKey: string, tab: TicketTab = "summaries"): PaneState {
+  const leaf = composeLeafById(state.root, composeId);
+  if (!leaf) return state;
+  const other = ticketLeafByKey(state.root, ticketKey);
+  if (other) {
+    const next = closePane(state, leaf.id);
+    return state.focusedId === leaf.id ? focusPane(next, other.id) : next;
+  }
+  return normalize({ ...state, root: setLeafContent(state.root, leaf.id, { kind: "ticket", ticketKey, tab }) });
+}
+
 /**
  * Dock `moving` (an existing leaf, re-docked with `content`) or a new leaf showing `content` on the
  * `zone` half of `targetId`, splitting the target's space 50/50. Docking against the board leaves
@@ -485,6 +551,16 @@ export function closePane(state: PaneState, leafId: string): PaneState {
     focusedId: state.focusedId === leafId ? neighbour : state.focusedId,
     zoomedId: state.zoomedId === leafId ? null : state.zoomedId,
   });
+}
+
+/**
+ * Escape ends a zoom, or else closes the focused ticket or New session pane (never the board, nor a
+ * terminal: Escape is the shell's). A draft's pane asks first (components/draftClose.ts), before this.
+ */
+export function escapePanes(s: PaneState): PaneState {
+  if (s.zoomedId) return toggleZoom(s, s.zoomedId);
+  const leaf = s.focusedId ? findLeaf(s.root, s.focusedId) : null;
+  return leaf?.content.kind === "ticket" || leaf?.content.kind === "compose" ? closePane(s, leaf.id) : s;
 }
 
 export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneState {
@@ -768,7 +844,7 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 // ---------------------------------------------------------------------------
 
 /** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns. */
-export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320 } as const;
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320, compose: 360 } as const;
 /** The shortest any pane may get in a column split. */
 export const PANE_MIN_HEIGHT = 200;
 
@@ -822,6 +898,14 @@ const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
+/** The panes as stored: New session panes aren't (see ComposeContent), so they drop out and their neighbours take their space. */
+function withoutCompose(s: PaneState): PaneState {
+  if (!leaves(s.root).some((l) => l.content.kind === "compose")) return s;
+  const root = prune(s.root, (l) => l.content.kind !== "compose");
+  const kept = (id: string | null) => (id && root && findLeaf(root, id) ? id : null);
+  return { root: (root && normalizeNode(root)) ?? s.root, focusedId: kept(s.focusedId), zoomedId: kept(s.zoomedId) };
+}
+
 function parseContent(v: unknown): PaneContent | null {
   if (!isObject(v)) return null;
   if (v.kind === "board") return { kind: "board" };
@@ -868,7 +952,7 @@ export function parsePanes(raw: string | null | undefined): PaneState {
   return root && isObject(v) ? normalize({ root, focusedId: idOrNull(v.focusedId), zoomedId: idOrNull(v.zoomedId) }) : defaultPanes();
 }
 
-export const serializePanes = (s: PaneState) => JSON.stringify(s);
+export const serializePanes = (s: PaneState) => JSON.stringify(withoutCompose(s));
 
 /** Every board scope's panes, keyed by scope (a project id, or ALL_SCOPE). A scope that isn't here shows just the board. */
 export interface PaneStore {
@@ -906,7 +990,7 @@ export function parsePaneStore(raw: string | null | undefined): PaneStore {
   return { scopes };
 }
 
-export const serializePaneStore = (s: PaneStore) => JSON.stringify(s);
+export const serializePaneStore = (s: PaneStore) => JSON.stringify({ scopes: Object.fromEntries(Object.entries(s.scopes).map(([scope, st]) => [scope, withoutCompose(st)])) });
 
 /** The board leaf id of a scope that has no stored panes yet: the same every time, so re-reading the store doesn't remount the board. */
 const bareBoardId = (scope: string) => `b:${scope}`;
