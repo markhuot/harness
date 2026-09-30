@@ -120,6 +120,11 @@
   padding-left: var(--chrome-inset);
 }
 
+/* A pop-out window (PopoutWindow.tsx) is one pane: its header clears the traffic lights. */
+.popout-window.has-traffic-lights .pane > :is(.detail, .terminal-pane) .detail-titlebar {
+  padding-left: 84px;
+}
+
 /* ------------------------------------------------------------------ pane workspace */
 
 .pane-workspace {

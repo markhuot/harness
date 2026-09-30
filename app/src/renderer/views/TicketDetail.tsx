@@ -52,8 +52,8 @@ import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { useStickToBottom } from "../components/stickToBottom";
-import { useOpenTicket, usePaneScope } from "../components/paneContext";
-import { MovePaneItems, PaneGrip } from "../components/paneHeader";
+import { useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
+import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
@@ -305,6 +305,7 @@ function DetailHeader({
 }) {
   const { state, client } = useStore();
   const openTicket = useOpenTicket();
+  const popout = usePopout();
   const act = useAction();
   const [changes, setChanges] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -396,16 +397,19 @@ function DetailHeader({
             </>
           )}
         </MenuButton>
-        <button
-          className="btn btn-ghost btn-icon"
-          data-testid="pane-zoom"
-          aria-pressed={zoomed}
-          onClick={onToggleZoom}
-          title={zoomed ? `Restore pane (Esc / ${commandKeys("pane.zoom")[0]})` : `Maximize pane${keyHint("pane.zoom")}`}
-          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
-        >
-          <Icon name={zoomed ? "shrink" : "expand"} />
-        </button>
+        <PaneWindowButton paneId={paneId} />
+        {!popout && (
+          <button
+            className="btn btn-ghost btn-icon"
+            data-testid="pane-zoom"
+            aria-pressed={zoomed}
+            onClick={onToggleZoom}
+            title={zoomed ? `Restore pane (Esc / ${commandKeys("pane.zoom")[0]})` : `Maximize pane${keyHint("pane.zoom")}`}
+            aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+          >
+            <Icon name={zoomed ? "shrink" : "expand"} />
+          </button>
+        )}
         <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={onClose} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane">
           <Icon name="x" />
         </button>

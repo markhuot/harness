@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, a ticket or terminal pane can pop out into a window of its own. Click the new
+  pop-out button next to Maximize in the pane's header, or press ⇧⌘O, and the pane moves into a
+  window near where it was. A terminal keeps its shell and everything it printed. Click the same
+  button in that window, or press ⇧⌘O again, to put the pane back on its board. Closing the
+  window closes the pane, and closing the pane closes the window. View → Pop Out Pane does the same.
+
 ### Fixed
 
 - Typing a new session's prompt on the Mac no longer stops after the first letter. When the draft

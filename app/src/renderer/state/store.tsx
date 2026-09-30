@@ -28,6 +28,7 @@ import {
   forgetProjectPanes,
   getPanes,
   getPaneStore,
+  isPopoutScope,
   newComposeContent,
   newTerminalContent,
   openCompose as openComposePane,
@@ -250,10 +251,11 @@ export function StoreProvider({
       const snapshot = await loadSnapshot(client, scopeRef.current);
       dispatch({ type: "snapshot", snapshot });
       // Panes of boards whose project is gone (removed while the app was closed) go, except the
-      // one on screen: a link to a missing project still shows a board.
+      // one on screen: a link to a missing project still shows a board. Pop-outs follow their
+      // windows instead (App.tsx).
       const known = new Set(snapshot.projects.map((p) => p.id));
       const shown = paneScopeOf(parseRoute(location.hash));
-      retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope));
+      retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope) || isPopoutScope(scope));
       // Board cards show the latest summary; backfill for tickets that are still moving
       // (and the most recent done ones). Live summary.added events keep them fresh after.
       const done = snapshot.donePage?.page.tickets.slice(0, 12) ?? snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);

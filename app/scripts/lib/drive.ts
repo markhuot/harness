@@ -157,13 +157,15 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
     await stopped(proc);
     rmSync(userData, { recursive: true, force: true });
   };
-  /** Evaluate in a child frame's own target (plugin iframes are out-of-process: a separate CDP target). */
-  const frame = async (urlPart: string) => {
-    const t = await until(
-      `frame target ${urlPart}`,
-      async () => ((await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[]).find((x) => x.type === "iframe" && x.url.includes(urlPart)),
-      15000,
-    );
+  /** The CDP targets of `type` whose url has `urlPart` (e.g. the pages of other windows). */
+  const targets = async (type: string, urlPart: string) =>
+    ((await (await fetch(`http://127.0.0.1:${cdpPort}/json`)).json()) as { type: string; url: string; webSocketDebuggerUrl: string }[]).filter((x) => x.type === type && x.url.includes(urlPart));
+  /**
+   * Evaluate in another target: a child frame's (plugin iframes are out-of-process: a separate CDP
+   * target), or with type "page" another window's.
+   */
+  const frame = async (urlPart: string, type: "iframe" | "page" = "iframe") => {
+    const t = await until(`${type} target ${urlPart}`, async () => (await targets(type, urlPart))[0], 15000);
     const fws = new WebSocket(t.webSocketDebuggerUrl);
     await new Promise((r) => (fws.onopen = r));
     let n = 0;
@@ -187,5 +189,5 @@ export async function launchApp(opts: { baseUrl: string; token: string; theme?: 
     };
     return { url: t.url, js: fjs, cdp: fcdp, events, close: () => fws.close() };
   };
-  return { proc, cdpPort, cdp, on, js, exists, type, key, cmdEnter, clickText, go, screenshot, frame, close };
+  return { proc, cdpPort, cdp, on, js, exists, type, key, cmdEnter, clickText, go, screenshot, frame, targets, close };
 }

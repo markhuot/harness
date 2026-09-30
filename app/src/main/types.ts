@@ -86,6 +86,38 @@ export interface TerminalBridge {
   onExit(cb: (id: string, exit: TerminalExit) => void): () => void;
 }
 
+/** A rectangle in screen coordinates. */
+export interface ScreenRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PopoutOpenOptions {
+  /** The pop-out's id (its pane scope is `popout:<id>`, see renderer/state/panes.ts) */
+  id: string;
+  /** The hash route the window opens at (#/popout/<id>/<fromScope>) */
+  route: string;
+  /** Where the pane was on screen; the window opens near it */
+  bounds?: ScreenRect;
+}
+
+/** Pop-out windows: one pane each, in its own window (renderer/components/PopoutWindow.tsx). */
+export interface PopoutBridge {
+  open(opts: PopoutOpenOptions): Promise<void>;
+  /** The pop-out's pane is gone (closed, or back on a board): close its window, if it's still open. */
+  close(id: string): Promise<void>;
+  /** Bring the main window forward at `route` (opening one if there's none). */
+  showMain(route: string): Promise<void>;
+  /** The ids of the pop-out windows that are open */
+  list(): Promise<string[]>;
+  /** Someone closed a pop-out's window: its pane closes with it. Sent to the main window. */
+  onClosed(cb: (id: string) => void): () => void;
+  /** The main process asks this window to go to a route (showMain). */
+  onNavigate(cb: (route: string) => void): () => void;
+}
+
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   retryService(): Promise<ConnectionResult>;
@@ -109,5 +141,6 @@ export interface HarnessBridge {
   /** Keep View → Show Sidebar's checkmark in step with the renderer's sidebar */
   setSidebarVisible(visible: boolean): void;
   terminal: TerminalBridge;
+  popout: PopoutBridge;
   platform: string;
 }

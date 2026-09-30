@@ -43,6 +43,22 @@ const bridge: HarnessBridge = {
       return () => ipcRenderer.removeListener("terminal:exit", listener);
     },
   },
+  popout: {
+    open: (opts) => ipcRenderer.invoke("harness:popout:open", opts),
+    close: (id) => ipcRenderer.invoke("harness:popout:close", id),
+    showMain: (route) => ipcRenderer.invoke("harness:popout:showMain", route),
+    list: () => ipcRenderer.invoke("harness:popout:list"),
+    onClosed: (cb) => {
+      const listener = (_e: IpcRendererEvent, id: string) => cb(id);
+      ipcRenderer.on("popout:closed", listener);
+      return () => ipcRenderer.removeListener("popout:closed", listener);
+    },
+    onNavigate: (cb) => {
+      const listener = (_e: IpcRendererEvent, route: string) => cb(route);
+      ipcRenderer.on("navigate", listener);
+      return () => ipcRenderer.removeListener("navigate", listener);
+    },
+  },
   platform: process.platform,
 };
 

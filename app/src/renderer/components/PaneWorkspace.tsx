@@ -142,7 +142,8 @@ export function PaneWorkspace({ scope }: { scope: string }) {
   );
 }
 
-function Pane({
+/** One pane: a leaf's content in its box. Also the whole of a pop-out window (components/PopoutWindow.tsx). */
+export function Pane({
   leaf,
   rect,
   hidden,
