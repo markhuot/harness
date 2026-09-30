@@ -48,8 +48,10 @@ name de-duplicates to `KEY2`, `KEY3`, ...
 
 `PATCH /projects/:id { key }` renames the project's **native** tickets `OLD-n` → `NEW-n` in one
 transaction, keeping the numbers: ticket keys, their session keys, and every `dependsOn` that
-points at them (in any project). `nextSeq` continues. Tickets mirrored from an external system
-(`externalRef` set, e.g. `FOO-123`) keep their keys. The rename is refused with 409 when
+points at them (in any project). `nextSeq` continues. Tickets linked to a remote ID are native
+tickets and rename too. Only a **legacy mirror** keeps its key: a ticket whose key is its remote
+ID (`key = externalRef.key`, e.g. `FOO-123`), from before remote IDs had their own field (see
+"Remote IDs"). The rename is refused with 409 when
 another project uses the key or any `NEW-n` already exists as a ticket or session key, and
 nothing changes. Clients get `project.upserted`, `ticket.upserted` (renamed tickets and
 dependency holders) and `session.upserted` events, and each renamed ticket's transcript gets a
@@ -74,6 +76,53 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
   doesn't hand the key back). Renaming a project back to an earlier key makes those keys real
   again and drops their aliases.
 - Deleting a ticket (or its project) deletes its aliases.
+
+## Remote IDs
+
+A ticket can be linked to a remote item, such as a Jira issue or a pull request. The link is
+`Ticket.externalRef { source, key, url, raw }`, and its `key` is the **remote ID** (`MH-62`).
+Lookups use the ticket's `key` (`MH-124`) and nothing else. It is the ticket's only identity:
+routes, branches, worktrees, sessions, `dependsOn` and every tool resolve it the same way (the
+current key, then an alias). The remote ID is what people call the work, so clients show it in
+place of the key.
+
+- **Display.** `displayKey(t)` is the remote ID when the ticket has one, else the key.
+  - `secondaryKey(t)` is the key when it differs from the display key, and null otherwise.
+  - `keyLabel(t)` joins the two: `MH-62 · MH-124`.
+  - Wherever a key is shown, the local key follows the remote ID in muted text. That keeps
+    tickets apart when several share one remote ID, or when a local ticket's key equals another
+    ticket's remote ID.
+  - Copying a key, drag data, routes and branch hints use the local key.
+  - Prompts label a linked ticket `MH-62 (local MH-124) "title"` (`ticketLabel`).
+- **Not unique.** Any number of tickets can carry one remote ID. For example, a pull request
+  reviewed in three rounds can become three tickets. Migration 20 stores the remote ID in
+  `tickets.external_key` (upper-cased, with a non-unique index), and `TicketRepo.create` and
+  `setExternalRef` keep it in sync with `external_ref`.
+- **Keys.** Tickets that triage creates take the project's next native key, like any other
+  ticket. `CreateTicketBody.key` still exists, for imports and tests.
+- **Related tickets.** `TicketDetail.relatedTickets` (`RelatedTicket { key, title, status,
+  projectId, externalKey }`, newest first) lists the other tickets whose remote ID equals the
+  requested key or the ticket's own remote ID.
+  - When no local key matches but tickets carry the requested key as their remote ID,
+    `GET /tickets/:key` returns 404 with `data: RemoteKeyMatches { requested, relatedTickets }`.
+    The error surfaces as `HarnessApiError.data`. Clients show a "Remote ID MH-62" pane that links
+    to those tickets.
+  - `get_ticket` returns `{ ticket: null, requested, relatedTickets }` in that case, as a result
+    rather than an error. A local match also carries `relatedTickets` (`[]` when there are none),
+    along with `externalKey` / `externalUrl`.
+  - Drafts appear in the HTTP list, not in the agent list.
+- **Search.** `search_tickets` and `GET /tickets/search` rank matches in this order: exact local
+  key or alias, local prefix, exact remote ID, remote prefix, title, then text. Searching `MH-62`
+  finds the native MH-62 and every ticket linked to it. Hits carry `externalKey`. The clients'
+  instant filter (`matchesQuery`) matches remote IDs too.
+- **Linking by hand.** `PATCH /tickets/:key { externalRef: { key, url? } | null }`.
+  - The key must look like `FOO-123` (upper-cased) and the URL must be http(s); anything else is
+    a 400.
+  - A new remote ID gets `source: "manual"` and `raw: null`. Re-sending the ticket's current
+    remote ID keeps its watcher `source`/`raw` and changes only the URL.
+  - `null` unlinks.
+  - The ticket's transcript gets a "Linked to MH-62" or "Unlinked from MH-62" status line.
+  - Ticket settings on the Mac and iPhone/iPad have a **Remote ID** field.
 
 ## Runtime paths
 
@@ -393,10 +442,23 @@ provisional title, an instruction to pick the project from the user's prompt and
 to decline when that leaves it ambiguous), the user's prompt, the local tickets whose keys
 appear in the output, the raw output in a fence it can't close, and the project list. Triage
 works out the title, key, link and project, then calls `dispatch_ticket` (once per separate item in the
-output that qualifies) or `decline_work`. `dispatch_ticket` with a `key` makes a ticket that
-mirrors the external key (`FOO-123`) and records `externalRef`. Without one, the ticket gets
-the project's next key. If a local ticket with that key already exists, dispatch posts the
-description to it as a message instead of creating a duplicate. Triage runs get the board
+output that qualifies) or `decline_work`. `dispatch_ticket`'s `key` is the item's remote ID
+("Remote IDs"), and `ticket_key` names an existing local ticket:
+
+- `key` without `ticket_key` always creates a **new** ticket with the project's next key, linked
+  to the remote ID (`externalRef`). It never picks an existing ticket by key: a local ticket whose
+  key happens to equal the remote ID isn't the same work. The outcome is
+  `Dispatched to MH-124 (MH-62) in MH`.
+- `ticket_key` (the current key or an alias; drafts don't count) posts the description to that
+  ticket as a message (`Sent update to existing MH-123`). Adding `key` links a ticket that has no
+  remote ID yet (`Linked MH-123 to MH-62 and sent update`). A ticket that already carries a
+  different remote ID is refused.
+- Neither creates a new, unlinked ticket with the next key.
+
+The "Existing tickets" section of the triage prompt lists, for each ticket-style key in the output,
+the local ticket with that key and every ticket linked to it as a remote ID, each with its status
+and remote ID. Triage then decides whether an update belongs to one of them or starts a new ticket.
+Outcomes always name the local key first, since `dispatchedKey` reads the first key. Triage runs get the board
 read tools, and the triage instructions tell the agent to use `search_tickets` / `get_ticket` to
 find tickets the output doesn't name by key (they're named only while triage runs have them).
 
@@ -426,7 +488,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -437,7 +499,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
 | `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
-| `dispatch_ticket` | triage | `{ project_key, key?, url?, title, description, start?, conductor? }` |
+| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
@@ -949,7 +1011,7 @@ Directives are read from the run prompt:
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | complete | text + `post_summary("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
-| triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key is the first `KEY-123` in the fenced output. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
+| triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key (remote ID) is the first `KEY-123` in the fenced output, and a `[dummy:ticket KEY]` in the prompt section passes `ticket_key`. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
 ## HTTP API
 

@@ -120,8 +120,12 @@ you answer.
   printed is skipped. Each item starts a triage session in the Inbox. The triage agent reads
   the output and your prompt, then either dispatches it to a ticket in the right project or
   declines it. Say in the prompt which project the work goes to ("dispatch it to the PLAYR
-  project"); triage declines output whose project it can't tell. An update about an existing ticket is sent to
-  that ticket as a message.
+  project"); triage declines output whose project it can't tell. A ticket made from a Jira issue
+  or a pull request carries its ID as a **remote ID**. The board shows that ID with the ticket's
+  own key beside it (`MH-62 · MH-124`), and search finds it. Several tickets can share one remote
+  ID. Triage can send an update to an existing ticket as a message, or start a new ticket; the
+  prompt can say which you want ("send changes to the open ticket for that issue"). You can also
+  link or unlink a remote ID in a ticket's settings.
 
 ## Keyboard
 
