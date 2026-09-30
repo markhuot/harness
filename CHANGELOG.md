@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing a new session's prompt on the Mac no longer stops after the first letter. When the draft
+  saves and its pane picks up the ticket's key, the prompt keeps the keyboard, so you can keep
+  typing. Moving a draft to another project doesn't interrupt your typing either.
+
 ## [app-20260930.0429](https://github.com/markhuot/harness/releases/tag/app-20260930.0429) - 2026-09-30
 
 ### Added
