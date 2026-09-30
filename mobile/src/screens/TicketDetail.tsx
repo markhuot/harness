@@ -363,7 +363,8 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const [sending, setSending] = useState(false);
   const ref = useRef<TextInput>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
-  const mentions = useFileMentions(text, setText, searchFiles);
+  const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
+  const mentions = useFileMentions(text, setText, searchFiles, searchCommands);
   const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
   // Leaving the ticket starts the chat mode's TTL; coming back within it picks the chat back up.
   useEffect(() => {
