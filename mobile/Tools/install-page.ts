@@ -36,7 +36,7 @@ export const CONTACT = "mark@markhuot.com";
  * that path. Drop this note (and point Getting started at the zip) once the app carries its own service.
  */
 export const MAC_SOURCE_NOTE =
-  "This download looks for the Harness source in the folder it was built from on Mark's Mac, so it won't start on other Macs yet. Build the app from the repo as described in Getting started instead.";
+  "For now, build the Mac app from the repo (step 2 of Getting started). The download starts its service from the folder it was built in on Mark's Mac, so it won't run on other Macs yet.";
 
 export function manifest(r: ReleaseInfo): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -396,13 +396,13 @@ function macSection(r: ReleaseInfo): string {
     </section>`;
   }
   const openNote = r.mac.notarized
-    ? "It's signed and notarized, so it opens like any other app. Unzip it and drag Harness to your Applications folder."
-    : "It's signed with Mark's Developer ID but not notarized yet, so macOS blocks the first launch. Open it once, then go to System Settings → Privacy & Security and click Open Anyway.";
+    ? "The download is signed and notarized, so macOS opens it without a warning."
+    : "The download is signed with Mark's Developer ID but not notarized yet, so macOS blocks the first launch. Open it once, then go to System Settings → Privacy & Security and click Open Anyway.";
   return `    <section>
       <h2>Mac (Apple silicon)</h2>
-      <p>${esc(openNote)}</p>
+      <p>${esc(MAC_SOURCE_NOTE)}</p>
       <a class="install secondary" href="${esc(r.mac.url)}">Download for Mac</a>
-      <p class="alt">${esc(MAC_SOURCE_NOTE)}</p>
+      <p class="alt">${esc(openNote)}</p>
       ${`<div class="meta">Version ${esc(r.mac.version)} &middot; ${mb(r.mac.bytes)} &middot; ${esc(r.date)}</div>`}
     </section>`;
 }
