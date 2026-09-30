@@ -557,7 +557,8 @@ describe("chat messages (sendMessage with chat)", () => {
     const chat = h.driver.calls.at(-1)!;
     expect(chat.kind).toBe("chat");
     expect(chat.prompt).toBe("why a button?");
-    expect(chat.permissionMode).toBe("read_only");
+    // The ticket's own mode, not a read-only lockdown (see the permission mode test below).
+    expect(chat.permissionMode).not.toBe("read_only");
     // It continues the work agent's conversation (not the reviewer's), and later work picks it up.
     expect(chat.state).toEqual({ turns: 1 });
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
@@ -603,6 +604,44 @@ describe("chat messages (sendMessage with chat)", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
     expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "human", body: "hello" }); // no answer to post
+  });
+
+  test("runs with the ticket's permission mode, and a call needing approval is denied without blocking", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.store.tickets.update(t.id, { permissionMode: "ask", allowedTools: ["WebFetch"] });
+    h.store.tickets.addGrant(t.id, "Bash", { command: "npm publish" });
+    let answer: unknown = null;
+    h.driver.script = async function* (req) {
+      if (req.kind !== "chat") return;
+      answer = await req.toolContext.ops.requestApproval(req.toolContext, "Bash", { command: "rm -rf dist" });
+      // Native calls are gated with the ticket's mode, not read_only: an edit in the workdir runs.
+      const edit = await req.toolContext.ops.checkPermission(req.toolContext, "Edit", { file_path: join(req.cwd, "a.ts"), old_string: "a", new_string: "b" });
+      yield { type: "text", text: `edit:${edit.behavior}` };
+    };
+    await h.orch.sendMessage(t.key, "can you clean dist?", { chat: true });
+    await h.orch.idle();
+    const chat = h.driver.calls.at(-1)!;
+    expect(chat.kind).toBe("chat");
+    expect(chat.permissionMode).toBe("ask");
+    // Always-allowed tools come along; the one-time grant is left for the work run it was given to.
+    expect(chat.grants).toEqual({ tools: ["WebFetch"], once: [] });
+    expect(h.store.tickets.listGrants(t.id).map((g) => g.toolName)).toEqual(["Bash"]);
+    expect(answer).toMatchObject({ behavior: "deny", message: expect.stringContaining("a chat can't ask for one") });
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "edit:allow" });
+    const after = h.orch.ticketDetail(t.key).ticket;
+    expect(after).toMatchObject({ status: "review", pendingApproval: null, blockedReason: null });
+  });
+
+  test("a read_only ticket's chat stays read-only", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.store.tickets.update(t.id, { permissionMode: "read_only", allowedTools: ["WebFetch"] });
+    await h.orch.sendMessage(t.key, "hi", { chat: true });
+    await h.orch.idle();
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", permissionMode: "read_only", grants: undefined });
   });
 
   test("a done ticket whose worktree is gone chats from the project checkout", async () => {
@@ -908,7 +947,7 @@ describe("conductor", () => {
       expect(errs[kind]!.every((e) => e.includes(`${other.key} is not a child of`))).toBe(true);
     }
     // Their review runs can't stand in for anyone.
-    expect(errs.review!.every((e) => e.includes("only available in work and conductor runs"))).toBe(true);
+    expect(errs.review!.every((e) => e.includes("only available in work, conductor and chat runs"))).toBe(true);
   });
 });
 

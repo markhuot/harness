@@ -40,6 +40,12 @@ describe("buildClaudeArgs per harness permission mode", () => {
       expect(arg(buildClaudeArgs({ ...base, kind: "plan", permissionMode: mode }, settings, null), "--permission-mode")).toBe("plan");
     }
   });
+
+  test("chat runs get the ticket's mode, like work runs (not a read-only lockdown)", () => {
+    for (const [mode, cli] of [["auto", "auto"], ["ask", "acceptEdits"], ["read_only", "dontAsk"]] as const) {
+      expect(arg(buildClaudeArgs({ ...base, kind: "chat", permissionMode: mode }, settings, null), "--permission-mode")).toBe(cli);
+    }
+  });
 });
 
 describe("StreamJsonParser permission events", () => {

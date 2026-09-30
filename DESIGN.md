@@ -101,7 +101,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Human message in in_progress | a work/conductor run that's going takes it in (see "Steering"); otherwise enqueue work run with the message |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
-| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
+| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a **chat** run that resumes the session's conversation; its last text is posted as an agent summary. A chat run has the ticket's own permission mode and a work run's tools minus the ones that move the ticket (`submit_for_review`, `block`) and the human-gated config writes, so the agent can read, run and change code like a work run. It never holds an approval card (that would block the ticket): `requestApproval` denies with guidance, and one-time grants are left for the work run they were given to (only "always allow" tools reach it). 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
 | Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
@@ -664,8 +664,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
-`auto`). Null at a level means "inherit". Plan, triage and chat runs are always read-only
-(claude-code runs chat runs with `--permission-mode dontAsk`).
+`auto`). Null at a level means "inherit". Plan and triage runs are always read-only; chat
+runs follow the ticket's mode like work runs.
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -996,8 +996,8 @@ has a visible result, and `browser_screenshot { save_to }` writes one to a file 
   `HarnessOps.fileOutputScope`). The permission gate never sees this write, so the tool confines
   it itself. The target, with its deepest existing ancestor resolved through `realpath` (a
   dangling symlink is refused), has to be inside the run's scratch folder
-  `$HARNESS_HOME/tmp/<sessionId>/` or its working directory. A read-only run (plan, review or
-  chat, or `read_only` as the effective mode, ticket → project → settings) gets only the scratch
+  `$HARNESS_HOME/tmp/<sessionId>/` or its working directory. A read-only run (plan or review,
+  or `read_only` as the effective mode, ticket → project → settings) gets only the scratch
   folder, and its relative paths resolve there, so `save_to: "shot.png"` still works for a
   reviewer. Other runs resolve relative paths against the cwd. An existing target is replaced
   only when it already starts with the PNG signature. A refused path fails the call before the

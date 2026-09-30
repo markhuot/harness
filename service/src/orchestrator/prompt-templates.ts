@@ -262,7 +262,7 @@ When every child is done and the goal is met, call \`submit_for_review\` { summa
   "system.chat": {
     group: "system",
     label: "Chat run instructions",
-    description: "Chat runs: answer the human's message about the ticket without changing anything.",
+    description: "Chat runs: answer the human's message about the ticket without moving it to another column.",
     variables: {
       status: "The ticket's status, or empty for a chat without a ticket",
       planning: "True when the ticket is in planning",
@@ -271,10 +271,10 @@ When every child is done and the goal is met, call \`submit_for_review\` { summa
       done: "True when the ticket is done",
     },
     template: `## This run: chat
-The human sent this message as a chat: they want to talk about the ticket in its current state, not to move it along.{{#if status}} The ticket stays in {{status}} whatever you say or do.{{/if}} Answer their message in text: explain what was done or planned, answer questions, discuss options and tradeoffs.
+The human sent this message as a chat: they want to talk about the ticket without moving it along.{{#if status}} The ticket stays in {{status}} whatever you say or do.{{/if}} Answer their message: explain what was done or planned, answer questions, discuss options and tradeoffs, and do what they ask.
 Your last message is posted on the ticket as your answer, next to their question, so make it complete on its own.
-Investigate read-only when it helps: read files, search, run non-destructive commands such as git log, git diff or the tests. Commands that change anything are denied in this run, whatever the ticket's permission mode; that is expected, not a setting to change. Do not create, modify or delete files, commit, or change the plan. There are no lifecycle tools in this run, so there is nothing to submit and nothing to block on: a question for the human can go at the end of your answer.
-If they ask for a change or approve something (revise the plan, do the work, go ahead), you can't act on it from a chat. Say what you would do and tell them how to get it done: {{#if planning}}they can turn on the composer's "Revise the plan" switch and send it again, which starts a planning run that rewrites the plan (or press Start to approve the plan and run the work){{else if blocked}}they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress{{else if review}}they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress{{else if done}}they can re-open the ticket with it{{else}}they can send it as a regular message{{/if}}.`,
+You have your usual tools and the ticket's usual permissions: read files, search, and run commands such as git log, git diff or the tests to back up your answer. When they ask for a change, make it and commit it to the ticket's branch the way a work run would, then say in your answer what you changed.{{#if planning}} The work hasn't started yet, so the working directory may be the project's main checkout: change files only when they ask for it outright.{{else if done}} The work has already landed, so the working directory may be the project's main checkout: change files only when they ask for it outright.{{/if}} Calls that need a human's approval are denied in a chat, since asking would block the ticket; carry on without them and say in your answer what you couldn't run.
+There are no lifecycle tools in this run (no submit_for_review, no block), so a question for the human goes at the end of your answer. When they want the ticket itself to move ({{#if planning}}the plan rewritten, or the work started{{else if review}}another review of the work{{else if blocked}}the work picked back up{{else}}the work picked back up{{/if}}), tell them how: {{#if planning}}they can turn on the composer's "Revise the plan" switch and send it again, which starts a planning run that rewrites the plan (or press Start to approve the plan and run the work){{else if blocked}}they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress{{else if review}}they can turn on the composer's "Move to in progress" switch and send it again, which moves the ticket to in progress and through review again{{else if done}}they can re-open the ticket with it{{else}}they can send it as a regular message{{/if}}.`,
   },
 
   "system.triage": {
@@ -332,7 +332,7 @@ This ticket's work is on \`{{branch}}\` and lands on \`{{baseBranch}}\` when the
     label: "Files",
     description: "Every ticket run: use the file tools rather than the shell to read and change files.",
     variables: {
-      canEdit: "True in runs that change files (work and completion runs)",
+      canEdit: "True in runs that change files (work, completion and chat runs)",
       readTool: "The tool that reads a file, in backticks, e.g. `Read`",
       searchTools: "The tools that find files, in backticks, e.g. `Grep` and `Glob`",
       editTool: "The tool that edits part of a file, in backticks, e.g. `Edit`",
@@ -351,7 +351,7 @@ Keep {{shell}} for running things: tests, builds, git, package managers, and cha
     description: "Every ticket run: how to write summaries and attach screenshots to them.",
     variables: {
       submits: "True in runs that can call submit_for_review (work and conductor runs)",
-      readOnly: "True in read-only runs (planning, review, chat), which save files only to their scratch folder",
+      readOnly: "True in read-only runs (planning, review), which save files only to their scratch folder",
       browser: "True when the run has the browser tools",
     },
     template: `## Summaries
