@@ -11,6 +11,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Messages you send to a working ticket now reach the running agent right away, instead of
+  waiting for the run to finish. The agent reads your message at its next step and can change
+  course mid-run. If it can't take the message in (for example, it had just finished), the
+  message waits for the next run, and the transcript says so.
 - On the Mac, the sidebar's ticket count next to All projects and each project is now a small
   colored pill that splits the count into in progress (yellow), blocked (red), and in review
   (purple). A status with no tickets drops out, so a board with one ticket in progress shows a

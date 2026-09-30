@@ -3,6 +3,9 @@
 
 import type { DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
+import type { RunInput } from "./input";
+
+export { RunInput, type SteerMessage } from "./input";
 
 /**
  * What a driver knows about a sub-agent (DESIGN.md "Sub-agents"). The first report for an id
@@ -95,6 +98,12 @@ export interface RunRequest {
    */
   mcp: { url: string; headers: Record<string, string> };
   signal: AbortSignal;
+  /**
+   * Messages the human sends while the run is going (only for drivers with supportsSteering).
+   * The driver takes them into the live conversation, calls delivered() once its agent has seen
+   * each, and closes the input when it stops taking more (DESIGN.md "Steering").
+   */
+  input?: RunInput;
 }
 
 export interface RunGrants {
@@ -119,6 +128,8 @@ export interface Driver {
    * `permission_prompt` tool (claude-code's --permission-prompt-tool). toolsForRun adds it.
    */
   usesPermissionPromptTool?: boolean;
+  /** True if a running run takes new human messages through RunRequest.input (steering). */
+  supportsSteering?: boolean;
   info(): Promise<DriverInfo>;
   /** Start an interactive login if supported. Returns a URL to open, if any. */
   login?(): Promise<{ url: string | null; message: string }>;

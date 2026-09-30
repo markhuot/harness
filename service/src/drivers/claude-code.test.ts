@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
 import { buildClaudeArgs, carrySession, claudeProjectDir, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
-import type { DriverEvent, RunRequest } from "./types";
+import { RunInput, type DriverEvent, type RunRequest } from "./types";
 import { tempDir } from "@harness/shared/testing";
 
 const FAKE = join(import.meta.dir, "__fixtures__", "fake-claude.ts");
@@ -51,6 +51,8 @@ interface Setup {
   invocations(): { argv: string[]; stdin: string; cwd: string; env: Record<string, string> }[];
   /** The fake's __mark lines: whether stdin was closed at that point of the script */
   marks(): { label: string; stdinClosed: boolean }[];
+  /** User messages the fake received after the prompt (steering) */
+  input(): { uuid: string; content: unknown }[];
 }
 
 function setup(
@@ -89,6 +91,7 @@ function setup(
     driver,
     invocations: () => ndjson(record),
     marks: () => ndjson(record + ".marks"),
+    input: () => ndjson(record + ".input"),
   };
 }
 
@@ -705,6 +708,106 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
       "Waiting for a background task to finish (Follow log), up to 1s.",
       "Background tasks were still running after 1s, so the turn ended and they were stopped.",
     ]);
+  });
+});
+
+// HARNESS-68: human messages sent while the run is going reach the live CLI (steering). The real
+// CLI echoes each one (isReplay, with our uuid) when its agent takes it in (claude 2.1.284).
+describe("ClaudeCodeDriver steering", () => {
+  const say = (text: string) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
+
+  /** Run the driver, pushing `message` into its input when the agent says "working". */
+  async function steer(s: Setup, input: RunInput, message: string, over: Partial<RunRequest> = {}) {
+    const events: DriverEvent[] = [];
+    let error: unknown = null;
+    try {
+      for await (const ev of s.driver.run(request({ input, ...over }))) {
+        events.push(ev);
+        if (ev.type === "text" && ev.text === "working") expect(input.push(message)).toBe(true);
+      }
+    } catch (err) {
+      error = err;
+    }
+    return { events, error };
+  }
+
+  test("argv asks the CLI to echo the messages it takes in", () => {
+    const args = buildClaudeArgs({ kind: "work", systemPrompt: "", mcp: { url: "http://h", headers: {} } }, baseSettings, null);
+    expect(args).toContain("--replay-user-messages");
+  });
+
+  test("a message sent mid-turn is written to the live CLI and counts as delivered once it's echoed", async () => {
+    const s = setup({ script: [init(), say("working"), { __until_input: 1 }, { __replay: true }, say("changed course"), success()] });
+    const input = new RunInput();
+    const { events, error } = await steer(s, input, "Stop and write HELLO.md instead");
+    expect(error).toBeNull();
+    expect(s.invocations()).toHaveLength(1);
+    expect(s.input().map((m) => m.content)).toEqual(["Stop and write HELLO.md instead"]);
+    expect(typeof s.input()[0]!.uuid).toBe("string");
+    expect(input.undelivered()).toEqual([]);
+    expect(events.filter((e) => e.type === "text").map((e) => (e as { text: string }).text)).toEqual(["working", "changed course"]);
+    // The run is over: later messages are refused and go to the queue instead.
+    expect(input.isClosed).toBe(true);
+    expect(input.push("too late")).toBe(false);
+  });
+
+  test("a message the CLI hasn't taken in when the turn ends keeps stdin open for the turn it starts", async () => {
+    const s = setup({
+      script: [
+        init(),
+        say("working"),
+        { __until_input: 1 },
+        success({ total_cost_usd: 0.01 }),
+        { __sleep: 200 },
+        { __mark: "after first turn" },
+        init(),
+        { __replay: true },
+        say("changed course"),
+        success({ total_cost_usd: 0.03 }),
+      ],
+    });
+    const input = new RunInput();
+    const { events, error } = await steer(s, input, "One more thing");
+    expect(error).toBeNull(); // the fake exits 7 if stdin is never closed
+    expect(s.marks()).toEqual([{ label: "after first turn", stdinClosed: false }]);
+    expect(input.undelivered()).toEqual([]);
+    expect(events.some((e) => e.type === "status")).toBe(false);
+    const costs = events.filter((e) => e.type === "usage").map((e) => (e as { costUsd: number }).costUsd);
+    expect(costs[0]).toBeCloseTo(0.01, 10);
+    expect(costs[1]).toBeCloseTo(0.02, 10);
+  });
+
+  test("a run that submits ends with an unseen message left undelivered for the queue", async () => {
+    const s = setup({
+      script: [
+        init(),
+        say("working"),
+        { __until_input: 1 },
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "s1", name: "mcp__harness__submit_for_review", input: { summary: "Done" } }] } },
+        success(),
+        { __until_stdin_closed: true },
+        { __mark: "after result" },
+      ],
+    });
+    const input = new RunInput();
+    const { error } = await steer(s, input, "Also update the README");
+    expect(error).toBeNull();
+    expect(s.marks()).toEqual([{ label: "after result", stdinClosed: true }]);
+    expect(input.undelivered()).toEqual(["Also update the README"]);
+    expect(input.push("later")).toBe(false);
+  });
+
+  test("a message waiting when a missing session is retried goes to the fresh attempt too", async () => {
+    const s = setup({
+      script: [{ __echo_session: true }, { __until_input: 1 }, { __replay: true }, success({ session_id: "new-session" })],
+      env: { FAKE_CLAUDE_MISSING_SESSION: "gone" },
+    });
+    const input = new RunInput();
+    input.push("Queued before the CLI started");
+    const { error } = await collect(s.driver.run(request({ input, state: { sessionId: "gone", costUsd: 0 } })));
+    expect(error).toBeNull();
+    expect(s.invocations()).toHaveLength(2);
+    expect(input.undelivered()).toEqual([]);
   });
 });
 

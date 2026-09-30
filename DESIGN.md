@@ -96,9 +96,9 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
 | Create with `draft: true` | status `planning`, `draft` set, no run (see "Drafts") |
 | `POST /submit {start}` on a draft | `draft` cleared, then exactly what a create with that `start` does |
-| Human message in planning | enqueue plan run with the message |
+| Human message in planning | a plan run that's going takes it in (see "Steering"); otherwise enqueue plan run with the message |
 | `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
-| Human message in in_progress | enqueue work run with the message (queued behind any active run) |
+| Human message in in_progress | a work/conductor run that's going takes it in (see "Steering"); otherwise enqueue work run with the message |
 | Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
 | Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
 | Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a read-only **chat** run that resumes the session's conversation; its last text is posted as an agent summary. 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
@@ -227,6 +227,46 @@ in, so the driver copies the session transcript under the new workdir's project 
 `--resume` (`carrySession`); a session it can't find starts fresh as before.
 
 **Completion** is covered in the next section.
+
+### Steering
+
+A human message to an in-progress or planning ticket (or a chat message) goes into the run that's
+going, when that run is the kind the message would queue (work/conductor, plan, chat) and its
+driver has `supportsSteering` (claude-code, anthropic-api). There's no setting: steering is how
+messages work, and the queue is only the fallback (HARNESS-68).
+
+- `sendMessage` → `steerOrEnqueue`. The message is written to the transcript as a `user` entry
+  of the **active** run right away, @-mentions attached as for a new run, then pushed into the
+  run's `RunInput` (`drivers/input.ts`), created with the `ActiveRun` so a message sent while the
+  run starts is waiting for the driver.
+- The driver takes messages into the live conversation and calls `delivered(id)` once its agent
+  has seen each, then closes the input when it stops taking more. A closed input refuses
+  `push`, and checking for pending messages and closing happen in one synchronous step, so a
+  message is never dropped between them.
+- When the run ends, the orchestrator closes the input and queues a run of the same kind for
+  each message the agent never saw (`enqueueRun(..., { skipTranscript: true })`, so it's shown
+  once), before `afterRun`, like a message queued during the run: the pending work holds off
+  auto-submit. A cancelled run drops them with the rest of the session's queue.
+- Whenever a message has to wait although a run is going (a driver that can't steer, a
+  different run kind, a run that already stopped taking input), the transcript gets the status
+  line "Couldn't reach the running agent; queued for the next run".
+- Review and complete runs never take messages: a message to a ticket in review moves it back
+  to in progress with a work run queued behind the review, as before.
+- The composer hint says "Sent to the running agent" while an in-progress or planning ticket is
+  busy.
+
+claude-code (verified against claude 2.1.284): each message is written to the open stdin as a
+stream-json `user` line with its `uuid`. With `--replay-user-messages` the CLI echoes a line
+(`isReplay: true`, same `uuid`) when its agent takes it in: mid-turn at the next tool boundary
+(the agent changes course in the same turn, one `result`), or, when it arrives as the turn is
+ending, as the start of a new turn (`init`, the replay, another `result`). Resume doesn't replay
+history. At each `result` the driver keeps stdin open while a written message hasn't been echoed.
+A finishing tool or an error still closes it; the unseen message then goes back to the queue. A
+failed `--resume` writes the unseen messages again to the fresh attempt. anthropic-api: messages
+join the user message carrying the tool results; at `end_turn` a waiting message becomes a new
+user turn instead of ending the run. They count as delivered once they're in the conversation
+state. `service/scripts/claude-code-steer-check.ts` checks both claude-code cases against the
+real CLI.
 
 Runs are serialized per session and limited globally by `settings.maxConcurrentRuns` (default 4).
 `ticket.busy` / `session.busy` is true while a run is queued or running. A queued job may also
@@ -591,7 +631,8 @@ half. We don't reimplement the file tools for claude-code: the CLI's own are use
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).
 - **claude-code** — wraps the `claude` CLI (`claude -p --input-format stream-json --output-format
   stream-json --verbose --include-partial-messages`), which carries your **team-plan OAuth** login
-  (`claude auth login --claudeai`; status via `claude auth status --json`). Harness tools are
+  (`claude auth login --claudeai`; status via `claude auth status --json`), plus
+  `--replay-user-messages` for steering (see "Steering"). Harness tools are
   injected with `--mcp-config` pointing at `POST /mcp/:runToken`. Conversation continuity via
   `--resume <session_id>` (stored as driver state). `--permission-mode` comes from the ticket's
   harness permission mode (see "Permissions"); plan runs use `--permission-mode plan`. Every

@@ -65,7 +65,7 @@ import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
-import type { Driver, DriverEvent, RunGrants, RunRequest } from "../drivers/types";
+import { RunInput, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "../drivers/types";
 import type {
   ApprovalMeta,
   BoardListFilter,
@@ -189,6 +189,10 @@ interface ActiveRun {
   offeredGrants: number[];
   /** The agent recorded a pull request during this run (record_pull_request) */
   pullRequest?: boolean;
+  /** Human messages sent while the run is going (steering); null when the run can't take them */
+  input: RunInput | null;
+  /** The run's working directory, for @-mentions in steered messages */
+  cwd: string | null;
 }
 
 interface TriageMeta {
@@ -225,6 +229,13 @@ const READ_ONLY_RUNS: RunKind[] = ["plan", "triage", "chat"];
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
 const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
+/**
+ * Runs a human message can steer while they're going (DESIGN.md "Steering"): the ones a message
+ * would otherwise queue. Review and complete runs never take one (a message moves those tickets).
+ */
+const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
+/** Transcript note when a message meant for the running agent had to wait for the next run */
+export const STEER_FALLBACK_STATUS = "Couldn't reach the running agent; queued for the next run";
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -1160,7 +1171,7 @@ export class Orchestrator {
       this.notCompleting(ticket, "messaged");
       // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
       this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
-      this.enqueueRun(ticket.sessionId, "chat", text);
+      await this.steerOrEnqueue(ticket.sessionId, "chat", text);
       return this.store.tickets.get(ticket.id)!;
     }
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
@@ -1169,10 +1180,10 @@ export class Orchestrator {
     this.resetRejections(ticket);
     switch (ticket.status) {
       case "planning":
-        this.enqueueRun(ticket.sessionId, "plan", text);
+        await this.steerOrEnqueue(ticket.sessionId, "plan", text);
         break;
       case "in_progress":
-        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
+        await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text);
         break;
       case "blocked":
         if (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir))) {
@@ -1196,6 +1207,33 @@ export class Orchestrator {
         break;
     }
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * A human message for a run of `kind` (DESIGN.md "Steering"). When such a run is going and its
+   * driver takes input, the message goes straight into it and the agent sees it at its next
+   * step. Otherwise it waits for a run of its own, queued behind the active one, with a
+   * transcript note when there was a running agent it couldn't reach.
+   */
+  private async steerOrEnqueue(sessionId: string, kind: RunKind, text: string): Promise<void> {
+    const active = [...this.active.values()].find((a) => a.run.sessionId === sessionId && !a.cancelled);
+    if (!active) {
+      this.enqueueRun(sessionId, kind, text);
+      return;
+    }
+    const input = active.input;
+    if (input && !input.isClosed && active.run.kind === kind) {
+      this.append(sessionId, active.run.id, "user", { type: "text", text });
+      this.touchSession(sessionId);
+      const prompt = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
+      if (input.push(prompt, text)) return;
+      // The run stopped taking input while the mentions were read.
+      const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true });
+      this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
+      return;
+    }
+    const run = this.enqueueRun(sessionId, kind, text);
+    this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
   }
 
   /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
@@ -2911,14 +2949,15 @@ export class Orchestrator {
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
 
-  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string): Run {
+  /** skipTranscript: the prompt is already in the transcript (a steered message that fell back to the queue). */
+  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string, opts: { skipTranscript?: boolean } = {}): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (ticket?.draft) throw conflict(`${ticket.key} is a draft: nothing runs on it until it's submitted`);
     const driver = ticket?.driver ?? session.driver;
     const run = this.store.runs.create({ sessionId, kind, driver, prompt });
     this.bus.emit({ kind: "run.upserted", run });
-    this.append(sessionId, run.id, "user", { type: "text", text: prompt });
+    if (!opts.skipTranscript) this.append(sessionId, run.id, "user", { type: "text", text: prompt });
     this.touchSession(sessionId);
     this.queue.enqueue({ runId: run.id, sessionId, kind, lock });
     return run;
@@ -2946,6 +2985,9 @@ export class Orchestrator {
       calls: new Map(),
       appliedGrants: new Set(),
       offeredGrants: [],
+      // From the start, so a message sent while the run gets going is waiting when the driver starts.
+      input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
+      cwd: null,
     };
     this.active.set(run.id, active);
     let error: string | null;
@@ -2956,6 +2998,10 @@ export class Orchestrator {
       controller.abort();
       error = errMsg(err);
     }
+    // Messages the agent never saw wait for the next run. Closed first, so a message sent from
+    // here on is queued by steerOrEnqueue rather than pushed into a run that's over.
+    active.input?.close();
+    const unseen = active.input?.undelivered() ?? [];
 
     const status = active.cancelled ? "cancelled" : error ? "failed" : "succeeded";
     try {
@@ -2979,6 +3025,18 @@ export class Orchestrator {
     );
     this.touchSession(session.id);
     if (this.stopping) return;
+    // Before afterRun, like a message queued during the run: pending work holds off auto-submit.
+    // Cancelling drops them with the rest of the session's queue.
+    if (status !== "cancelled") {
+      for (const text of unseen) {
+        try {
+          const next = this.enqueueRun(session.id, run.kind, text, undefined, { skipTranscript: true });
+          this.appendStatus(session.id, next.id, STEER_FALLBACK_STATUS);
+        } catch (err) {
+          this.log(`couldn't queue an undelivered message for ${session.id}: ${errMsg(err)}`);
+        }
+      }
+    }
     try {
       await this.afterRun(run, active, error);
     } catch (err) {
@@ -3021,6 +3079,7 @@ export class Orchestrator {
         const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
         const children = ticket ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
         const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
+        active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
         const req: RunRequest = {
           runId: run.id,
@@ -3045,6 +3104,7 @@ export class Orchestrator {
           toolContext: ctx,
           mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
           signal: controller.signal,
+          ...(active.input ? { input: active.input } : {}),
         };
         error = await this.consume(driver.run(req), active, controller.signal);
       } catch (err) {

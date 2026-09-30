@@ -71,9 +71,14 @@ export const COMPOSER_PLACEHOLDER: Record<TicketStatus, string> = {
   done: "",
 };
 
-/** Hint under the ticket message composer. */
+/**
+ * Hint under the ticket message composer. While the agent is working on an in-progress or
+ * planning ticket, a message goes into its run (steering); a blocked or review ticket's message
+ * moves it and waits for the run that's going.
+ */
 export function composerHint(t: { busy: boolean; status: TicketStatus }): string {
-  return t.busy ? "Queued behind the current run" : t.status === "planning" ? "The planning agent will revise" : "";
+  if (t.busy) return t.status === "in_progress" || t.status === "planning" ? "Sent to the running agent" : "Queued behind the current run";
+  return t.status === "planning" ? "The planning agent will revise" : "";
 }
 
 /** New-session prompt placeholder. Start vs plan is picked when it's submitted, so only the kind matters. */
