@@ -206,7 +206,7 @@ describe("overrides reach runs", () => {
     expect(catalog.find((e) => e.id === "system.plan")).toMatchObject({ override: null, overrideError: null });
 
     h.orch.updateSettings({ prompts: { "system.work": null } });
-    await h.orch.sendMessage(t.key, "again");
+    await h.orch.sendMessage(t.key, "again", { move: true });
     await h.orch.idle();
     const again = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect(again.systemPrompt).toContain("Do the work the ticket describes");

@@ -33,12 +33,13 @@ const CONFIG_WRITE = [
 ];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  work: ["post_summary", "block", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  work: ["post_summary", "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_summary", ...BOARD, ...CONFIG_READ],
   conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
-  chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  // A chat about a blocked ticket (the fixture's worktree ticket is blocked below) has the work tools.
+  chat: ["post_summary", "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];
 
@@ -125,7 +126,7 @@ describe("systemPrompt tool references", () => {
   const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
   for (const kind of kinds) {
     test(`${kind} mentions only tools its run can call`, () => {
-      const t = kind === "conductor" ? ticket({ kind: "conductor" }) : kind === "triage" ? null : ticket(worktree);
+      const t = kind === "conductor" ? ticket({ kind: "conductor" }) : kind === "triage" ? null : kind === "chat" ? ticket({ ...worktree, status: "blocked" }) : ticket(worktree);
       const text = sys(kind, t, kind === "triage" ? { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } } : {});
       const mentioned = toolsMentioned(text);
       expect(mentioned.filter((n) => !TOOLS[kind].includes(n))).toEqual([]);
@@ -140,8 +141,8 @@ describe("systemPrompt tool references", () => {
       expect(s).not.toBeNull();
       expect(s).toContain("`attachments`");
       // submit_for_review is named (and preferred) only where the run can call it
-      expect(s!.includes("`submit_for_review`")).toBe(kind === "work" || kind === "conductor");
-      expect(s!.includes("submit summary")).toBe(kind === "work" || kind === "conductor");
+      expect(s!.includes("`submit_for_review`")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
+      expect(s!.includes("submit summary")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
       // complete runs have no browser, so no save_to hint
       expect(s!.includes("`save_to`")).toBe(kind !== "complete");
       // read-only run kinds are told their save_to goes to the scratch folder
@@ -190,18 +191,38 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(sys("work")).toMatch(/exactly one[\s\S]*never both/);
   });
 
-  test("a chat about a planning ticket points plan changes at the Revise the plan switch", () => {
-    const text = sys("chat", ticket({ status: "planning" }));
-    expect(text).toContain('"Revise the plan" switch');
-    expect(text).not.toContain("moves the ticket to in progress");
+  test("a chat about a blocked ticket names its question and says to unblock only when the message resolves it", () => {
+    const text = sys("chat", ticket({ status: "blocked", blockedReason: "Which database?" }));
+    expect(text).toContain("The ticket is blocked on: Which database?");
+    expect(text).toContain("call `unblock` { note? } before you continue");
+    expect(text).toContain("answer it and leave the ticket blocked");
+    expect(text).not.toContain("switch");
   });
 
-  test("a chat about a blocked or review ticket points changes at the Move to in progress switch", () => {
-    for (const status of ["blocked", "review"] as const) {
-      const text = sys("chat", ticket({ status }));
-      expect(text).toContain('"Move to in progress" switch');
-      expect(text).not.toContain("Revise the plan");
-    }
+  test("a chat about a review ticket submits again only when the work changed; a done one stays done", () => {
+    const review = sys("chat", ticket({ status: "review" }));
+    expect(review).toContain("call `submit_for_review` { summary } again, which starts both reviews over");
+    expect(review).not.toContain("`unblock` { note? } before");
+    const done = sys("chat", ticket({ status: "done" }));
+    expect(done).toContain('"Re-open and move to in progress" switch');
+    expect(done).toContain("change files only when they ask for it outright");
+    expect(done).not.toContain("starts both reviews over");
+  });
+
+  test("a chat gets a work run's branch, board-changes and approval sections", () => {
+    const text = sys("chat", ticket({ ...worktree, status: "blocked" }));
+    expect(text).toContain("## Branches");
+    expect(text).toContain("## Changing other tickets");
+    expect(text).toContain("## Tool approvals");
+    expect(text).toContain("call `block`, saying what the denied call is for");
+    // A conductor ticket's chat can't block, like its conductor runs.
+    const conductor = sys("chat", ticket({ ...worktree, kind: "conductor", status: "blocked" }));
+    expect(conductor).toContain("stop and end your turn, saying what the denied call is for");
+  });
+
+  test("plan runs are told the human approves with Start, never ExitPlanMode", () => {
+    expect(sys("plan")).toContain("the human approves the plan on the board by pressing Start");
+    expect(sys("plan")).toContain("Don't call ExitPlanMode");
   });
 
   test("plan runs are read-only", () => {

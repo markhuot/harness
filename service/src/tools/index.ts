@@ -1,6 +1,6 @@
 // Tool registry. toolsForRun() is the single source of truth for which tools a run gets.
 
-import type { RunKind } from "@harness/shared";
+import type { RunKind, Ticket } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { getTicket, listInbox, listProjects, listTickets, searchTickets } from "./board";
 import { browserClick, browserContent, browserEval, browserOpen, browserScreenshot, browserType } from "./browser";
@@ -9,7 +9,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
-import { block, postSummary, recordPullRequest, reviewDecision, submitForReview, updateBranch, updatePlan } from "./ticket";
+import { block, postSummary, recordPullRequest, reviewDecision, submitForReview, unblock, updateBranch, updatePlan } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -38,6 +38,7 @@ export const allTools: ToolDefinition[] = [
   postSummary,
   updatePlan,
   block,
+  unblock,
   submitForReview,
   updateBranch,
   reviewDecision,
@@ -54,8 +55,8 @@ export const allTools: ToolDefinition[] = [
 ];
 
 // Config reads (watchers, settings, drivers) go to every run kind, like the board reads.
-// Config writes, all human-gated, go to work and conductor runs only: plan/review/triage have no
-// human in the loop to approve them.
+// Config writes, all human-gated, go to work, conductor and chat runs only: plan/review/triage have
+// no human in the loop to approve them.
 
 /**
  * Harness tools per run kind (see DESIGN.md "Tools"), plus which native set the
@@ -65,28 +66,35 @@ export const allTools: ToolDefinition[] = [
  *    shouldn't edit the tree: plan runs are read-only in claude-code's plan mode too,
  *    and a conductor's children work in the same checkout)
  *  - "none": triage only routes work
+ * A chat (a human's message to a blocked, review or done ticket) gets its ticket's work tools:
+ * see toolsForRun.
  */
-const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
+const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
-  work: { harness: [postSummary, block, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools], native: "full" },
+  work: {
+    harness: [postSummary, block, unblock, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    native: "full",
+  },
   review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postSummary, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postSummary, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postSummary, unblock, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
-  // A work run's tools minus the ones that move the ticket (submit_for_review, block) and the
-  // human-gated config writes: a chat never holds an approval card, since that blocks the ticket.
-  chat: { harness: [postSummary, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...browserTools], native: "full" },
 };
 
 /**
  * permission_prompt is added for every run kind of a driver with usesPermissionPromptTool:
- * requestApproval decides per kind (review/plan/triage are denied with guidance).
+ * requestApproval decides per kind (review/plan/triage are denied with guidance). A chat run gets
+ * the same tools as its ticket's work runs (a conductor ticket's: the conductor tools).
  */
-export function toolsForRun(kind: RunKind, driver: Pick<Driver, "hasBuiltinTools" | "usesPermissionPromptTool">): ToolDefinition[] {
-  const entry = RUN_TOOLS[kind];
+export function toolsForRun(
+  kind: RunKind,
+  driver: Pick<Driver, "hasBuiltinTools" | "usesPermissionPromptTool">,
+  ticket: Pick<Ticket, "kind"> | null = null,
+): ToolDefinition[] {
+  const entry = kind === "chat" ? RUN_TOOLS[ticket?.kind === "conductor" ? "conductor" : "work"] : RUN_TOOLS[kind as Exclude<RunKind, "chat">];
   if (!entry) throw new Error(`Unknown run kind: ${kind}`);
   const tools = [...entry.harness];
   if (driver.usesPermissionPromptTool) tools.push(permissionPrompt);

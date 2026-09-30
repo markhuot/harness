@@ -9,6 +9,31 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Done tickets have a message composer on the Mac and on iPhone and iPad, so you can ask the
+  agent about finished work without re-opening the ticket.
+
+### Changed
+
+- When you reply to a blocked ticket, it stays in Blocked until its agent picks the work back up.
+  If your reply answers what the agent asked, the agent moves the ticket to In progress and carries
+  on, and if you only asked it something, it answers and the ticket keeps waiting on its question.
+  Before, a reply sent with the composer's switch off left the agent unable to send its finished
+  work to review, so the ticket sat in Blocked.
+- A message to a ticket in review or a done ticket leaves it where it is, and the agent can still
+  change the work and send it back to review. To move the ticket first, turn on **Move to in
+  progress** (review) or **Re-open and move to in progress** (done) above the composer. The switch
+  starts off on every ticket and turns itself off after each message.
+- A message to a planning ticket always goes to its planning agent, which revises the plan.
+- When the agent asks for an approval while answering your message, the card shows on the ticket
+  without moving it to Blocked.
+
+### Removed
+
+- The composer's **Revise the plan** switch, and the switch remembering its setting for each
+  ticket.
+
 ### Fixed
 
 - On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request

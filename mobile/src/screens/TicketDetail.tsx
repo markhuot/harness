@@ -9,17 +9,10 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { approveLabel, completionOptions, isConductor, type CompletionAction, type Ticket } from "@harness/shared";
 import {
-  CHAT_PLACEHOLDER,
-  chatHint,
-  chatModes,
   childrenOf,
-  closeChatMode,
   hasCustomDriver,
-  isChatMode,
   moveSwitchLabel,
-  openChatMode,
   openingTab,
-  setChatMode,
   ticketByKey,
   COMPOSER_PLACEHOLDER,
   composerHint,
@@ -165,7 +158,7 @@ export function TicketDetailScreen() {
           </View>
         )}
       </View>
-      {ticket.status !== "done" && <Composer ticket={ticket} key={ticket.id} />}
+      <Composer ticket={ticket} key={ticket.id} />
     </KeyboardAvoider>
   );
 }
@@ -364,32 +357,28 @@ function Composer({ ticket }: { ticket: Ticket }) {
   const ref = useRef<TextInput>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const mentions = useFileMentions(text, setText, searchFiles);
-  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
-  // Leaving the ticket starts the chat mode's TTL; coming back within it picks the chat back up.
-  useEffect(() => {
-    openChatMode(chatModes, ticket.key, Date.now());
-    return () => closeChatMode(chatModes, ticket.key, Date.now());
-  }, [ticket.key]);
+  // Off by default and after every send: the ticket stays where it is unless asked to move first.
+  const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
-  const chat = !!switchLabel && chatMode;
-  const toggleMove = (move: boolean) => {
+  const move = !!switchLabel && moveFirst;
+  const toggleMove = (on: boolean) => {
     haptic("select");
-    setChatMode(chatModes, ticket.key, !move);
-    setChat(!move);
+    setMoveFirst(on);
   };
-  const hint = chat ? chatHint(ticket) : composerHint(ticket);
+  const hint = composerHint(ticket, move);
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move }));
     setSending(false);
     if (ok) {
       haptic("success");
       setText("");
+      setMoveFirst(false);
     }
   };
-  const attention = ticket.status === "blocked" && !chat;
+  const attention = ticket.status === "blocked";
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
       <MentionList mentions={mentions} maxHeight={200} />
@@ -398,7 +387,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
           {switchLabel && (
             <>
               <Switch
-                value={!chat}
+                value={move}
                 onValueChange={toggleMove}
                 trackColor={{ true: c.accent }}
                 style={{ transform: [{ scale: 0.75 }], marginHorizontal: -6 }}
@@ -420,7 +409,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
           multiline
           value={text}
           onChangeText={setText}
-          placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
+          placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}
           accessibilityLabel="Message the agent"

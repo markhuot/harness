@@ -143,7 +143,7 @@ describe("drafts never run", () => {
       await expect(h.orch.updateTicket(d.key, { status })).rejects.toMatchObject({ status: 409 });
     }
     await expect(h.orch.sendMessage(d.key, "hi")).rejects.toMatchObject({ status: 409 });
-    await expect(h.orch.sendMessage(d.key, "hi", { chat: true })).rejects.toMatchObject({ status: 409 });
+    await expect(h.orch.sendMessage(d.key, "hi", { move: true })).rejects.toMatchObject({ status: 409 });
     expect(() => h.orch.humanReview(d.key, { decision: "approve" })).toThrow(expect.objectContaining({ status: 409 }));
     await expect(h.orch.completeTicket(d.key, { skipAgent: true })).rejects.toMatchObject({ status: 409 });
     await expect(h.orch.cancelTicket(d.key)).rejects.toMatchObject({ status: 409 });

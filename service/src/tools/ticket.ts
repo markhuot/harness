@@ -1,4 +1,4 @@
-// Ticket-lifecycle tools used by plan / work / review / complete / conductor runs.
+// Ticket-lifecycle tools used by plan / work / review / complete / conductor / chat runs.
 
 import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../attachments";
 import { defineTool, schema } from "./util";
@@ -48,7 +48,7 @@ export const updatePlan = defineTool<{ plan: string; title?: string }>({
 export const block = defineTool<{ question: string }>({
   name: "block",
   description:
-    "Stop and ask the human a question when you cannot continue without their input (missing requirements, credentials, a decision only they can make). Moves the ticket to the Blocked column with your question. The human's answer arrives as a new message in a later run. Do not call this for things you can find out yourself.",
+    "Stop and ask the human a question when you cannot continue without their input (missing requirements, credentials, a decision only they can make). Moves the ticket to the Blocked column with your question. The human's answer arrives as a new message in a later run; when it resolves the block, call unblock and carry on. Do not call this for things you can find out yourself.",
   inputSchema: schema(
     { question: { type: "string", minLength: 1, description: "The specific question for the human, with enough context to answer it without reading the transcript." } },
     ["question"],
@@ -56,6 +56,17 @@ export const block = defineTool<{ question: string }>({
   async run({ question }, ctx) {
     await ctx.ops.block(ctx, question);
     return "Ticket moved to blocked; the human will answer in a later message. Stop here.";
+  },
+});
+
+export const unblock = defineTool<{ note?: string }>({
+  name: "unblock",
+  description:
+    "Move your blocked ticket back to In progress. Call it as soon as the human's message resolves what the ticket was blocked on, before you continue the work, so the board shows the ticket being worked on. Then finish with submit_for_review, or block again with a new question. Don't call it when their message doesn't resolve the block (a side question, say): answer it and leave the ticket blocked. Refused unless the ticket is blocked, and while a tool approval is waiting on the human.",
+  inputSchema: schema({ note: { type: "string", description: "Optional: what resolved the block, shown on the ticket's timeline." } }, []),
+  async run({ note }, ctx) {
+    await ctx.ops.unblock(ctx, note);
+    return "Ticket moved to in progress. Carry on with the work, then call submit_for_review (or block with a new question).";
   },
 });
 

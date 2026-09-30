@@ -149,7 +149,7 @@ export interface OrchestratorOptions {
   browser: BrowserService;
   paths: HarnessPaths;
   /** Tool selection per run (defaults to tools/index toolsForRun) */
-  tools?: (kind: RunKind, driver: Driver) => ToolDefinition[];
+  tools?: (kind: RunKind, driver: Driver, ticket: Ticket | null) => ToolDefinition[];
   /** Base URL of the HTTP server, used to build run-scoped MCP URLs */
   baseUrl?: () => string;
   /** Build the watcher supervisor (defaults to WatcherRunner); null disables watchers */
@@ -223,19 +223,21 @@ export interface IngestInput {
   watcherId?: string | null;
 }
 
-const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
-/** Run kinds with a human in the loop for tool-permission prompts */
-const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
+/** Runs that do the ticket's work: a queued one holds off auto-submit (see finishWork). */
+const RUNNABLE_WORK: RunKind[] = ["work", "conductor", "chat"];
 /**
- * Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. Chat runs
- * aren't: they get the ticket's own mode, and only never hold an approval card (that would block
- * the ticket, and a chat keeps its status).
+ * Run kinds with a human in the loop for tool-permission prompts. A chat's approval card leaves the
+ * ticket in its column, and answering it resumes the chat (openApproval, answerApproval).
  */
+const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor", "chat"];
+/** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
 const READ_ONLY_RUNS: RunKind[] = ["plan", "triage"];
 /** Run kinds that get the board write tools (create_ticket, message_ticket, update_branch, ...) */
 const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat"];
 /** Run kinds that get the (human-gated) config tools */
-const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
+const CONFIG_RUNS: RunKind[] = ["work", "conductor", "chat"];
+/** The agent's own runs of a ticket: a message for one of them can steer any other that's going. */
+const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat"]);
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
 const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /**
@@ -243,6 +245,9 @@ const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]
  * would otherwise queue. Review and complete runs never take one (a message moves those tickets).
  */
 const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
+/** Why a plan run can't leave Claude Code's plan mode itself (ExitPlanMode). */
+export const PLAN_APPROVAL_MESSAGE =
+  "The human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved with update_plan, then end your turn.";
 /** Transcript note when a message meant for the running agent had to wait for the next run */
 export const STEER_FALLBACK_STATUS = "Couldn't reach the running agent; queued for the next run";
 export const MAX_AGENT_REJECTIONS = 3;
@@ -354,7 +359,7 @@ export class Orchestrator {
   readonly browser: BrowserService;
   readonly paths: HarnessPaths;
   private drivers = new Map<string, Driver>();
-  private tools: (kind: RunKind, driver: Driver) => ToolDefinition[];
+  private tools: (kind: RunKind, driver: Driver, ticket: Ticket | null) => ToolDefinition[];
   private baseUrl: () => string;
   private log: (msg: string) => void;
   private queue: RunQueue;
@@ -408,7 +413,7 @@ export class Orchestrator {
     this.browser = opts.browser;
     this.paths = opts.paths;
     for (const d of opts.drivers) this.drivers.set(d.id, d);
-    this.tools = opts.tools ?? ((kind, driver) => toolsForRun(kind, driver));
+    this.tools = opts.tools ?? toolsForRun;
     this.baseUrl = opts.baseUrl ?? (() => "http://127.0.0.1:0");
     this.log = opts.log ?? ((m) => console.log(`[orchestrator] ${m}`));
     this.queue = new RunQueue({
@@ -1207,23 +1212,19 @@ export class Orchestrator {
   }
 
   /**
-   * A human message to the ticket's agent. By default it acts on the ticket: a blocked or review
-   * ticket goes back to in progress. With chat, the agent answers in a chat run, with the ticket's
-   * own permission mode and a work run's tools minus the ones that move it, and the ticket keeps
-   * its status and reviews.
+   * A human message to the ticket's agent (DESIGN.md "Messages"). Code moves the ticket only
+   * before a run starts, and only on request: `move` sends a review ticket back to in progress,
+   * or re-opens a done one. Otherwise the ticket stays where it is:
+   *  - planning: the plan run takes it (plan mode; it revises the plan),
+   *  - in progress: the running work takes it, or a new work run,
+   *  - blocked, review, done: a chat run with the ticket's work tools, whose agent moves the
+   *    ticket itself (unblock once the block is resolved, submit_for_review, block).
+   * A message to a ticket waiting on a tool approval answers it as a deny.
    */
-  async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "messaged (it has no agent yet)");
-    if (opts.chat) {
-      if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval; answer it before chatting`);
-      this.notCompleting(ticket, "messaged");
-      // Chat turns go in the summaries, where the human reads the ticket (the answer when the run ends).
-      this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
-      await this.steerOrEnqueue(ticket.sessionId, "chat", text);
-      return this.store.tickets.get(ticket.id)!;
-    }
     if (ticket.pendingApproval) return this.answerApproval(ticket.key, { decision: "deny", message: text });
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
@@ -1235,18 +1236,11 @@ export class Orchestrator {
       case "in_progress":
         await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text);
         break;
-      case "blocked":
-        if (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir))) {
-          await this.begin(ticket, text);
-        } else {
-          this.transition(ticket, "in_progress", { blockedReason: null }, "Unblocked by human reply");
-          this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
-        }
-        break;
-      case "done":
-        await this.reopen(ticket, text, "Re-opened by human message");
-        break;
       case "review":
+        if (!opts.move) {
+          await this.chat(ticket, text);
+          break;
+        }
         this.transition(
           ticket,
           "in_progress",
@@ -1255,8 +1249,44 @@ export class Orchestrator {
         );
         this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
         break;
+      case "done":
+        if (opts.move) await this.reopen(ticket, text, "Re-opened by human message");
+        else await this.chat(ticket, text);
+        break;
+      case "blocked":
+        await this.chat(ticket, text);
+        break;
     }
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * The message goes to a chat run: the ticket's own agent, conversation and work tools, with its
+   * status unchanged. The message is also posted as a summary, where the agent's answer follows.
+   * A blocked ticket that never got a worktree (or lost it) gets one first, so the agent can work.
+   */
+  private async chat(ticket: Ticket, text: string) {
+    if (ticket.status === "blocked" && (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir)))) {
+      const error = await this.prepareWorkdir(ticket);
+      if (error) {
+        this.addSummary(ticket.sessionId, ticket.id, "system", error);
+        this.store.tickets.update(ticket.id, { blockedReason: error });
+        this.touchSession(ticket.sessionId);
+        return;
+      }
+    }
+    this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
+    await this.steerOrEnqueue(ticket.sessionId, "chat", text);
+  }
+
+  /**
+   * What the agent reads with a human's message to a blocked ticket (the transcript shows only the
+   * message): the ticket's question, and when to unblock.
+   */
+  private blockedNote(t: Ticket | null): string {
+    if (t?.status !== "blocked") return "";
+    const reason = t.blockedReason?.trim();
+    return `\n\n[Harness note: this ticket is blocked${reason ? ` on: ${reason}` : ""}. If this message resolves that, call unblock before you continue the work; if it doesn't, answer and leave the ticket blocked.]`;
   }
 
   /**
@@ -1272,10 +1302,12 @@ export class Orchestrator {
       return;
     }
     const input = active.input;
-    if (input && !input.isClosed && active.run.kind === kind) {
+    if (input && !input.isClosed && (active.run.kind === kind || (AGENT_RUNS.has(kind) && AGENT_RUNS.has(active.run.kind)))) {
       this.append(sessionId, active.run.id, "user", { type: "text", text });
       this.touchSession(sessionId);
-      const prompt = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
+      const withFiles = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
+      const ticketId = this.store.sessions.get(sessionId)?.ticketId;
+      const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null);
       if (input.push(prompt, text)) return;
       // The run stopped taking input while the mentions were read.
       const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true });
@@ -1386,7 +1418,16 @@ export class Orchestrator {
     }
     if (note && decision !== "deny") prompt += ` Note from the human: ${note}.`;
     this.addSummary(ticket.sessionId, ticket.id, "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
-    const kind = this.store.runs.get(pa.runId)?.kind === "complete" ? "complete" : this.workKind(ticket);
+    const asked = this.store.runs.get(pa.runId)?.kind;
+    if (asked === "chat") {
+      // The chat carries on where the ticket is; its question (if it's blocked) stays open.
+      const t = this.store.tickets.update(ticket.id, { pendingApproval: null, allowedTools, reviewRejections: 0 })!;
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, `Approval answered: ${decision}`);
+      this.enqueueRun(t.sessionId, "chat", prompt);
+      return this.store.tickets.get(t.id)!;
+    }
+    const kind = asked === "complete" ? "complete" : this.workKind(ticket);
     const t = this.transition(
       ticket,
       kind === "complete" ? "review" : "in_progress",
@@ -1764,19 +1805,46 @@ export class Orchestrator {
     this.appendStatus(u.sessionId, ctx.runId, "Plan updated");
   }
 
+  /**
+   * The agent's question for the human. From in progress or blocked (a new question replaces the
+   * old one); from review too, which starts both reviews over (a chat about a reviewed ticket).
+   */
   async block(ctx: ToolContext, question: string): Promise<void> {
     const t = this.ctxTicket(ctx);
-    if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
+    this.lifecycleFrom(t, "block");
     if (!question?.trim()) throw new Error("question is empty");
+    const patch: TicketPatch = { blockedReason: question.trim() };
+    if (t.status === "review") {
+      await this.cancelReviewRuns(t.sessionId);
+      Object.assign(patch, { agentReview: "pending", humanReview: "pending" });
+    }
     this.addSummary(t.sessionId, t.id, "agent", `Blocked: ${question.trim()}`);
-    this.transition(t, "blocked", { blockedReason: question.trim() }, `Blocked: ${question.trim()}`, question.trim());
+    this.transition(t, "blocked", patch, `Blocked: ${question.trim()}`, question.trim());
     const a = this.ctxActive(ctx);
     if (a) a.blocked = true;
   }
 
+  /** The human's message resolved the block: back to in progress while the agent carries on. */
+  async unblock(ctx: ToolContext, note?: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can unblock it.`);
+    if (t.status !== "blocked") throw new Error(`${t.key} is ${t.status}, not blocked: there's nothing to unblock.`);
+    const why = typeof note === "string" ? note.trim() : "";
+    this.transition(t, "in_progress", { blockedReason: null }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
+  }
+
+  /**
+   * block and submit_for_review work from in progress, blocked and review; a planning ticket
+   * starts when the human presses Start, and a done one when they re-open it.
+   */
+  private lifecycleFrom(t: Ticket, tool: "block" | "submit_for_review") {
+    if (t.status === "planning") throw new Error(`${t.key} is still in planning: the work starts when the human presses Start, so ${tool} doesn't apply yet.`);
+    if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (the composer's "Re-open and move to in progress" switch) to change it again.`);
+  }
+
   async submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void> {
     let t = this.ctxTicket(ctx);
-    if (t.status !== "in_progress") throw new Error(`${t.key} is ${t.status}, not in progress`);
+    this.lifecycleFrom(t, "submit_for_review");
     // A parent in review (or done) would strand its children: their reviews and merges are its job.
     const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
     if (open.length) {
@@ -1786,6 +1854,8 @@ export class Orchestrator {
     }
     if (skipAgentReview === true) this.assertAgentMaySkipReview(t);
     const prepared = prepareAttachments(attachments, ctx.cwd);
+    // Submitted again from review (a chat changed the work): the reviews start over.
+    if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
     if (skipAgentReview !== undefined && skipAgentReview !== !!t.skipAgentReview) {
       t = this.store.tickets.update(t.id, { skipAgentReview })!;
       this.appendStatus(t.sessionId, ctx.runId, skipAgentReview ? "The agent turned off the agent review for this ticket" : "The agent turned the agent review back on");
@@ -2162,11 +2232,6 @@ export class Orchestrator {
   async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
     const { actor, target } = this.boardTarget(ctx, key, "message_ticket");
     this.noPendingApproval(target);
-    // A message moves a ticket in review back to in progress: that's a review decision, which only
-    // its conductor (standing in for the human reviewer) may make.
-    if (target.status === "review" && target.parentId !== actor.id) {
-      throw new Error(`${target.key} is in review; messaging it would send it back to in progress. Only its reviewers can do that.`);
-    }
     this.notLooserThanCaller(actor, target);
     await this.asTool(() => this.sendMessage(target.key, text));
   }
@@ -2444,11 +2509,9 @@ export class Orchestrator {
     input: unknown,
     meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
-    if (ctx.runKind === "chat") {
-      return {
-        behavior: "deny",
-        message: `${toolName} needs a human's approval, and a chat can't ask for one: that would block the ticket, and a chat leaves its status alone. Proceed without it, and say in your answer what you couldn't run.`,
-      };
+    if (ctx.runKind === "plan" && toolName === "ExitPlanMode") {
+      // Claude Code's plan mode asks to leave it; on the board the human approves the plan instead.
+      return { behavior: "deny", message: PLAN_APPROVAL_MESSAGE };
     }
     if (!APPROVABLE_RUNS.includes(ctx.runKind) || !ctx.ticket) {
       return {
@@ -2481,6 +2544,7 @@ export class Orchestrator {
   /**
    * Put a tool call in front of a human: pendingApproval + blocked. A ticket the agent already
    * blocked (it called block after a denial) keeps its question; the approval is attached to it.
+   * A chat's approval leaves the ticket in its column: the card shows wherever the ticket is.
    */
   private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: ApprovalMeta) {
     const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: Date.now() };
@@ -2490,7 +2554,7 @@ export class Orchestrator {
     if (meta.onceOnly) pending.onceOnly = true;
     const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
     this.addSummary(t.sessionId, t.id, "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
-    if (t.status === "blocked") {
+    if (t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat") {
       this.store.tickets.update(t.id, { pendingApproval: pending });
       this.touchSession(t.sessionId);
       this.appendStatus(t.sessionId, null, reason);
@@ -2501,13 +2565,11 @@ export class Orchestrator {
 
   /**
    * RunRequest.grants: human grants for runs that act for the ticket (not review/plan/triage, not
-   * read_only). Chat runs get the ticket's "always allow" tools, but its one-time grants wait for
-   * the work run they were given to.
+   * read_only).
    */
   private runGrants(kind: RunKind, ticket: Ticket | null, project: Project | null, active: ActiveRun): RunGrants | undefined {
-    if (!ticket || (!APPROVABLE_RUNS.includes(kind) && kind !== "chat")) return undefined;
+    if (!ticket || !APPROVABLE_RUNS.includes(kind)) return undefined;
     if (this.permissionModeFor(ticket, project) === "read_only") return undefined;
-    if (kind === "chat") return { tools: ticket.allowedTools.filter((name) => !GATED_TOOL_NAMES.has(name)), once: [] };
     const grants = this.store.tickets.listGrants(ticket.id);
     active.offeredGrants = grants.map((g) => g.id);
     // Gated harness tools consume their grants in-process (requestApproval); the driver never
@@ -2542,7 +2604,9 @@ export class Orchestrator {
       this.addSummary(t.sessionId, t.id, "system", `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}:\n${lines.join("\n")}`);
       return false;
     }
-    if (t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && run.kind === "complete")) return false;
+    // A chat's denial surfaces wherever the ticket is (its card leaves the column alone).
+    if (run.kind !== "chat" && t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && run.kind === "complete")) return false;
+    if (run.kind === "chat" && t.status === "done") return false;
     const key = grantKey(denial.toolName, denial.input);
     // The exact rule for this call was passed and it was still denied: next time, ask instead.
     if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
@@ -2551,9 +2615,13 @@ export class Orchestrator {
     if (t.allowedTools.includes(denial.toolName) && retries < MAX_AUTO_RETRIES) {
       this.autoRetries.set(t.id, retries + 1);
       this.store.tickets.addGrant(t.id, denial.toolName, denial.input);
-      const kind = run.kind === "complete" ? "complete" : this.workKind(t);
+      const kind = run.kind === "complete" || run.kind === "chat" ? run.kind : this.workKind(t);
       this.appendStatus(t.sessionId, run.id, `Claude Code's classifier denied ${what}, but ${denial.toolName} is allowed on this ticket: retrying with that call pre-approved`);
-      const u = this.transition(t, kind === "complete" ? "review" : "in_progress", { blockedReason: null }, t.status === "blocked" ? "Unblocked: the denied tool is allowed on this ticket" : undefined);
+      // A chat retries where the ticket is; a work run retries in progress.
+      const u =
+        kind === "chat"
+          ? t
+          : this.transition(t, kind === "complete" ? "review" : "in_progress", { blockedReason: null }, t.status === "blocked" ? "Unblocked: the denied tool is allowed on this ticket" : undefined);
       this.enqueueRun(
         u.sessionId,
         kind,
@@ -2740,9 +2808,7 @@ export class Orchestrator {
       runKind: ctx.runKind,
       cwd: ctx.cwd,
       signal: ctx.signal,
-      // A chat leaves one-time grants to the work run they were given to (see runGrants).
-      isGranted: (tool, i) =>
-        !!ticket && ((ctx.runKind !== "chat" && this.store.tickets.consumeGrant(ticket.id, tool, i)) || ticket.allowedTools.includes(tool)),
+      isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
       // A soft denial is the agent's to work around first; surfaceDenial turns the run's last
       // one into a card if the run ends stuck on it (runs that can hold a card only).
@@ -2827,37 +2893,54 @@ export class Orchestrator {
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
     try {
-      let workdir = ticket.workdir;
-      let branch = ticket.branch;
-      if (!workdir || (branch && !existsSync(workdir))) {
-        branch = null;
-        const project = this.store.projects.get(ticket.projectId)!;
-        workdir = project.path;
-        if ((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path))) {
-          try {
-            ({ workdir, branch } = await ensureWorktree({
-              repo: project.path,
-              worktreesDir: this.paths.worktreesDir,
-              key: ticket.key,
-              // A re-opened ticket whose worktree was removed gets its branch back.
-              branch: ticket.requestedBranch ?? ticket.branch,
-              base: (await this.refreshBaseBranch(ticket, project)).branch,
-            }));
-          } catch (err) {
-            const reason = `Could not create worktree: ${errMsg(err)}`;
-            this.addSummary(ticket.sessionId, ticket.id, "system", reason);
-            this.transition(ticket, "blocked", { blockedReason: reason }, "Could not create worktree");
-            return;
-          }
-        }
+      const dir = await this.workdirFor(ticket);
+      if (typeof dir === "string") {
+        this.addSummary(ticket.sessionId, ticket.id, "system", dir);
+        this.transition(ticket, "blocked", { blockedReason: dir }, "Could not create worktree");
+        return;
       }
       const fresh = this.store.tickets.get(ticket.id);
       if (!fresh) return;
-      this.store.sessions.update(fresh.sessionId, { cwd: workdir });
-      this.transition(fresh, "in_progress", { ...patch, workdir, branch, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note);
+      this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
+      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note);
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt);
     } finally {
       this.starting.delete(ticket.id);
+    }
+  }
+
+  /**
+   * Give a ticket that has no workdir (or lost its worktree) one, without changing its status: for
+   * a chat on a blocked ticket. Returns an error message when the worktree can't be created.
+   */
+  private async prepareWorkdir(ticket: Ticket): Promise<string | null> {
+    const dir = await this.workdirFor(ticket);
+    if (typeof dir === "string") return dir;
+    const t = this.store.tickets.update(ticket.id, dir)!;
+    this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
+    this.touchSession(t.sessionId);
+    return null;
+  }
+
+  /**
+   * The ticket's workdir and branch: its own when they're still there, else a new worktree (or the
+   * project checkout for a project without worktrees). A string is why the worktree couldn't be made.
+   */
+  private async workdirFor(ticket: Ticket): Promise<{ workdir: string; branch: string | null } | string> {
+    if (ticket.workdir && !(ticket.branch && !existsSync(ticket.workdir))) return { workdir: ticket.workdir, branch: ticket.branch };
+    const project = this.store.projects.get(ticket.projectId)!;
+    if (!((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path)))) return { workdir: project.path, branch: null };
+    try {
+      return await ensureWorktree({
+        repo: project.path,
+        worktreesDir: this.paths.worktreesDir,
+        key: ticket.key,
+        // A re-opened ticket whose worktree was removed gets its branch back.
+        branch: ticket.requestedBranch ?? ticket.branch,
+        base: (await this.refreshBaseBranch(ticket, project)).branch,
+      });
+    } catch (err) {
+      return `Could not create worktree: ${errMsg(err)}`;
     }
   }
 
@@ -3134,14 +3217,16 @@ export class Orchestrator {
         browser: this.browser,
         signal: controller.signal,
       };
-      const tools = this.tools(run.kind, driver);
+      const tools = this.tools(run.kind, driver, ticket);
       const token = randomBytes(24).toString("hex");
       this.mcpRuns.set(token, { tools, ctx });
       active.mcpToken = token;
       try {
         const parent = ticket?.parentId ? this.store.tickets.get(ticket.parentId) : null;
         const children = ticket ? this.store.tickets.list({ parentId: ticket.id }) : undefined;
-        const prompt = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
+        const withFiles = MENTION_RUN_KINDS.has(run.kind) ? await this.withMentions(session.id, run.id, run.prompt, cwd) : run.prompt;
+        // The transcript keeps the human's words; the agent also reads when to unblock.
+        const prompt = run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles;
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
         const req: RunRequest = {
@@ -3314,32 +3399,27 @@ export class Orchestrator {
         this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
         return;
       }
-      if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete") {
+      // A chat that unblocked the ticket was doing its work: it fails like a work run. Any other
+      // failed chat leaves the ticket where it is.
+      if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
         this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
+      } else if (run.kind === "chat") {
+        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
       }
       return;
     }
     switch (run.kind) {
       case "work":
-      case "conductor": {
-        if (active.submitted) {
-          if (ticket.status === "review") this.enqueueReview(ticket);
-        } else if (ticket.status === "in_progress") {
-          const moreWork = this.queue.pendingFor(session.id).some((j) => RUNNABLE_WORK.includes(j.kind));
-          if (!moreWork && run.kind === "work" && endsWithQuestion(active.lastText)) {
-            // The agent is asking the human something: block with its question instead of submitting.
-            const question = active.lastText!.trim();
-            this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
-            this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
-          } else if (!moreWork && this.allChildrenDone(ticket)) {
-            this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
-            this.enqueueReview(this.store.tickets.get(ticket.id)!);
-          }
-        }
-        this.flushConductor(ticket.id);
+      case "conductor":
+        this.finishWork(ticket, run, active);
         break;
-      }
+      case "chat":
+        // A chat that moved the ticket (submit_for_review, block, unblock) ends like a work run;
+        // one that left it where it was posts its answer next to the human's message.
+        if (active.submitted || active.blocked || ticket.status === "in_progress") this.finishWork(ticket, run, active);
+        else if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
+        break;
       case "complete":
         if (ticket.status === "done") break;
         if (ticket.completionAction === "pr" && !active.pullRequest) {
@@ -3354,12 +3434,32 @@ export class Orchestrator {
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
         break;
-      case "chat":
-        if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
-        break;
       case "plan":
         break;
     }
+  }
+
+  /**
+   * The end of a run that did the ticket's work: a submit gets its review; a ticket still in
+   * progress with nothing more queued blocks on the agent's trailing question, or is submitted
+   * with its last text once its children are done.
+   */
+  private finishWork(ticket: Ticket, run: Run, active: ActiveRun) {
+    if (active.submitted) {
+      if (ticket.status === "review") this.enqueueReview(ticket);
+    } else if (ticket.status === "in_progress") {
+      const moreWork = this.queue.pendingFor(ticket.sessionId).some((j) => RUNNABLE_WORK.includes(j.kind));
+      if (!moreWork && run.kind !== "conductor" && endsWithQuestion(active.lastText)) {
+        // The agent is asking the human something: block with its question instead of submitting.
+        const question = active.lastText!.trim();
+        this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
+        this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
+      } else if (!moreWork && this.allChildrenDone(ticket)) {
+        this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
+        this.enqueueReview(this.store.tickets.get(ticket.id)!);
+      }
+    }
+    this.flushConductor(ticket.id);
   }
 
   /** HarnessOps facade handed to tools (maps conductor/triage op names onto internals). */
@@ -3373,6 +3473,7 @@ export class Orchestrator {
       postSummary: (c, b, a) => this.postSummary(c, b, a),
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
+      unblock: (c, n) => this.unblock(c, n),
       submitForReview: (c, s, a, skip) => this.submitForReview(c, s, a, skip),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),

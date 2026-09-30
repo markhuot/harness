@@ -3,10 +3,11 @@ import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, Ticket } from "@harness/shared";
 import { FakeDriver, makeOrchestrator, tempHome } from "../testing/fakes";
+import { toolsForRun } from "../tools";
 import { HarnessError } from "./errors";
 
-function setup(opts: { requireHumanReview?: boolean; autoComplete?: boolean; driver?: FakeDriver } = {}) {
-  const h = makeOrchestrator({ driver: opts.driver });
+function setup(opts: { requireHumanReview?: boolean; autoComplete?: boolean; driver?: FakeDriver; realTools?: boolean } = {}) {
+  const h = makeOrchestrator({ driver: opts.driver, ...(opts.realTools ? { tools: toolsForRun } : {}) });
   const dir = join(h.home, "proj", "acme");
   mkdirSync(dir, { recursive: true });
   const project = h.orch.createProject({ path: dir, requireHumanReview: opts.requireHumanReview ?? true, autoComplete: opts.autoComplete });
@@ -99,8 +100,8 @@ describe("ticket lifecycle", () => {
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
   });
 
-  test("block → blocked with reason; human reply → in_progress + work run with the message", async () => {
-    const h = setup();
+  test("block → blocked; the human's answer resumes the agent with its tools, which unblocks and submits", async () => {
+    const h = setup({ realTools: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
     await h.orch.idle();
     let cur = h.orch.ticketDetail(t.key).ticket;
@@ -109,13 +110,31 @@ describe("ticket lifecycle", () => {
     expect(h.orch.summaries(t.key).map((s) => s.body)).toContain("Blocked: Which database?");
     // blocked runs do not auto-submit and do not get a review
     expect(runKinds(h, t)).toEqual(["work:succeeded"]);
+    const workTools = h.driver.calls[0]!.toolNames;
 
-    cur = await h.orch.sendMessage(t.key, "Postgres");
-    expect(cur.status).toBe("in_progress");
-    expect(cur.blockedReason).toBeNull();
+    // The message moves nothing: the agent decides.
+    cur = await h.orch.sendMessage(t.key, "Postgres /unblock /submit");
+    expect(cur.status).toBe("blocked");
     await h.orch.idle();
-    expect(h.driver.calls[1]!.prompt).toBe("Postgres");
-    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    const chat = h.driver.calls[1]!;
+    expect(chat.kind).toBe("chat");
+    expect(chat.toolNames).toEqual(workTools);
+    for (const tool of ["block", "unblock", "submit_for_review"]) expect(chat.toolNames).toContain(tool);
+    // The agent reads the question it's answering; the transcript keeps what the human typed.
+    expect(chat.prompt).toStartWith("Postgres /unblock /submit\n\n[Harness note: this ticket is blocked on: Which database?.");
+    expect(h.store.transcript.list(t.sessionId).some((e) => e.content.type === "text" && e.content.text === "Postgres /unblock /submit")).toBe(true);
+    expect(h.store.transcript.list(t.sessionId).some((e) => e.content.type === "text" && e.content.text.includes("[Harness note"))).toBe(false);
+
+    cur = h.orch.ticketDetail(t.key).ticket;
+    expect(cur).toMatchObject({ status: "review", blockedReason: null, agentReview: "approved" });
+    expect(statuses(h, t.sessionId)).toContain("Unblocked by the agent: answered");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded", "review:succeeded"]);
+    // One agent answer: the submit summary, not the chat's last text as well (then the reviewer's).
+    const after = h.orch.summaries(t.key).map((s) => `${s.author}:${s.body}`);
+    expect(after.slice(after.indexOf("human:Postgres /unblock /submit"))).toEqual(["human:Postgres /unblock /submit", "agent:Done from chat.", "agent:Review approved: LGTM"]);
+    // The card went blocked → in progress (while the agent worked) → review.
+    const st = statuses(h, t.sessionId);
+    expect(st.indexOf("Unblocked by the agent: answered")).toBeLessThan(st.indexOf("Moved to review"));
   });
 
   test("work run that ends without submitting is auto-submitted with the last assistant text", async () => {
@@ -344,17 +363,18 @@ describe("ticket lifecycle", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("in_progress");
   });
 
-  test("rerun agent review; message in review reopens work", async () => {
+  test("rerun agent review; a message with move in review reopens work", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     h.orch.rerunAgentReview(t.key);
     await h.orch.idle();
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "review:succeeded"]);
-    const cur = await h.orch.sendMessage(t.key, "one more thing");
-    expect(cur.status).toBe("in_progress");
+    const cur = await h.orch.sendMessage(t.key, "one more thing", { move: true });
+    expect(cur).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    expect(runKinds(h, t).slice(-2)).toEqual(["work:succeeded", "review:succeeded"]);
   });
 
   test("re-open sends a done ticket back to work with the notes; only done tickets, notes required", async () => {
@@ -538,100 +558,275 @@ describe("skipping the agent review", () => {
   });
 });
 
-describe("chat messages (sendMessage with chat)", () => {
-  test("in review: the agent answers in a chat run and the ticket keeps its status and reviews", async () => {
-    const h = setup();
+describe("messages that leave the ticket where it is (chat runs)", () => {
+  test("in review: the agent answers with its work tools, and the ticket keeps its status and reviews", async () => {
+    const h = setup({ realTools: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
     await h.orch.idle();
     const before = h.orch.ticketDetail(t.key).ticket;
     expect(before).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
 
-    const cur = await h.orch.sendMessage(t.key, "why a button?", { chat: true });
+    const cur = await h.orch.sendMessage(t.key, "why a button?");
     expect(cur.status).toBe("review");
     expect(cur.busy).toBe(true);
     await h.orch.idle();
     const after = h.orch.ticketDetail(t.key).ticket;
     expect(after).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending", blockedReason: null });
-    // No new work or review run, and no auto-block on the chat reply's trailing question.
+    // No new work or review run.
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded"]);
     const chat = h.driver.calls.at(-1)!;
     expect(chat.kind).toBe("chat");
+    // Only a blocked ticket's message carries the unblock note.
     expect(chat.prompt).toBe("why a button?");
-    // The ticket's own mode, not a read-only lockdown (see the permission mode test below).
     expect(chat.permissionMode).not.toBe("read_only");
     // It continues the work agent's conversation (not the reviewer's), and later work picks it up.
     expect(chat.state).toEqual({ turns: 1 });
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
-    expect(chat.toolNames).not.toContain("submit_for_review");
-    expect(chat.toolNames).not.toContain("block");
+    expect(chat.toolNames).toEqual(h.driver.calls[0]!.toolNames);
     expect(h.orch.summaries(t.key).some((s) => s.body.startsWith("Question:"))).toBe(false);
     // The exchange reads in the summaries: the question, then the agent's answer.
-    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:why a button?", "agent:Chatting about: why a button??"]);
-
-    // A regular message still sends the ticket back to work.
-    expect((await h.orch.sendMessage(t.key, "make it red")).status).toBe("in_progress");
+    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:why a button?", "agent:Chatting about: why a button?."]);
   });
 
-  test("in blocked: the question stays open", async () => {
+  test("in review: a chat that changed the work submits again, and the reviews start over with one reviewer", async () => {
+    const h = setup({ autoComplete: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.sendMessage(t.key, "make it red /hold /submit");
+    await Bun.sleep(5);
+    // A review queued behind the chat is dropped when the chat submits: the new one replaces it.
+    h.orch.rerunAgentReview(t.key);
+    h.driver.release();
+    await h.orch.idle();
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded", "review:cancelled", "review:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+    expect(h.orch.summaries(t.key).filter((s) => s.body === "Done from chat.")).toHaveLength(1);
+  });
+
+  test("in review: block asks the human and starts the reviews over", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "change the copy /block Which copy?");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which copy?", agentReview: "pending", humanReview: "pending" });
+    // The block summary is the answer: the chat's last text isn't posted as well.
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Blocked: Which copy?" });
+  });
+
+  test("in blocked: a side question leaves the ticket blocked with its question open", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "what are the options?", { chat: true });
+    await h.orch.sendMessage(t.key, "what are the options? /ask");
     await h.orch.idle();
+    // No unblock: no auto-block on the trailing question and no auto-submit either.
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
     expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded"]);
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Which color should it be?" });
   });
 
-  test("in planning: no plan run, the plan is unchanged", async () => {
+  test("in blocked: once the agent unblocks, the chat ends like a work run (auto-submit, or block on a question)", async () => {
+    const h = setup();
+    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(a.key, "Postgres /unblock");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(a.key).ticket).toMatchObject({ status: "review", blockedReason: null });
+    expect(h.orch.summaries(a.key).find((s) => s.author === "system")!.body).toBe("Chatting about: Postgres /unblock.");
+
+    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(b.key, "Postgres /unblock /ask");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(b.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which color should it be?" });
+  });
+
+  test("in blocked: block replaces the question; unblock is refused on a ticket that isn't blocked", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "Postgres /block Which port?");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which port?" });
+
+    const r = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await h.orch.sendMessage(r.key, "looks good /unblock");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(r.key).ticket.status).toBe("review");
+    expect(h.orch.summaries(r.key).at(-1)!.body).toContain(`Refused: ${r.key} is review, not blocked`);
+  });
+
+  test("a blocked ticket without a worktree gets one before the chat; its status doesn't change", async () => {
+    const h = setup();
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    const p = h.orch.createProject({ path: repo, key: "repo" });
+    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x", start: false });
+    await h.orch.idle();
+    // Dragged from planning to blocked: it never got a worktree.
+    await h.orch.updateTicket(t.key, { status: "blocked" });
+    expect(h.orch.ticketDetail(t.key).ticket.workdir).toBeNull();
+    const cur = await h.orch.sendMessage(t.key, "go ahead");
+    expect(cur.status).toBe("blocked");
+    expect(existsSync(join(cur.workdir!, ".git"))).toBe(true);
+    await h.orch.idle();
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: cur.workdir });
+  });
+
+  test("in planning: the plan run takes the message, never a chat", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Refactor auth", start: false });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "is this risky?", { chat: true });
+    await h.orch.sendMessage(t.key, "is this risky?", { move: true });
     await h.orch.idle();
-    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", description: "1. Do Refactor auth" });
-    expect(runKinds(h, t)).toEqual(["plan:succeeded", "chat:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", description: "1. Do is this risky?" });
+    expect(runKinds(h, t)).toEqual(["plan:succeeded", "plan:succeeded"]);
   });
 
-  test("a failed chat run doesn't block the ticket", async () => {
+  test("block and submit_for_review refuse a planning or done ticket", async () => {
+    const h = setup();
+    const refusals: string[] = [];
+    h.driver.script = async function* (req) {
+      for (const f of [() => req.toolContext.ops.submitForReview(req.toolContext, "x"), () => req.toolContext.ops.block(req.toolContext, "q?")]) {
+        try {
+          await f();
+        } catch (err) {
+          refusals.push((err as Error).message);
+        }
+      }
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("planning");
+    expect(refusals).toEqual([`${t.key} is still in planning: the work starts when the human presses Start, so submit_for_review doesn't apply yet.`, `${t.key} is still in planning: the work starts when the human presses Start, so block doesn't apply yet.`]);
+
+    h.driver.script = null;
+    const d = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    await h.orch.idle();
+    await h.orch.completeTicket(d.key, { skipAgent: true });
+    await h.orch.sendMessage(d.key, "one more thing /submit");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(d.key).ticket.status).toBe("done");
+    expect(h.orch.summaries(d.key).at(-1)!.body).toContain(`Refused: ${d.key} is done: the human re-opens it`);
+  });
+
+  test("in done: the ticket stays done; with move it re-opens", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    expect((await h.orch.sendMessage(t.key, "what did you change?")).status).toBe("done");
+    await h.orch.idle();
+    expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
+    const cur = await h.orch.sendMessage(t.key, "change it back", { move: true });
+    expect(cur).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
+  });
+
+  test("a failed chat leaves the ticket where it is, unless it had unblocked the ticket", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     h.driver.script = async function* (req) {
-      if (req.kind === "chat") yield { type: "error", message: "boom" };
+      if (req.kind !== "chat") return;
+      if (req.prompt.includes("/unblock")) await req.toolContext.ops.unblock(req.toolContext);
+      yield { type: "error", message: "boom" };
     };
-    await h.orch.sendMessage(t.key, "hello", { chat: true });
+    await h.orch.sendMessage(t.key, "hello");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
-    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "human", body: "hello" }); // no answer to post
+    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:hello", "system:Run failed: boom"]);
+
+    h.driver.script = null;
+    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    h.driver.script = async function* (req) {
+      if (req.kind !== "chat") return;
+      await req.toolContext.ops.unblock(req.toolContext);
+      yield { type: "error", message: "crashed mid-work" };
+    };
+    await h.orch.sendMessage(b.key, "Postgres");
+    await h.orch.idle();
+    // It was working (in progress) when it failed: blocked with the error, like a failed work run.
+    expect(h.orch.ticketDetail(b.key).ticket).toMatchObject({ status: "blocked", blockedReason: "crashed mid-work" });
   });
 
-  test("runs with the ticket's permission mode, and a call needing approval is denied without blocking", async () => {
+  test("a chat's approval card leaves the ticket in its column, and answering it resumes the chat", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    h.store.tickets.update(t.id, { permissionMode: "ask" });
+    await h.orch.sendMessage(t.key, 'clean it /tool Bash {"command":"rm -rf dist"}');
+    await h.orch.idle();
+    let cur = h.orch.ticketDetail(t.key).ticket;
+    expect(cur).toMatchObject({ status: "review", agentReview: "approved", pendingApproval: { toolName: "Bash" }, blockedReason: null });
+    expect(h.driver.approvals.at(-1)).toEqual({ name: "Bash", behavior: "deny" });
+
+    cur = await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    expect(cur).toMatchObject({ status: "review", pendingApproval: null });
+    await h.orch.idle();
+    // The retry is a chat with the one-time grant, and the ticket is still in review.
+    const retry = h.driver.calls.at(-1)!;
+    expect(retry.kind).toBe("chat");
+    expect(retry.grants?.once).toEqual([{ toolName: "Bash", input: { command: "rm -rf dist" } }]);
+    expect(h.driver.approvals.at(-1)).toEqual({ name: "Bash", behavior: "allow" });
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved" });
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded", "chat:succeeded"]);
+  });
+
+  test("a blocked ticket's chat approval keeps its question, and unblock waits for the human's answer", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    h.store.tickets.update(t.id, { permissionMode: "ask" });
+    let refused = "";
+    h.driver.script = async function* (req) {
+      if (req.kind !== "chat") return;
+      await req.toolContext.ops.requestApproval(req.toolContext, "Bash", { command: "psql -c 'create database x'" });
+      try {
+        await req.toolContext.ops.unblock(req.toolContext);
+      } catch (err) {
+        refused = (err as Error).message;
+      }
+    };
+    await h.orch.sendMessage(t.key, "Postgres");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?", pendingApproval: { toolName: "Bash" } });
+    expect(refused).toContain("waiting on a human to answer a tool approval (Bash)");
+    // A message now answers the approval (a deny), and the chat resumes: the question is still open.
+    h.driver.script = null;
+    await h.orch.sendMessage(t.key, "no, use sqlite");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?", pendingApproval: null });
+    expect(h.driver.calls.at(-1)!.kind).toBe("chat");
+    expect(h.driver.calls.at(-1)!.prompt).toContain("The human denied Bash");
+  });
+
+  test("runs with the ticket's permission mode and all of its grants", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "ask", allowedTools: ["WebFetch"] });
     h.store.tickets.addGrant(t.id, "Bash", { command: "npm publish" });
-    let answer: unknown = null;
     h.driver.script = async function* (req) {
       if (req.kind !== "chat") return;
-      answer = await req.toolContext.ops.requestApproval(req.toolContext, "Bash", { command: "rm -rf dist" });
       // Native calls are gated with the ticket's mode, not read_only: an edit in the workdir runs.
       const edit = await req.toolContext.ops.checkPermission(req.toolContext, "Edit", { file_path: join(req.cwd, "a.ts"), old_string: "a", new_string: "b" });
       yield { type: "text", text: `edit:${edit.behavior}` };
     };
-    await h.orch.sendMessage(t.key, "can you clean dist?", { chat: true });
+    await h.orch.sendMessage(t.key, "can you clean dist?");
     await h.orch.idle();
     const chat = h.driver.calls.at(-1)!;
     expect(chat.kind).toBe("chat");
     expect(chat.permissionMode).toBe("ask");
-    // Always-allowed tools come along; the one-time grant is left for the work run it was given to.
-    expect(chat.grants).toEqual({ tools: ["WebFetch"], once: [] });
-    expect(h.store.tickets.listGrants(t.id).map((g) => g.toolName)).toEqual(["Bash"]);
-    expect(answer).toMatchObject({ behavior: "deny", message: expect.stringContaining("a chat can't ask for one") });
+    expect(chat.grants).toEqual({ tools: ["WebFetch"], once: [{ toolName: "Bash", input: { command: "npm publish" } }] });
     expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "edit:allow" });
-    const after = h.orch.ticketDetail(t.key).ticket;
-    expect(after).toMatchObject({ status: "review", pendingApproval: null, blockedReason: null });
   });
 
   test("a read_only ticket's chat stays read-only", async () => {
@@ -639,7 +834,7 @@ describe("chat messages (sendMessage with chat)", () => {
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "read_only", allowedTools: ["WebFetch"] });
-    await h.orch.sendMessage(t.key, "hi", { chat: true });
+    await h.orch.sendMessage(t.key, "hi");
     await h.orch.idle();
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", permissionMode: "read_only", grants: undefined });
   });
@@ -650,20 +845,15 @@ describe("chat messages (sendMessage with chat)", () => {
     await h.orch.idle();
     await h.orch.completeTicket(t.key, { skipAgent: true });
     h.store.tickets.update(t.id, { workdir: join(h.home, "gone") });
-    await h.orch.sendMessage(t.key, "what did you change?", { chat: true });
+    await h.orch.sendMessage(t.key, "what did you change?");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
   });
 
-  test("refused while a tool approval is pending or the ticket is completing; text is required", async () => {
+  test("refused while the ticket is completing; text is required", async () => {
     const h = setup({ autoComplete: false });
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"npm install"}' });
-    await h.orch.idle();
-    await expect(h.orch.sendMessage(a.key, "what is npm?", { chat: true })).rejects.toThrow(/waiting on a tool approval/);
-    expect(h.orch.ticketDetail(a.key).ticket.pendingApproval).not.toBeNull();
-
     const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
     await h.orch.idle();
     h.orch.humanReview(b.key, { decision: "approve" });
@@ -671,8 +861,8 @@ describe("chat messages (sendMessage with chat)", () => {
       await Bun.sleep(20);
     };
     await h.orch.completeTicket(b.key);
-    await expect(h.orch.sendMessage(b.key, "wait", { chat: true })).rejects.toThrow(/is completing/);
-    await expect(h.orch.sendMessage(b.key, "  ", { chat: true })).rejects.toThrow(/text is required/);
+    await expect(h.orch.sendMessage(b.key, "wait")).rejects.toThrow(/is completing/);
+    await expect(h.orch.sendMessage(b.key, "  ")).rejects.toThrow(/text is required/);
     await h.orch.idle();
   });
 });
@@ -1028,9 +1218,11 @@ describe("triage", () => {
     await h.orch.idle();
     expect(h.orch.getSession(s2!.id).outcome).toBe("Sent update to existing FOO-9");
     expect(h.orch.listTickets().filter((t) => t.key === "FOO-9").length).toBe(1);
-    const lastWork = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
-    expect(lastWork.prompt).toBe("Handle FOO-9");
-    expect(h.orch.ticketDetail("FOO-9").runs.length).toBeGreaterThan(before.runs.length);
+    // The update goes to the ticket's agent (a chat); the ticket stays where it was.
+    const last = h.driver.calls.at(-1)!;
+    expect([last.kind, last.prompt]).toEqual(["chat", "Handle FOO-9"]);
+    expect(h.orch.ticketDetail("FOO-9").ticket.status).toBe("review");
+    expect(h.orch.ticketDetail("FOO-9").runs.length).toBe(before.runs.length + 1);
   });
 
   test("dispatch without a key uses the project's next key and makes no mirror", async () => {
@@ -1279,7 +1471,7 @@ describe("worktrees", () => {
     const done = h.orch.ticketDetail(t.key).ticket;
     git("worktree", "remove", "--force", done.workdir!);
 
-    const cur = await h.orch.sendMessage(t.key, "tweak it");
+    const cur = await h.orch.sendMessage(t.key, "tweak it", { move: true });
     expect(cur.status).toBe("in_progress");
     expect(existsSync(join(done.workdir!, ".git"))).toBe(true);
     await h.orch.idle();
@@ -1314,7 +1506,7 @@ describe("@-mentioned files", () => {
     writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "what does @notes.md say?", { chat: true });
+    await h.orch.sendMessage(t.key, "what does @notes.md say?");
     await h.orch.idle();
     const chat = h.driver.calls.find((c) => c.kind === "chat")!;
     expect(chat.prompt).toContain('<file path="notes.md">');

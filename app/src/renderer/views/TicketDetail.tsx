@@ -2,27 +2,20 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { isConductor, type CompletionAction, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
-  CHAT_PLACEHOLDER,
-  chatHint,
-  chatModes,
   childrenOf,
-  closeChatMode,
   COMPOSER_PLACEHOLDER,
   composerHint,
   depChipTitle,
   dependencyStates,
   effectiveTab,
   hasCustomDriver,
-  isChatMode,
   isReady,
   moveSwitchLabel,
   nextTab,
-  openChatMode,
   openingTab,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
-  setChatMode,
   showsAgentsTab,
   subagentsOf,
   subagentTabRoute,
@@ -179,7 +172,7 @@ export function TicketDetail({
     "tab.next": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, 1))),
     "tab.prev": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, -1))),
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab.${i + 1}`, !!tabs[i] && (() => goTab(tabs[i]!))])),
-    "ticket.compose": !!ticket && ticket.status !== "done" && (() => asideRef.current?.querySelector<HTMLElement>(".composer-input")?.focus()),
+    "ticket.compose": !!ticket && (() => asideRef.current?.querySelector<HTMLElement>(".composer-input")?.focus()),
     "ticket.scrollDown": scroll((el) => el.scrollBy({ top: LINE })),
     "ticket.scrollUp": scroll((el) => el.scrollBy({ top: -LINE })),
     "ticket.pageDown": scroll((el) => el.scrollBy({ top: el.clientHeight * 0.9 })),
@@ -284,7 +277,7 @@ export function TicketDetail({
         )}
         </FileLinkScope>
       </div>
-      {ticket.status !== "done" && <MessageComposer ticket={ticket} key={ticket.id} />}
+      <MessageComposer ticket={ticket} key={ticket.id} />
     </aside>
   );
 }
@@ -637,18 +630,10 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
-  const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
-  // Closing the ticket starts the chat mode's TTL; re-opening within it picks the chat back up.
-  useEffect(() => {
-    openChatMode(chatModes, ticket.key, Date.now());
-    return () => closeChatMode(chatModes, ticket.key, Date.now());
-  }, [ticket.key]);
+  // Off by default and after every send: the ticket stays where it is unless asked to move first.
+  const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
-  const chat = !!switchLabel && chatMode;
-  const toggleMove = (move: boolean) => {
-    setChatMode(chatModes, ticket.key, !move);
-    setChat(!move);
-  };
+  const move = !!switchLabel && moveFirst;
 
   useEffect(() => {
     const el = ref.current;
@@ -666,18 +651,21 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { chat }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move }));
     setSending(false);
-    if (ok) setText("");
+    if (ok) {
+      setText("");
+      setMoveFirst(false);
+    }
   };
 
   return (
-    <div className={`composer ${ticket.status === "blocked" && !chat ? "attention" : ""}`}>
+    <div className={`composer ${ticket.status === "blocked" ? "attention" : ""}`}>
       <MentionTextarea
         ref={ref}
         rows={1}
         className="composer-input"
-        placeholder={chat ? CHAT_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
+        placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
         value={text}
         onValueChange={setText}
         search={searchFiles}
@@ -694,8 +682,8 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         }}
       />
       <div className="composer-bar">
-        {switchLabel && <Switch checked={!chat} onChange={toggleMove} label={switchLabel} />}
-        <span className="muted">{chat ? chatHint(ticket) : composerHint(ticket)}</span>
+        {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} />}
+        <span className="muted">{composerHint(ticket, move)}</span>
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">

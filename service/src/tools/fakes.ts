@@ -82,6 +82,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     postSummary: async () => {},
     updatePlan: async () => {},
     block: async () => {},
+    unblock: async () => {},
     submitForReview: async () => {},
     updateBranch: async () => "Branch updated.",
     reviewDecision: async () => {},

@@ -137,6 +137,22 @@ describe("dummy driver", () => {
     expect(ops.calls).toEqual([{ method: "block", args: ["Which database should I use?"] }]);
   });
 
+  test("chat echoes the human's words; [dummy:unblock] then [dummy:submit] or [dummy:block] move the ticket", async () => {
+    const note = "\n\n[Harness note: this ticket is blocked on: Which DB?. If this message resolves that, call unblock before you continue the work; if it doesn't, answer and leave the ticket blocked.]";
+    const quiet = makeReq("chat", `what are the options?${note}`);
+    const q = await collect(driver, quiet.req);
+    expect(q.events.filter((e) => e.type === "text").map((e) => (e as { text: string }).text)).toEqual(['(dummy chat) You said: "what are the options?"']);
+    expect(quiet.ops.calls).toEqual([]);
+
+    const done = makeReq("chat", `Postgres [dummy:unblock] [dummy:submit]${note}`);
+    await collect(driver, done.req);
+    expect(done.ops.calls.map((c) => c.method)).toEqual(["unblock", "submitForReview"]);
+
+    const again = makeReq("chat", "Postgres [dummy:unblock] [dummy:block]");
+    await collect(driver, again.req);
+    expect(again.ops.calls.map((c) => c.method)).toEqual(["unblock", "block"]);
+  });
+
   test("/fail yields an error event and throws", async () => {
     const { req, ops } = makeReq("work", "/fail kaboom now");
     const { events, error } = await collect(driver, req);

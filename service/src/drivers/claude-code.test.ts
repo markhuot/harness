@@ -144,6 +144,8 @@ describe("buildClaudeArgs", () => {
   test("plan run forces plan mode regardless of settings", () => {
     const args = buildClaudeArgs({ ...req, kind: "plan", permissionMode: "auto" }, { ...baseSettings, permissionMode: "auto" }, null);
     expect(argValue(args, "--permission-mode")).toBe("plan");
+    // Plan mode blocks writes, but the harness server's tools (update_plan, post_summary) still run.
+    expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
   });
 
   test("model and resume are passed only when set", () => {

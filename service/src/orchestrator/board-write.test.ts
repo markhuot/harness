@@ -198,15 +198,17 @@ describe("guard rails", () => {
     expect(h.runKinds(idea)).toEqual(["plan"]); // no complete run, like a drag to done
   });
 
-  test("a message can't send another ticket back from review, except from its conductor", async () => {
+  test("a message to a ticket in review leaves it in review, from any agent: its reviewers decide", async () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     const child = await h.make("child", { parentId: c.id, status: "review" });
     const me = await h.make("me", { status: "in_progress" });
-    await expect(h.orch.ops.messageTicket(h.ctx("work", me), child.key, "redo it")).rejects.toThrow("is in review; messaging it would send it back");
+    await h.orch.ops.messageTicket(h.ctx("work", me), child.key, "why this approach?");
     expect(h.get(child).status).toBe("review");
-    await h.orch.ops.messageTicket(h.ctx("conductor", h.get(c)), child.key, "redo it");
-    expect(h.get(child).status).toBe("in_progress");
+    await h.orch.ops.messageTicket(h.ctx("conductor", h.get(c)), child.key, "and this one?");
+    expect(h.get(child).status).toBe("review");
+    await h.orch.idle();
+    expect(h.store.runs.listBySession(child.sessionId).map((r) => r.kind).slice(-2)).toEqual(["chat", "chat"]);
   });
 
   test("a pending tool approval can't be answered, moved past, restarted or cancelled by another agent", async () => {
@@ -339,7 +341,9 @@ describe("permission modes across tickets", () => {
     const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "part", autoStart: false });
     h.store.tickets.update(child.id, { status: "blocked" });
     await h.orch.ops.messageTicket(h.ctx("conductor", h.get(c)), child.key, "use postgres");
-    expect(h.get(child).status).toBe("in_progress");
+    // The child's agent gets the answer (a chat) and moves the ticket on itself.
+    expect(h.get(child).status).toBe("blocked");
+    expect(h.store.runs.listBySession(child.sessionId).map((r) => r.kind).at(-1)).toBe("chat");
   });
 });
 
@@ -402,7 +406,7 @@ describe("update, move, start, cancel, reopen", () => {
     const blocked = await h.make("blocked", { status: "blocked" });
     await h.orch.ops.messageTicket(h.ctx("work", me), blocked.key, "use postgres");
     await h.orch.idle();
-    const run = h.store.runs.listBySession(blocked.sessionId).find((r) => r.kind === "work")!;
+    const run = h.store.runs.listBySession(blocked.sessionId).find((r) => r.kind === "chat")!;
     expect(h.driver.calls.find((c) => c.runId === run.id)!.prompt).toContain("use postgres");
   });
 
