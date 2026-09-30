@@ -39,7 +39,7 @@ import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
-import { landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../state/approveMenu";
+import { landCommands, landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
@@ -346,13 +346,23 @@ function DetailHeader({
   const external = ticket.externalRef?.url;
   const reviewing = ticket.status === "review";
   const canApprove = reviewing && ticket.humanReview !== "approved";
+  const canComplete = reviewing && ready && !ticket.busy;
+  // The split button that's showing (Approve, or Complete once approved), as the palette names it.
+  const landing = (landMode === "approve" ? canApprove : canComplete) && landCommands(land, landMode);
+  const landChoice = (action: CompletionAction) => {
+    const c = landing && landing.others[action];
+    return c && { label: c.label, run: () => choose(landMode)(c) };
+  };
   useCommands(owner, {
     "ticket.start": ticket.status === "planning" && start,
-    "ticket.approve": canApprove && approve,
+    "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
+    "ticket.land.merge": landChoice("merge"),
+    "ticket.land.pr": landChoice("pr"),
+    "ticket.land.custom": landChoice("custom"),
     "ticket.requestChanges": canApprove && (() => setChanges(true)),
-    "ticket.approveNoAction": reviewing && approveNoAction,
-    "ticket.complete": reviewing && ready && !ticket.busy && (() => choose("complete")(land.primary)),
-    "ticket.rerunReview": reviewing && !ticket.busy && rerunReview,
+    "ticket.approveNoAction": reviewing && { label: land.noAction.label, run: approveNoAction },
+    "ticket.complete": canComplete && landing && { label: landing.primary, run: () => choose("complete")(land.primary) },
+    "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
     "ticket.cancelRun": ticket.busy && cancelRun,
     "ticket.markDone": ticket.status !== "done" && markDone,
     "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),

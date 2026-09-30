@@ -1598,7 +1598,12 @@ Settings, project settings, or on the board route the pane workspace.
     (`useRovingList`: j/k/↑/↓, g/G/Home/End, one tab stop). Menus focus their first item, move with
     ↑/↓ and give focus back to their button. Modals trap Tab and restore focus when they close.
   - *Palette and overlay.* ⌘K (`views/CommandPalette.tsx`) lists the commands that apply where the
-    focus was (`availableCommands`), places to go, and tickets. Loaded tickets match at once, and
+    focus was (`availableCommands`: the focused area's actions first, then its other commands, then
+    the global ones), places to go, and tickets. A handler can carry the label it has right now
+    (`{ label, run }`), so a ticket's actions read as its buttons do: ticket.approve is "Approve and
+    merge" or "Approve and open PR", and the split button's other choices are `ticket.land.merge`,
+    `.pr` and `.custom` (`landCommands` in `state/approveMenu.ts` drops the one the primary already
+    names). The registry label, and a spec's `keywords` ("Reopen ticket" for Re-open…), still match. Loaded tickets match at once, and
     `searchTickets` adds the rest after 150 ms. `rankCommands` (`state/palette.ts`) ranks
     subsequence matches, with a label prefix first, then word starts, then runs, then scattered
     letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`

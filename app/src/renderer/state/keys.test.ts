@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { accelerator, chordMatches, COMMANDS, commandAccelerator, commandKeys, formatChord, isAppChord, isGlobalChord, matchCommands, type KeyContext, type KeyEventLike } from "./keys";
+import { rankCommands } from "./palette";
 
 const ev = (code: string, mods: Partial<Omit<KeyEventLike, "code">> = {}): KeyEventLike => ({ code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods });
 const free: KeyContext = { inText: false, inCapture: false, overlay: false, onControl: false };
@@ -11,6 +12,14 @@ describe("the registry", () => {
       if (c.group !== "Actions") continue;
       expect(c.keys.filter((k) => !isGlobalChord(k))).toEqual([]);
     }
+  });
+  test("ticket actions are found by the way people say them, not only by their labels", () => {
+    const actions = COMMANDS.filter((c) => c.group === "Actions").map((c) => ({ id: c.id, label: c.label, keywords: c.keywords }));
+    const top = (q: string) => rankCommands(q, actions)[0]?.item.id;
+    expect(top("reopen ticket")).toBe("ticket.reopen");
+    expect(top("rerun agent review")).toBe("ticket.rerunReview");
+    expect(top("stop run")).toBe("ticket.cancelRun");
+    expect(top("approve and merge")).toBe("ticket.land.merge");
   });
   test("command ids are unique", () => {
     expect(new Set(COMMANDS.map((c) => c.id)).size).toBe(COMMANDS.length);

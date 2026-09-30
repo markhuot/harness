@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { landMenu, pullRequestLabel } from "./approveMenu";
+import { landCommands, landMenu, pullRequestLabel } from "./approveMenu";
 
 const gh = { isGit: true, pullRequestHost: "github.com" } as const;
 const git = { isGit: true, pullRequestHost: null } as const;
@@ -48,6 +48,41 @@ describe("landMenu (complete)", () => {
   test("outside git the primary reads Complete; on a parent branch it names the branch", () => {
     expect(landMenu("complete", fresh, plain).primary.label).toBe("Complete");
     expect(landMenu("complete", fresh, git, { branch: "harness/x" }).primary.label).toBe("Complete and merge into harness/x");
+  });
+});
+
+describe("landCommands (the palette's split-button commands)", () => {
+  const actions = (o: ReturnType<typeof landCommands>["others"]) => Object.entries(o).map(([a, c]) => `${a}:${c!.label}`);
+
+  test("approving: the primary is named as the button reads, and the menu choice it repeats is dropped", () => {
+    const c = landCommands(landMenu("approve", fresh, gh), "approve");
+    expect(c.primary).toBe("Approve and merge");
+    expect(actions(c.others)).toEqual(["pr:Approve and open PR", "custom:Approve and…"]);
+  });
+
+  test("with the PR preselected, merge stays in the palette and the PR choice goes", () => {
+    const c = landCommands(landMenu("approve", { completionAction: "pr", pullRequestUrl: null }, gh), "approve");
+    expect(c.primary).toBe("Approve and open PR");
+    expect(actions(c.others)).toEqual(["merge:Approve and merge", "custom:Approve and…"]);
+  });
+
+  test("a plain Approve (outside git) keeps Approve and… as its own command", () => {
+    const c = landCommands(landMenu("approve", fresh, plain), "approve");
+    expect(c.primary).toBe("Approve");
+    expect(actions(c.others)).toEqual(["custom:Approve and…"]);
+  });
+
+  test("completing: the primary opens the sheet, so it reads with an ellipsis; the rest run directly", () => {
+    const c = landCommands(landMenu("complete", fresh, gh), "complete");
+    expect(c.primary).toBe("Complete and merge…");
+    expect(actions(c.others)).toEqual(["pr:Complete and open PR", "custom:Complete and…"]);
+    expect(c.others.pr).toMatchObject({ kind: "run", action: "pr" });
+  });
+
+  test("a child on its parent's branch has only the primary", () => {
+    const c = landCommands(landMenu("approve", fresh, gh, { branch: "harness/web-1" }), "approve");
+    expect(c.primary).toBe("Approve and merge into harness/web-1");
+    expect(c.others).toEqual({});
   });
 });
 

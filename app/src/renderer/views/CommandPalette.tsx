@@ -1,5 +1,5 @@
 // ⌘K command palette: every command that applies where the focus was (the focused ticket's actions
-// included), navigation (boards, inbox, settings sections), tickets and files, fuzzy-ranked by
+// first, named as its buttons read: "Approve and merge", "Re-open…"), navigation (boards, inbox, settings sections), tickets and files, fuzzy-ranked by
 // state/palette.ts. ">" narrows it to commands, "#" to tickets and "@" to files (⌘P opens it that
 // way). Files are searched in one root: the focused ticket pane's ticket, else the board's project
 // (paletteFileRoot), git-ignored files included; `path:12` or `path#L12-L20` opens at those lines.
@@ -198,11 +198,12 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     if (kind !== "tickets" && kind !== "files") {
       const commands = availableCommands(origin);
       const have = new Set(commands.map((c) => c.spec.id));
-      for (const { spec } of commands) {
+      for (const { spec, label, keywords } of commands) {
         out.push({
           id: `cmd:${spec.id}`,
           kind: "command",
-          label: spec.label,
+          label,
+          keywords,
           group: spec.group,
           keys: commandKeys(spec.id)[0],
           // The overlay's toggle would close it again if it were already open; open it outright.
