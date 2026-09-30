@@ -512,6 +512,40 @@ const DIFF_BRIEF = [
 ].join("\n");
 
 /**
+ * A file long enough that the file viewer has to scroll to a linked range: committed on main, then
+ * edited in the changes ticket's worktree (greetingFor rewritten, greet_da removed, greet_ja
+ * changed, greet_eo added) for the viewer's Diff tab.
+ */
+const GREETINGS_PATH = "src/greetings.ts";
+const LOCALES: [string, string][] = [
+  ["en", "Hello"], ["de", "Hallo"], ["fr", "Bonjour"], ["es", "Hola"], ["it", "Ciao"], ["pt", "Olá"],
+  ["nl", "Hallo"], ["sv", "Hej"], ["da", "Hej"], ["fi", "Hei"], ["pl", "Cześć"], ["cs", "Ahoj"],
+  ["tr", "Merhaba"], ["ja", "Konnichiwa"], ["ko", "Annyeong"], ["hi", "Namaste"], ["sw", "Jambo"], ["haw", "Aloha"],
+];
+function greetingsLines(edited: boolean): string[] {
+  const out = ["// Greetings by locale, for main() and the API.", "", "export const GREETINGS: Record<string, string> = {", ...LOCALES.map(([k, v]) => `  ${k}: "${v}",`), "};", ""];
+  out.push('/** The greeting for a locale: "de-AT" falls back to "de", anything unknown to English. */', "export function greetingFor(locale: string): string {");
+  if (edited) out.push("  const [lang] = locale.toLowerCase().split(/[-_]/);", "  return GREETINGS[lang!] ?? GREETINGS.en!;");
+  else out.push('  const lang = locale.split("-")[0];', '  return GREETINGS[lang] || "Hello";');
+  out.push("}", "");
+  for (const [k] of LOCALES) {
+    if (edited && k === "da") continue;
+    out.push(`export function greet_${k}(name: string): string {`, edited && k === "ja" ? "  return `${GREETINGS.ja}, ${name}-san!`;" : `  return \`\${GREETINGS.${k}}, \${name}!\`;`, "}", "");
+  }
+  if (edited) out.push("export function greet_eo(name: string): string {", "  return `Saluton, ${name}!`;", "}", "");
+  return out;
+}
+const greetings = (edited: boolean) => greetingsLines(edited).join("\n");
+/** 1-based lines of the function whose first line starts with `head`, closing brace included. */
+function functionLines(lines: string[], head: string): [number, number] {
+  const start = lines.findIndex((l) => l.startsWith(head));
+  return [start + 1, lines.indexOf("}", start) + 1];
+}
+const GREETING_FOR = functionLines(greetingsLines(false), "export function greetingFor");
+/** Far enough down that the viewer has to scroll to it. */
+const GREET_JA = functionLines(greetingsLines(true), "export function greet_ja");
+
+/**
  * Settings → Prompts: a working override of the review message, and a broken one of the Files
  * section. The API refuses a template naming a variable the prompt doesn't have, so the broken one
  * goes straight into the settings table, the way an app update that renamed {{shell}} would leave
@@ -541,6 +575,7 @@ async function seed() {
   writeFileSync(join(repo, "README.md"), "# Greeter\n\nSays hello.\n");
   writeFileSync(join(repo, "src/app.ts"), 'export function main(name = "world") {\n  console.log("Hello, " + name);\n}\n');
   writeFileSync(join(repo, "config.json"), '{\n  "verbose": false\n}\n');
+  writeFileSync(join(repo, GREETINGS_PATH), greetings(false));
   await git(repo, "init", "-q", "-b", "main");
   await git(repo, "add", "-A");
   await git(repo, "commit", "-qm", "Initial commit");
@@ -582,6 +617,9 @@ async function seed() {
   // Briefs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
   const code = await create(other.id, CODE_BRIEF, { skipAgentReview: true });
   const diff = await create(other.id, DIFF_BRIEF, { skipAgentReview: true });
+  // A brief with a relative file link, which opens in the ticket's own worktree.
+  // The link is a paragraph of its own, so a tap near the paragraph's start lands on it.
+  const fileLink = await create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -615,6 +653,7 @@ async function seed() {
     settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
     settle(code.key, (t) => t.status === "review" && !t.busy),
     settle(diff.key, (t) => t.status === "review" && !t.busy),
+    settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -626,9 +665,10 @@ async function seed() {
   writeFileSync(join(wd, "src/app.ts"), 'import { greet } from "./lib/greet";\n\nexport function main(name = "world") {\n  console.log(greet(name, true));\n}\n');
   writeFileSync(join(wd, "config.json"), '{\n  "verbose": true\n}\n');
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
+  writeFileSync(join(wd, GREETINGS_PATH), greetings(true));
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff, fileLink };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1093,6 +1133,16 @@ function screens(s: Seeded): Screen[] {
     // The brief's fenced code: plain at first, colored once its grammar has loaded.
     { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=summaries`, wait: 1500 },
     { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=summaries`, wait: 1500 },
+    // The file viewer, from an OS-level harness://file link (app/+native-intent): opened at a range
+    // below the first screenful, then its Diff tab.
+    { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
+    {
+      name: "file-diff",
+      url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}`,
+      ready: hasLabel("Modified"),
+      seconds: 6,
+      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Diff")).then(() => Bun.sleep(1500)),
+    },
     { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
     { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
     { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },
@@ -1515,6 +1565,27 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, "Allow once");
         const t = await settle(s.approval.key, (x) => !x.pendingApproval, 15000);
         return `${t.key} → ${t.status}`;
+      });
+    }),
+    chain(6, async (udid) => {
+      await check("a relative file link in a brief opens the file viewer in the ticket's folder, at its lines", async () => {
+        const label = "greetingFor fallback";
+        await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=summaries`, (l) => l.includes(label));
+        // The paragraph is as wide as the card and the link only its first words: tap near its start.
+        const el = await until("the link", () => findElement(udid, (l) => l === label), 8000);
+        await axe("tap", "-x", String(Math.round(el.frame.x + 30)), "-y", String(Math.round(el.frame.y + el.frame.height / 2)), "--udid", udid);
+        moved(udid);
+        const range = `lines ${GREETING_FOR[0]}–${GREETING_FOR[1]}`;
+        const l = await until("the file viewer", async () => ((x) => (x.includes(GREETINGS_PATH) && x.some((y) => y.includes(range)) ? x : null))(await labels(udid)), 10000).catch(async (e) => {
+          await shot(udid, "file-link-tap-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
+        });
+        await Bun.sleep(1200);
+        await shot(udid, "file-link-tap-light");
+        // Its folder is the ticket's worktree (main's commit): the file is there, clean, and it has no Diff tab.
+        if (l.includes("Modified") || l.some((x) => x.startsWith("Diff"))) throw new Error("a clean file shows as modified");
+        if (!l.some((x) => x.startsWith(`export function greetingFor`))) throw new Error("the linked lines aren't on screen");
+        return `${GREETINGS_PATH}, ${range}`;
       });
     }),
   ];

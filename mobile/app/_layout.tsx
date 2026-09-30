@@ -35,6 +35,7 @@ function Themed() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="ticket/[key]" options={{ title: "" }} />
             <Stack.Screen name="inbox/[id]" options={{ title: "" }} />
+            <Stack.Screen name="file" options={{ title: "" }} />
             <Stack.Screen name="project/[id]" options={{ title: "Project settings" }} />
             <Stack.Screen name="prompts" options={{ title: "Prompts" }} />
             <Stack.Screen name="prompt/[id]" options={{ title: "" }} />

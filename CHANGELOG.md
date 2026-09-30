@@ -18,6 +18,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   colors as the Mac and the Git tab, and follows your light, dark and color theme. In diffs, added
   and removed lines get green and red backgrounds, and the code in them is colored by its file's
   language.
+- On iPhone and iPad, tapping a file link in a chat message, brief or summary opens the file with
+  syntax highlighting and line numbers, scrolled to the linked lines and with them highlighted.
+  When the file has uncommitted changes, a Diff tab shows them. Pull down to reload. File links
+  opened from outside the app (`harness://file/…?ticket=…`) open there too.
 
 ### Changed
 

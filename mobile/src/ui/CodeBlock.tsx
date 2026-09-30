@@ -24,7 +24,7 @@ const FONT = 12.5;
 const LINE = 18;
 const PAD = 10;
 
-function spanStyle(s: Span, fallback: string): TextStyle {
+export function spanStyle(s: Span, fallback: string): TextStyle {
   const f = s.fontStyle ?? 0;
   return {
     color: s.color ?? fallback,
@@ -34,8 +34,15 @@ function spanStyle(s: Span, fallback: string): TextStyle {
   };
 }
 
+/** The app theme's Shiki theme, as on the desktop and in the Git tab; Pierre's when it isn't bundled. */
+export function useSyntaxTheme(): string {
+  const { resolved, theme } = useTheme();
+  const named = syntaxThemeName(resolved, theme.syntaxTheme);
+  return hasSyntaxTheme(named) ? named : PIERRE_DEFAULT[resolved];
+}
+
 /** Re-renders once the highlight for these inputs lands in the cache. */
-function useHighlight(code: string, lang: string | null, theme: string, diff: boolean, appearance: "light" | "dark") {
+export function useHighlight(code: string, lang: string | null, theme: string, diff: boolean, appearance: "light" | "dark") {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const hit = cachedHighlight(code, lang, theme, diff);
   const pending = hit === undefined;
@@ -51,12 +58,10 @@ function useHighlight(code: string, lang: string | null, theme: string, diff: bo
 }
 
 export function CodeBlock({ code, lang, showLineNumbers, highlightLines }: CodeBlockProps) {
-  const { resolved, theme, c } = useTheme();
+  const { resolved, c } = useTheme();
   const shikiLang = codeLanguage(lang ?? "");
   const diff = codeKind(lang ?? "", code) === "diff";
-  // The app theme's Shiki theme, as on the desktop and in the Git tab; Pierre's when it isn't bundled.
-  const named = syntaxThemeName(resolved, theme.syntaxTheme);
-  const syntaxTheme = hasSyntaxTheme(named) ? named : PIERRE_DEFAULT[resolved];
+  const syntaxTheme = useSyntaxTheme();
   const hl = useHighlight(code, shikiLang, syntaxTheme, diff, resolved);
 
   // The last colored lines, reused line by line while a changed block re-highlights.

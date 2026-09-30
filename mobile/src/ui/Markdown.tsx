@@ -1,16 +1,19 @@
 // Agent markdown with native <Text>: blocks and inline tokens come from the shared parser
-// (@harness/shared/state "markdown"); links open in Safari, and wide tables scroll sideways.
-// Fenced code is syntax highlighted (CodeBlock). Nothing is ever interpreted as markup.
+// (@harness/shared/state "markdown"); web links open in Safari and file links in the file viewer
+// (fileLinks), and wide tables scroll sideways. Fenced code is syntax highlighted (CodeBlock).
+// Nothing is ever interpreted as markup.
 
 import { Fragment, useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { inlineTokens, parseBlocks, type Block, type InlineToken } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
 import { CodeBlock } from "./CodeBlock";
+import { useOpenLink } from "./fileLinks";
 
 function Inline({ tokens, base }: { tokens: InlineToken[]; base: StyleProp<TextStyle> }) {
   const c = useColors();
+  const open = useOpenLink();
   return (
     <>
       {tokens.map((t, i) => {
@@ -37,7 +40,7 @@ function Inline({ tokens, base }: { tokens: InlineToken[]; base: StyleProp<TextS
             );
           case "link":
             return (
-              <Text key={i} style={{ color: c.accentText }} accessibilityRole="link" onPress={() => void Linking.openURL(t.url)}>
+              <Text key={i} style={{ color: c.accentText }} accessibilityRole="link" onPress={() => open(t.url)}>
                 {t.text}
               </Text>
             );

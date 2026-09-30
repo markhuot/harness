@@ -1713,6 +1713,26 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   closes the viewer (`pullOf` / `dismissOnRelease`, never while zoomed). A JS `PanResponder` lost
   those drags to the zoom scroll view's own pan. A load or decode error shows a placeholder in
   the thumb and the page.
+- **File viewer.** Markdown links go through `useOpenLink` (`mobile/src/ui/fileLinks.tsx`):
+  http(s) and mailto open outside the app, and a file link (`parseFileLink`) pushes `app/file.tsx`
+  with `path`, `ticket` or `project`, `start` and `end`. A relative link resolves in the ticket
+  that `FileLinkScope` provides (`app/ticket/[key].tsx` wraps the ticket screen in one), unless the
+  link carries its own `?ticket=`/`?project=`. The Inbox's triage transcripts have no scope, so
+  only a link that names its own context opens from there. An OS-level `harness://file/…` URL is
+  rewritten to the same route by `app/+native-intent.tsx` (`fileScreenHref`), because the
+  path-based router would read it as `/file/<segments>` and drop the `#L` range. Every other
+  `harness://` link passes through unchanged. `FileViewerScreen` (`mobile/src/screens/FileViewer.tsx`)
+  loads `FileView` and, only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs
+  (the Diff tab counts +added/−removed). Both are `FlatList`s of fixed-height rows inside one
+  horizontal `ScrollView` sized to the longest line (capped at 400 columns, clipped past that).
+  Rows never wrap, so `getItemLayout` lets the list open straight at the range
+  (`initialScrollIndex`, a few lines above it). A long file is highlighted a window at a time
+  (`highlightWindow`, 40 000 characters around what's on screen, re-centered when scrolling
+  leaves it). Colored lines stay colored as later windows land. Tokenizing from a window's first
+  line can start mid-comment, which is accepted. The Diff tab numbers each line of the patch
+  from its hunk headers (`patchRows`) and takes the colors from the whole patch highlighted as a
+  diff (`PatchRow.source` indexes parseDiff's lines). Pull to refresh reloads both. The pure
+  parts are in `mobile/src/lib/fileViewer.ts`.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
   Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.
