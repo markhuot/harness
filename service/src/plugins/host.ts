@@ -2,8 +2,8 @@
 // /plugins/<id>/api/* to them, serves /plugins/<id>/ui/* and evaluates ticket tabs.
 // A plugin that fails to load is listed with `error` and otherwise ignored.
 
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { PluginInfo, PluginTab, Project, Ticket, TicketTabWhen } from "@harness/shared";
 import type {
@@ -18,6 +18,7 @@ import type {
 } from "../../../plugins/sdk/server";
 import type { EventBus } from "../events";
 import { isGitRepo } from "../orchestrator/worktree";
+import { safeJoin } from "../safe-path";
 
 export type PluginSource = "builtin" | "user";
 
@@ -100,23 +101,6 @@ export function parseManifest(raw: unknown): PluginManifest {
   return manifest;
 }
 
-/** Resolve `rel` inside `root`, refusing anything that escapes it (.., absolute paths, symlinks out). */
-export function safeJoin(root: string, rel: string): string | null {
-  if (rel.includes("\0")) return null;
-  const segments = rel.split(/[\\/]+/).filter(Boolean);
-  if (segments.some((s) => s === "..")) return null;
-  const target = resolve(root, ...segments);
-  const inside = (p: string, r: string) => p === r || p.startsWith(r.endsWith(sep) ? r : r + sep);
-  if (!inside(target, root)) return null;
-  if (!existsSync(target)) return target; // caller 404s; nothing to follow
-  try {
-    const realRoot = realpathSync(root);
-    if (!inside(realpathSync(target), realRoot)) return null;
-  } catch {
-    return null;
-  }
-  return target;
-}
 
 /** True when <uiRoot>/index.html is missing or older than any source file in the plugin dir. */
 export function needsBuild(dir: string, uiRoot: string): boolean {
