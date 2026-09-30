@@ -42,6 +42,7 @@ import type {
   PairingInfo,
 } from "./protocol";
 import type { FileMatch } from "./mentions";
+import type { CommandMatch } from "./commands";
 
 /** The /files query: a bare number is the limit (the autocomplete's older call shape). */
 function fileSearchQuery(q: string, opts: number | FileSearchOptions = {}): string {
@@ -126,6 +127,13 @@ export class HarnessClient {
   projectFiles(id: string, q: string, opts?: number | FileSearchOptions) {
     return this.request<FileMatch[]>("GET", `/projects/${id}/files${fileSearchQuery(q, opts)}`);
   }
+  /**
+   * Slash commands and skills matching `q` that a new session's agent (`driver`, default: the
+   * project's) offers in the project folder, for the `/command` autocomplete. [] when it has none.
+   */
+  projectCommands(id: string, q: string, opts: { driver?: string | null; limit?: number } = {}) {
+    return this.request<CommandMatch[]>("GET", `/projects/${id}/commands${query({ q, driver: opts.driver || undefined, limit: opts.limit })}`);
+  }
   /** A file in the project folder, read from disk, and where it stands in git. */
   projectFile(id: string, path: string) {
     return this.request<FileView>("GET", `/projects/${id}/file${query({ path })}`);
@@ -206,6 +214,10 @@ export class HarnessClient {
   /** Files and folders where the ticket's agent works matching `q`, for @-mentions in a message (options as projectFiles). */
   ticketFiles(key: string, q: string, opts?: number | FileSearchOptions) {
     return this.request<FileMatch[]>("GET", `/tickets/${key}/files${fileSearchQuery(q, opts)}`);
+  }
+  /** Slash commands and skills matching `q` that the ticket's agent offers where it works, for `/command` in a message. */
+  ticketCommands(key: string, q: string, limit?: number) {
+    return this.request<CommandMatch[]>("GET", `/tickets/${key}/commands${query({ q, limit })}`);
   }
   /** A file where the ticket's agent works (its worktree, else its cwd, else the project folder). */
   ticketFile(key: string, path: string) {
