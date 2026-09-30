@@ -555,3 +555,96 @@ describe("migration 19: drafts", () => {
     expect(s.tickets.update(d.id, { draft: false })!.draft).toBe(false);
   });
 });
+
+describe("remote IDs", () => {
+  test("migration 20 backfills external_key from external_ref, indexes the remote ID for search, and legacy mirrors keep their keys on rename", () => {
+    const db = new Database(":memory:", { strict: true });
+    db.exec("PRAGMA foreign_keys = ON;");
+    for (const [v, sql] of MIGRATIONS.slice(0, 19).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    // The FTS index as a v19 service built it (five columns), so migration 20 has to replace it.
+    db.exec(`
+      CREATE VIRTUAL TABLE ticket_fts USING fts5(key, aliases, title, description, summary, content = 'ticket_search', content_rowid = 'rowid');
+      CREATE TRIGGER ticket_fts_insert AFTER INSERT ON ticket_search BEGIN
+        INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary) VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+      END;
+      CREATE TRIGGER ticket_fts_update AFTER UPDATE ON ticket_search BEGIN
+        INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary) VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary);
+        INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary) VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+      END;
+    `);
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'HEL', 'hel', '/hel', 3, 0, 0)`);
+    const insert = db.query(
+      `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, external_ref, created_at, updated_at)
+       VALUES ($id, $key, 'p1', 'task', $title, '', 'planning', $id, 'dummy', $ref, 0, 0)`,
+    );
+    insert.run({ id: "mirror", key: "FOO-9", title: "Old mirror", ref: JSON.stringify(ext("FOO-9")) });
+    insert.run({ id: "lookalike", key: "HEL-40", title: "Mirror sharing the prefix", ref: JSON.stringify(ext("HEL-40")) });
+    insert.run({ id: "native", key: "HEL-1", title: "Plain native", ref: null });
+    migrate(db);
+    const s = new Store(db);
+    expect((db.query("SELECT id, external_key FROM tickets ORDER BY id").all() as { id: string; external_key: string | null }[])).toEqual([
+      { id: "lookalike", external_key: "HEL-40" },
+      { id: "mirror", external_key: "FOO-9" },
+      { id: "native", external_key: null },
+    ]);
+    expect(s.tickets.byExternalKey("foo-9").map((t) => t.id)).toEqual(["mirror"]);
+    // The rebuilt FTS index has the remote ID column: a multi-word query (no key candidate) finds it there.
+    s.tickets.setExternalRef("native", ext("JIRA-77"));
+    expect(s.tickets.search({ q: "jira-77 plain" }).tickets.map((t) => t.id)).toEqual(["native"]);
+    // A new ticket linked to a remote ID is native: it renames with the project; legacy mirrors don't.
+    const linked = ticketFor(s, "p1", "HEL-2", [], ext("JIRA-5"));
+    expect(s.projects.nativeTicketKeys("p1").map((n) => n.key)).toEqual(["HEL-1", "HEL-2"]);
+    s.projects.rekey("p1", "NEW");
+    expect(s.tickets.get(linked.id)!.key).toBe("NEW-2");
+    expect(s.tickets.get("native")!.key).toBe("NEW-1");
+    expect(s.tickets.get("mirror")!.key).toBe("FOO-9");
+    expect(s.tickets.get("lookalike")!.key).toBe("HEL-40");
+  });
+
+  test("a rename collision check counts linked native tickets", () => {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/hel", name: "hel", key: "HEL" });
+    const q = s.projects.create({ path: "/a/new", name: "new", key: "NEW" });
+    ticketFor(s, p.id, "HEL-1", [], ext("JIRA-1"));
+    ticketFor(s, q.id, "NEW-1");
+    expect(s.projects.rekeyConflicts(p.id, "NEW")).toEqual(["NEW-1"]);
+  });
+
+  test("setExternalRef keeps the remote ID lookup and search in step; byExternalKey is newest first and can leave drafts out", () => {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/mh", name: "mh", key: "MH" });
+    const a = ticketFor(s, p.id, "MH-1", [], ext("JIRA-5"));
+    const b = ticketFor(s, p.id, "MH-2");
+    s.db.query("UPDATE tickets SET created_at = created_at + 10 WHERE id = $id").run({ id: b.id });
+    s.tickets.setExternalRef(b.id, { source: "manual", key: "jira-5", url: null, raw: null });
+    expect(s.tickets.get(b.id)!.externalRef).toEqual({ source: "manual", key: "JIRA-5", url: null, raw: null });
+    expect(s.tickets.byExternalKey("JIRA-5").map((t) => t.key)).toEqual(["MH-2", "MH-1"]);
+    s.tickets.update(b.id, { draft: true });
+    expect(s.tickets.byExternalKey("JIRA-5", { drafts: false }).map((t) => t.key)).toEqual(["MH-1"]);
+    expect(s.tickets.search({ q: "JIRA-5" }).tickets.map((t) => t.key).sort()).toEqual(["MH-1", "MH-2"]);
+    s.tickets.setExternalRef(a.id, null);
+    expect(s.tickets.byExternalKey("JIRA-5").map((t) => t.key)).toEqual(["MH-2"]);
+    expect(s.tickets.search({ q: "JIRA-5" }).tickets.map((t) => t.key)).toEqual(["MH-2"]);
+    // A remote ID never looks a ticket up.
+    expect(s.tickets.lookup("JIRA-5")).toBeNull();
+  });
+
+  test("search ranks local key, local key prefix, remote ID, remote ID prefix, then text", () => {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/mh", name: "mh", key: "MH" });
+    const mk_ = (key: string, remote: string | null, title = key) => {
+      const t = ticketFor(s, p.id, key, [], remote ? ext(remote) : null);
+      if (title !== key) s.tickets.update(t.id, { title });
+      return t;
+    };
+    mk_("MH-9", null, "About MH-62 in the title");
+    mk_("MH-8", "MH-621");
+    mk_("MH-7", "MH-62");
+    mk_("MH-620", null);
+    mk_("MH-62", null);
+    expect(s.tickets.search({ q: "mh-62" }).tickets.map((t) => t.key)).toEqual(["MH-62", "MH-620", "MH-7", "MH-8", "MH-9"]);
+  });
+});

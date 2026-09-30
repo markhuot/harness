@@ -250,9 +250,10 @@ export class TicketRepo {
 
   /**
    * The search hit set for `q` as CTEs ending in `hits(id, rank)`: rank 0 exact key, 1 key
-   * prefix (current key or an old one from before a rename), 2 every term in the title, 3 every
-   * term somewhere in key/old keys/title/description/latest summary. FTS5 prefix matching when
-   * the index exists, LIKE substring matching otherwise.
+   * prefix (current key or an old one from before a rename), 2 exact remote ID, 3 remote ID
+   * prefix, 4 every term in the title, 5 every term somewhere in key/old keys/title/description/
+   * latest summary/remote ID. FTS5 prefix matching when the index exists, LIKE substring
+   * matching otherwise.
    */
   private hitsCte(q: string, params: SqlParams): string {
     const k = keyCandidate(q);
@@ -274,7 +275,7 @@ export class TicketRepo {
     } else {
       const terms = searchTerms(q);
       if (terms.length) {
-        const cols = ["key", "aliases", "title", "description", "summary"];
+        const cols = ["key", "aliases", "title", "description", "summary", "external_key"];
         terms.forEach((term, i) => (params[`like${i}`] = `%${likePattern(term, false)}%`));
         const anyCol = terms.map((_, i) => `(${cols.map((c) => `s.${c} LIKE $like${i} ESCAPE '\\'`).join(" OR ")})`).join(" AND ");
         const inTitle = terms.map((_, i) => `s.title LIKE $like${i} ESCAPE '\\'`).join(" AND ");
@@ -286,13 +287,17 @@ export class TicketRepo {
     return `WITH ${text},
       kexact AS (SELECT id FROM tickets WHERE key = $kExact UNION SELECT ticket_id FROM ticket_key_aliases WHERE key = $kExact),
       kprefix AS (SELECT id FROM tickets WHERE key LIKE $kPrefix ESCAPE '\\' UNION SELECT ticket_id FROM ticket_key_aliases WHERE key LIKE $kPrefix ESCAPE '\\'),
+      rexact AS (SELECT id FROM tickets WHERE external_key = $kExact),
+      rprefix AS (SELECT id FROM tickets WHERE external_key LIKE $kPrefix ESCAPE '\\'),
       hits AS (
         SELECT t.id AS id, CASE
           WHEN t.id IN (SELECT id FROM kexact) THEN 0
           WHEN t.id IN (SELECT id FROM kprefix) THEN 1
-          WHEN t.id IN (SELECT id FROM ftitle) THEN 2
-          ELSE 3 END AS rank
-        FROM tickets t WHERE t.id IN (SELECT id FROM kprefix) OR t.id IN (SELECT id FROM fts)
+          WHEN t.id IN (SELECT id FROM rexact) THEN 2
+          WHEN t.id IN (SELECT id FROM rprefix) THEN 3
+          WHEN t.id IN (SELECT id FROM ftitle) THEN 4
+          ELSE 5 END AS rank
+        FROM tickets t WHERE t.id IN (SELECT id FROM kprefix) OR t.id IN (SELECT id FROM rprefix) OR t.id IN (SELECT id FROM fts)
       )`;
   }
 
@@ -453,9 +458,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, draft, created_at, updated_at)
+           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, draft, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $draft, $t, $t)`,
+           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $draft, $t, $t)`,
       )
       .run({
         id,
@@ -470,6 +475,7 @@ export class TicketRepo {
         parentId: input.parentId,
         autoStart: int(input.autoStart),
         externalRef: toJson(input.externalRef),
+        externalKey: input.externalRef?.key ? input.externalRef.key.toUpperCase() : null,
         workdir: input.workdir,
         position: this.nextPosition(input.projectId),
         model: input.model ?? null,
@@ -530,6 +536,29 @@ export class TicketRepo {
     this.db.query("INSERT OR REPLACE INTO ticket_key_aliases (key, ticket_id, created_at) VALUES ($from, $id, $t)").run({ from, id, t });
     this.db.query("UPDATE ticket_deps SET depends_on_key = $to WHERE depends_on_key = $from").run({ from, to });
     return { from, to };
+  }
+
+  /**
+   * Link the ticket to a remote item, or unlink it with null. external_key (the indexed remote ID)
+   * follows external_ref, so related-ticket lookups and search see the change.
+   */
+  setExternalRef(id: string, ref: ExternalRef | null): Ticket | null {
+    const externalRef = ref ? { ...ref, key: ref.key.trim().toUpperCase() } : null;
+    this.db
+      .query("UPDATE tickets SET external_ref = $ref, external_key = $key, updated_at = $t WHERE id = $id")
+      .run({ id, ref: toJson(externalRef), key: externalRef?.key ?? null, t: now() });
+    return this.get(id);
+  }
+
+  /**
+   * Tickets linked to this remote ID, newest first. `drafts: false` leaves drafts out (what agents
+   * see). Never consulted by lookup: a remote ID doesn't identify a ticket.
+   */
+  byExternalKey(key: string, opts: { drafts?: boolean } = {}): Ticket[] {
+    const k = key.trim().toUpperCase();
+    if (!k) return [];
+    const drafts = opts.drafts === false ? " AND t.draft = 0" : "";
+    return this.map(this.db.query(`${SELECT} WHERE t.external_key = $k${drafts} ORDER BY t.created_at DESC, t.id DESC`).all({ k }) as TicketRow[]);
   }
 
   delete(id: string) {

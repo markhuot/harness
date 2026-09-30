@@ -404,6 +404,44 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN draft INTEGER NOT NULL DEFAULT 0;
   `,
+  // 20: remote IDs (DESIGN.md "Remote IDs"). tickets.external_key: externalRef.key, denormalized
+  //     so lookups by remote ID (related tickets, search) use an index. Not unique: any number of
+  //     tickets can link one remote ID. Existing mirrors are backfilled from external_ref.
+  //     ticket_search gains the remote ID (search ranks it right after the local key), so its
+  //     triggers are recreated and the FTS index is dropped for ensureSearchIndex to rebuild with
+  //     the new column.
+  `
+  ALTER TABLE tickets ADD COLUMN external_key TEXT;
+  UPDATE tickets SET external_key = upper(json_extract(external_ref, '$.key'))
+    WHERE external_ref IS NOT NULL AND json_valid(external_ref) AND json_extract(external_ref, '$.key') IS NOT NULL;
+  CREATE INDEX tickets_external_key ON tickets(external_key);
+
+  DROP TRIGGER IF EXISTS ticket_fts_insert;
+  DROP TRIGGER IF EXISTS ticket_fts_delete;
+  DROP TRIGGER IF EXISTS ticket_fts_update;
+  DROP TABLE IF EXISTS ticket_fts;
+
+  ALTER TABLE ticket_search ADD COLUMN external_key TEXT NOT NULL DEFAULT '';
+  UPDATE ticket_search SET external_key = COALESCE((SELECT t.external_key FROM tickets t WHERE t.id = ticket_search.ticket_id), '');
+
+  DROP TRIGGER ticket_search_ticket_insert;
+  DROP TRIGGER ticket_search_ticket_update;
+  CREATE TRIGGER ticket_search_ticket_insert AFTER INSERT ON tickets BEGIN
+    INSERT INTO ticket_search (ticket_id, key, aliases, title, description, summary, external_key) VALUES (
+      NEW.id, NEW.key,
+      COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = NEW.id), ''),
+      NEW.title, NEW.description,
+      COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), ''),
+      COALESCE(NEW.external_key, ''));
+  END;
+  CREATE TRIGGER ticket_search_ticket_update AFTER UPDATE OF key, title, description, session_id, external_key ON tickets BEGIN
+    UPDATE ticket_search SET key = NEW.key, title = NEW.title, description = NEW.description,
+      summary = COALESCE((SELECT s.body FROM summaries s WHERE s.session_id = NEW.session_id ORDER BY s.created_at DESC, s.rowid DESC LIMIT 1), ''),
+      external_key = COALESCE(NEW.external_key, '')
+    WHERE ticket_id = NEW.id;
+  END;
+
+  `,
 ];
 
 /**
@@ -419,22 +457,22 @@ export function ensureSearchIndex(db: Database): boolean {
     db.transaction(() => {
       db.exec(`
         CREATE VIRTUAL TABLE ticket_fts USING fts5(
-          key, aliases, title, description, summary,
+          key, aliases, title, description, summary, external_key,
           content = 'ticket_search', content_rowid = 'rowid', tokenize = 'unicode61 remove_diacritics 2'
         );
         CREATE TRIGGER ticket_fts_insert AFTER INSERT ON ticket_search BEGIN
-          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary, external_key)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary, NEW.external_key);
         END;
         CREATE TRIGGER ticket_fts_delete AFTER DELETE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary, external_key)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary, OLD.external_key);
         END;
         CREATE TRIGGER ticket_fts_update AFTER UPDATE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary);
-          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary, external_key)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary, OLD.external_key);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary, external_key)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary, NEW.external_key);
         END;
         INSERT INTO ticket_fts (ticket_fts) VALUES ('rebuild');
       `);
