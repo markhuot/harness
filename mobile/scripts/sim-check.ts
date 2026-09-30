@@ -56,6 +56,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
+import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
 
 const here = resolve(import.meta.dir, "..");
@@ -472,7 +473,7 @@ const TABLE_BRIEF = [
   "|---|---|---|",
   "| 21 screens, light and dark | about 300 s | Every shot is a `coldOpen`: terminate, cold launch (about 4 s), then wait for the accessibility tree to stay unchanged for 800 ms (each `describe-ui` takes about 0.4 s). Then a fixed 1 s sleep (3.5 s for browser, 2.5 s for changes), then `running()`. That's 42 cold launches. |",
   "| Seeding | tens of seconds | The dummy driver streams at 40 ms per word, about 3× its default. `settle(browse)` allows up to 90 s. `Bun.sleep(1500)` at the end. |",
-  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for a full dummy run and a reviewer run at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
+  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
   "",
   "Measure with:",
   "```",
@@ -788,9 +789,14 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
 /** --stick: one ticket whose brief and transcript are both taller than the screen. */
 const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
+/** The line over the composer ("Stays in review unless…"), which isn't one of the list's rows. */
+const COMPOSER_HINTS = new Set((["planning", "in_progress", "blocked", "review", "done"] as const).flatMap((status) => [false, true].map((busy) => composerHint({ status, busy }))));
 async function sayStick(key: string, n: number) {
   await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
-  return settle(key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
+  // The ticket stays in review, so it looks settled before the run starts: wait for the reply.
+  const reply = `You said: "Stick ${n}:`;
+  await until(`${key} replies to message ${n}`, async () => (await api<{ body: string }[]>("GET", `/tickets/${encodeURIComponent(key)}/summaries`)).some((s) => s.body.includes(reply)), 60000, 100);
+  return settle(key, (t) => !t.busy);
 }
 /** A project with a few files and one ticket in review (brief `prompt`), for --stick, --keyboard and --mentions. */
 async function seedTicket(key: string, prompt: string, files: Record<string, string> = {}) {
@@ -826,7 +832,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
     // viewport). Starting below it leaves out the app window and the header.
-    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && n.frame.y >= top);
+    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && !COMPOSER_HINTS.has(n.AXLabel) && n.frame.y >= top);
     return { rows, top, bottom };
   }
   /** At the bottom: the lowest rendered row is the list's last row and ends just above the composer. */
@@ -835,6 +841,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const lowest = rows.reduce<AXNode | null>((a, n) => (!a || n.frame.y + n.frame.height > a.frame.y + a.frame.height ? n : a), null);
     const end = lowest ? lowest.frame.y + lowest.frame.height : 0;
     const ok = !!lowest && last(lowest.AXLabel!) && end <= bottom + 2 && end >= bottom - 70;
+    if (!ok && process.env.SIM_CHECK_DEBUG) console.error(`not at the bottom: lowest "${lowest?.AXLabel?.slice(0, 60)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}`);
     return ok ? `last row "${lowest!.AXLabel!.slice(0, 32)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}` : null;
   };
   /** A uniquely labelled row inside the viewport, to check that the view doesn't move. */
@@ -866,12 +873,13 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   };
 
   let n = 3;
-  // Every message ends with the reviewer's run: its last transcript row and its last summary.
+  // Every message ends with its chat run (a message leaves the ticket in review, so no reviewer
+  // run follows): its last transcript row and the agent's reply as the last summary.
   // Transcript (a FlatList with estimated rows, where UIKit moves the offset by itself) gets every
   // check; Summaries uses the same hook, whose gating is unit-tested, so it gets the first two.
   const tabs: [string, (l: string) => boolean, boolean][] = [
-    ["transcript", (l) => l.startsWith("Run finished (review)"), true],
-    ["summaries", (l) => l.startsWith("Review approved"), false],
+    ["transcript", (l) => l.startsWith("Run finished (chat)"), true],
+    ["summaries", (l) => l.startsWith("(dummy chat) You said"), false],
   ];
   for (const [tab, last, all] of tabs) {
     await check(`${tab} opens at the bottom`, async () => {
