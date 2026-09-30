@@ -2,13 +2,28 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { isConductor, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
+import { displayKey, isConductor, secondaryKey, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
 import { rovingIndex, type RovingMove } from "./useRovingList";
 
 export { driverLabel, relativeTime, STATUS_LABEL } from "@harness/shared/state";
+
+/**
+ * A ticket's key as the board shows it: its remote ID when it's linked to one, then its own key,
+ * muted ("MH-62 · MH-124"), so tickets sharing a remote ID stay apart. Just the key otherwise.
+ * Goes inside the caller's key element (it brings no box of its own).
+ */
+export function TicketKey({ ticket }: { ticket: { key: string; externalRef?: { key: string } | null } }) {
+  const local = secondaryKey(ticket);
+  return (
+    <>
+      {displayKey(ticket)}
+      {local && <span className="key-local"> · {local}</span>}
+    </>
+  );
+}
 
 export function StatusDot({ status }: { status: TicketStatus }) {
   return <span className="status-dot" data-status={status} style={{ ["--dot" as string]: `var(--c-${status})` }} />;

@@ -12,8 +12,8 @@
 
 import "./palette.css";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import type { FileMatch, Ticket } from "@harness/shared";
-import { sortedProjects } from "@harness/shared/state";
+import { displayKey, keyLabel, secondaryKey, type FileMatch, type Ticket } from "@harness/shared";
+import { sortedProjects, ticketByKey } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { commandKeys } from "../state/keys";
 import { availableCommands, runCommand } from "../components/commands";
@@ -79,6 +79,23 @@ function Highlighted({ text, ranges, offset = 0 }: { text: string; ranges: Match
   return <>{out}</>;
 }
 
+/** A ticket row's key, as its label starts ("MH-62 · MH-124"): the local key muted, both marked. */
+function TicketKeyHighlighted({ ticket, ranges }: { ticket: Ticket; ranges: MatchRange[] }) {
+  const shown = displayKey(ticket);
+  const local = secondaryKey(ticket);
+  return (
+    <span className="palette-key">
+      <Highlighted text={shown} ranges={ranges} />
+      {local && (
+        <span className="key-local">
+          {" · "}
+          <Highlighted text={local} ranges={ranges} offset={shown.length + 3} />
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** A file row: the name, then its folder dimmed, both with the query's matches marked. */
 function FileLabel({ path, ranges }: { path: string; ranges: MatchRange[] }) {
   const slash = path.lastIndexOf("/");
@@ -126,7 +143,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     return { scope, paneId: leaf?.id ?? null, root: paletteFileRoot(leaf?.content, projectId) };
   });
   const root = where.root;
-  const rootLabel = !root ? null : "ticketKey" in root ? root.ticketKey : state.projects[root.projectId]?.name ?? "this project";
+  const rootTicket = root && "ticketKey" in root ? ticketByKey(state, root.ticketKey) : undefined;
+  const rootLabel = !root ? null : "ticketKey" in root ? (rootTicket ? keyLabel(rootTicket) : root.ticketKey) : state.projects[root.projectId]?.name ?? "this project";
 
   // Put the focus back where it was when the palette goes away some other way (⌘K again). A row
   // that ran has already done that, and whatever it focused since (a composer, a confirm) keeps it.
@@ -225,7 +243,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       const ticket = (t: Ticket) => {
         if (seen.has(t.key)) return;
         seen.add(t.key);
-        out.push({ id: `ticket:${t.key}`, kind: "ticket", label: `${t.key} ${t.title}`, group: "Ticket", ticket: t, run: () => openTicketKey(t.key) });
+        // "MH-62 · MH-124 title": the remote ID and the key both match (the row marks either).
+        out.push({ id: `ticket:${t.key}`, kind: "ticket", label: `${keyLabel(t)} ${t.title}`, group: "Ticket", ticket: t, run: () => openTicketKey(t.key) });
       };
       for (const t of Object.values(state.tickets)) ticket(t);
       if (remote?.q === q) for (const t of remote.tickets) ticket(t);
@@ -370,11 +389,9 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
               >
                 {t ? (
                   <>
-                    <span className="palette-key">
-                      <Highlighted text={t.key} ranges={ranges} />
-                    </span>
+                    <TicketKeyHighlighted ticket={t} ranges={ranges} />
                     <span className="palette-label">
-                      <Highlighted text={t.title} ranges={ranges} offset={t.key.length + 1} />
+                      <Highlighted text={t.title} ranges={ranges} offset={keyLabel(t).length + 1} />
                     </span>
                     <span className="palette-status">
                       <StatusDot status={t.status} />

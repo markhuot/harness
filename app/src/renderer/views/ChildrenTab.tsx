@@ -2,11 +2,11 @@
 // store (ticket.upserted / summary.added keep it current; nothing polls).
 
 import { useEffect, useMemo, useRef } from "react";
-import type { Ticket } from "@harness/shared";
+import { displayKey, keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill } from "../components/bits";
+import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
 import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
 import { keysArea } from "../components/commands";
@@ -111,12 +111,14 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
       onClick={() => onOpen(c.key)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(c.key))}
       // Drag onto a half of this pane (or any other) to see the child beside its conductor.
-      {...dragProps(c.key, c.title)}
+      {...dragProps(c.key, c.title, undefined, keyLabel(c))}
       onContextMenu={(e) => void ticketContextMenu(e, scope, c.key, () => onOpen(c.key), paneId)}
     >
       <div className="child-main">
         <div className="child-top">
-          <span className="child-key">{c.key}</span>
+          <span className="child-key">
+            <TicketKey ticket={c} />
+          </span>
           <span className="child-title">{c.title || "Untitled"}</span>
           {c.busy && <span className="spinner" title="Agent working" />}
           {c.status === "review" && (
@@ -161,7 +163,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
                 key={d.key}
                 className={`chip link-chip ${d.state}`}
                 data-dep-state={d.state}
-                title={d.state === "pending" && d.ticket ? `Waiting on ${d.key} (${STATUS_LABEL[d.ticket.status].toLowerCase()})` : depChipTitle(d)}
+                title={d.state === "pending" && d.ticket ? `Waiting on ${keyLabel(d.ticket)} (${STATUS_LABEL[d.ticket.status].toLowerCase()})` : depChipTitle(d)}
                 disabled={!d.ticket}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -170,7 +172,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
               >
                 {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
                 <span className="chip-label">{d.state === "done" ? "after" : d.state === "pending" ? "waiting on" : "depends on"}</span>
-                {d.ticket?.key ?? d.key}
+                {d.ticket ? displayKey(d.ticket) : d.key}
               </button>
             ))}
             <div className="grow" />

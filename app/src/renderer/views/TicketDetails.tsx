@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Ticket } from "@harness/shared";
+import type { RelatedTicket, Ticket, TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { dependentsOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { driverLabel, relativeTime, StatusDot, useNow } from "../components/bits";
+import { driverLabel, relativeTime, STATUS_LABEL, StatusDot, TicketKey, useNow } from "../components/bits";
 import { useOpenTicket } from "../components/paneContext";
 import { TicketSettings } from "../components/TicketSettings";
+import { liveRelatedTickets } from "../state/remoteIds";
 
-export function TicketDetails({ ticket }: { ticket: Ticket }) {
+export function TicketDetails({
+  ticket,
+  related: fetchedRelated,
+}: {
+  ticket: Ticket;
+  /** The detail's relatedTickets: other tickets linked to this one's key or remote ID */
+  related?: RelatedTicket[];
+}) {
   const { state, client } = useStore();
   const openTicket = useOpenTicket();
   const act = useAction();
@@ -33,6 +41,17 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   const project = state.projects[ticket.projectId];
 
   const open = (key: string) => openTicket(key);
+  const related = useMemo(
+    () => liveRelatedTickets(state, [ticket.key, ticket.externalRef?.key], fetchedRelated, ticket),
+    [state.tickets, state.keyAliases, ticket, fetchedRelated],
+  );
+  const relatedList = related.length > 0 && (
+    <div className="related-tickets" data-testid="related-tickets">
+      {related.map((r) => (
+        <TicketLink key={r.key} t={{ key: r.key, title: r.title, status: r.status, externalRef: { key: r.externalKey } }} onOpen={open} />
+      ))}
+    </div>
+  );
 
   const saveTitle = () => {
     if (title.trim() && title !== ticket.title) void act(() => client.updateTicket(ticket.key, { title: title.trim() }));
@@ -77,7 +96,12 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
       </div>
 
       {/* The settings rows (the same ones a draft's Options shows), then what's read-only. */}
-      <TicketSettings ticket={ticket} project={project} onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))}>
+      <TicketSettings
+        ticket={ticket}
+        project={project}
+        onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))}
+        onRemoteId={(externalRef) => client.updateTicket(ticket.key, { externalRef })}
+      >
         {dependents.length > 0 && (
           <>
             <dt>Blocks</dt>
@@ -96,20 +120,40 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
         )}
         <dt>Workdir</dt>
         <dd className="mono selectable">{ticket.workdir ?? <span className="muted">Not prepared yet</span>}</dd>
-        {ticket.externalRef && (
+        {ticket.externalRef ? (
           <>
             <dt>External</dt>
-            <dd>
-              {ticket.externalRef.url ? (
-                <a onClick={() => void window.harness?.openExternal(ticket.externalRef!.url!)}>
-                  {ticket.externalRef.key} <Icon name="external" size={11} />
-                </a>
-              ) : (
-                ticket.externalRef.key
+            <dd className="stack" data-testid="external-row">
+              <span>
+                {ticket.externalRef.url ? (
+                  <a onClick={() => void window.harness?.openExternal(ticket.externalRef!.url!)} title={ticket.externalRef.url}>
+                    {ticket.externalRef.key} <Icon name="external" size={11} />
+                  </a>
+                ) : (
+                  <span className="mono">{ticket.externalRef.key}</span>
+                )}
+                <span className="muted"> · via {ticket.externalRef.source}</span>
+              </span>
+              {relatedList && (
+                <>
+                  <span className="field-hint related-hint">Also linked to {ticket.externalRef.key}:</span>
+                  {relatedList}
+                </>
               )}
-              <span className="muted"> · via {ticket.externalRef.source}</span>
             </dd>
           </>
+        ) : (
+          // An unlinked ticket whose key other tickets carry as their remote ID (a native MH-62
+          // beside Jira's MH-62): they're a different item, but worth seeing from here.
+          relatedList && (
+            <>
+              <dt>Linked</dt>
+              <dd className="stack" data-testid="external-row">
+                <span className="field-hint related-hint">Tickets with {ticket.key} as their remote ID:</span>
+                {relatedList}
+              </dd>
+            </>
+          )
         )}
         <dt>Allowed tools</dt>
         <dd>
@@ -160,12 +204,14 @@ export function TicketDetails({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function TicketLink({ t, onOpen }: { t: Ticket; onOpen: (key: string) => void }) {
+function TicketLink({ t, onOpen }: { t: { key: string; title: string; status: TicketStatus; externalRef?: { key: string } | null }; onOpen: (key: string) => void }) {
   return (
-    <button className="ticket-link" onClick={() => onOpen(t.key)}>
+    <button className="ticket-link" onClick={() => onOpen(t.key)} title={`${STATUS_LABEL[t.status]} · open ${t.key}`}>
       <StatusDot status={t.status} />
-      <span className="mono">{t.key}</span>
-      <span className="truncate">{t.title}</span>
+      <span className="mono">
+        <TicketKey ticket={t} />
+      </span>
+      <span className="truncate">{t.title || "Untitled"}</span>
     </button>
   );
 }

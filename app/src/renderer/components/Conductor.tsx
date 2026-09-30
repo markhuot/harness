@@ -3,9 +3,9 @@
 // "Hide child tickets" preference.
 
 import { useCallback, useState } from "react";
-import type { Ticket } from "@harness/shared";
+import { keyLabel, type Ticket } from "@harness/shared";
 import { progressLabel, progressSegments, readHideChildren, writeHideChildren, type Progress } from "@harness/shared/state";
-import { STATUS_LABEL } from "./bits";
+import { STATUS_LABEL, TicketKey } from "./bits";
 import { Icon } from "./Icon";
 import "./conductor.css";
 
@@ -48,10 +48,12 @@ export function ConductorRollup({ progress }: { progress: Progress }) {
 /** "Part of HEL-1 <title>" above a child's title; opens the conductor's Tickets tab. */
 export function ParentCrumb({ parent, onOpen }: { parent: Ticket; onOpen: (key: string) => void }) {
   return (
-    <button className="cond-crumb" data-testid="parent-crumb" onClick={() => onOpen(parent.key)} title={`Open ${parent.key}`}>
+    <button className="cond-crumb" data-testid="parent-crumb" onClick={() => onOpen(parent.key)} title={`Open ${keyLabel(parent)}`}>
       <Icon name="conductor" size={11} />
       <span className="muted">Part of</span>
-      <span className="mono">{parent.key}</span>
+      <span className="mono">
+        <TicketKey ticket={parent} />
+      </span>
       <span className="truncate">{parent.title || "Untitled"}</span>
       <Icon name="chevronRight" size={11} />
     </button>

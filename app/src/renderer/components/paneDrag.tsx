@@ -60,12 +60,12 @@ export function dragSourceOf(dt: DataTransfer | null): DragSource | null {
 }
 
 /** A compact chip (key + title) as the drag image, instead of a ghost of the whole card or header. */
-function setChipImage(dt: DataTransfer, ticketKey: string, title: string) {
+function setChipImage(dt: DataTransfer, keyText: string, title: string) {
   const chip = document.createElement("div");
   chip.className = "drag-chip";
   const key = document.createElement("span");
   key.className = "drag-chip-key";
-  key.textContent = ticketKey;
+  key.textContent = keyText;
   const label = document.createElement("span");
   label.className = "drag-chip-title";
   label.textContent = title || "Untitled";
@@ -78,9 +78,10 @@ function setChipImage(dt: DataTransfer, ticketKey: string, title: string) {
 
 /**
  * Props that make an element a drag source for a ticket (a card or child row) or, with `paneId`,
- * for the pane showing it (the header grip).
+ * for the pane showing it (the header grip). `chip` is what the drag image shows for the key
+ * (a linked ticket's "MH-62 · MH-124"); the drag data always carries `ticketKey`.
  */
-export function dragProps(ticketKey: string, title: string, paneId?: string) {
+export function dragProps(ticketKey: string, title: string, paneId?: string, chip: string = ticketKey) {
   return {
     draggable: true,
     onDragStart: (e: DragEvent) => {
@@ -90,7 +91,7 @@ export function dragProps(ticketKey: string, title: string, paneId?: string) {
       else dt.setData(TICKET_MIME, ticketKey);
       dt.setData("text/plain", ticketKey);
       dt.effectAllowed = "move";
-      setChipImage(dt, ticketKey, title);
+      setChipImage(dt, chip, title);
       // Next tick: Chromium can cancel a drag whose dragstart puts something under the pointer.
       const source: DragSource = paneId ? { kind: "pane", leafId: paneId } : { kind: "ticket", ticketKey };
       const g = ++generation;

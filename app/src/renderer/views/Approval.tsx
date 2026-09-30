@@ -2,7 +2,7 @@
 // human allows once, allows the tool for the whole ticket, or denies.
 
 import { useState } from "react";
-import type { PendingApproval, Ticket } from "@harness/shared";
+import { keyLabel, type PendingApproval, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { Icon } from "../components/Icon";
 import { relativeTime, useNow } from "../components/bits";
@@ -27,7 +27,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
     setBusy(decision);
     await act(
       () => client.answerApproval(ticket.key, { decision, message: message.trim() || undefined }),
-      approvalToast(decision, tool, ticket.key),
+      approvalToast(decision, tool, keyLabel(ticket)),
     );
     setBusy(null);
   };
@@ -92,7 +92,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
               {busy === "allow_once" ? <span className="spinner" /> : <Icon name="check" strokeWidth={2.25} />} Allow once
             </button>
             {!approval.onceOnly && (
-              <button className="btn" onClick={() => answer("allow_tool")} disabled={!!busy} title={`Every future ${tool} call on ${ticket.key} runs without asking`}>
+              <button className="btn" onClick={() => answer("allow_tool")} disabled={!!busy} title={`Every future ${tool} call on ${keyLabel(ticket)} runs without asking`}>
                 {busy === "allow_tool" ? <span className="spinner" /> : <Icon name="checkCircle" />} Always allow {tool} on this ticket
               </button>
             )}

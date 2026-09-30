@@ -2,7 +2,7 @@
 // asks for completion instructions. The choices come from state/approveMenu.ts.
 
 import { useState } from "react";
-import type { CompletionAction, Ticket } from "@harness/shared";
+import { keyLabel, type CompletionAction, type Ticket } from "@harness/shared";
 import { Icon, type IconName } from "./Icon";
 import { MenuButton, MOD, Modal } from "./bits";
 import type { LandChoice, LandMenu, LandMode } from "../state/approveMenu";
@@ -111,7 +111,7 @@ export function LandSheet({
     <Modal onClose={onClose}>
       <div className="modal-head">
         <strong>
-          {verb} {ticket.key}
+          {verb} {keyLabel(ticket)}
         </strong>
       </div>
       <div className="modal-body" data-testid="land-sheet" data-action={sheet.action}>

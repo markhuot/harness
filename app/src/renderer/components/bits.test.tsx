@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ICON_PATHS } from "@harness/shared/state";
-import { ReviewMark } from "./bits";
+import { ReviewMark, TicketKey } from "./bits";
 
 describe("ReviewMark", () => {
   test("a skipped agent review is outlined and muted, with a minus", () => {
@@ -19,5 +19,17 @@ describe("ReviewMark", () => {
     expect(marks[0]).toContain("pending-dot");
     expect(marks[1]).toContain(`d="${ICON_PATHS.check}"`);
     expect(marks[2]).toContain('title="Agent review: changes requested"');
+  });
+});
+
+describe("TicketKey", () => {
+  test("a linked ticket shows its remote ID, then its own key muted", () => {
+    const html = renderToStaticMarkup(<TicketKey ticket={{ key: "MH-124", externalRef: { key: "MH-62" } }} />);
+    expect(html).toBe('MH-62<span class="key-local"> · MH-124</span>');
+  });
+
+  test("an unlinked ticket, or a legacy mirror whose key is its remote ID, shows the key alone", () => {
+    expect(renderToStaticMarkup(<TicketKey ticket={{ key: "MH-62", externalRef: null }} />)).toBe("MH-62");
+    expect(renderToStaticMarkup(<TicketKey ticket={{ key: "FOO-123", externalRef: { key: "FOO-123" } }} />)).toBe("FOO-123");
   });
 });
