@@ -956,7 +956,9 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
 POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
-GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
+GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
+GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
+GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
@@ -1104,6 +1106,41 @@ file typed in full (`.env`) stays in the list, first.
   transcript keeps the prompt as typed plus a status line, `Attached @README.md, @src/app.ts`,
   and one `Didn't attach @…: <reason>` line per skipped path. Contents are read when the run
   starts, so a message queued behind a run gets the files as they are when it runs.
+- **The file browser's search.** `?ignored=1` on either `/files` route (the command palette's
+  file browser; the autocomplete never sends it) builds a separate, deeper index that also walks
+  `node_modules` (anywhere), after everything else, with its own budget of 200,000 entries and
+  1.5 seconds, cached for 30 seconds. Gitignored paths (and everything in `node_modules`) rank
+  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`.
+  `?kind=file` (or `dir`) keeps one kind, the one-level browse included.
+
+## File viewer
+
+The desktop file pane and the mobile file viewer read one file where a project or ticket works,
+syntax-highlight it, and show a diff tab when it has uncommitted changes
+(`service/src/orchestrator/file-view.ts`). The root is the project folder, or for a ticket the
+same folder `/tickets/:key/files` searches (worktree, else session cwd, else project folder).
+
+- **Paths.** `?path=` is relative to the root, or absolute inside it (made relative, with the
+  root's real path accepted too, e.g. macOS's `/private/var`). `safeJoin`
+  (`service/src/safe-path.ts`, shared with the plugin static UIs) refuses NUL, `..` and anything
+  whose real path leaves the root, so symlinks can't escape: those are 400, as are folders, the
+  root itself and anything inside `.git`. A missing file is 404.
+- **Contents** (`FileView`) are read from disk, not git, so gitignored files open like any
+  other. A NUL in the first 8 KB makes a file `binary`; a file over 2 MiB is `tooLarge`; either
+  way `contents` is null. `truncated` flags a file that grew past the cap while being read.
+  `git` comes from one `git status --porcelain -z --untracked-files=all --ignored=matching` for
+  the path: `untracked` (`??`), `ignored` (`!!`), `tracked` otherwise, `dirty` for any entry but
+  an ignored one; all false outside a repository.
+- **Diff** (`FileDiff`) is the working tree against `HEAD` (the empty tree before the first
+  commit), staged and unstaged together, with the git plugin's flags (`--no-color --no-ext-diff
+  --no-textconv --src-prefix=a/ --dst-prefix=b/`, no `-M`: renames aren't followed) plus
+  `--relative`, so paths match `path` when the root is a folder inside the repository. An
+  untracked file is `git diff --no-index -- /dev/null <path>`, so it shows as added. A clean or
+  ignored file has an empty patch; a deleted one still diffs. `oldContents` is `HEAD:./<path>`
+  and `newContents` the disk copy, each null when missing, binary or over 2 MiB; a patch over
+  4 MiB comes back empty with `tooLarge`. A root outside any repository is a 409 (the viewer knows
+  from `FileView.git.repo` not to ask). Git runs without a shell, with `--literal-pathspecs`,
+  the path after `--`, and `GIT_OPTIONAL_LOCKS=0` so it never takes the index lock.
 
 ## Service updates
 

@@ -9,6 +9,9 @@ import type {
   CreateTicketBody,
   DriverInfo,
   DriverModels,
+  FileDiff,
+  FileSearchOptions,
+  FileView,
   HarnessEvent,
   Health,
   HumanReviewBody,
@@ -39,6 +42,12 @@ import type {
   PairingInfo,
 } from "./protocol";
 import type { FileMatch } from "./mentions";
+
+/** The /files query: a bare number is the limit (the autocomplete's older call shape). */
+function fileSearchQuery(q: string, opts: number | FileSearchOptions = {}): string {
+  const o = typeof opts === "number" ? { limit: opts } : opts;
+  return query({ q, limit: o.limit, ignored: o.ignored ? 1 : undefined, kind: o.kind });
+}
 
 export class HarnessApiError extends Error {
   constructor(
@@ -110,9 +119,20 @@ export class HarnessClient {
   deleteProject(id: string) {
     return this.request<{ ok: true }>("DELETE", `/projects/${id}`);
   }
-  /** Files and folders in the project folder matching `q`, for @-mentions in a new session. */
-  projectFiles(id: string, q: string, limit?: number) {
-    return this.request<FileMatch[]>("GET", `/projects/${id}/files${query({ q, limit })}`);
+  /**
+   * Files and folders in the project folder matching `q`, for @-mentions in a new session. The file
+   * browser passes `{ ignored: true }` to search node_modules too, and `kind: "file"` for files only.
+   */
+  projectFiles(id: string, q: string, opts?: number | FileSearchOptions) {
+    return this.request<FileMatch[]>("GET", `/projects/${id}/files${fileSearchQuery(q, opts)}`);
+  }
+  /** A file in the project folder, read from disk, and where it stands in git. */
+  projectFile(id: string, path: string) {
+    return this.request<FileView>("GET", `/projects/${id}/file${query({ path })}`);
+  }
+  /** A project file's uncommitted changes against HEAD (409 outside a git repository). */
+  projectFileDiff(id: string, path: string) {
+    return this.request<FileDiff>("GET", `/projects/${id}/file/diff${query({ path })}`);
   }
   /** The project's local branches (most recent first) matching `q`, for the new-session branch picker. */
   projectBranches(id: string, q?: string, limit?: number) {
@@ -183,9 +203,17 @@ export class HarnessClient {
   cancelTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/cancel`);
   }
-  /** Files and folders where the ticket's agent works matching `q`, for @-mentions in a message. */
-  ticketFiles(key: string, q: string, limit?: number) {
-    return this.request<FileMatch[]>("GET", `/tickets/${key}/files${query({ q, limit })}`);
+  /** Files and folders where the ticket's agent works matching `q`, for @-mentions in a message (options as projectFiles). */
+  ticketFiles(key: string, q: string, opts?: number | FileSearchOptions) {
+    return this.request<FileMatch[]>("GET", `/tickets/${key}/files${fileSearchQuery(q, opts)}`);
+  }
+  /** A file where the ticket's agent works (its worktree, else its cwd, else the project folder). */
+  ticketFile(key: string, path: string) {
+    return this.request<FileView>("GET", `/tickets/${key}/file${query({ path })}`);
+  }
+  /** That file's uncommitted changes against HEAD (409 outside a git repository). */
+  ticketFileDiff(key: string, path: string) {
+    return this.request<FileDiff>("GET", `/tickets/${key}/file/diff${query({ path })}`);
   }
   listSummaries(key: string) {
     return this.request<Summary[]>("GET", `/tickets/${key}/summaries`);

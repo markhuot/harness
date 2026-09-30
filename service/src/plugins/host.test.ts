@@ -6,7 +6,8 @@ import { HarnessClient, type PluginInfo, type PluginTab } from "@harness/shared"
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { stubBrowser, tempHome } from "../testing/fakes";
-import { execFile, parseManifest, safeJoin } from "./host";
+import { safeJoin } from "../safe-path";
+import { execFile, parseManifest } from "./host";
 
 let harness: Harness | null = null;
 afterEach(async () => {

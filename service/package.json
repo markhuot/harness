@@ -13,6 +13,7 @@
     "@anthropic-ai/sdk": "latest"
   },
   "devDependencies": {
+    "@pierre/diffs": "^1.5.1",
     "@types/bun": "latest",
     "typescript": "^5.9.0"
   }

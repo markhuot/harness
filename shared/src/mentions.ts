@@ -93,20 +93,21 @@ export function parseMentions(text: string): string[] {
  * Rank `paths` (files, and directories ending in "/") for the autocomplete, best first:
  * the path starts with the query, then its name does, then any folder name in it does, then it
  * contains the query. Only when none of those match do paths with the query's characters in order
- * ("fmt" → format.ts) count. Case-insensitive; shorter paths win ties. An empty query lists the
+ * ("fmt" → format.ts) count. Case-insensitive; shorter paths win ties, after `demote`d ones (the
+ * file browser's gitignored paths) are put behind the rest of their rank. An empty query lists the
  * top level.
  */
-export function rankPaths(paths: readonly string[], query: string, limit = 50): string[] {
+export function rankPaths(paths: readonly string[], query: string, limit = 50, opts: { demote?: (path: string) => boolean } = {}): string[] {
   const q = query.toLowerCase();
   const scored: { path: string; score: number }[] = [];
   for (const path of paths) {
     // A picked folder ("src/") lists what's in it, not itself again. A file typed in full stays.
     if (q.endsWith("/") && path.toLowerCase() === q) continue;
     const score = q ? matchScore(path.toLowerCase(), q) : topLevel(path) ? 0 : -1;
-    if (score >= 0) scored.push({ path, score });
+    if (score >= 0) scored.push({ path, score: score * 2 + (opts.demote?.(path) ? 1 : 0) });
   }
   // Loose in-order matches are noise next to real ones (every path with m…e…n…t in it).
-  const loose = scored.some((s) => s.score < LOOSE) ? scored.filter((s) => s.score < LOOSE) : scored;
+  const loose = scored.some((s) => s.score < LOOSE * 2) ? scored.filter((s) => s.score < LOOSE * 2) : scored;
   loose.sort((a, b) => a.score - b.score || a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return loose.slice(0, limit).map((s) => s.path);
 }
