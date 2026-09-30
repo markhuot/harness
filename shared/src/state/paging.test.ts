@@ -259,6 +259,12 @@ describe("search", () => {
     expect(matchesQuery(t, "old-4", { "OLD-4": "r1" })).toBe(true);
     expect(matchesQuery(t, "old-4")).toBe(false);
   });
+
+  test("local matching covers a linked remote ID", () => {
+    const t = tk("r1", { key: "MH-124", title: "x", externalRef: { source: "jira", key: "MH-62", url: null, raw: null } });
+    expect(matchesQuery(t, "mh-62")).toBe(true);
+    expect(matchesQuery(tk("r2", { key: "MH-124", title: "x" }), "mh-62")).toBe(false);
+  });
 });
 
 function detail(ticket: Ticket, over: Partial<TicketDetail> = {}): TicketDetail {

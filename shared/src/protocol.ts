@@ -156,7 +156,12 @@ export interface Ticket {
   autoStart: boolean;
   agentReview: ReviewState;
   humanReview: ReviewState;
-  /** Mirrored external ticket, when this came from a watcher */
+  /**
+   * The remote item this ticket is linked to (a Jira issue, a PR), from a watcher's triage or set
+   * by hand. Its `key` is the remote ID the board shows in place of `key` (`displayKey`). Many
+   * tickets can link the same remote ID; `key` stays the ticket's only identity (DESIGN.md
+   * "Remote IDs").
+   */
   externalRef: ExternalRef | null;
   /** Directory the agent runs in (project path or a worktree) */
   workdir: string | null;
@@ -277,10 +282,32 @@ export interface PendingApproval {
 }
 
 export interface ExternalRef {
-  source: string; // watcher name, e.g. "jira"
-  key: string; // FOO-123
+  source: string; // watcher name, e.g. "jira", or "manual" for a link set by hand
+  key: string; // the remote ID, e.g. FOO-123
   url: string | null;
-  raw: unknown; // the original item emitted by the watcher
+  raw: unknown; // the original item emitted by the watcher (null for a manual link)
+}
+
+/**
+ * A ticket that carries a remote ID (TicketDetail.relatedTickets): another ticket linked to the
+ * same remote item, or the tickets a remote ID points to when no local key matches.
+ */
+export interface RelatedTicket {
+  key: string;
+  title: string;
+  status: TicketStatus;
+  projectId: string;
+  /** The remote ID it carries */
+  externalKey: string;
+}
+
+/**
+ * A remote ID set by hand (UpdateTicketBody.externalRef). The key is upper-cased and must look
+ * like FOO-123; the link's source is "manual".
+ */
+export interface ExternalRefInput {
+  key: string;
+  url?: string | null;
 }
 
 export type SessionKind = "ticket" | "triage";
@@ -827,7 +854,10 @@ export interface CreateTicketBody {
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;
-  /** Use this key instead of the next native key (external mirrors) */
+  /**
+   * Use this key instead of the next native key. Only for imports and tests: watcher tickets get
+   * native keys and carry the remote ID in externalRef.
+   */
   key?: string;
   externalRef?: ExternalRef | null;
   /**
@@ -861,6 +891,8 @@ export interface UpdateTicketBody {
   skipAgentReview?: boolean;
   dependsOn?: string[];
   position?: number;
+  /** Link the ticket to a remote ID by hand (source "manual"), or null to unlink it */
+  externalRef?: ExternalRefInput | null;
   /** Drafts only (409 otherwise): what the ticket is, fixed once it launches */
   kind?: TicketKind;
   /** Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches */
@@ -1017,6 +1049,20 @@ export interface TicketDetail {
   parent?: Ticket | null;
   /** Sub-agents started in the ticket's session, oldest first (absent from older services) */
   subagents?: Subagent[];
+  /**
+   * Other tickets carrying a remote ID equal to the requested key or to this ticket's own remote
+   * ID, newest first. Absent from older services.
+   */
+  relatedTickets?: RelatedTicket[];
+}
+
+/**
+ * The `data` of GET /tickets/:key's 404 when no local key matches but tickets carry the requested
+ * key as their remote ID: a remote ID never opens a ticket, it points to the local ones.
+ */
+export interface RemoteKeyMatches {
+  requested: string;
+  relatedTickets: RelatedTicket[];
 }
 
 export interface ApiOk<T> {

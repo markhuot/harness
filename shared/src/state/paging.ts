@@ -243,11 +243,12 @@ export function needsFirstDonePage(state: State, projectId: string | null): bool
   return state.ready && !state.donePaging[scopeOf(projectId)];
 }
 
-/** Instant local match while the server search is in flight: key (current or old) or title. */
+/** Instant local match while the server search is in flight: key (current or old), remote ID or title. */
 export function matchesQuery(t: Ticket, q: string, aliases: Record<string, string> = {}): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
   if (t.key.toLowerCase().includes(needle) || t.title.toLowerCase().includes(needle)) return true;
+  if (t.externalRef?.key.toLowerCase().includes(needle)) return true;
   for (const [alias, id] of Object.entries(aliases)) if (id === t.id && alias.toLowerCase().includes(needle)) return true;
   return false;
 }
