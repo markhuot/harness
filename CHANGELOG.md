@@ -15,6 +15,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   pane except the board an even share of the room beside its siblings. Three panes side by side
   each get a third of the space the board leaves, and two panes stacked in one of them each get
   half its height.
+- On the Mac board, ⇧⌘↩ opens the card under the keyboard cursor in a new pane instead of
+  replacing the ticket you already have open. With the board and one ticket open, you get the
+  board, that ticket, and the new one side by side. Plain Enter still opens the card in the
+  ticket pane beside the board.
 
 ### Changed
 

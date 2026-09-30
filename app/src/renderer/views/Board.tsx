@@ -26,7 +26,7 @@ import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "..
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
-import { focusedTicket, leaves, openTicket, updatePanes, usePanes } from "../state/panes";
+import { focusedTicket, leaves, openTicket, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
 import { usePane, usePaneScope } from "../components/paneContext";
 import { keysArea, runCommand, useCommands } from "../components/commands";
@@ -126,6 +126,11 @@ export function BoardPane() {
       const key = cursor;
       if (!key || document.activeElement?.closest("button, a[href], summary")) return null;
       return () => focusPaneBy(scope, (s) => openTicket(s, key));
+    },
+    get "board.openSplit"() {
+      const key = cursor;
+      if (!key) return null;
+      return () => focusPaneBy(scope, (s) => openTicketInNewSplit(s, key));
     },
     "board.search": () => searchRef.current?.focus(),
   });

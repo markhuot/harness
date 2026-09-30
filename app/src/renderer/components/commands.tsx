@@ -8,7 +8,7 @@
 // same lookup, which is how ⌘ chords reach the app from inside a plugin iframe or a terminal.
 
 import { useEffect, useRef } from "react";
-import { COMMAND_BY_ID, COMMANDS, matchCommands, type CommandSpec, type KeyContext, type KeyScope } from "../state/keys";
+import { chordMatches, COMMAND_BY_ID, COMMANDS, matchCommands, type CommandSpec, type KeyContext, type KeyScope } from "../state/keys";
 import { installModality, setModality } from "../state/inputModality";
 
 /** A handler, or a falsy value when the command doesn't apply right now (it's then skipped and hidden from the palette). */
@@ -151,7 +151,10 @@ export function useKeyboardDispatcher() {
       const hit = resolveKey(e);
       if (!hit) return;
       e.preventDefault();
-      handledAt.set(hit.spec.id, performance.now());
+      // Every command on this chord, not just the one that ran: ⇧⌘↩ on a card opens it in a new
+      // split, and the menu's Maximize (the same chord) mustn't then zoom as well.
+      const now = performance.now();
+      for (const c of COMMANDS) if (c.keys.some((ch) => chordMatches(ch, e))) handledAt.set(c.id, now);
       setModality("keyboard");
       hit.run();
     };

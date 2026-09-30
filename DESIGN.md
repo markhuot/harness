@@ -1498,7 +1498,9 @@ Settings, project settings, or on the board route the pane workspace.
   left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
   Right/Below/Left/Above). It splits the row's own pane, else the focused pane, else the board
   (`splitTarget`), and it skips a pane already showing that ticket. The board's cards take a
-  keyboard cursor (see Keyboard below), and Enter opens the one it's on. A ticket pane's More menu has a Move pane section with a row for each other
+  keyboard cursor (see Keyboard below), and Enter opens the one it's on. ⇧⌘Enter opens it in a
+  new pane instead (`openTicketInNewSplit`): it splits the pane Enter would have replaced 50/50,
+  so [board, A] becomes [board, A, B], and with no ticket pane beside the board it acts like Enter. A ticket pane's More menu has a Move pane section with a row for each other
   pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call `movePane`,
   so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
@@ -1583,7 +1585,9 @@ Settings, project settings, or on the board route the pane workspace.
     columns as rendered (`state/boardNav.ts`). Empty columns are skipped, and the row index is
     kept and clamped. A card that moves column or gets filtered out hands the cursor to the card
     nearest its old spot (`resolveCursor`). The cursor reaches cards as a boolean prop, so a move
-    re-renders two cards.
+    re-renders two cards. ⇧⌘Enter (`board.openSplit`) shares its chord with Maximize: the board's
+    scope is innermost, so on the board it wins, and the dispatcher marks every command on a chord
+    it handled for the menu de-dupe, so Maximize doesn't also run.
   - *Ticket pane.* The tabs are a `role=tablist` over `visibleTabs` (built-in tabs, then plugin
     tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
     scroll the current tab's own scroller. `i` focuses the composer, and Escape there hands focus

@@ -36,6 +36,7 @@ import {
   openFile,
   openTerminal,
   openTicket,
+  openTicketInNewSplit,
   paneInDirection,
   paneLabel,
   PANE_MIN_WIDTH,
@@ -246,6 +247,42 @@ describe("openTicket (the click-a-card rule)", () => {
     expect(openTicket(st(row("r", [B, T("A-1")]), "B", "B"), "A-2").zoomedId).toBeNull();
     expect(openTicket(st(row("r", [B, T("A-1")]), "B", "B"), "A-9").zoomedId).toBeNull();
     expect(openTicket(st(row("r", [B, T("A-1")]), "A-1", "A-1"), "A-1").zoomedId).toBe("A-1");
+  });
+});
+
+describe("openTicketInNewSplit (⇧⌘↩ on a card)", () => {
+  test("opens a new pane right of the ticket pane beside the board, splitting its space", () => {
+    const s = valid(openTicketInNewSplit(st(row("r", [B, T("A-1")], [0.6, 0.4]), "B"), "A-2"));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.2, A-2 0.2]");
+    expect(focusedLabel(s)).toBe("A-2");
+    expect(s.focusedId).not.toBe("A-1");
+  });
+
+  test("splits the ticket pane openTicket would replace, not the last one in the row", () => {
+    const s = valid(openTicketInNewSplit(st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25])), "A-3"));
+    expect(shape(s.root)).toBe("row[board 0.5, A-1 0.125, A-3 0.125, A-2 0.25]");
+  });
+
+  test("with tickets stacked beside the board, splits the top one sideways", () => {
+    const s = valid(openTicketInNewSplit(st(row("r", [B, col("c", [T("A-1"), T("A-2")])])), "A-3"));
+    expect(shape(s.root)).toBe("row[board 0.5, col[row[A-1 0.5, A-3 0.5] 0.5, A-2 0.5] 0.5]");
+  });
+
+  test("with only the board, opens beside it as a click would", () => {
+    const s = valid(openTicketInNewSplit(defaultPanes(), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.4]");
+    expect(focusedLabel(s)).toBe("A-1");
+  });
+
+  test("an already-open ticket is focused, not opened twice", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")]), "B");
+    const s = valid(openTicketInNewSplit(start, "A-2"));
+    expect(shape(s.root)).toBe(shape(start.root));
+    expect(s.focusedId).toBe("A-2");
+  });
+
+  test("ends a zoom so the new pane is visible", () => {
+    expect(openTicketInNewSplit(st(row("r", [B, T("A-1")]), "A-1", "A-1"), "A-2").zoomedId).toBeNull();
   });
 });
 

@@ -469,17 +469,37 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
     return normalize({ root, focusedId: existing.id, zoomedId: zoomFor(state, existing.id) });
   }
   const content: PaneContent = { kind: "ticket", ticketKey: key, tab: tab ?? "summaries" };
+  const target = ticketPaneBesideBoard(state.root);
+  if (target) return normalize({ root: setLeafContent(state.root, target.id, content), focusedId: target.id, zoomedId: zoomFor(state, target.id) });
   const board = boardLeaf(state.root)!;
-  const path = pathTo(state.root, board.id)!;
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(allIds(state.root)), content };
+  return normalize({ root: insertLeaf(state.root, board.id, "right", leaf, 1 - BOARD_SHARE), focusedId: leaf.id, zoomedId: null });
+}
+
+/**
+ * The ticket pane a card click replaces: the first one to the right of the board, in the next
+ * sibling of the nearest row split where the board isn't last. Null when there's none.
+ */
+function ticketPaneBesideBoard(root: PaneNode): PaneLeaf | null {
+  const board = boardLeaf(root)!;
+  const path = pathTo(root, board.id)!;
   for (let k = path.length - 1; k >= 0; k--) {
     const { split, index } = path[k]!;
     if (split.dir !== "row" || index === split.children.length - 1) continue;
-    const target = leaves(split.children[index + 1]!).find((l) => l.content.kind === "ticket");
-    if (target) return normalize({ root: setLeafContent(state.root, target.id, content), focusedId: target.id, zoomedId: zoomFor(state, target.id) });
-    break;
+    return leaves(split.children[index + 1]!).find((l) => l.content.kind === "ticket") ?? null;
   }
-  const leaf: PaneLeaf = { type: "leaf", id: freshId(allIds(state.root)), content };
-  return normalize({ root: insertLeaf(state.root, board.id, "right", leaf, 1 - BOARD_SHARE), focusedId: leaf.id, zoomedId: null });
+  return null;
+}
+
+/**
+ * ⇧⌘Enter on a card: like openTicket, but instead of replacing the ticket pane beside the board it
+ * opens a new pane to that pane's right ([board, A] → [board, A, B]), splitting A's space 50/50.
+ * An already-open ticket is focused, and with no ticket pane beside the board it's openTicket.
+ */
+export function openTicketInNewSplit(state: PaneState, key: string): PaneState {
+  const target = ticketLeafByKey(state.root, key) ? null : ticketPaneBesideBoard(state.root);
+  if (!target) return openTicket(state, key);
+  return dock(state, null, target.id, "right", { kind: "ticket", ticketKey: key, tab: "summaries" });
 }
 
 /**

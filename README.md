@@ -135,6 +135,7 @@ lines. The ones you'll use most:
 |---|---|
 | h j k l, or the arrows | Move between cards on the board |
 | Enter | Open the card beside the board, with the keyboard in its pane |
+| ⇧⌘↩ on a card | Open the card in a new pane to the right of the one beside the board, keeping that ticket open |
 | ⇧⌘[ / ⇧⌘], or 1–9 | Switch tabs in a ticket pane |
 | ⌥⌘ + arrows, or ⌃h ⌃j ⌃k ⌃l | Move to the pane in that direction (left from the board goes to the sidebar) |
 | j k, Space, g G | Scroll a ticket's tab (in the sidebar and lists, j and k move between items) |
@@ -142,7 +143,7 @@ lines. The ones you'll use most:
 | / | Search the board |
 | ⌘P | Open any file in the project or ticket (the palette's `@` file browser) |
 | ⌘W | Close the focused pane |
-| ⇧⌘↩ | Maximize or restore the focused pane |
+| ⇧⌘↩ | Maximize or restore the focused pane (on the board, it opens the card instead) |
 | ⇧⌘O | Pop the focused ticket or terminal out into its own window (in that window, put it back on the board) |
 | ⌘= | Equalize panes: every pane but the board gets an even share beside its siblings |
 | Esc | Close a menu or dialog, end a zoom, or close the ticket pane |
