@@ -3,6 +3,8 @@
 // client renders the blocks and tokens with its own primitives (DOM on desktop, <Text> on iOS), so
 // agent output can never inject markup.
 
+import { parseFileLink } from "../fileLinks";
+
 export type Block =
   | { t: "p"; text: string }
   | { t: "h"; level: number; text: string }
@@ -135,7 +137,11 @@ export type InlineToken =
 
 const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)/g;
 
-/** Inline markup of one line. Links are only produced for http(s) URLs; other [label](x) keep the label. */
+/**
+ * Inline markup of one line. [label](x) is a link when x is http(s) or a file link (`harness://file/…`,
+ * or a path with no scheme; see parseFileLink); other targets (javascript:, data:, anchors) keep only
+ * the label. Bare URLs are autolinked only for http(s).
+ */
 export function inlineTokens(text: string): InlineToken[] {
   const out: InlineToken[] = [];
   let last = 0;
@@ -148,7 +154,7 @@ export function inlineTokens(text: string): InlineToken[] {
     else if (m[3]) out.push({ t: "em", text: s.slice(1, -1) });
     else if (m[4]) {
       const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s)!;
-      out.push(/^https?:/.test(mm[2]!) ? { t: "link", text: mm[1]!, url: mm[2]! } : { t: "text", text: mm[1]! });
+      out.push(/^https?:/.test(mm[2]!) || parseFileLink(mm[2]!) ? { t: "link", text: mm[1]!, url: mm[2]! } : { t: "text", text: mm[1]! });
     } else if (m[5]) out.push({ t: "link", text: s, url: s });
     last = idx + s.length;
   }

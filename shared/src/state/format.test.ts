@@ -165,6 +165,31 @@ test("inline tokens: code, bold, italic, http links; non-http link targets keep 
   ]);
 });
 
+test("inline tokens: file links and scheme-less paths become links as written; other schemes and anchors stay text", () => {
+  expect(inlineTokens("see [app.ts](harness://file/src/app.ts#L102-L115), [x](./src/x.ts), [y](src/y.ts#L10-L20) and [abs](/Users/me/a.ts)")).toEqual([
+    { t: "text", text: "see " },
+    { t: "link", text: "app.ts", url: "harness://file/src/app.ts#L102-L115" },
+    { t: "text", text: ", " },
+    { t: "link", text: "x", url: "./src/x.ts" },
+    { t: "text", text: ", " },
+    { t: "link", text: "y", url: "src/y.ts#L10-L20" },
+    { t: "text", text: " and " },
+    { t: "link", text: "abs", url: "/Users/me/a.ts" },
+  ]);
+  expect(inlineTokens("[a](javascript:alert(1)) [b](data:text/html,x) [c](#top) [d](mailto:a@b.c) [e](../../etc/passwd)")).toEqual([
+    { t: "text", text: "a" },
+    { t: "text", text: ") " },
+    { t: "text", text: "b" },
+    { t: "text", text: " " },
+    { t: "text", text: "c" },
+    { t: "text", text: " " },
+    { t: "text", text: "d" },
+    { t: "text", text: " " },
+    { t: "text", text: "e" },
+  ]);
+  expect(inlineTokens("open harness://file/src/a.ts now")).toEqual([{ t: "text", text: "open harness://file/src/a.ts now" }]);
+});
+
 test("tabs: plugin tab ids; the Tickets tab only on conductors; plugin tabs that don't apply fall back", () => {
   expect(parsePluginTab(pluginTabRoute("git", "changes"))).toEqual({ pluginId: "git", tabId: "changes" });
   expect(parsePluginTab("details")).toBeNull();
