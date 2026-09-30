@@ -1338,6 +1338,11 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   border-radius: var(--radius-sm);
   min-width: 0;
 }
+/* The bare select draws no ring of its own, so the picker around it shows the keyboard focus. */
+.project-picker:has(.select.bare:focus-visible) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
 .select.bare {
   border: 0;
   background-color: transparent;

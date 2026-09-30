@@ -25,6 +25,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the Mac, dragging a pane between two of its neighbors in the same row or column keeps every
   pane's size. Before, the widths were reshuffled on drop.
 
+### Fixed
+
+- On the Mac, the project picker in a New session pane now shows a focus ring when you Tab to it.
+- On the Mac, switches can be reached with Tab and turned on or off with Space. This includes Skip
+  agent review in a New session's Options, the switches in Settings and project settings, and the
+  one in a ticket's chat bar. Each shows a focus ring while it has the keyboard.
+
 ### Removed
 
 - On the Mac, View → Zoom In and Zoom Out (⌘= and ⌘-) are gone, since ⌘= now equalizes panes.

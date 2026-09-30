@@ -556,6 +556,39 @@ try {
   // Options: the same TicketSettings rows as Details; picks PATCH the draft (debounced).
   await js(`document.querySelector('${inPane(printId, "[data-testid=draft-options]")}').click()`);
   await until("Options open", () => exists(inPane(printId, "[data-testid=ticket-settings]")));
+  // From the keyboard: the project picker shows a focus ring, and Tab reaches the Skip agent review
+  // switch, which Space toggles. Real Tab and Space key events, so :focus-visible applies.
+  {
+    const tab = (shift = false) => app!.key("Tab", "Tab", 9, shift ? 8 : 0);
+    const space = async () => {
+      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32, text: " " });
+      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
+    };
+    /** Tab (or ⇧Tab) until the focus matches `sel` in the pane, at most `max` stops. */
+    const tabTo = async (sel: string, shift: boolean, max = 25) => {
+      for (let i = 0; i < max; i++) {
+        if (await js<boolean>(`!!document.activeElement?.matches('${inPane(printId, sel)}')`)) return true;
+        await tab(shift);
+      }
+      return js<boolean>(`!!document.activeElement?.matches('${inPane(printId, sel)}')`);
+    };
+    await js(`document.querySelector('${inPane(printId, ".draft-prompt")}').focus()`);
+    const onPicker = await tabTo(".project-picker select", true, 6);
+    const pickerRing = await js<string>(`getComputedStyle(document.querySelector('${inPane(printId, ".project-picker")}')).boxShadow`);
+    check("⇧Tab reaches the project picker, which shows a focus ring", onPicker && pickerRing !== "none", `${onPicker} ${pickerRing}`);
+
+    await js(`document.querySelector('${inPane(printId, ".draft-prompt")}').focus()`);
+    const sw = `[data-testid=ticket-settings] input[role=switch]`;
+    const onSwitch = await tabTo(sw, false);
+    const trackRing = await js<string>(`getComputedStyle(document.querySelector('${inPane(printId, `${sw} + .switch-track`)}')).boxShadow`);
+    check("Tab reaches the Skip agent review switch, which shows a focus ring", onSwitch && trackRing !== "none", `${onSwitch} ${trackRing}`);
+    await space();
+    const flipped = await js<boolean>(`document.querySelector('${inPane(printId, sw)}').checked`);
+    const saved = await until("skipAgentReview saved", async () => (await api<{ ticket: DT & { skipAgentReview?: boolean } }>("GET", `/tickets/${printDraft.key}`)).ticket.skipAgentReview === true || null).catch(() => false);
+    check("Space toggles the switch and saves Skip agent review on the draft", flipped && !!saved, `${flipped} ${saved}`);
+    await space();
+    await until("skipAgentReview cleared", async () => (await api<{ ticket: DT & { skipAgentReview?: boolean } }>("GET", `/tickets/${printDraft.key}`)).ticket.skipAgentReview === false || null).catch(() => null);
+  }
   const comboClose = () => js(`document.querySelector(".model-combo") && window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
   /** Open the combined Model combobox inside `scope` and list its rows ("# Driver" for headings). */
   const comboRows = async (scope: string) => {
