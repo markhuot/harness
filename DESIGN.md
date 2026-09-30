@@ -1603,7 +1603,11 @@ Settings, project settings, or on the board route the pane workspace.
     (`{ label, run }`), so a ticket's actions read as its buttons do: ticket.approve is "Approve and
     merge" or "Approve and open PR", and the split button's other choices are `ticket.land.merge`,
     `.pr` and `.custom` (`landCommands` in `state/approveMenu.ts` drops the one the primary already
-    names). The registry label, and a spec's `keywords` ("Reopen ticket" for Re-open…), still match. Loaded tickets match at once, and
+    names). The registry label, and a spec's `keywords` ("Reopen ticket" for Re-open…), still match.
+    Where the focus was is read generously: a pane that has the focus itself (a click on its
+    title or text) counts as its command area inside it, and a board card borrows the Actions (only
+    those, never its keys) of its ticket's open pane (`data-pane-ticket`), since a click on a card
+    opens the ticket but leaves the focus on the card. Loaded tickets match at once, and
     `searchTickets` adds the rest after 150 ms. `rankCommands` (`state/palette.ts`) ranks
     subsequence matches, with a label prefix first, then word starts, then runs, then scattered
     letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`

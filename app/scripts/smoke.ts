@@ -1820,7 +1820,8 @@ try {
       const firstId = await js<string | null>(`document.querySelector("[data-testid=palette-row][data-kind=command]")?.dataset.id ?? null`);
       check("an empty palette on a ticket lists its actions before the other commands", !!firstId?.startsWith("cmd:ticket."), firstId ?? "");
       await type("[data-testid=palette-input]", buttonText);
-      const byButton = await until("button-named row", () => hl().then((id) => id === "cmd:ticket.approve" && id)).catch(() => null);      check(`typing the Approve button's text ("${buttonText}") finds its command, labeled the same`, !!buttonText && !!byButton && (await hlText()) === buttonText, `${byButton} "${await hlText()}"`);
+      const byButton = await until("button-named row", () => hl().then((id) => id === "cmd:ticket.approve" && id)).catch(() => null);
+      check(`typing the Approve button's text ("${buttonText}") finds its command, labeled the same`, !!buttonText && !!byButton && (await hlText()) === buttonText, `${byButton} "${await hlText()}"`);
       // Request changes runs the button's action: its notes modal opens over the ticket.
       await type("[data-testid=palette-input]", "request changes");
       await until("request changes row", () => hl().then((id) => id === "cmd:ticket.requestChanges" && id));
@@ -1829,6 +1830,35 @@ try {
       check("Request changes from the palette opens the same notes modal as the button", modal === "Request changes", modal ?? "no modal");
       await press.escape();
       await until("modal closed", async () => !(await exists(".modal")));
+
+      // Where a click leaves the focus: on the card (the ticket opens beside the board), or on the
+      // ticket pane itself (its title isn't focusable). The ticket's actions are there from both.
+      const realClick = async (sel: string) => {
+        const r = await js<{ x: number; y: number } | null>(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: "nearest" }); const b = e.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + Math.min(12, b.height / 2) }; })()`);
+        if (!r) return false;
+        await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.x, y: r.y });
+        await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: r.x, y: r.y, button: "left", buttons: 1, clickCount: 1 });
+        await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: r.x, y: r.y, button: "left", buttons: 0, clickCount: 1 });
+        return true;
+      };
+      const paletteRows = async () => {
+        await press.palette();
+        await until("palette", () => exists("[data-testid=palette-input]"));
+        const ids = await js<string[]>(`[...document.querySelectorAll("[data-testid=palette-row][data-kind=command]")].map(r => r.dataset.id)`);
+        await press.escape();
+        await until("palette closed", async () => !(await exists("[data-testid=palette]")));
+        return ids;
+      };
+      await realClick(`.board-pane .card[data-key="${reviewKey}"]`);
+      await until("ticket pane", async () => (await openTickets()).includes(reviewKey!));
+      const onCard = await js<boolean>(`document.activeElement?.closest(".card")?.dataset.key === ${JSON.stringify(reviewKey)}`);
+      const fromCard = await paletteRows();
+      check("clicking a review card keeps the focus on it, and the palette still offers its ticket's Approve", onCard && fromCard.includes("cmd:ticket.approve") && fromCard.includes("cmd:ticket.requestChanges"), `${onCard} ${fromCard.slice(0, 4).join(",")}`);
+      check("…but only the ticket's Actions: its tab commands stay with its pane", !fromCard.includes("cmd:tab.next"));
+      await realClick(".pane-ticket .detail-title");
+      const onPane = await js<boolean>(`document.activeElement?.matches(".pane.pane-ticket") ?? false`);
+      const fromPane = await paletteRows();
+      check("clicking a ticket pane's title (focus on the pane itself) still offers its Approve", onPane && fromPane.includes("cmd:ticket.approve") && fromPane.includes("cmd:tab.next"), `${onPane} ${fromPane.slice(0, 4).join(",")}`);
     }
 
     // A done ticket: "reopen ticket" finds Re-open…, and Enter opens its notes modal.
