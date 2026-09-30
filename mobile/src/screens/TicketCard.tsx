@@ -7,7 +7,7 @@ import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
-import { isConductor, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, keyLabel, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { childrenOf, dependencyStates, dimOnBoard, hasCustomDriver, latestSummary, plainText, progressOf, shortToolName, STATUS_LABEL, type State } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO, RADIUS } from "../theme/tokens";
@@ -17,6 +17,7 @@ import { ConductorRollup } from "../ui/Conductor";
 import { Icon } from "../ui/Icon";
 import { haptic } from "../ui/haptics";
 import { pick } from "../ui/pick";
+import { TicketKey } from "../ui/TicketKey";
 
 
 export interface CardProps {
@@ -53,11 +54,11 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
     >
       <View style={styles.top}>
         {showProject && project && <ProjectKey k={project.key} color={project.color} size="sm" />}
-        <Text style={[styles.key, { color: c.text3 }]}>{t.key}</Text>
+        <TicketKey ticket={t} style={styles.key} />
         {parent && (
           <View style={[styles.parentChip, { backgroundColor: c.violetSoft }]}>
             <Text style={{ fontSize: 11, color: c.violet, fontFamily: MONO }} numberOfLines={1}>
-              ↳ {parent.key}
+              ↳ {keyLabel(parent)}
             </Text>
           </View>
         )}
@@ -106,7 +107,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       {deps.length > 0 && (
         <View style={styles.wrap}>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} />
+            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} />
           ))}
         </View>
       )}
@@ -124,7 +125,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
     haptic("heavy");
     if (draft) {
       const v = await pick<string>({
-        title: `${t.key} · Draft`,
+        title: `${keyLabel(t)} · Draft`,
         choices: [
           { value: "discard", label: "Discard draft", destructive: true },
           { value: "copy", label: "Copy key" },
@@ -135,11 +136,11 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       return;
     }
     const v = await pick<string>({
-      title: `${t.key} · ${t.title}`.slice(0, 90),
+      title: `${keyLabel(t)} · ${t.title}`.slice(0, 90),
       choices: [
         ...TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ value: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` })),
         ...(t.status !== "done" ? [{ value: "top", label: "Move to top" }, { value: "bottom", label: "Move to bottom" }] : []),
-        ...(parent ? [{ value: "parent", label: `Open ${parent.key}` }] : []),
+        ...(parent ? [{ value: "parent", label: `Open ${keyLabel(parent)}` }] : []),
         { value: "copy", label: "Copy key" },
       ],
     });
@@ -158,7 +159,7 @@ export const TicketCard = memo(function TicketCard({ ticket: t, state, showProje
       onLongPress={() => void menu()}
       delayLongPress={350}
       accessibilityRole="button"
-      accessibilityLabel={`${t.key} ${t.title}${draft ? ", draft" : t.pendingApproval ? ", needs approval" : t.status === "blocked" ? ", blocked" : ""}`}
+      accessibilityLabel={`${keyLabel(t)} ${t.title}${draft ? ", draft" : t.pendingApproval ? ", needs approval" : t.status === "blocked" ? ", blocked" : ""}`}
       accessibilityHint={draft ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it."}
       accessibilityActions={draft ? [] : TICKET_STATUSES.filter((st) => st !== t.status).map((st) => ({ name: `move:${st}`, label: `Move to ${STATUS_LABEL[st]}` }))}
       onAccessibilityAction={(e) => e.nativeEvent.actionName.startsWith("move:") && onMove(t, e.nativeEvent.actionName.slice(5) as TicketStatus)}
@@ -182,8 +183,8 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
 const styles = StyleSheet.create({
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: RADIUS.lg, padding: 13, gap: 8 },
   top: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 21 },
-  key: { fontFamily: MONO, fontSize: 12.5 },
-  parentChip: { paddingHorizontal: 6, height: 19, borderRadius: 5, justifyContent: "center", maxWidth: 120 },
+  key: { flexShrink: 1 },
+  parentChip: { paddingHorizontal: 6, height: 19, borderRadius: 5, justifyContent: "center", maxWidth: 150, flexShrink: 1 },
   title: { fontWeight: "500", lineHeight: 21 },
   note: { flexDirection: "row", gap: 7, alignItems: "flex-start", borderRadius: RADIUS.sm + 2, paddingVertical: 7, paddingHorizontal: 9 },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" },

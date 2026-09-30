@@ -9,7 +9,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { HarnessApiError, HarnessClient, type HarnessEvent, type HarnessSocket, type TicketDetail, type TicketPage } from "@harness/shared";
+import { HarnessApiError, HarnessClient, type HarnessEvent, type HarnessSocket, type RelatedTicket, type TicketDetail, type TicketPage } from "@harness/shared";
 import { DONE_PAGE_SIZE, initialState, LIVE_STATUSES, reducer, scopeOf, scopeProject, type Action, type State } from "@harness/shared/state";
 import { describeError, isUnauthorized } from "../lib/connection";
 import { BoardLoader } from "../lib/boardLoader";
@@ -43,6 +43,11 @@ export interface Store {
   loadDetail: (key: string) => Promise<TicketDetail>;
   /** Keep this key resolved while mounted (a screen showing a ticket that may not be loaded). */
   watchKey: (key: string) => () => void;
+  /**
+   * Remote IDs from the details fetched so far (lib/related): each ticket's relatedTickets by
+   * ticket id, and the tickets a remote-only key points to by the upper-cased key.
+   */
+  related: { byTicket: Record<string, RelatedTicket[]>; byRemoteKey: Record<string, RelatedTicket[]> };
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -93,7 +98,17 @@ export function StoreProvider({ baseUrl, token, toast, children }: { baseUrl: st
   const { prefs } = useApp();
   const scopeRef = useRef(scopeOf(prefs.boardProject));
   const loader = useMemo(() => new BoardLoader({ client, dispatch, getState: () => stateRef.current, describe: (e) => describeError(e, baseUrl) }), [client, baseUrl]);
-  const details = useMemo(() => new DetailFetcher({ client, dispatch }), [client]);
+  const [related, setRelated] = useState<Store["related"]>({ byTicket: {}, byRemoteKey: {} });
+  const details = useMemo(
+    () =>
+      new DetailFetcher({
+        client,
+        dispatch,
+        onRelated: (id, list) => setRelated((r) => ({ ...r, byTicket: { ...r.byTicket, [id]: list } })),
+        onRemoteKey: (key, list) => setRelated((r) => (!list.length && !r.byRemoteKey[key] ? r : { ...r, byRemoteKey: { ...r.byRemoteKey, [key]: list } })),
+      }),
+    [client],
+  );
   useEffect(() => () => loader.dispose(), [loader]);
 
   const refresh = useCallback(async () => {
@@ -200,8 +215,8 @@ export function StoreProvider({ baseUrl, token, toast, children }: { baseUrl: st
   }, []);
 
   const value = useMemo<Store>(
-    () => ({ state, dispatch, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey }),
-    [state, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey],
+    () => ({ state, dispatch, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey, related }),
+    [state, client, socket, onEvent, epoch, refresh, authError, loadError, toast, baseUrl, loader, setBoardScope, loadDetail, watchKey, related],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

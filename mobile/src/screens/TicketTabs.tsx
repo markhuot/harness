@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import type { Ticket } from "@harness/shared";
+import { keyLabel, type Ticket } from "@harness/shared";
 import {
   attentionOf,
   childrenOfTicket,
@@ -31,6 +31,9 @@ import { ProgressBar } from "../ui/Conductor";
 import { useStickToBottom } from "../ui/stickToBottom";
 import { Prop } from "../ui/Prop";
 import { TicketSettings } from "../ui/TicketSettings";
+import { TicketKey } from "../ui/TicketKey";
+import { RelatedTicketRows } from "../ui/RelatedTickets";
+import { relatedOf } from "../lib/related";
 
 export function useOpenTicket() {
   const router = useRouter();
@@ -62,7 +65,7 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           <SectionTitle>Depends on</SectionTitle>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
+            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
           ))}
         </View>
       )}
@@ -185,7 +188,7 @@ function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: s
       ]}
     >
       <View style={{ flexDirection: "row", gap: 7, alignItems: "center" }}>
-        <Text style={{ fontFamily: MONO, fontSize: 12.5, color: c.text3 }}>{ch.key}</Text>
+        <TicketKey ticket={ch} style={{ flexShrink: 1, maxWidth: "45%" }} />
         <Text style={{ flex: 1, color: c.text, fontSize: 14.5, fontWeight: "500" }} numberOfLines={2}>
           {ch.title || "Untitled"}
         </Text>
@@ -215,7 +218,7 @@ function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: s
       {(deps.length > 0 || showDriver || ch.model) && (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => onOpen(d.ticket?.key ?? d.key)} />
+            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => onOpen(d.ticket?.key ?? d.key)} />
           ))}
           <View style={{ flex: 1 }} />
           {showDriver && <DriverBadge driver={ch.driver} />}
@@ -231,11 +234,12 @@ function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: s
 // ---------------------------------------------------------------------------
 
 export function DetailsTab({ ticket }: { ticket: Ticket }) {
-  const { state, client } = useStore();
+  const { state, client, related: fetchedRelated } = useStore();
   const act = useAction();
   const c = useColors();
   const now = useNow();
   const open = useOpenTicket();
+  const related = useMemo(() => relatedOf(state.tickets, ticket, fetchedRelated.byTicket[ticket.id]), [state.tickets, ticket, fetchedRelated.byTicket]);
   const [title, setTitle] = useState(ticket.title);
   const [description, setDescription] = useState(ticket.description);
   useEffect(() => setTitle(ticket.title), [ticket.title]);
@@ -276,7 +280,7 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
               {dependents.map((d) => (
                 <Pressable key={d.key} onPress={() => open(d.key)} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
                   {d.ticket && <StatusDot status={d.ticket.status} />}
-                  <Text style={{ fontFamily: MONO, color: c.accentText, fontSize: 13.5 }}>{d.key}</Text>
+                  <Text style={{ fontFamily: MONO, color: c.accentText, fontSize: 13.5 }}>{d.ticket ? keyLabel(d.ticket) : d.key}</Text>
                 </Pressable>
               ))}
             </View>
@@ -296,11 +300,22 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         )}
         {ticket.externalRef && (
           <Prop label="External">
-            <Text style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14 }} onPress={ticket.externalRef.url ? () => void Linking.openURL(ticket.externalRef!.url!) : undefined}>
+            <Text
+              style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14, fontFamily: MONO, textAlign: "right", flexShrink: 1 }}
+              accessibilityRole={ticket.externalRef.url ? "link" : undefined}
+              onPress={ticket.externalRef.url ? () => void Linking.openURL(ticket.externalRef!.url!) : undefined}
+            >
               {ticket.externalRef.key}
-              <Text style={{ color: c.text3 }}> · via {ticket.externalRef.source}</Text>
+              {ticket.externalRef.url ? " ↗" : ""}
+              <Text style={{ color: c.text3, fontFamily: undefined }}> · {ticket.externalRef.source === "manual" ? "set by hand" : `via ${ticket.externalRef.source}`}</Text>
             </Text>
           </Prop>
+        )}
+        {related.length > 0 && (
+          <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
+            <Text style={{ color: c.text2, fontSize: 14, paddingHorizontal: 13, paddingTop: 11, paddingBottom: 4 }}>{ticket.externalRef ? `Also linked to ${ticket.externalRef.key}` : `Linked to remote ID ${ticket.key}`}</Text>
+            <RelatedTicketRows related={related} onOpen={(key) => open(key)} />
+          </View>
         )}
         <Prop label="Allowed tools">
           {ticket.allowedTools.length ? (
