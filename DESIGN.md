@@ -658,8 +658,10 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   agent launched" notice ends with that result). It also closes stdin when the turn called a
   finishing tool (`submit_for_review`, `block`, `review_decision`, `dispatch_ticket`,
   `decline_work`), so a dev server left running doesn't hold the run open, and when the result
-  is an error. A wait posts a status line and lasts at most 30 min from the latest turn's end
-  (`backgroundWaitMs`). `total_cost_usd` is cumulative across turns, so each `usage` is charged
+  is an error. A wait posts a status line and has no time limit (a monitor or an import can
+  run for days; `backgroundWaitMs` sets one, counted from the latest turn's end, for tests). The
+  work prompt tells the agent to pair a long background job with a check-in timer (a background
+  `sleep`) so it wakes periodically instead of sitting silent; a human can stop the run. `total_cost_usd` is cumulative across turns, so each `usage` is charged
   the difference from the previous result. Before this, a work run whose agent ended its turn
   to wait on a background test run was cut short, and the orchestrator auto-submitted the
   "I'll be notified…" text (HARNESS-81).

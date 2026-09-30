@@ -28,7 +28,10 @@ export interface ClaudeCodeDriverOptions {
   env?: Record<string, string | undefined>;
   /** How long login() waits for the CLI to print its URL */
   loginUrlTimeoutMs?: number;
-  /** How long a turn that ended with background tasks still running waits for them (default 30 min) */
+  /**
+   * How long a turn that ended with background tasks still running waits for them. Unset waits
+   * as long as they run (a monitor or an import can take days); a human can stop the run.
+   */
   backgroundWaitMs?: number;
 }
 
@@ -37,7 +40,6 @@ export interface ClaudeCodeDriverOptions {
  * still running (a dev server started to check the UI never finishes on its own).
  */
 const FINISHING_TOOLS = new Set(["submit_for_review", "block", "review_decision", "dispatch_ticket", "decline_work"]);
-const BACKGROUND_WAIT_MS = 30 * 60_000;
 
 function formatWait(ms: number): string {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.max(1, Math.round(ms / 1000))}s`;
@@ -754,7 +756,7 @@ export class ClaudeCodeDriver implements Driver {
 
     // stdin stays open while the turn runs. Closing it lets the CLI exit after the current
     // turn and kills any background task still running.
-    const waitMs = this.opts.backgroundWaitMs ?? BACKGROUND_WAIT_MS;
+    const waitMs = this.opts.backgroundWaitMs;
     let stdinOpen = true;
     let waitTimer: ReturnType<typeof setTimeout> | null = null;
     let waitedOut = false;
@@ -806,8 +808,8 @@ export class ClaudeCodeDriver implements Driver {
           // on stdin (it starts the next turn with it), or while the agent's own background
           // tasks run (a test suite it moved to the background, a sub-agent): their completion
           // starts the next turn. A finished run, an error or a turn with nothing left ends it;
-          // an unseen message then becomes a queued run. The wait limit counts from the latest
-          // turn's end.
+          // an unseen message then becomes a queued run. There's no wait limit unless
+          // backgroundWaitMs sets one (counted from the latest turn's end).
           const waiting = [...parser.runningTasks.values()];
           if (parser.finished || parser.result?.isError) closeStdin();
           else if (req.input?.pending) {
@@ -817,13 +819,16 @@ export class ClaudeCodeDriver implements Driver {
           else {
             events.push({
               type: "status",
-              text: `Waiting for ${waiting.length === 1 ? "a background task" : `${waiting.length} background tasks`} to finish (${waiting.join("; ")}), up to ${formatWait(waitMs)}.`,
+              text: `Waiting for ${waiting.length === 1 ? "a background task" : `${waiting.length} background tasks`} to finish (${waiting.join("; ")})${waitMs === undefined ? "" : `, up to ${formatWait(waitMs)}`}.`,
             });
             if (waitTimer) clearTimeout(waitTimer);
-            waitTimer = setTimeout(() => {
-              waitedOut = true;
-              closeStdin();
-            }, waitMs);
+            waitTimer = null;
+            if (waitMs !== undefined) {
+              waitTimer = setTimeout(() => {
+                waitedOut = true;
+                closeStdin();
+              }, waitMs);
+            }
           }
         }
         // Hold events back until the session has started so a failed --resume can be
@@ -853,7 +858,7 @@ export class ClaudeCodeDriver implements Driver {
         yield { type: "error", message };
         throw new Error(message);
       }
-      if (waitedOut) {
+      if (waitedOut && waitMs !== undefined) {
         yield { type: "status", text: `Background tasks were still running after ${formatWait(waitMs)}, so the turn ended and they were stopped.` };
       }
       return "done";
