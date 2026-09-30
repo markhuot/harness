@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.1551](https://github.com/markhuot/harness/releases/tag/app-20260930.1551) - 2026-09-30
+
 ### Added
 
 - The iPhone and iPad app is on TestFlight, so any iPhone or iPad can install it from the public
