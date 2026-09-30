@@ -600,11 +600,17 @@ export function composeToTicket(state: PaneState, composeId: string, ticketKey: 
 /**
  * Dock `moving` (an existing leaf, re-docked with `content`) or a new leaf showing `content` on the
  * `zone` half of `targetId`, splitting the target's space 50/50. Docking against the board leaves
- * it BOARD_SHARE instead, the same split a card click makes. Ends any zoom.
+ * it BOARD_SHARE instead, the same split a card click makes. A pane moved along its own split's
+ * axis keeps its size instead (reorderSibling). Ends any zoom.
  */
 function dock(state: PaneState, moving: PaneLeaf | null, targetId: string, zone: DropZone, content: PaneContent): PaneState {
   const target = findLeaf(state.root, targetId);
   if (!target || moving?.id === targetId) return state;
+  if (moving) {
+    const reordered = reorderSibling(state.root, moving, targetId, zone, content);
+    if (reordered === state.root) return state;
+    if (reordered) return normalize({ root: reordered, focusedId: moving.id, zoomedId: null });
+  }
   const share = target.content.kind === "board" ? 1 - BOARD_SHARE : 0.5;
   let root = state.root;
   let leaf: PaneLeaf;
@@ -615,6 +621,27 @@ function dock(state: PaneState, moving: PaneLeaf | null, targetId: string, zone:
     leaf = { type: "leaf", id: freshId(allIds(root)), content };
   }
   return normalize({ root: insertLeaf(root, targetId, zone, leaf, share), focusedId: leaf.id, zoomedId: null });
+}
+
+/**
+ * A pane moved beside a sibling in its own split, along that split's axis (dragging the right of
+ * three panes between the other two): it changes places and every pane keeps its size. Returns
+ * `root` itself when the order and content don't change, and null when the move isn't a reorder
+ * (dock splits the target's space instead).
+ */
+function reorderSibling(root: PaneNode, moving: PaneLeaf, targetId: string, zone: DropZone, content: PaneContent): PaneNode | null {
+  const from = pathTo(root, moving.id)?.at(-1);
+  const to = pathTo(root, targetId)?.at(-1);
+  if (!from || !to || from.split.id !== to.split.id || from.split.dir !== DIR_OF[zone]) return null;
+  const { split } = from;
+  const children = split.children.filter((_, i) => i !== from.index);
+  const sizes = split.sizes.filter((_, i) => i !== from.index);
+  const at = children.findIndex((c) => c.id === targetId) + (AFTER[zone] ? 1 : 0);
+  const sameContent = JSON.stringify(content) === JSON.stringify(moving.content);
+  if (at === from.index && sameContent) return root;
+  children.splice(at, 0, sameContent ? moving : { ...moving, content });
+  sizes.splice(at, 0, split.sizes[from.index]!);
+  return replaceNode(root, split.id, () => ({ ...split, children, sizes }));
 }
 
 /**
@@ -969,34 +996,81 @@ export function minSize(node: PaneNode, dir: SplitDir): number {
   return node.dir === dir ? mins.reduce((a, b) => a + b, 0) : Math.max(...mins);
 }
 
+const sumRange = (xs: readonly number[], from: number, to: number) => xs.slice(from, to).reduce((a, b) => a + b, 0);
+
 /**
  * New sizes while dragging the divider between child `index` and `index + 1` by `deltaPx`, in a
- * split `totalPx` long. Only those two children change, and neither goes below its minimum
- * (`minPx`, or `[before, after]` for different minimums); when the pair is too small for both
- * minimums it's shared in proportion to them (equally for a single `minPx`).
+ * split `totalPx` long. Every child before the divider shares the room on its side and every child
+ * after it the room on the other, each side scaling in proportion (so dragging the last divider
+ * left grows the last pane and shrinks all the others alike). With `pair` (⌥-drag) only the two
+ * children touching the divider change. No child goes below its minimum (`minPx`, or one per
+ * child): a side's children that reach it stay there while the rest keep shrinking (clampSizes),
+ * and a side can't shrink past the sum of its minimums. When there isn't room for every minimum
+ * the space is shared in proportion to them (equally for a single `minPx`).
  */
-export function resizeSplit(sizes: readonly number[], index: number, deltaPx: number, totalPx: number, minPx: number | readonly [number, number]): number[] {
+export function resizeSplit(sizes: readonly number[], index: number, deltaPx: number, totalPx: number, minPx: number | readonly number[], pair = false): number[] {
   const out = [...sizes];
   if (index < 0 || index + 1 >= sizes.length || !(totalPx > 0) || Number.isNaN(deltaPx)) return out;
-  const [minA, minB] = typeof minPx === "number" ? [minPx, minPx] : minPx;
-  const a = sizes[index]! * totalPx;
-  const pair = a + sizes[index + 1]! * totalPx;
-  const na = pair < minA + minB ? (minA + minB > 0 ? (pair * minA) / (minA + minB) : pair / 2) : Math.max(minA, Math.min(pair - minB, a + deltaPx));
-  out[index] = na / totalPx;
-  out[index + 1] = (pair - na) / totalPx;
+  const mins = sizes.map((_, i) => (typeof minPx === "number" ? minPx : (minPx[i] ?? 0)));
+  const [lo, hi] = pair ? [index, index + 2] : [0, sizes.length];
+  const mid = index + 1;
+  const before = sumRange(sizes, lo, mid) * totalPx;
+  const span = before + sumRange(sizes, mid, hi) * totalPx;
+  const [minBefore, minAfter] = [sumRange(mins, lo, mid), sumRange(mins, mid, hi)];
+  const need = minBefore + minAfter;
+  const nb = span < need ? (need > 0 ? (span * minBefore) / need : span / 2) : Math.max(minBefore, Math.min(span - minAfter, before + deltaPx));
+  /** Share `px` among children from..to-1, in proportion to their sizes, none below its minimum. */
+  const place = (from: number, to: number, px: number) =>
+    clampSizes(sizes.slice(from, to), mins.slice(from, to), px).forEach((share, j) => (out[from + j] = (share * px) / totalPx));
+  place(lo, mid, nb);
+  place(mid, hi, span - nb);
   return out;
 }
 
 /**
- * Keyboard resizing on a focused divider (role=separator): the arrows
- * along the split's axis move it 16px (64px with Shift); Home/End move it as far back/forward as it
- * goes. Returns the new sizes, or null when the key isn't a resize key for this split.
+ * Keyboard resizing on a focused divider (role=separator): the arrows along the split's axis move
+ * it 16px (64px with Shift); Home/End move it as far back/forward as it goes. `pair` (⌥) resizes
+ * only the two children touching it, as resizeSplit. Returns the new sizes, or null when the key
+ * isn't a resize key for this split.
  */
-export function keySplit(key: string, shift: boolean, dir: SplitDir, sizes: readonly number[], index: number, totalPx: number, minPx: number | readonly [number, number]): number[] | null {
+export function keySplit(
+  key: string,
+  shift: boolean,
+  dir: SplitDir,
+  sizes: readonly number[],
+  index: number,
+  totalPx: number,
+  minPx: number | readonly number[],
+  pair = false,
+): number[] | null {
   const step = shift ? 64 : 16;
   const [back, forward] = dir === "row" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
   const delta = key === back ? -step : key === forward ? step : key === "Home" ? -Infinity : key === "End" ? Infinity : null;
-  return delta === null ? null : resizeSplit(sizes, index, delta, totalPx, minPx);
+  return delta === null ? null : resizeSplit(sizes, index, delta, totalPx, minPx, pair);
+}
+
+/**
+ * Equalize Panes (⌘=): in every split, the children share the room evenly, except the one holding
+ * the board, which keeps its share while the others split the rest. So three panes beside the board
+ * get a third of what the board leaves each, and two stacked in one of them half its height each.
+ * Returns `state` itself when everything is already even.
+ */
+export function equalizePanes(state: PaneState): PaneState {
+  let changed = false;
+  const walk = (node: PaneNode): PaneNode => {
+    if (node.type === "leaf") return node;
+    const children = node.children.map(walk);
+    const boardAt = children.findIndex((c) => leaves(c).some((l) => l.content.kind === "board"));
+    const kept = boardAt >= 0 ? node.sizes[boardAt]! : 0;
+    const others = children.length - (boardAt >= 0 ? 1 : 0);
+    const sizes = node.sizes.map((s, i) => (i === boardAt ? s : (1 - kept) / others));
+    const same = sizes.every((s, i) => Math.abs(s - node.sizes[i]!) < 1e-9) && children.every((c, i) => c === node.children[i]);
+    if (same) return node;
+    changed = true;
+    return { ...node, children, sizes };
+  };
+  const root = walk(state.root);
+  return changed ? normalize({ ...state, root }) : state;
 }
 
 // ---------------------------------------------------------------------------

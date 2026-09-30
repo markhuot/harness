@@ -1,8 +1,8 @@
 // The global pane commands (state/keys.ts "Panes"): moving between panes and the sidebar, closing,
-// zooming, and Escape. Registered once by the shell for the board scope on screen (null off the
+// zooming, equalizing, and Escape. Registered once by the shell for the board scope on screen (null off the
 // board, where only the sidebar and the window are left to act on).
 
-import { boardLeaf, escapePanes, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, type PaneDir } from "../state/panes";
+import { boardLeaf, equalizePanes, escapePanes, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, updatePanes, type PaneDir } from "../state/panes";
 import { GLOBAL_OWNER, useCommands } from "./commands";
 import { hasDraftCloser, requestClosePane } from "./draftClose";
 import { focusPaneBy, focusSidebar } from "./paneFocus";
@@ -56,6 +56,7 @@ export function usePaneCommands(scope: string | null, sidebarOpen: boolean) {
       else closeWindow();
     },
     "pane.zoom": !!scope && (() => focusPaneBy(scope!, (s) => toggleZoom(s))),
+    "pane.equalize": !!scope && (() => updatePanes(scope!, equalizePanes)),
     // The focused ticket or terminal into a window of its own (in that window, ⇧⌘O puts it back:
     // components/PopoutWindow.tsx).
     "pane.popout":

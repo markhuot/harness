@@ -1489,7 +1489,10 @@ Settings, project settings, or on the board route the pane workspace.
   dropped pane's box in the layout that would result (`dropPreview`), and drop runs `applyDrop`
   (`dropContent` for a ticket, `movePane` for a pane). A ticket that's already open moves with its
   pane and keeps its tab, and a pane over itself isn't a target. Docking against the board leaves
-  it 60%, the same split a click makes, while any other pane is split in half. Drags that don't
+  it 60%, the same split a click makes, while any other pane is split in half. A pane moved
+  beside a sibling in its own split, along that split's axis (the right of three panes dropped
+  between the other two), just changes places, and every pane keeps its size (`reorderSibling`).
+  Dropping it where it already is isn't a target. Drags that don't
   carry our types (files, text) are ignored. The layer goes away on drop, on dragend (Escape
   cancels a native drag with a dragend), or on the first buttonless mouse move if the source
   left the DOM mid-drag. The keyboard route is a card's or row's context menu (Open to the
@@ -1500,7 +1503,13 @@ Settings, project settings, or on the board route the pane workspace.
   so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
-  Home/End, double-click to make the panes equal. While dragging, a full-window overlay
+  Home/End, double-click to make the panes equal. A drag or key moves every sibling on each side
+  of the divider together (`resizeSplit`): each side scales in proportion, a pane that reaches its
+  minimum stays there while the rest of its side keeps shrinking. Holding ⌥ (checked on every
+  move, and on ⌥ down/up mid-drag) resizes only the two panes touching the divider. Equalize
+  Panes (⌘=, `equalizePanes`) evens out every split's children, except that the child holding the
+  board keeps its share and the others split the rest. ⌘= was Electron's Zoom In; Zoom In/Out
+  are gone from the View menu, and Actual Size stays so an old zoom can be undone. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
   taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, a file 360 px, any
   pane 200 px tall.

@@ -112,6 +112,10 @@ describe("accelerator", () => {
     expect(accelerator({ code: "Enter", meta: true, shift: true })).toBe("Cmd+Shift+Return");
     expect(accelerator({ code: "Digit1", meta: true })).toBe("Cmd+1");
   });
+  test("Equalize Panes is ⌘= (the key Electron's Zoom In used to take)", () => {
+    expect(commandKeys("pane.equalize")).toEqual(["⌘="]);
+    expect(commandAccelerator("pane.equalize")).toBe("Cmd+=");
+  });
   test("keys without ⌘ are the renderer's, never the menu's", () => {
     expect(accelerator({ code: "KeyH", ctrl: true })).toBeNull();
     expect(commandAccelerator("board.down")).toBeUndefined();
