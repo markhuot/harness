@@ -88,7 +88,7 @@ test("waitForBuild gives up at the deadline", async () => {
   expect(waitForBuild(c, "A1", "202609301424", { ...quiet, timeoutMs: 0 })).rejects.toThrow("wasn't processed in time");
 });
 
-function distributeRoutes(reviewStatus: number) {
+function distributeRoutes(reviewStatus: number, reviewCode = "ENTITY_ERROR") {
   return {
     "GET /apps?filter[bundleId]=com.markhuot.harness&limit=1": () => [200, { data: [{ id: "A1", type: "apps", attributes: {} }] }],
     [buildsPath]: () => [200, { data: [{ id: "B1", type: "builds", attributes: { processingState: "VALID", version: "202609301424" } }] }],
@@ -97,7 +97,7 @@ function distributeRoutes(reviewStatus: number) {
     "POST /betaBuildLocalizations": () => [201, { data: {} }],
     "POST /betaGroups/G1/relationships/builds": () => [204, undefined],
     "POST /betaAppReviewSubmissions": () =>
-      reviewStatus < 300 ? [201, { data: {} }] : [reviewStatus, { errors: [{ code: "ENTITY_ERROR", detail: "already submitted" }] }],
+      reviewStatus < 300 ? [201, { data: {} }] : [reviewStatus, { errors: [{ code: reviewCode, detail: "already submitted" }] }],
   } as Record<string, (b: any) => [number, unknown]>;
 }
 
@@ -113,4 +113,13 @@ test("distribute tolerates a build that is already in review (409) but not other
   const again = await distribute(fakeAsc(distributeRoutes(409)).c, "202609301424", "", quiet);
   expect(again.review).toStartWith("not resubmitted");
   expect(distribute(fakeAsc(distributeRoutes(422)).c, "202609301424", "", quiet)).rejects.toThrow("422");
+});
+
+test("distribute leaves the build in the group when another build of the version is in beta review", async () => {
+  const { c, calls } = fakeAsc(distributeRoutes(422, "ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW"));
+  const r = await distribute(c, "202609301424", "", quiet);
+  expect(r.review).toStartWith("waiting");
+  expect(r.review).toContain("distribute 202609301424");
+  expect(r.publicLink).toBe("https://testflight.apple.com/join/abc");
+  expect(calls.some((x) => x.key === "POST /betaGroups/G1/relationships/builds")).toBe(true);
 });

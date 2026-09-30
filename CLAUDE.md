@@ -69,12 +69,16 @@ reuse a pushed tag. If a published build is broken, fix it on `main` and cut a n
 - Before building, it checks that it can reach App Store Connect: the API key, the app record for
   `com.markhuot.harness`, and the `Public` group. It stops there if it can't.
 - After exporting the development IPA, it exports the same archive with
-  `mobile/ExportOptions-testflight.plist` and uploads it to App Store Connect, using the Apple
-  account signed in to Xcode. Warnings about missing dSYMs for prebuilt frameworks (React,
-  hermesvm, Expo) are expected.
+  `mobile/ExportOptions-testflight.plist` and uploads it to App Store Connect, signed in with the
+  same API key (not the Apple account in Xcode's settings, whose saved sign-in expires). Warnings
+  about missing dSYMs for prebuilt frameworks (React, hermesvm, Expo) are expected.
 - It waits for App Store Connect to process the build, sets What to Test from the CHANGELOG
   section, adds the build to the external `Public` group and submits it for Beta App Review. Testers
-  get the build once Apple approves it, usually within a day.
+  get the build once Apple approves it, usually within a day. Only one build of a version can wait
+  in review, so while an earlier release's build is still there, the publish leaves the new build
+  in the group unsubmitted and says so. Submit it once the earlier one clears with
+  `bun mobile/Tools/testflight.ts distribute <build number>` (from `mobile/`, as
+  `bun Tools/testflight.ts distribute …`).
 - It writes the group's public link (https://testflight.apple.com/join/M8kvbuv1) on the install
   page as the **Get it on TestFlight** button.
 

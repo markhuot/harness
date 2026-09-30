@@ -148,8 +148,12 @@ export async function distribute(c: Client, buildNumber: string, whatsNew: strin
     await c.post("/betaAppReviewSubmissions", { data: { type: "betaAppReviewSubmissions", relationships: { build: { data: { type: "builds", id: build.id } } } } });
   } catch (e) {
     // 409 means it's already in review or approved (a later build of an approved version is often waved through).
-    if (!(e instanceof AscError && e.status === 409)) throw e;
-    review = `not resubmitted (${e.message.split("→ ")[1]})`;
+    if (e instanceof AscError && e.status === 409) review = `not resubmitted (${e.message.split("→ ")[1]})`;
+    // Only one build per version can wait in Beta App Review. This one is in the group with its notes;
+    // submit it once the earlier build clears, by rerunning `distribute` for it.
+    else if (e instanceof AscError && e.codes.includes("ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW"))
+      review = `waiting: another build is in beta review; once it clears, run \`bun Tools/testflight.ts distribute ${buildNumber}\``;
+    else throw e;
   }
   return { publicLink: group.attributes.publicLink as string | null, build: build.attributes.version as string, group: group.id, review };
 }
