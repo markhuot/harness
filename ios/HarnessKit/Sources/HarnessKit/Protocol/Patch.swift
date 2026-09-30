@@ -50,11 +50,14 @@ extension Patch: Sendable where Wrapped: Sendable {}
 extension Patch: Equatable where Wrapped: Equatable {}
 extension Patch: Hashable where Wrapped: Hashable {}
 
-extension Patch: Codable where Wrapped: Codable {
+extension Patch: Decodable where Wrapped: Decodable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.singleValueContainer()
         self = c.decodeNil() ? .null : .value(try c.decode(Wrapped.self))
     }
+}
+
+extension Patch: Encodable where Wrapped: Encodable {
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
@@ -78,11 +81,14 @@ extension Nullable: Sendable where Wrapped: Sendable {}
 extension Nullable: Equatable where Wrapped: Equatable {}
 extension Nullable: Hashable where Wrapped: Hashable {}
 
-extension Nullable: Codable where Wrapped: Codable {
+extension Nullable: Decodable where Wrapped: Decodable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.singleValueContainer()
         wrappedValue = c.decodeNil() ? nil : try c.decode(Wrapped.self)
     }
+}
+
+extension Nullable: Encodable where Wrapped: Encodable {
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
