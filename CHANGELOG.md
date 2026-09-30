@@ -20,6 +20,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Messages you send to a working ticket now reach the running agent right away, instead of
+  waiting for the run to finish. The agent reads your message at its next step and can change
+  course mid-run. If it can't take the message in (for example, it had just finished), the
+  message waits for the next run, and the transcript says so.
 - On the Mac, New session opens as a pane next to the board instead of a window on top of it, so
   you can write a new session with another ticket open beside it, or keep several going at once.
   Its pane is tinted and marked Draft until you start it.

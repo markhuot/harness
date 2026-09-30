@@ -260,6 +260,10 @@ export function buildClaudeArgs(
     "stream-json",
     "--verbose",
     "--include-partial-messages",
+    // The CLI echoes each stdin message (with our uuid) when its agent takes it in: mid-turn at
+    // the next tool boundary, or as the start of a new turn. That's how steering knows a
+    // message was delivered (DESIGN.md "Steering").
+    "--replay-user-messages",
     "--mcp-config",
     JSON.stringify(mcpConfig),
     // Server-level rule: allow every tool of the harness MCP server without prompting
@@ -611,6 +615,7 @@ export class ClaudeCodeDriver implements Driver {
   readonly description = "Runs the claude CLI with your Claude login (team plan). Harness tools are provided over MCP.";
   readonly hasBuiltinTools = true;
   readonly usesPermissionPromptTool = true;
+  readonly supportsSteering = true;
 
   constructor(private readonly opts: ClaudeCodeDriverOptions) {}
 
@@ -702,12 +707,16 @@ export class ClaudeCodeDriver implements Driver {
         text: `Claude Code can't pre-approve ${what} as an exact rule, so this turn runs in ask mode: Claude Code asks the harness, which allows the approved call once.`,
       };
     }
-    const first = yield* this.attempt(req, resume);
-    if (first === "retry-fresh") {
-      // Sessions are stored per working directory; carrySession copies one to a new workdir,
-      // but when it's gone (cleaned up, or never found) start a new conversation instead.
-      const second = yield* this.attempt(req, null);
-      if (second === "retry-fresh") throw new Error("claude could not start a conversation");
+    try {
+      const first = yield* this.attempt(req, resume);
+      if (first === "retry-fresh") {
+        // Sessions are stored per working directory; carrySession copies one to a new workdir,
+        // but when it's gone (cleaned up, or never found) start a new conversation instead.
+        const second = yield* this.attempt(req, null);
+        if (second === "retry-fresh") throw new Error("claude could not start a conversation");
+      }
+    } finally {
+      req.input?.close();
     }
   }
 
@@ -738,15 +747,37 @@ export class ClaudeCodeDriver implements Driver {
       }
     })().catch(() => {});
 
+    const priorCost = (req.state as Partial<ClaudeCodeState> | null)?.costUsd;
+    const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null, {
+      requested: planGrants(req, settings).permissionMode,
+      mode: req.permissionMode ?? settings.permissionMode,
+    });
+
     // stdin stays open while the turn runs. Closing it lets the CLI exit after the current
     // turn and kills any background task still running.
     const waitMs = this.opts.backgroundWaitMs ?? BACKGROUND_WAIT_MS;
     let stdinOpen = true;
     let waitTimer: ReturnType<typeof setTimeout> | null = null;
     let waitedOut = false;
+    const writeUser = (content: string, uuid: string) => {
+      try {
+        proc.stdin.write(JSON.stringify({ type: "user", uuid, message: { role: "user", content } }) + "\n");
+        void Promise.resolve(proc.stdin.flush()).catch(() => {});
+      } catch {
+        /* child already gone; the message stays undelivered */
+      }
+    };
+    // Human messages sent mid-run go straight to the CLI, which takes them in at its next tool
+    // boundary (or starts a new turn with them once the current one ends).
+    const writeInput = () => {
+      if (stdinOpen && req.input) for (const m of req.input.take()) writeUser(m.text, m.id);
+    };
     const closeStdin = () => {
       if (waitTimer) clearTimeout(waitTimer);
       waitTimer = null;
+      // The run takes no more messages once the session started and stdin is closing (a failed
+      // --resume keeps them for the fresh attempt). Refused messages become a queued run.
+      if (!resume || parser.sawInit) req.input?.close();
       if (!stdinOpen) return;
       stdinOpen = false;
       try {
@@ -755,18 +786,11 @@ export class ClaudeCodeDriver implements Driver {
         /* child already gone */
       }
     };
-    try {
-      proc.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: req.prompt } }) + "\n");
-      await proc.stdin.flush();
-    } catch {
-      /* child died early; reported below */
-    }
-
-    const priorCost = (req.state as Partial<ClaudeCodeState> | null)?.costUsd;
-    const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null, {
-      requested: planGrants(req, settings).permissionMode,
-      mode: req.permissionMode ?? settings.permissionMode,
-    });
+    writeUser(req.prompt, crypto.randomUUID());
+    // Messages written to a previous attempt (a failed --resume) that its CLI never took in.
+    for (const m of req.input?.inFlight() ?? []) writeUser(m.text, m.id);
+    writeInput();
+    const unsubscribe = req.input?.onPush(writeInput);
     const buffered: DriverEvent[] = [];
     try {
       for await (const line of readLines(proc.stdout)) {
@@ -776,14 +800,21 @@ export class ClaudeCodeDriver implements Driver {
         } catch {
           continue; // non-JSON noise
         }
+        if (msg?.type === "user" && msg.isReplay === true && typeof msg.uuid === "string") req.input?.delivered(msg.uuid);
         const events = parser.handle(msg);
         if (msg?.type === "result" && stdinOpen) {
-          // The turn ended. Keep the CLI alive only while the agent's own background tasks
-          // run (a test suite it moved to the background, a sub-agent): their completion
-          // starts the next turn. A finished run, an error or a turn with nothing left ends it.
-          // The wait limit counts from the latest turn's end.
+          // The turn ended. Keep the CLI alive while a human message it hasn't taken in yet is
+          // on stdin (it starts the next turn with it), or while the agent's own background
+          // tasks run (a test suite it moved to the background, a sub-agent): their completion
+          // starts the next turn. A finished run, an error or a turn with nothing left ends it;
+          // an unseen message then becomes a queued run. The wait limit counts from the latest
+          // turn's end.
           const waiting = [...parser.runningTasks.values()];
-          if (!waiting.length || parser.finished || parser.result?.isError) closeStdin();
+          if (parser.finished || parser.result?.isError) closeStdin();
+          else if (req.input?.pending) {
+            if (waitTimer) clearTimeout(waitTimer);
+            waitTimer = null;
+          } else if (!waiting.length) closeStdin();
           else {
             events.push({
               type: "status",
@@ -828,6 +859,7 @@ export class ClaudeCodeDriver implements Driver {
       }
       return "done";
     } finally {
+      unsubscribe?.();
       closeStdin();
       req.signal.removeEventListener("abort", onAbort);
       if (proc.exitCode === null) proc.kill("SIGTERM");

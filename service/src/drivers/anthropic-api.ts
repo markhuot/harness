@@ -89,6 +89,7 @@ export class AnthropicApiDriver implements Driver {
   readonly name = "Anthropic API";
   readonly description = "Calls the Claude Messages API directly with an API key, using the harness's own file and shell tools.";
   readonly hasBuiltinTools = false;
+  readonly supportsSteering = true;
 
   constructor(private readonly opts: AnthropicApiDriverOptions) {}
 
@@ -138,6 +139,27 @@ export class AnthropicApiDriver implements Driver {
   }
 
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {
+    try {
+      yield* this.loop(req);
+    } finally {
+      req.input?.close();
+    }
+  }
+
+  /**
+   * Human messages sent since the last model turn, as text blocks for the next user message
+   * (DESIGN.md "Steering"). They're delivered once they're in the conversation: the state
+   * yielded next carries them, so even an aborted run keeps them for the next one.
+   */
+  private steering(req: RunRequest): Anthropic.TextBlockParam[] {
+    if (!req.input) return [];
+    return req.input.take().map((m) => {
+      req.input!.delivered(m.id);
+      return { type: "text", text: m.text };
+    });
+  }
+
+  private async *loop(req: RunRequest): AsyncGenerator<DriverEvent> {
     const key = this.apiKey();
     if (!key) {
       const message = "No Anthropic API key configured. Add one in Settings or set ANTHROPIC_API_KEY.";
@@ -219,7 +241,16 @@ export class AnthropicApiDriver implements Driver {
         continue;
       }
       if (message.stop_reason !== "tool_use" || toolUses.length === 0) {
-        // end_turn / stop_sequence / max_tokens without pending tool calls: the turn is over.
+        // end_turn / stop_sequence / max_tokens without pending tool calls: the turn is over,
+        // unless the human sent something meanwhile; then the agent answers that next.
+        const steered = this.steering(req);
+        if (steered.length) {
+          messages.push({ role: "user", content: steered });
+          yield { type: "state", state: { messages } satisfies AnthropicApiState };
+          continue;
+        }
+        // Checked and closed in one step: a message sent from here on is queued instead.
+        req.input?.close();
         yield { type: "state", state: { messages } satisfies AnthropicApiState };
         yield usage();
         return;
@@ -236,7 +267,7 @@ export class AnthropicApiDriver implements Driver {
         yield { type: "tool_result", callId: use.id, name: use.name, result };
         results.push(toToolResultBlock(use.id, result));
       }
-      messages.push({ role: "user", content: results });
+      messages.push({ role: "user", content: [...results, ...this.steering(req)] });
       yield { type: "state", state: { messages } satisfies AnthropicApiState };
     }
   }

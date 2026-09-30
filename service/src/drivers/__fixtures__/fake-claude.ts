@@ -8,9 +8,13 @@
 //                          {"__echo_session": true} → emits system/init with the --resume id (or "new-session")
 //                          {"__mark": "label"} → appends { label, stdinClosed } to FAKE_CLAUDE_RECORD + ".marks"
 //                          {"__until_stdin_closed": true} → waits for the harness to close stdin
+//                          {"__until_input": n} → waits (up to 5s) until n more user messages arrived
+//                          {"__replay": true} → echoes the oldest un-echoed later user message the
+//                            way --replay-user-messages does (isReplay, with its uuid)
 //                        Runs read one stream-json user message (recorded as stdin), replay the
 //                        script, then exit once stdin closes like the real CLI (code 7 if it
-//                        stays open for 5s: the driver never ended the run).
+//                        stays open for 5s: the driver never ended the run). Later user
+//                        messages are appended to FAKE_CLAUDE_RECORD + ".input" as { uuid, content }.
 //   FAKE_CLAUDE_MISSING_SESSION  when --resume equals this id, fail like the real CLI does
 //   FAKE_CLAUDE_AUTH     JSON printed by `auth status --json`
 //   FAKE_CLAUDE_LOGIN_URL URL printed by `auth login` (then it sleeps FAKE_CLAUDE_LOGIN_SLEEP ms)
@@ -72,9 +76,11 @@ if (streamInput && !argv.includes("--mcp-config")) {
   process.exit(0);
 }
 // Agent runs: the prompt is the first stream-json user message; stdin then stays open until the
-// harness closes it.
+// harness closes it, and any later user message (steering) is collected.
 let stdinClosed = false;
 let stdin = "";
+const input: { uuid: string; content: unknown }[] = [];
+let replayed = 0;
 if (argv[0] === "-p") {
   const reader = (Bun.stdin.stream() as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
@@ -87,14 +93,34 @@ if (argv[0] === "-p") {
     }
     buf += decoder.decode(value, { stream: true });
   }
-  const first = buf.split("\n")[0]!.trim();
+  const nl = buf.indexOf("\n");
+  const first = (nl === -1 ? buf : buf.slice(0, nl)).trim();
+  buf = nl === -1 ? "" : buf.slice(nl + 1);
   if (streamInput && first) {
     const content = JSON.parse(first).message?.content;
     stdin = typeof content === "string" ? content : JSON.stringify(content);
-  } else stdin = buf;
+  } else stdin = first;
+  const collect = () => {
+    let i: number;
+    while ((i = buf.indexOf("\n")) !== -1) {
+      const raw = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!raw) continue;
+      const msg = JSON.parse(raw);
+      if (msg.type !== "user") continue;
+      input.push({ uuid: msg.uuid, content: msg.message?.content });
+      if (env.FAKE_CLAUDE_RECORD) appendFileSync(env.FAKE_CLAUDE_RECORD + ".input", JSON.stringify({ uuid: msg.uuid, content: msg.message?.content }) + "\n");
+    }
+  };
+  collect();
   if (!stdinClosed) {
     void (async () => {
-      while (!(await reader.read()).done) {}
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        collect();
+      }
       stdinClosed = true;
     })();
   }
@@ -145,6 +171,13 @@ for (const raw of script.split("\n")) {
   else if (typeof line.__mark === "string") {
     if (env.FAKE_CLAUDE_RECORD) appendFileSync(env.FAKE_CLAUDE_RECORD + ".marks", JSON.stringify({ label: line.__mark, stdinClosed }) + "\n");
   } else if (line.__until_stdin_closed) await untilStdinClosed(10_000);
+  else if (typeof line.__until_input === "number") {
+    const start = Date.now();
+    while (input.length < line.__until_input && Date.now() - start < 5_000) await Bun.sleep(10);
+  } else if (line.__replay) {
+    const next = input[replayed++];
+    if (next) out(JSON.stringify({ type: "user", isReplay: true, uuid: next.uuid, session_id: resume ?? "new-session", message: { role: "user", content: next.content } }));
+  }
   else out(raw);
 }
 if (argv[0] === "-p" && !(await untilStdinClosed(5_000))) {

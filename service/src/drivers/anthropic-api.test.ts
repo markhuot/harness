@@ -5,7 +5,7 @@ import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
 import { toolsForRun } from "../tools/index";
 import type { ToolDefinition } from "../tools/types";
 import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
-import type { DriverEvent, RunRequest } from "./types";
+import { RunInput, type DriverEvent, type RunRequest } from "./types";
 
 const baseSettings: Settings = {
   defaultDriver: "anthropic-api",
@@ -210,6 +210,59 @@ describe("anthropic-api driver", () => {
     const kinds = events.filter((e) => e.type === "tool_call" || e.type === "tool_result").map((e: any) => `${e.type}:${e.callId}`);
     expect(kinds).toEqual(["tool_call:tu_1", "tool_result:tu_1", "tool_call:tu_2", "tool_result:tu_2", "tool_call:tu_3", "tool_result:tu_3", "tool_call:tu_4", "tool_result:tu_4"]);
     expect(events.filter((e) => e.type === "text").map((e: any) => e.text)).toEqual(["Working.", "Done."]);
+  });
+
+  // HARNESS-68: human messages sent mid-run join the live conversation (steering).
+  test("a message sent during a tool call goes to the model with that call's results", async () => {
+    const { driver, fake } = driverWith([
+      { content: [toolUse("tu_1", "post_summary", { summary: "halfway" })], stop_reason: "tool_use" },
+      { content: [text("Changing course.")], stop_reason: "end_turn" },
+    ]);
+    const { req } = makeReq("work", "go");
+    const input = new RunInput();
+    req.input = input;
+    const events: DriverEvent[] = [];
+    for await (const ev of driver.run(req)) {
+      events.push(ev);
+      if (ev.type === "tool_call") expect(input.push("Stop and write HELLO.md instead")).toBe(true);
+    }
+    expect(fake.requests.length).toBe(2);
+    const last = fake.requests[1]!.messages.at(-1)!;
+    expect(last.role).toBe("user");
+    const blocks = last.content as Anthropic.ContentBlockParam[];
+    expect(blocks.map((b) => b.type)).toEqual(["tool_result", "text"]);
+    expect((blocks[1] as Anthropic.TextBlockParam).text).toBe("Stop and write HELLO.md instead");
+    expect(input.undelivered()).toEqual([]);
+    expect(input.push("too late")).toBe(false);
+  });
+
+  test("a message waiting when the model ends its turn starts another turn instead of ending the run", async () => {
+    const { driver, fake } = driverWith([
+      { content: [text("All done.")], stop_reason: "end_turn" },
+      { content: [text("Sure, adding that too.")], stop_reason: "end_turn" },
+    ]);
+    const { req } = makeReq("work", "go");
+    const input = new RunInput();
+    req.input = input;
+    for await (const ev of driver.run(req)) {
+      if (ev.type === "text_delta" && input.undelivered().length === 0 && fake.requests.length === 1) input.push("Also update the README");
+    }
+    expect(fake.requests.length).toBe(2);
+    const second = fake.requests[1]!.messages;
+    expect(second.at(-2)!.role).toBe("assistant");
+    expect(second.at(-1)).toEqual({ role: "user", content: [{ type: "text", text: "Also update the README" }] });
+    expect(input.undelivered()).toEqual([]);
+  });
+
+  test("without steering input the run ends at end_turn as before", async () => {
+    const { driver, fake } = driverWith([{ content: [text("Done.")], stop_reason: "end_turn" }]);
+    const { req } = makeReq("work", "go");
+    const input = new RunInput();
+    req.input = input;
+    const { error } = await collect(driver, req);
+    expect(error).toBeNull();
+    expect(fake.requests.length).toBe(1);
+    expect(input.isClosed).toBe(true);
   });
 
   test("usage is summed across iterations, including cache tokens", async () => {

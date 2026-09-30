@@ -77,6 +77,8 @@ export interface RecordedCall {
  *
  * work directives: `/block <q>`, `/fail <msg>`, `/hold` (wait for release()/abort),
  * `/nosubmit` (end without submitting → auto-submit), `/throw <msg>`.
+ * Steering (only with supportsSteering): after a /hold (work and plan runs) the run takes the
+ * messages sent meanwhile and answers each with `Steered: <text>`; `/deaf` never takes them in.
  * review: request_changes while `rejectsLeft > 0` or the prompt contains [dummy:reject].
  */
 export class FakeDriver implements Driver {
@@ -84,6 +86,8 @@ export class FakeDriver implements Driver {
   name = "Fake";
   description = "test driver";
   hasBuiltinTools = true;
+  /** Off by default, so a test opts in to messages reaching the running agent */
+  supportsSteering = false;
   calls: RecordedCall[] = [];
   running = 0;
   maxRunning = 0;
@@ -148,6 +152,22 @@ export class FakeDriver implements Driver {
     }
   }
 
+  private async hold(req: RunRequest) {
+    await new Promise<void>((resolve) => {
+      this.holds.push(resolve);
+      req.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+  }
+
+  /** Take the messages sent to this run so far, answering each (unless the prompt says /deaf). */
+  private *steered(req: RunRequest): Generator<DriverEvent> {
+    if (!req.input || req.prompt.includes("/deaf")) return;
+    for (const m of req.input.take()) {
+      req.input.delivered(m.id);
+      yield { type: "text", text: `Steered: ${m.text}` };
+    }
+  }
+
   private async *behave(req: RunRequest): AsyncGenerator<DriverEvent> {
     const ctx = req.toolContext;
     const ops = ctx.ops;
@@ -155,6 +175,11 @@ export class FakeDriver implements Driver {
     const p = req.prompt;
     switch (req.kind) {
       case "plan": {
+        if (p.includes("/hold")) {
+          await this.hold(req);
+          if (req.signal.aborted) return;
+          yield* this.steered(req);
+        }
         yield { type: "text_delta", text: "Here's " };
         yield { type: "text", text: `Here's a plan for: ${p.split("\n")[0]}` };
         await ops.updatePlan(ctx, `1. Do ${p.split("\n")[0]}`);
@@ -163,11 +188,9 @@ export class FakeDriver implements Driver {
       }
       case "work": {
         if (p.includes("/hold")) {
-          await new Promise<void>((resolve) => {
-            this.holds.push(resolve);
-            req.signal.addEventListener("abort", () => resolve(), { once: true });
-          });
+          await this.hold(req);
           if (req.signal.aborted) return;
+          yield* this.steered(req);
         }
         for (const w of ["Hello", " from", " fake"]) yield { type: "text_delta", text: w };
         yield { type: "text", text: `Hello from fake! You said: "${p}"` };
