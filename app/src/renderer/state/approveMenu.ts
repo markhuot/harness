@@ -58,6 +58,19 @@ export function landMenu(mode: LandMode, ticket: Parameters<typeof completionOpt
   return { opts, primary, items, noAction: { kind: "none", label: label(APPROVE_NO_ACTION_LABEL) } };
 }
 
+/**
+ * The split button as palette commands: the primary (ticket.approve / ticket.complete, labeled as
+ * the button reads; completing opens the sheet, hence the "…"), then each menu choice by action
+ * (ticket.land.merge, .pr, .custom), leaving out the one the primary already names. "Take no action"
+ * is ticket.approveNoAction.
+ */
+export function landCommands(menu: LandMenu, mode: LandMode): { primary: string; others: Partial<Record<CompletionAction, LandChoice>> } {
+  const primary = mode === "complete" ? `${menu.primary.label}…` : menu.primary.label;
+  const others: Partial<Record<CompletionAction, LandChoice>> = {};
+  for (const c of menu.items) if (c.kind !== "none" && c.label !== menu.primary.label) others[c.action] = c;
+  return { primary, others };
+}
+
 /** A pull request link's short label: "PR #42" from a …/pull/42 (GitHub) or …/merge_requests/42 URL, else "PR". */
 export function pullRequestLabel(url: string): string {
   const n = /\/(?:pull|pulls|merge_requests)\/(\d+)(?:[/?#]|$)/.exec(url)?.[1];

@@ -37,6 +37,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the Mac, ⌘1 is now labeled for where it goes: **Go to All Projects** in the command palette
   and **All Projects** in the File menu. Typing "board" or "all projects" in the palette finds it
   next to each project's board.
+- On the Mac, the command palette names a ticket's actions the way its buttons do. With a ticket
+  in review focused, ⌘K and "Approve and merge" runs the same thing as the Approve and merge
+  button, and the Approve menu's other choices (Approve and open PR, Approve and…) are there too.
+  Once a ticket is approved, the Complete choices read "Complete and merge…" and so on. The
+  palette also understands other ways of saying things, such as "reopen ticket" on a done ticket
+  or "stop run" for Cancel run. The focused ticket's actions now come before the rest of the
+  commands.
 - On the Mac, dragging the divider between panes now resizes every pane on each side of it
   together, keeping their proportions. With three panes, dragging the right divider to the left
   grows the right pane and shrinks the other two alike. Hold Option while dragging, or while

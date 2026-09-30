@@ -1810,6 +1810,43 @@ try {
       await press.escape();
       await until("palette closed", async () => !(await exists("[data-testid=palette]")));
       check("closing the palette ran nothing", (await api<{ ticket: { humanReview: string } }>("GET", `/tickets/${reviewKey}`)).ticket.humanReview !== "approved");
+
+      // The actions are named as the buttons read ("Approve and merge"), and lead an empty palette.
+      const hlText = () => js<string>(`document.querySelector("[data-testid=palette-row][aria-selected=true] .palette-label")?.textContent ?? ""`);
+      const buttonText = await js<string>(`document.querySelector(".pane.active [data-testid=approve-primary]")?.textContent.trim() ?? ""`);
+      await press.palette();
+      await until("palette", () => exists("[data-testid=palette-input]"));
+      // (Recently run rows come before any command; the ticket opened above is one.)
+      const firstId = await js<string | null>(`document.querySelector("[data-testid=palette-row][data-kind=command]")?.dataset.id ?? null`);
+      check("an empty palette on a ticket lists its actions before the other commands", !!firstId?.startsWith("cmd:ticket."), firstId ?? "");
+      await type("[data-testid=palette-input]", buttonText);
+      const byButton = await until("button-named row", () => hl().then((id) => id === "cmd:ticket.approve" && id)).catch(() => null);      check(`typing the Approve button's text ("${buttonText}") finds its command, labeled the same`, !!buttonText && !!byButton && (await hlText()) === buttonText, `${byButton} "${await hlText()}"`);
+      // Request changes runs the button's action: its notes modal opens over the ticket.
+      await type("[data-testid=palette-input]", "request changes");
+      await until("request changes row", () => hl().then((id) => id === "cmd:ticket.requestChanges" && id));
+      await press.enter();
+      const modal = await until("request changes modal", () => js<string | null>(`document.querySelector(".modal .modal-head strong")?.textContent ?? null`)).catch(() => null);
+      check("Request changes from the palette opens the same notes modal as the button", modal === "Request changes", modal ?? "no modal");
+      await press.escape();
+      await until("modal closed", async () => !(await exists(".modal")));
+    }
+
+    // A done ticket: "reopen ticket" finds Re-open…, and Enter opens its notes modal.
+    const doneKey = (await js<string[]>(`[...[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done").querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`))[0];
+    if (!doneKey) fail(), console.log("✗ no done ticket to test Re-open from the palette on");
+    else {
+      await js(`location.hash = "#/board/all/ticket/${doneKey}"`);
+      await until("done ticket open", async () => (await openTickets()).includes(doneKey));
+      await js(`document.querySelector(".pane.active [data-pane-autofocus]")?.focus()`);
+      await press.palette();
+      await until("palette", () => exists("[data-testid=palette-input]"));
+      await type("[data-testid=palette-input]", "reopen ticket");
+      const reopen = await until("reopen row", () => js<string | null>(`document.querySelector("[data-testid=palette-row][aria-selected=true]")?.dataset.id ?? null`).then((id) => id === "cmd:ticket.reopen" && id)).catch(() => null);
+      await press.enter();
+      const modal = await until("re-open modal", () => js<string | null>(`document.querySelector(".modal .modal-head strong")?.textContent ?? null`)).catch(() => null);
+      check('"reopen ticket" in the palette on a done ticket runs Re-open (its notes modal opens)', reopen === "cmd:ticket.reopen" && modal === "Re-open", `${reopen} / ${modal}`);
+      await press.escape();
+      await until("modal closed", async () => !(await exists(".modal")));
     }
 
     // ⌘W closes the focused ticket pane (and never the board).

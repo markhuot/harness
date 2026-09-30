@@ -11,8 +11,23 @@ import { useEffect, useRef } from "react";
 import { chordMatches, COMMAND_BY_ID, COMMANDS, matchCommands, type CommandSpec, type KeyContext, type KeyScope } from "../state/keys";
 import { installModality, setModality } from "../state/inputModality";
 
+/** A handler with the palette label it has right now ("Approve and merge" for ticket.approve). */
+export interface LabeledHandler {
+  run: () => void;
+  label: string;
+}
+
 /** A handler, or a falsy value when the command doesn't apply right now (it's then skipped and hidden from the palette). */
-export type CommandHandlers = Record<string, (() => void) | false | null | undefined>;
+export type CommandHandlers = Record<string, (() => void) | LabeledHandler | false | null | undefined>;
+
+/** A command as it applies where the palette opened: its handler, and the label it shows. */
+export interface AvailableCommand {
+  spec: CommandSpec;
+  run: () => void;
+  label: string;
+  /** Other phrasings it answers to: the registry's, plus the registry label when the handler renamed it. */
+  keywords: string[];
+}
 
 export const GLOBAL_OWNER = "global";
 
@@ -38,10 +53,10 @@ export function useCommands(owner: string | null, handlers: CommandHandlers) {
   }, [owner]);
 }
 
-function handlerFor(owner: string, id: string): (() => void) | null {
+function handlerFor(owner: string, id: string): { run: () => void; label?: string } | null {
   for (const ref of owners.get(owner) ?? []) {
     const h = ref.current[id];
-    if (h) return h;
+    if (h) return typeof h === "function" ? { run: h } : h;
   }
   return null;
 }
@@ -95,34 +110,47 @@ export function resolveKey(e: KeyboardEvent): { spec: CommandSpec; run: () => vo
   for (const area of areasFrom(el)) {
     for (const scope of area.scopes) {
       for (const spec of matchCommands(e, scope, ctx)) {
-        const run = handlerFor(area.owner, spec.id);
-        if (run) return { spec, run };
+        const h = handlerFor(area.owner, spec.id);
+        if (h) return { spec, run: h.run };
       }
     }
   }
   return null;
 }
 
-/** The handler `id` has from `from` (default: where the focus is), or null when it doesn't apply there. */
-export function commandHandler(id: string, from: Element | null = commandOrigin()): (() => void) | null {
+function lookup(id: string, from: Element | null): { run: () => void; label?: string } | null {
   const spec = COMMAND_BY_ID.get(id);
   if (!spec) return null;
   for (const area of areasFrom(from)) if (area.scopes.includes(spec.scope)) {
-    const run = handlerFor(area.owner, id);
-    if (run) return run;
+    const h = handlerFor(area.owner, id);
+    if (h) return h;
   }
   return null;
 }
 
-/** Every palette-listed command that applies from `from`, in registry order. */
-export function availableCommands(from: Element | null): { spec: CommandSpec; run: () => void }[] {
-  const out: { spec: CommandSpec; run: () => void }[] = [];
+/** The handler `id` has from `from` (default: where the focus is), or null when it doesn't apply there. */
+export function commandHandler(id: string, from: Element | null = commandOrigin()): (() => void) | null {
+  return lookup(id, from)?.run ?? null;
+}
+
+/**
+ * Every palette-listed command that applies from `from`: the actions of the area around it (the
+ * focused ticket's Approve, Re-open…) first, then its other commands, then the global ones, each in
+ * registry order.
+ */
+export function availableCommands(from: Element | null): AvailableCommand[] {
+  const actions: AvailableCommand[] = [];
+  const local: AvailableCommand[] = [];
+  const global: AvailableCommand[] = [];
   for (const spec of COMMANDS) {
     if (spec.palette === false) continue;
-    const run = commandHandler(spec.id, from);
-    if (run) out.push({ spec, run });
+    const h = lookup(spec.id, from);
+    if (!h) continue;
+    const label = h.label ?? spec.label;
+    const keywords = [...(spec.keywords ?? []), ...(label !== spec.label ? [spec.label] : [])];
+    (spec.scope === "global" ? global : spec.group === "Actions" ? actions : local).push({ spec, run: h.run, label, keywords });
   }
-  return out;
+  return [...actions, ...local, ...global];
 }
 
 // A key the renderer handled mustn't also arrive as the menu command (a ⌘ key the page handles
