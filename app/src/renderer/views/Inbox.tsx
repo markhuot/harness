@@ -3,7 +3,7 @@ import type { Session, Watcher } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions, watcherStatus } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { Markdown } from "../components/Markdown";
+import { FileLinkScope, Markdown } from "../components/Markdown";
 import { relativeTime, useNow } from "../components/bits";
 import { keysArea } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
@@ -145,8 +145,9 @@ function TriageSession({ session }: { session: Session }) {
   // "Dispatched to FOO-123" → link the ticket when it exists locally.
   const dispatchedKey = outcomeKey(session);
   const dispatched = dispatchedKey ? ticketByKey(state, dispatchedKey) : undefined;
+  // A triage session has no project of its own: file links resolve in the project it dispatched to.
   return (
-    <>
+    <FileLinkScope projectId={dispatched?.projectId ?? null}>
       <header className="view-header">
         <span className="detail-key">{session.key}</span>
         <TriageBadge session={session} />
@@ -171,6 +172,6 @@ function TriageSession({ session }: { session: Session }) {
         </div>
       )}
       <Transcript sessionId={session.id} emptyHint="The triage agent's reasoning appears here." />
-    </>
+    </FileLinkScope>
   );
 }

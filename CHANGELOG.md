@@ -14,6 +14,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the Mac, code in chat messages and summaries is syntax highlighted in the same colors as the
   Git tab, and follows your light, dark and color theme. Diffs show added and removed lines the way
   the Git tab's diff viewer does. Hover a code block to copy it.
+- On the Mac, clicking a file link in a chat message, summary or brief opens the whole file in a
+  new file pane beside the ticket. The file is syntax highlighted, and a link to specific lines
+  scrolls to them and highlights them. Following another link into the same file reuses its pane.
+  Click or drag the line numbers to pick lines, and use **Copy link** in the pane's More menu to
+  share them. Files that git ignores open too, marked "ignored", and file panes stay open when
+  you quit and reopen the app.
+- When a file in the file pane has uncommitted changes, a **Diff** tab shows what changed since
+  the last commit, in the same style as the Git tab, as unified or split.
 
 ## [app-20260930.0429](https://github.com/markhuot/harness/releases/tag/app-20260930.0429) - 2026-09-30
 

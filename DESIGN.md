@@ -1436,9 +1436,11 @@ Settings, project settings, or on the board route the pane workspace.
   again by id when you come back, and a terminal re-attaches to its shell, which lives in the
   main process. Keeping every board mounted would mean running a board per project, each with its
   own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
-  `{ kind: "terminal", sessionId, cwd, title? }`), splits lay their children out side by side
+  `{ kind: "terminal", sessionId, cwd, title? }`, `{ kind: "file", root, path, startLine?, endLine?, tab? }`),
+  splits lay their children out side by side
   (`row`) or stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board
-  pane, and a ticket or a terminal session is open in at most one pane of any scope. `PaneWorkspace.tsx`
+  pane, and a ticket, a terminal session or a file (its root plus path, `fileKey`) is open in at
+  most one pane of any scope. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -1449,6 +1451,25 @@ Settings, project settings, or on the board route the pane workspace.
   plugin's open-ticket request) replace that pane's content through `useOpenTicket`
   (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
   highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **File panes.** `views/FilePane.tsx` shows one file in full through the File viewer endpoints
+  (see "File viewer"). Its `root` is `{ ticketKey }` (the ticket's workdir) or `{ projectId }`.
+  File links in chat (`harness://file/…` or plain paths, `shared/src/fileLinks.ts`) render as
+  `.file-link` anchors in `components/Markdown.tsx` and call the store's `openFile`. A link's own
+  `?ticket=`/`?project=` names its root, else the `FileLinkScope` the text renders in (the ticket
+  pane's ticket, the Inbox session's dispatched project; `state/fileOpen.ts`). `openFile` in
+  `state/panes.ts` focuses the pane already showing that file and moves it to the link's lines
+  (switching to the File tab), else reuses a file pane just right of the pane the link came from,
+  else docks a new one on its right. `FileViewer.tsx` (loaded lazily) draws the file with
+  @pierre/diffs' `File`: the syntax theme, line numbers, `startLine..endLine` as its selected
+  lines, scrolled into view on open and when a link moves the pane (not when you pick lines in
+  the gutter, which updates the pane's range in place with `setFileView`). A file with
+  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, a
+  `MultiFileDiff` of HEAD against the working tree (a `PatchDiff` of git's patch when a side is
+  binary or too big), with the Git tab's `lineDiffType` and hunk separators. Contents and diff
+  refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
+  button. File panes persist with the rest of the tree, follow a ticket rename, and close when
+  their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real
+  service.
 - **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
   drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
   or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
@@ -1473,7 +1494,7 @@ Settings, project settings, or on the board route the pane workspace.
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
-  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, any
+  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, a file 360 px, any
   pane 200 px tall.
   They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
@@ -1481,10 +1502,10 @@ Settings, project settings, or on the board route the pane workspace.
   until a divider moves, and a drag starts from the sizes on screen.
 - **Focus, close, zoom.** Clicking into a pane, or tabbing into it, focuses it (a faint header
   tint). Focus that code moves with no key or pointer input in the last 300 ms (an autofocus, a
-  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket or
-  terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
+  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket,
+  file or terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
   focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
-  focused ticket pane (never while a text field, modal, menu, the palette or a terminal has the
+  focused ticket or file pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
   pane, and a renamed key follows the rename.
 - **Keyboard.** Every shortcut is a command in one registry (`state/keys.ts`): an id, a label, a
