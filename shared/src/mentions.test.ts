@@ -95,6 +95,14 @@ describe("rankPaths", () => {
     expect(rankPaths(paths, "mat")).toEqual(["src/lib/format.ts", "docs/formatting.md"]);
   });
 
+  test("demoted paths go behind the rest of their rank, never ahead of a worse one", () => {
+    const demote = (p: string) => p.startsWith("app/");
+    expect(rankPaths(paths, "app", 50, { demote })).toEqual(["app/", "app/main.ts", "src/app.ts"]);
+    expect(rankPaths(["dist/fmt.ts", "src/fmt.ts", "x/fmtr/a.ts"], "fmt", 50, { demote: (p) => p.startsWith("dist/") })).toEqual(["src/fmt.ts", "dist/fmt.ts", "x/fmtr/a.ts"]);
+    // A demoted real match still beats loose in-order ones, which stay filtered out.
+    expect(rankPaths(["dist/fmt.ts", "f/m/t.ts"], "fmt", 50, { demote: (p) => p.startsWith("dist/") })).toEqual(["dist/fmt.ts"]);
+  });
+
   test("in-order letters count only when nothing matches outright", () => {
     expect(rankPaths(paths, "fmt")).toEqual(["test/fmt.ts"]);
     expect(rankPaths(paths, "frmt")).toEqual(["src/lib/format.ts", "docs/formatting.md"]);

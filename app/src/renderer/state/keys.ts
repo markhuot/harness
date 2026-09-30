@@ -51,6 +51,8 @@ const cmd = (code: string, mods: Omit<Chord, "code" | "meta"> = {}): Chord => ({
 export const COMMANDS: CommandSpec[] = [
   // General (⌘ chords, also in the menu bar)
   { id: "palette", label: "Command Palette…", group: "General", scope: "global", keys: [cmd("KeyK")], inOverlay: true, menu: true, palette: false },
+  // The palette in files mode ("@"); inOverlay so ⌘P switches an open palette over to files.
+  { id: "open-file", label: "Open File…", group: "General", scope: "global", keys: [cmd("KeyP")], inOverlay: true, menu: true },
   { id: "shortcuts", label: "Keyboard Shortcuts", group: "General", scope: "global", keys: [cmd("Slash"), k("Slash", { shift: true })], inOverlay: true, menu: true },
   { id: "new-session", label: "New Session…", group: "General", scope: "global", keys: [cmd("KeyN")], menu: true },
   { id: "new-terminal", label: "New Terminal", group: "General", scope: "global", keys: [cmd("KeyT")], menu: true },

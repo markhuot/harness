@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext } from "react";
 import { ALL_SCOPE, type TicketTab } from "@harness/shared/state";
 import { replaceContent, updatePanes } from "../state/panes";
-import { useStore } from "../state/store";
+import { useOptionalStore } from "../state/store";
 
 export interface PaneInfo {
   paneId: string;
@@ -33,18 +33,20 @@ export const usePopout = () => useContext(PopoutContext);
 
 /**
  * Open a ticket from inside a pane: it replaces this pane's content (or focuses the pane it's
- * already open in). Outside a pane it's an ordinary link to the ticket.
+ * already open in). Outside a pane it's an ordinary link to the ticket, and without a store (Markdown
+ * rendered on its own, as in tests) there's nowhere to go.
  */
 export function useOpenTicket(): (key: string, tab?: TicketTab) => void {
   const pane = usePane();
   const paneId = pane?.paneId ?? null;
   const scope = usePaneScope();
-  const { navigate, route } = useStore();
-  const projectId = route.view === "board" ? route.projectId : null;
+  const store = useOptionalStore();
+  const navigate = store?.navigate;
+  const projectId = store?.route.view === "board" ? store.route.projectId : null;
   return useCallback(
     (key: string, tab: TicketTab = "summaries") => {
       if (paneId) updatePanes(scope, (s) => replaceContent(s, paneId, { kind: "ticket", ticketKey: key, tab }));
-      else navigate({ view: "board", projectId, ticketKey: key, tab });
+      else navigate?.({ view: "board", projectId, ticketKey: key, tab });
     },
     [paneId, scope, navigate, projectId],
   );

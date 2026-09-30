@@ -11,7 +11,7 @@
 //
 // Every operation returns a new, normalized state (see `normalize`), so these always hold:
 //   • exactly one board leaf (a pop-out scope has none: see "Pop-out windows"), a ticket key is
-//     open in at most one leaf, and so is a terminal session;
+//     open in at most one leaf, and so is a terminal session and a file (its root + path);
 //   • no split has fewer than 2 children, and no split directly holds a split with the same dir;
 //   • a split's sizes are positive fractions that sum to 1;
 //   • focusedId/zoomedId name an existing leaf, or are null.
@@ -41,8 +41,26 @@ export interface ComposeContent {
   id: string;
   projectId?: string | null;
 }
+/** Where a file pane's path is resolved: a ticket's workdir (its worktree, else its cwd, else its project's folder), or a project's folder. */
+export type FileRoot = { ticketKey: string } | { projectId: string };
+export type FileTab = "file" | "diff";
+/**
+ * A file shown in full (views/FilePane.tsx), `path` relative to `root` (or absolute inside it, as a
+ * link may name it). `startLine`..`endLine` (1-based, inclusive; `endLine` only for a range) is
+ * highlighted and scrolled to. At most one leaf per root + path (fileKey), so following another
+ * link into the same file moves that pane to the new lines.
+ */
+export interface FileContent {
+  kind: "file";
+  root: FileRoot;
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  /** Which tab shows; the Diff tab only exists while the file has uncommitted changes. Default "file". */
+  tab?: FileTab;
+}
 /** What a pane shows. */
-export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent | ComposeContent;
+export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent | ComposeContent | FileContent;
 export interface PaneLeaf {
   type: "leaf";
   id: string;
@@ -127,6 +145,12 @@ export const terminalLeafBySession = (root: PaneNode, sessionId: string): PaneLe
   leaves(root).find((l) => l.content.kind === "terminal" && l.content.sessionId === sessionId) ?? null;
 export const composeLeafById = (root: PaneNode, id: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "compose" && l.content.id === id) ?? null;
 
+/** What makes two file panes the same file: the root and the path. */
+export const fileKey = (c: Pick<FileContent, "root" | "path">): string => ("ticketKey" in c.root ? `t:${c.root.ticketKey}` : `p:${c.root.projectId}`) + `\u0000${c.path}`;
+export const fileLeafByKey = (root: PaneNode, key: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "file" && fileKey(l.content) === key) ?? null;
+/** A file pane's root ticket, if it's resolved in a ticket's workdir. */
+export const fileRootTicket = (c: FileContent): string | null => ("ticketKey" in c.root ? c.root.ticketKey : null);
+
 /** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a terminal session, a New session), if any. */
 function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
   switch (content.kind) {
@@ -138,15 +162,25 @@ function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
       return terminalLeafBySession(root, content.sessionId);
     case "compose":
       return composeLeafById(root, content.id);
+    case "file":
+      return fileLeafByKey(root, fileKey(content));
   }
 }
 
-/** How menus and drag chips name a pane: "the board", a ticket's key, a terminal's title or folder, "New session". */
+/** How menus and drag chips name a pane: "the board", a ticket's key, a terminal's title or folder, "New session", a file's name. */
 export function paneLabel(content: PaneContent): string {
-  if (content.kind === "board") return "the board";
-  if (content.kind === "ticket") return content.ticketKey;
-  if (content.kind === "compose") return "New session";
-  return content.title || cwdName(content.cwd);
+  switch (content.kind) {
+    case "board":
+      return "the board";
+    case "ticket":
+      return content.ticketKey;
+    case "compose":
+      return "New session";
+    case "file":
+      return content.path.slice(content.path.lastIndexOf("/") + 1) || content.path;
+    case "terminal":
+      return content.title || cwdName(content.cwd);
+  }
 }
 
 /** A directory's last component, for a terminal that hasn't set a title (`~` for home). */
@@ -262,23 +296,23 @@ export function normalize(
   const keys = new Set<string>();
   const sessions = new Set<string>();
   const composes = new Set<string>();
+  const files = new Set<string>();
+  const once = (seen: Set<string>, id: string) => !seen.has(id) && !!seen.add(id);
   let root =
     s.root &&
     prune(s.root, (l) => {
-      if (l.content.kind === "board") return sawBoard ? false : (sawBoard = true);
-      if (l.content.kind === "compose") {
-        if (composes.has(l.content.id)) return false;
-        composes.add(l.content.id);
-        return true;
+      switch (l.content.kind) {
+        case "board":
+          return sawBoard ? false : (sawBoard = true);
+        case "compose":
+          return once(composes, l.content.id);
+        case "file":
+          return once(files, fileKey(l.content));
+        case "terminal":
+          return !claimedSessions.has(l.content.sessionId) && once(sessions, l.content.sessionId);
+        case "ticket":
+          return once(keys, l.content.ticketKey);
       }
-      if (l.content.kind === "terminal") {
-        if (sessions.has(l.content.sessionId) || claimedSessions.has(l.content.sessionId)) return false;
-        sessions.add(l.content.sessionId);
-        return true;
-      }
-      if (keys.has(l.content.ticketKey)) return false;
-      keys.add(l.content.ticketKey);
-      return true;
     });
   for (const id of sessions) claimedSessions.add(id);
   root = root && normalizeNode(root);
@@ -301,7 +335,13 @@ export function checkPanes(state: PaneState): string[] {
   const keys = new Set<string>();
   const sessions = new Set<string>();
   const composes = new Set<string>();
+  const files = new Set<string>();
   for (const l of all) {
+    if (l.content.kind === "file") {
+      const k = fileKey(l.content);
+      if (files.has(k)) errors.push(`file ${l.content.path} is open twice`);
+      files.add(k);
+    }
     if (l.content.kind === "compose") {
       if (composes.has(l.content.id)) errors.push(`New session ${l.content.id} is open twice`);
       composes.add(l.content.id);
@@ -490,6 +530,58 @@ export function openCompose(state: PaneState, fromLeafId: string | null = null, 
 }
 
 /**
+ * Open a file pane (following a file link, or the palette). A pane already showing the file (same
+ * root and path) is focused and moved to `content`'s lines, switching to the File tab when lines
+ * are given (they're lines of the file, not of the diff). Otherwise, when the pane it's opened from
+ * (`fromLeafId`, else the focused pane, else the board: splitTarget) is itself a file pane (the
+ * palette's file browser over one), that pane shows the new file; when it has a file pane right after it
+ * in a row, that pane shows the new file, so following links from a transcript doesn't stack up a
+ * pane per file; failing that, a new pane docks on its right.
+ */
+export function openFile(state: PaneState, content: FileContent, fromLeafId: string | null = null): PaneState {
+  const existing = fileLeafByKey(state.root, fileKey(content));
+  if (existing && existing.content.kind === "file") {
+    const tab = content.tab ?? (content.startLine ? "file" : existing.content.tab);
+    const next: FileContent = { kind: "file", root: existing.content.root, path: existing.content.path, ...lineRange(content), ...(tab === "diff" ? { tab } : {}) };
+    return normalize({ root: setLeafContent(state.root, existing.id, next), focusedId: existing.id, zoomedId: zoomFor(state, existing.id) });
+  }
+  const clean: FileContent = { kind: "file", root: content.root, path: content.path, ...lineRange(content), ...(content.tab === "diff" ? { tab: "diff" } : {}) };
+  const from = splitTarget(state, fromLeafId);
+  const fromLeaf = findLeaf(state.root, from);
+  if (fromLeaf?.content.kind === "file") {
+    return normalize({ root: setLeafContent(state.root, from, clean), focusedId: from, zoomedId: zoomFor(state, from) });
+  }
+  const step = pathTo(state.root, from)?.at(-1);
+  const beside = step && step.split.dir === "row" ? step.split.children[step.index + 1] : undefined;
+  if (beside?.type === "leaf" && beside.content.kind === "file") {
+    return normalize({ root: setLeafContent(state.root, beside.id, clean), focusedId: beside.id, zoomedId: zoomFor(state, beside.id) });
+  }
+  return dock(state, null, from, "right", clean);
+}
+
+/** Just `c`'s line range, with an endLine only when it's a real range after startLine. */
+function lineRange(c: Pick<FileContent, "startLine" | "endLine">): Pick<FileContent, "startLine" | "endLine"> {
+  const start = validLine(c.startLine);
+  if (!start) return {};
+  const end = validLine(c.endLine);
+  return end && end > start ? { startLine: start, endLine: end } : { startLine: start };
+}
+
+const validLine = (n: unknown): number | undefined => (typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : undefined);
+
+/** Change a file pane's tab or lines in place (the Diff/File tabs, clicking line numbers). `null` lines clear the highlight. */
+export function setFileView(state: PaneState, leafId: string, view: { tab?: FileTab; lines?: { startLine: number; endLine?: number } | null }): PaneState {
+  const leaf = findLeaf(state.root, leafId);
+  if (!leaf || leaf.content.kind !== "file") return state;
+  const c = leaf.content;
+  const range = view.lines === undefined ? lineRange(c) : view.lines ? lineRange(view.lines) : {};
+  const tab = view.tab ?? c.tab;
+  const next: FileContent = { kind: "file", root: c.root, path: c.path, ...range, ...(tab && tab !== "file" ? { tab } : {}) };
+  const same = next.startLine === c.startLine && next.endLine === c.endLine && (next.tab ?? "file") === (c.tab ?? "file");
+  return same ? state : { ...state, root: setLeafContent(state.root, leafId, next) };
+}
+
+/**
  * A New session was saved as the draft `ticketKey`: its pane shows the ticket from now on, in
  * place (same leaf id, same size, same focus). If that ticket is already open in another pane,
  * the New session pane closes and the focus goes there instead.
@@ -555,13 +647,13 @@ export function closePane(state: PaneState, leafId: string): PaneState {
 }
 
 /**
- * Escape ends a zoom, or else closes the focused ticket or New session pane (never the board, nor a
- * terminal: Escape is the shell's). A draft's pane asks first (components/draftClose.ts), before this.
+ * Escape ends a zoom, or else closes the focused ticket, file or New session pane (never the board,
+ * nor a terminal: Escape is the shell's). A draft's pane asks first (components/draftClose.ts), before this.
  */
 export function escapePanes(s: PaneState): PaneState {
   if (s.zoomedId) return toggleZoom(s, s.zoomedId);
-  const leaf = s.focusedId ? findLeaf(s.root, s.focusedId) : null;
-  return leaf?.content.kind === "ticket" || leaf?.content.kind === "compose" ? closePane(s, leaf.id) : s;
+  const kind = s.focusedId ? findLeaf(s.root, s.focusedId)?.content.kind : null;
+  return kind === "ticket" || kind === "compose" || kind === "file" ? closePane(s, s.focusedId!) : s;
 }
 
 export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneState {
@@ -612,22 +704,39 @@ export function setSizes(state: PaneState, splitId: string, sizes: number[]): Pa
   return normalize({ ...state, root: replaceNode(state.root, splitId, () => ({ ...node, sizes })) });
 }
 
-/** A ticket's key changed (a project rename): follow it, or close the pane if the new key is already open. */
+/**
+ * A ticket's key changed (a project rename): follow it, or close the pane if the new key is already
+ * open. File panes resolved in that ticket's workdir follow it too (the same way).
+ */
 export function renameTicketKey(state: PaneState, oldKey: string, newKey: string): PaneState {
-  const leaf = ticketLeafByKey(state.root, oldKey);
-  if (!leaf || leaf.content.kind !== "ticket" || oldKey === newKey) return state;
-  const other = ticketLeafByKey(state.root, newKey);
-  if (other) {
-    const next = closePane(state, leaf.id);
-    return state.focusedId === leaf.id ? { ...next, focusedId: other.id } : next;
+  if (oldKey === newKey) return state;
+  let next = state;
+  for (const l of leaves(state.root)) {
+    if (l.content.kind !== "file" || fileRootTicket(l.content) !== oldKey) continue;
+    const moved: FileContent = { ...l.content, root: { ticketKey: newKey } };
+    const other = fileLeafByKey(next.root, fileKey(moved));
+    if (other) {
+      const closed = closePane(next, l.id);
+      next = next.focusedId === l.id ? { ...closed, focusedId: other.id } : closed;
+    } else next = { ...next, root: setLeafContent(next.root, l.id, moved) };
   }
-  return { ...state, root: setLeafContent(state.root, leaf.id, { ...leaf.content, ticketKey: newKey }) };
+  const leaf = ticketLeafByKey(next.root, oldKey);
+  if (!leaf || leaf.content.kind !== "ticket") return next;
+  const other = ticketLeafByKey(next.root, newKey);
+  if (other) {
+    const closed = closePane(next, leaf.id);
+    return next.focusedId === leaf.id ? { ...closed, focusedId: other.id } : closed;
+  }
+  return { ...next, root: setLeafContent(next.root, leaf.id, { ...leaf.content, ticketKey: newKey }) };
 }
 
-/** Close every ticket pane whose ticket no longer exists. */
+/** Close every ticket pane whose ticket no longer exists, and every file pane resolved in one. */
 export function pruneTickets(state: PaneState, exists: (key: string) => boolean): PaneState {
   let next = state;
-  for (const l of leaves(state.root)) if (l.content.kind === "ticket" && !exists(l.content.ticketKey)) next = closePane(next, l.id);
+  for (const l of leaves(state.root)) {
+    const key = l.content.kind === "ticket" ? l.content.ticketKey : l.content.kind === "file" ? fileRootTicket(l.content) : null;
+    if (key !== null && !exists(key)) next = closePane(next, l.id);
+  }
   return next;
 }
 
@@ -844,8 +953,8 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 // Resizing
 // ---------------------------------------------------------------------------
 
-/** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns. */
-export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320, compose: 360 } as const;
+/** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns, a file ~40 columns past its line numbers. */
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320, compose: 360, file: 360 } as const;
 /** The shortest any pane may get in a column split. */
 export const PANE_MIN_HEIGHT = 200;
 
@@ -917,6 +1026,15 @@ function parseContent(v: unknown): PaneContent | null {
     const t: TerminalContent = { kind: "terminal", sessionId: v.sessionId, cwd: v.cwd };
     if (typeof v.title === "string" && v.title) t.title = v.title;
     return t;
+  }
+  if (v.kind === "file" && typeof v.path === "string" && v.path && isObject(v.root)) {
+    const r = v.root;
+    const root: FileRoot | null =
+      typeof r.ticketKey === "string" && r.ticketKey ? { ticketKey: r.ticketKey } : typeof r.projectId === "string" && r.projectId ? { projectId: r.projectId } : null;
+    if (!root) return null;
+    const f: FileContent = { kind: "file", root, path: v.path, ...lineRange({ startLine: v.startLine as number, endLine: v.endLine as number }) };
+    if (v.tab === "diff") f.tab = "diff";
+    return f;
   }
   return null; // unknown kinds (e.g. from a newer build) are dropped
 }

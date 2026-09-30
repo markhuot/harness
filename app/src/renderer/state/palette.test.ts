@@ -1,5 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { matchLabel, parsePaletteQuery, pushRecent, rankCommands, readRecents, RECENT_KEY, RECENT_MAX, recentRanks, type PaletteItem } from "./palette";
+import {
+  fileItemId,
+  looksLikePath,
+  matchLabel,
+  paletteFileRoot,
+  parseFileQuery,
+  parsePaletteQuery,
+  pushRecent,
+  rankCommands,
+  readRecents,
+  recentFilePaths,
+  RECENT_FILES_KEY,
+  RECENT_FILES_MAX,
+  RECENT_KEY,
+  RECENT_MAX,
+  recentRanks,
+  type PaletteItem,
+} from "./palette";
 
 const items = (...labels: string[]): PaletteItem[] => labels.map((label, i) => ({ id: `i${i}`, label }));
 const labels = (q: string, list: PaletteItem[]) => rankCommands(q, list).map((r) => r.item.label);
@@ -160,5 +177,92 @@ describe("recents", () => {
     expect(r.filter((x) => x === "c5").length).toBe(1);
     expect(r).not.toContain("c0");
     expect(recentRanks(r).get("c5")).toBe(0);
+  });
+  test("file recents live under their own key and cap, apart from the commands'", () => {
+    const s = memoryStorage();
+    pushRecent("cmd:board", s);
+    for (let i = 0; i < RECENT_FILES_MAX + 2; i++) pushRecent(`f${i}`, s, RECENT_FILES_KEY, RECENT_FILES_MAX);
+    expect(readRecents(s)).toEqual(["cmd:board"]);
+    const files = readRecents(s, RECENT_FILES_KEY, RECENT_FILES_MAX);
+    expect(files.length).toBe(RECENT_FILES_MAX);
+    expect(files[0]).toBe(`f${RECENT_FILES_MAX + 1}`);
+  });
+});
+
+describe("parsePaletteQuery: files", () => {
+  test("@ limits to files", () => {
+    expect(parsePaletteQuery("@ src/app.ts:12 ")).toEqual({ kind: "files", q: "src/app.ts:12" });
+    expect(parsePaletteQuery("@")).toEqual({ kind: "files", q: "" });
+    expect(parsePaletteQuery("mail me@host")).toEqual({ kind: "all", q: "mail me@host" });
+  });
+});
+
+describe("parseFileQuery", () => {
+  test("a bare path has no lines", () => {
+    expect(parseFileQuery(" src/app.ts ")).toEqual({ search: "src/app.ts" });
+    expect(parseFileQuery("app")).toEqual({ search: "app" });
+  });
+  test("path:line and path:start-end", () => {
+    expect(parseFileQuery("src/app.ts:120")).toEqual({ search: "src/app.ts", startLine: 120 });
+    expect(parseFileQuery("src/app.ts:120-130")).toEqual({ search: "src/app.ts", startLine: 120, endLine: 130 });
+  });
+  test("a column after the line is dropped", () => {
+    expect(parseFileQuery("src/app.ts:12:5")).toEqual({ search: "src/app.ts", startLine: 12 });
+  });
+  test("#L anchors, with or without the second L", () => {
+    expect(parseFileQuery("src/app.ts#L120")).toEqual({ search: "src/app.ts", startLine: 120 });
+    expect(parseFileQuery("src/app.ts#L120-L130")).toEqual({ search: "src/app.ts", startLine: 120, endLine: 130 });
+    expect(parseFileQuery("src/app.ts#L120-130")).toEqual({ search: "src/app.ts", startLine: 120, endLine: 130 });
+  });
+  test("a backwards range is put in order, a one-line range is its start, line 0 is no line", () => {
+    expect(parseFileQuery("a.ts:30-10")).toEqual({ search: "a.ts", startLine: 10, endLine: 30 });
+    expect(parseFileQuery("a.ts#L7-L7")).toEqual({ search: "a.ts", startLine: 7 });
+    expect(parseFileQuery("a.ts:0")).toEqual({ search: "a.ts" });
+  });
+  test("a colon or hash that isn't a line stays in the search", () => {
+    expect(parseFileQuery("a.ts:x")).toEqual({ search: "a.ts:x" });
+    expect(parseFileQuery("notes#todo")).toEqual({ search: "notes#todo" });
+    expect(parseFileQuery("v2:12abc")).toEqual({ search: "v2:12abc" });
+  });
+});
+
+describe("looksLikePath", () => {
+  test("slashes and dots read as paths; words and sentences don't", () => {
+    expect(looksLikePath("src/app")).toBe(true);
+    expect(looksLikePath("app.ts")).toBe(true);
+    expect(looksLikePath(".env")).toBe(true);
+    expect(looksLikePath("settings")).toBe(false);
+    expect(looksLikePath("new session")).toBe(false);
+    expect(looksLikePath("fix the app.ts bug")).toBe(false);
+    expect(looksLikePath("...")).toBe(false);
+  });
+});
+
+describe("paletteFileRoot", () => {
+  test("a focused ticket pane wins over the board's project", () => {
+    expect(paletteFileRoot({ kind: "ticket", ticketKey: "A-1" }, "p1")).toEqual({ ticketKey: "A-1" });
+  });
+  test("a focused file pane searches its own root", () => {
+    expect(paletteFileRoot({ kind: "file", root: { ticketKey: "B-2" } }, "p1")).toEqual({ ticketKey: "B-2" });
+    expect(paletteFileRoot({ kind: "file", root: { projectId: "p2" } }, null)).toEqual({ projectId: "p2" });
+  });
+  test("any other pane, or none, falls back to the board's project", () => {
+    expect(paletteFileRoot({ kind: "terminal" }, "p1")).toEqual({ projectId: "p1" });
+    expect(paletteFileRoot(null, "p1")).toEqual({ projectId: "p1" });
+  });
+  test("the All projects board with no ticket or file focused has no root", () => {
+    expect(paletteFileRoot({ kind: "board" }, null)).toBeNull();
+    expect(paletteFileRoot(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("recentFilePaths", () => {
+  test("keeps the root's paths in order and leaves other roots' out", () => {
+    const t = { ticketKey: "A-1" };
+    const p = { projectId: "A-1" };
+    const recents = [fileItemId(t, "b.ts"), fileItemId(p, "x.ts"), fileItemId({ ticketKey: "A-10" }, "y.ts"), fileItemId(t, "a/c.ts")];
+    expect(recentFilePaths(recents, t)).toEqual(["b.ts", "a/c.ts"]);
+    expect(recentFilePaths(recents, p)).toEqual(["x.ts"]);
+    expect(recentFilePaths(["cmd:board"], t)).toEqual([]);
   });
 });

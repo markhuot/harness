@@ -1,6 +1,9 @@
 // ⌘K command palette: every command that applies where the focus was (the focused ticket's actions
-// included), navigation (boards, inbox, settings sections) and tickets, fuzzy-ranked by
-// state/palette.ts. ">" narrows it to commands and "#" to tickets.
+// included), navigation (boards, inbox, settings sections), tickets and files, fuzzy-ranked by
+// state/palette.ts. ">" narrows it to commands, "#" to tickets and "@" to files (⌘P opens it that
+// way). Files are searched in one root: the focused ticket pane's ticket, else the board's project
+// (paletteFileRoot), git-ignored files included; `path:12` or `path#L12-L20` opens at those lines.
+// Without a prefix, a query that reads as a path adds a few files at the end.
 //
 // Keys, all on the input: ↑/↓, ⌃p/⌃n and ⌃k/⌃j move the highlight (wrapping), Home/End jump to the
 // first and last row (the caret has ⌘←/⌘→ for that on the Mac), Enter runs the highlighted row and
@@ -9,29 +12,54 @@
 
 import "./palette.css";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Ticket } from "@harness/shared";
+import type { FileMatch, Ticket } from "@harness/shared";
 import { sortedProjects } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { commandKeys } from "../state/keys";
 import { availableCommands, runCommand } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
-import { openTicket } from "../state/panes";
+import { findLeaf, getPanes, openTicket } from "../state/panes";
 import { paneScopeOf } from "../state/route";
-import { parsePaletteQuery, pushRecent, rankCommands, readRecents, recentRanks, type MatchRange, type PaletteItem } from "../state/palette";
+import {
+  fileItemId,
+  looksLikePath,
+  matchLabel,
+  paletteFileRoot,
+  parseFileQuery,
+  parsePaletteQuery,
+  pushRecent,
+  rankCommands,
+  readRecents,
+  recentFilePaths,
+  recentRanks,
+  RECENT_FILES_KEY,
+  RECENT_FILES_MAX,
+  type MatchRange,
+  type PaletteFileRoot,
+  type PaletteItem,
+  type Ranked,
+} from "../state/palette";
 import { StatusDot, STATUS_LABEL } from "../components/bits";
 import { SETTINGS_SECTIONS } from "./Settings";
 
 const SEARCH_DEBOUNCE_MS = 150;
 const SEARCH_LIMIT = 20;
+/** Files listed in files mode, and in the unprefixed palette when the query reads as a path. */
+const FILE_LIMIT = 50;
+const FILE_LIMIT_ALL = 5;
 /** Rows shown at most; the query narrows the rest. */
 const MAX_ROWS = 60;
 
 interface Entry extends PaletteItem {
-  kind: "command" | "nav" | "ticket";
+  kind: "command" | "nav" | "ticket" | "file";
   group: string;
   /** Shortcut hint ("⇧⌘]"). */
   keys?: string;
   ticket?: Ticket;
+  /** A file row's path, relative to the root. */
+  path?: string;
+  /** A file git ignores (or in node_modules), per the search. */
+  ignored?: boolean;
   run: () => void;
 }
 
@@ -51,17 +79,54 @@ function Highlighted({ text, ranges, offset = 0 }: { text: string; ranges: Match
   return <>{out}</>;
 }
 
-export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Element; onClose: () => void; onShortcuts: () => void }) {
-  const { state, client, route, navigate } = useStore();
-  const [raw, setRaw] = useState("");
+/** A file row: the name, then its folder dimmed, both with the query's matches marked. */
+function FileLabel({ path, ranges }: { path: string; ranges: MatchRange[] }) {
+  const slash = path.lastIndexOf("/");
+  const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
+  const name = path.slice(dir.length);
+  return (
+    <span className="palette-label palette-file">
+      <span className="palette-file-name">
+        <Highlighted text={name} ranges={ranges} offset={dir.length} />
+      </span>
+      {dir && (
+        <span className="palette-file-dir">
+          <Highlighted text={dir} ranges={ranges} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+const rootKey = (root: PaletteFileRoot | null) => (!root ? "" : "ticketKey" in root ? `t:${root.ticketKey}` : `p:${root.projectId}`);
+
+export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: { origin: Element; initial?: string; onClose: () => void; onShortcuts: () => void }) {
+  const { state, client, route, navigate, openFile } = useStore();
+  const [raw, setRaw] = useState(initial);
   const [active, setActive] = useState(0);
   const [recents] = useState(readRecents);
+  const [fileRecents] = useState(() => readRecents(undefined, RECENT_FILES_KEY, RECENT_FILES_MAX));
   const [remote, setRemote] = useState<{ q: string; tickets: Ticket[] } | null>(null);
+  const [remoteFiles, setRemoteFiles] = useState<{ key: string; files: FileMatch[] } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchingFiles, setSearchingFiles] = useState(false);
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
   const { kind, q } = parsePaletteQuery(raw);
   const wantTickets = kind === "tickets" || (kind === "all" && !!q);
+  const fileQuery = parseFileQuery(q);
+  const wantFiles = kind === "files" || (kind === "all" && looksLikePath(fileQuery.search));
+
+  // The pane the palette was opened over (on a board), and the folder its file browser searches.
+  const [where] = useState(() => {
+    const scope = route.view === "board" ? paneScopeOf(route) : null;
+    const panes = scope ? getPanes(scope) : null;
+    const leaf = panes?.focusedId ? findLeaf(panes.root, panes.focusedId) : null;
+    const projectId = route.view === "board" || route.view === "project" ? route.projectId : null;
+    return { scope, paneId: leaf?.id ?? null, root: paletteFileRoot(leaf?.content, projectId) };
+  });
+  const root = where.root;
+  const rootLabel = !root ? null : "ticketKey" in root ? root.ticketKey : state.projects[root.projectId]?.name ?? "this project";
 
   // Put the focus back where it was when the palette goes away some other way (⌘K again). A row
   // that ran has already done that, and whatever it focused since (a composer, a confirm) keeps it.
@@ -93,16 +158,44 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
     return () => clearTimeout(t);
   }, [client, q, wantTickets]);
 
+  // The file search: every file under the root, git-ignored ones (node_modules, .env) included.
+  const fileSeq = useRef(0);
+  const search = fileQuery.search;
+  const filesKey = `${rootKey(root)}\u0000${search}`;
+  useEffect(() => {
+    const n = ++fileSeq.current;
+    if (!wantFiles || !root || !search) {
+      setSearchingFiles(false);
+      return;
+    }
+    setSearchingFiles(true);
+    const t = setTimeout(() => {
+      const opts = { limit: FILE_LIMIT, ignored: true, kind: "file" as const };
+      ("ticketKey" in root ? client.ticketFiles(root.ticketKey, search, opts) : client.projectFiles(root.projectId, search, opts))
+        .then((files) => n === fileSeq.current && setRemoteFiles({ key: filesKey, files: files.filter((f) => f.kind === "file") }))
+        .catch(() => n === fileSeq.current && setRemoteFiles({ key: filesKey, files: [] }))
+        .finally(() => n === fileSeq.current && setSearchingFiles(false));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [client, root, search, filesKey, wantFiles]);
+
   const openTicketKey = (key: string) => {
     const scope = route.view === "board" ? paneScopeOf(route) : null;
     if (scope) focusPaneBy(scope, (s) => openTicket(s, key));
     else navigate({ view: "board", projectId: null, ticketKey: key, tab: "summaries" });
   };
 
+  const openPath = (path: string) => {
+    if (!root) return;
+    const { startLine, endLine } = fileQuery;
+    const link = { path, absolute: path.startsWith("/"), startLine, endLine, ...root };
+    openFile(link, { paneId: where.paneId, scope: where.scope });
+  };
+
   const entries = useMemo((): Entry[] => {
     const ranks = recentRanks(recents);
     const out: Entry[] = [];
-    if (kind !== "tickets") {
+    if (kind !== "tickets" && kind !== "files") {
       const commands = availableCommands(origin);
       const have = new Set(commands.map((c) => c.spec.id));
       for (const { spec } of commands) {
@@ -140,7 +233,22 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
     // origin's handlers are read when the palette opens and again as the query changes.
   }, [kind, wantTickets, q, origin, state, remote, recents, route, navigate, onShortcuts]);
 
+  // File rows, in the server's order (it ranks them); the recently opened ones for an empty query.
+  const fileRows = useMemo((): Ranked<Entry>[] => {
+    if (!wantFiles || !root) return [];
+    const file = (path: string, ignored = false): Ranked<Entry> => ({
+      item: { id: fileItemId(root, path), kind: "file", label: path, group: "File", path, ignored, run: () => openPath(path) },
+      ranges: search ? matchLabel(search.toLowerCase(), path)?.ranges ?? [] : [],
+      score: 0,
+    });
+    if (!search) return kind === "files" ? recentFilePaths(fileRecents, root).map((p) => file(p)) : [];
+    const files = remoteFiles?.key === filesKey ? remoteFiles.files : [];
+    return files.slice(0, kind === "files" ? FILE_LIMIT : FILE_LIMIT_ALL).map((f) => file(f.path, !!f.ignored));
+    // openPath reads the query's lines, which change with `q`.
+  }, [wantFiles, root, search, kind, fileRecents, remoteFiles, filesKey, q]);
+
   const rows = useMemo(() => {
+    if (kind === "files") return fileRows;
     const ranked = rankCommands(q, entries);
     // The server matched these on more than the label (their description): keep them, after the rest.
     if (remote?.q === q) {
@@ -150,8 +258,8 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
         if (e && !shown.has(e.id)) ranked.push({ item: e, ranges: [], score: 0 });
       }
     }
-    return ranked.slice(0, MAX_ROWS);
-  }, [q, entries, remote]);
+    return [...ranked.slice(0, MAX_ROWS - fileRows.length), ...fileRows];
+  }, [kind, q, entries, remote, fileRows]);
 
   useEffect(() => setActive(0), [raw]);
   const current = Math.min(active, rows.length - 1);
@@ -164,7 +272,8 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
     onClose();
     if (origin.isConnected) (origin as HTMLElement).focus?.();
     if (!entry) return;
-    pushRecent(entry.id);
+    if (entry.kind === "file") pushRecent(entry.id, undefined, RECENT_FILES_KEY, RECENT_FILES_MAX);
+    else pushRecent(entry.id);
     entry.run();
   };
 
@@ -192,7 +301,26 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
   };
 
   const optionId = (i: number) => `${listId}-${i}`;
-  const placeholder = kind === "commands" ? "Run a command…" : kind === "tickets" ? "Find a ticket…" : "Search commands and tickets…  (> commands, # tickets)";
+  const placeholder =
+    kind === "commands"
+      ? "Run a command…"
+      : kind === "tickets"
+        ? "Find a ticket…"
+        : kind === "files"
+          ? rootLabel
+            ? `Find a file in ${rootLabel}…  (path:12 opens at a line)`
+            : "Find a file…"
+          : "Search commands and tickets…  (> commands, # tickets, @ files)";
+  const lineHint = fileQuery.startLine ? `:${fileQuery.startLine}${fileQuery.endLine ? `-${fileQuery.endLine}` : ""}` : null;
+  const busy = searching || searchingFiles;
+
+  const emptyNote = (): string => {
+    if (kind === "files") {
+      if (!root) return "Focus a ticket, or open a project's board, to browse its files";
+      return search ? "No matching files" : `Type to find a file in ${rootLabel}`;
+    }
+    return q ? "No matches" : kind === "tickets" ? "Type to find a ticket" : "Nothing to run here";
+  };
 
   return (
     <div className="overlay palette-overlay" data-testid="palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && finish()}>
@@ -213,6 +341,12 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
           onChange={(e) => setRaw(e.target.value)}
           onKeyDown={onKeyDown}
         />
+        {kind === "files" && rootLabel && (
+          <div className="palette-root" data-testid="palette-root">
+            Files in <strong>{rootLabel}</strong>
+            {!search && rows.length > 0 && <span className="palette-root-hint">Recently opened</span>}
+          </div>
+        )}
         <div className="palette-list" id={listId} role="listbox" aria-label="Results" ref={listRef}>
           {rows.map(({ item, ranges }, i) => {
             const t = item.ticket;
@@ -226,6 +360,7 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
                 data-testid="palette-row"
                 data-id={item.id}
                 data-kind={item.kind}
+                data-path={item.path}
                 // mousemove, not mouseenter: the list scrolling under a still pointer mustn't take the highlight.
                 onMouseMove={() => i !== current && setActive(i)}
                 // Keep the focus (and the caret) in the input.
@@ -245,6 +380,17 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
                       {STATUS_LABEL[t.status]}
                     </span>
                   </>
+                ) : item.path !== undefined ? (
+                  <>
+                    <FileLabel path={item.path} ranges={ranges} />
+                    {item.ignored && (
+                      <span className="palette-ignored" data-testid="palette-ignored" title="Git ignores this file">
+                        ignored
+                      </span>
+                    )}
+                    {lineHint && <span className="palette-group palette-lines">{lineHint}</span>}
+                    {kind !== "files" && <span className="palette-group">{item.group}</span>}
+                  </>
                 ) : (
                   <>
                     <span className="palette-label">
@@ -258,15 +404,15 @@ export function CommandPalette({ origin, onClose, onShortcuts }: { origin: Eleme
             );
           })}
         </div>
-        {searching && (
+        {busy && (
           <div className="palette-note" role="status" data-testid="palette-searching">
             <span className="spinner" />
             Searching…
           </div>
         )}
-        {!searching && rows.length === 0 && (
+        {!busy && rows.length === 0 && (
           <div className="palette-note" data-testid="palette-empty">
-            {q ? "No matches" : kind === "tickets" ? "Type to find a ticket" : "Nothing to run here"}
+            {emptyNote()}
           </div>
         )}
       </div>

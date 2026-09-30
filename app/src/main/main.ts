@@ -343,6 +343,7 @@ function buildMenu() {
       submenu: [
         commandItem("new-session", "New Session"),
         commandItem("new-terminal"),
+        commandItem("open-file"),
         { type: "separator" },
         commandItem("board", "Board"),
         commandItem("inbox", "Inbox"),

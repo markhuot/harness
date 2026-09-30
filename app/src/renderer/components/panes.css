@@ -113,10 +113,10 @@
 }
 /* The first header in the main area clears the traffic lights and the toggle. In the pane
    workspace that's only the top-left pane's (the zoomed one while zoomed). */
-.main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar) {
+.main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar, .pane-corner > .file-pane > .detail-titlebar) {
   transition: padding-left 0.18s cubic-bezier(0.2, 0, 0, 1);
 }
-.sidebar-collapsed .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar) {
+.sidebar-collapsed .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar, .pane-corner > .file-pane > .detail-titlebar) {
   padding-left: var(--chrome-inset);
 }
 
@@ -144,7 +144,8 @@
 }
 .pane > .board-pane,
 .pane > .detail,
-.pane > .terminal-pane {
+.pane > .terminal-pane,
+.pane > .file-pane {
   flex: 1;
   min-height: 0;
 }
@@ -402,7 +403,7 @@ html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.acti
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
-  .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar),
+  .main :is(.view > .view-header, .inbox-list > .view-header, .pane-corner > .board-pane > .view-header, .pane-corner > .detail .detail-titlebar, .pane-corner > .terminal-pane > .detail-titlebar, .pane-corner > .file-pane > .detail-titlebar),
   .resize-handle::after,
   .pane-divider::after,
   .pane-drop-preview {

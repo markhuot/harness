@@ -626,6 +626,12 @@ edits are fine; the section overrides that, because edits in the workdir are aut
 goes to a permission prompt or the classifier. Plan, review and conductor runs get only the read
 half. We don't reimplement the file tools for claude-code: the CLI's own are used as-is.
 
+File links: every ticket run (not triage) also gets a "File links" section (`system.file_links`)
+asking the model to put a `[path:start-end](harness://file/path#Lstart-Lend)` link before any code
+it quotes from the working directory, and to use the same link for a file:line named in prose.
+The apps open those links in the file pane (`shared/src/fileLinks.ts` defines the format). Claude
+Code's own prompt asks for bare `file_path:line_number` references; the section overrides that.
+
 ## Drivers
 
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).
@@ -897,7 +903,7 @@ sub-agent links to its transcript.
 
 Every agent prompt is a template in `service/src/orchestrator/prompt-templates.ts` under a stable
 id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
-context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, board,
+context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, file links, board,
 board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
 and conductor start, review, the three completions, conductor update, changes requested, reopen,
 triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and
@@ -956,7 +962,9 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
 POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
-GET    /projects/:id/files?q=&limit=50   GET /tickets/:key/files?q=&limit=50   → FileMatch[] (@-mention autocomplete)
+GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
+GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
+GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
@@ -1104,6 +1112,42 @@ file typed in full (`.env`) stays in the list, first.
   transcript keeps the prompt as typed plus a status line, `Attached @README.md, @src/app.ts`,
   and one `Didn't attach @…: <reason>` line per skipped path. Contents are read when the run
   starts, so a message queued behind a run gets the files as they are when it runs.
+- **The file browser's search.** `?ignored=1` on either `/files` route (the command palette's
+  file browser; the autocomplete never sends it) builds a separate, deeper index that also walks
+  `node_modules` (anywhere), after everything else, with its own budget of 200,000 entries and
+  1.5 seconds, cached for 30 seconds. Gitignored paths (and everything in `node_modules`) rank
+  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`, and
+  come back as `{ path, kind, ignored: true }` (the autocomplete's matches never carry the field).
+  `?kind=file` (or `dir`) keeps one kind, the one-level browse included.
+
+## File viewer
+
+The desktop file pane and the mobile file viewer read one file where a project or ticket works,
+syntax-highlight it, and show a diff tab when it has uncommitted changes
+(`service/src/orchestrator/file-view.ts`). The root is the project folder, or for a ticket the
+same folder `/tickets/:key/files` searches (worktree, else session cwd, else project folder).
+
+- **Paths.** `?path=` is relative to the root, or absolute inside it (made relative, with the
+  root's real path accepted too, e.g. macOS's `/private/var`). `safeJoin`
+  (`service/src/safe-path.ts`, shared with the plugin static UIs) refuses NUL, `..` and anything
+  whose real path leaves the root, so symlinks can't escape: those are 400, as are folders, the
+  root itself and anything inside `.git`. A missing file is 404.
+- **Contents** (`FileView`) are read from disk, not git, so gitignored files open like any
+  other. A NUL in the first 8 KB makes a file `binary`; a file over 2 MiB is `tooLarge`; either
+  way `contents` is null. `truncated` flags a file that grew past the cap while being read.
+  `git` comes from one `git status --porcelain -z --untracked-files=all --ignored=matching` for
+  the path: `untracked` (`??`), `ignored` (`!!`), `tracked` otherwise, `dirty` for any entry but
+  an ignored one; all false outside a repository.
+- **Diff** (`FileDiff`) is the working tree against `HEAD` (the empty tree before the first
+  commit), staged and unstaged together, with the git plugin's flags (`--no-color --no-ext-diff
+  --no-textconv --src-prefix=a/ --dst-prefix=b/`, no `-M`: renames aren't followed) plus
+  `--relative`, so paths match `path` when the root is a folder inside the repository. An
+  untracked file is `git diff --no-index -- /dev/null <path>`, so it shows as added. A clean or
+  ignored file has an empty patch; a deleted one still diffs. `oldContents` is `HEAD:./<path>`
+  and `newContents` the disk copy, each null when missing, binary or over 2 MiB; a patch over
+  4 MiB comes back empty with `tooLarge`. A root outside any repository is a 409 (the viewer knows
+  from `FileView.git.repo` not to ask). Git runs without a shell, with `--literal-pathspecs`,
+  the path after `--`, and `GIT_OPTIONAL_LOCKS=0` so it never takes the index lock.
 
 ## Service updates
 
@@ -1399,9 +1443,11 @@ Settings, project settings, or on the board route the pane workspace.
   again by id when you come back, and a terminal re-attaches to its shell, which lives in the
   main process. Keeping every board mounted would mean running a board per project, each with its
   own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
-  `{ kind: "terminal", sessionId, cwd, title? }`), splits lay their children out side by side
+  `{ kind: "terminal", sessionId, cwd, title? }`, `{ kind: "file", root, path, startLine?, endLine?, tab? }`),
+  splits lay their children out side by side
   (`row`) or stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board
-  pane, and a ticket or a terminal session is open in at most one pane of any scope. `PaneWorkspace.tsx`
+  pane, and a ticket, a terminal session or a file (its root plus path, `fileKey`) is open in at
+  most one pane of any scope. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -1412,6 +1458,26 @@ Settings, project settings, or on the board route the pane workspace.
   plugin's open-ticket request) replace that pane's content through `useOpenTicket`
   (`components/paneContext.ts`), or focus the pane already showing that ticket. Cards are
   highlighted when their ticket is open in a pane, most strongly in the focused one.
+- **File panes.** `views/FilePane.tsx` shows one file in full through the File viewer endpoints
+  (see "File viewer"). Its `root` is `{ ticketKey }` (the ticket's workdir) or `{ projectId }`.
+  File links in chat (`harness://file/…` or plain paths, `shared/src/fileLinks.ts`) render as
+  `.file-link` anchors in `components/Markdown.tsx` and call the store's `openFile`. A link's own
+  `?ticket=`/`?project=` names its root, else the `FileLinkScope` the text renders in (the ticket
+  pane's ticket, the Inbox session's dispatched project; `state/fileOpen.ts`). `openFile` in
+  `state/panes.ts` focuses the pane already showing that file and moves it to the link's lines
+  (switching to the File tab), else shows it in the pane it's opened from when that's a file pane
+  (the palette's file browser over one), else reuses a file pane just right of that pane, else
+  docks a new one on its right. `FileViewer.tsx` (loaded lazily) draws the file with
+  @pierre/diffs' `File`: the syntax theme, line numbers, `startLine..endLine` as its selected
+  lines, scrolled into view on open and when a link moves the pane (not when you pick lines in
+  the gutter, which updates the pane's range in place with `setFileView`). A file with
+  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, a
+  `MultiFileDiff` of HEAD against the working tree (a `PatchDiff` of git's patch when a side is
+  binary or too big), with the Git tab's `lineDiffType` and hunk separators. Contents and diff
+  refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
+  button. File panes persist with the rest of the tree, follow a ticket rename, and close when
+  their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real
+  service.
 - **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
   drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
   or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
@@ -1436,7 +1502,7 @@ Settings, project settings, or on the board route the pane workspace.
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
-  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, any
+  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, a file 360 px, any
   pane 200 px tall.
   They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
@@ -1444,10 +1510,10 @@ Settings, project settings, or on the board route the pane workspace.
   until a divider moves, and a drag starts from the sizes on screen.
 - **Focus, close, zoom.** Clicking into a pane, or tabbing into it, focuses it (a faint header
   tint). Focus that code moves with no key or pointer input in the last 300 ms (an autofocus, a
-  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket or
-  terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
+  blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket,
+  file or terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
   focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
-  focused ticket pane (never while a text field, modal, menu, the palette or a terminal has the
+  focused ticket or file pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
   pane, and a renamed key follows the rename.
 - **Pop-out windows.** A ticket or terminal pane's header has a pop-out button beside Maximize
@@ -1522,6 +1588,17 @@ Settings, project settings, or on the board route the pane workspace.
     subsequence matches, with a label prefix first, then word starts, then runs, then scattered
     letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`
     and ⌘/ open the shortcuts overlay, which is rendered from the registry.
+  - *File browser.* `@` (or ⌘P, Open File…) turns the palette into a file browser. It searches one
+    root, picked when the palette opens (`paletteFileRoot`): the focused ticket pane's ticket, else
+    the focused file pane's root, else the board's project. The All projects board with neither
+    focused has no root, and says so. It searches with `ticketFiles`/`projectFiles` and
+    `{ ignored: true, kind: "file" }` after 150 ms, keeps the server's order, marks matches
+    with `matchLabel`, and tags the matches the server says are ignored. `parseFileQuery` splits `path:12`, `path:12-20` or `path#L12-L20` off the
+    query, and Enter opens the file at those lines through the store's `openFile`, beside the
+    pane the palette was opened over. An empty query lists that root's recently opened files
+    (`harness.palette.recentFiles`, kept apart from the commands' recents). Without a prefix, a
+    query that reads as a path (`looksLikePath`) adds up to five files after the commands and
+    tickets. `scripts/palette-files-check.ts` drives it against the real service.
   - *Rings.* `html[data-input]` is `keyboard` after a keyboard command or Tab, and `pointer` after
     any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
     (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
@@ -1688,6 +1765,30 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   closes the viewer (`pullOf` / `dismissOnRelease`, never while zoomed). A JS `PanResponder` lost
   those drags to the zoom scroll view's own pan. A load or decode error shows a placeholder in
   the thumb and the page.
+- **File viewer.** Markdown links go through `useOpenLink` (`mobile/src/ui/fileLinks.tsx`):
+  http(s) and mailto open outside the app, and a file link (`parseFileLink`) pushes `app/file.tsx`
+  with `path`, `ticket` or `project`, `start` and `end`. A relative link resolves in the ticket
+  that `FileLinkScope` provides (`app/ticket/[key].tsx` wraps the ticket screen in one), unless the
+  link carries its own `?ticket=`/`?project=`. A triage session (the Inbox) has no folder, so its
+  outcome and transcript resolve in the project of the ticket it dispatched, as on the desktop.
+  When that ticket isn't loaded, they use its key instead (`triageLinkContext`). A session that
+  dispatched nothing has no scope, and a relative link from it shows a toast. An OS-level `harness://file/…` URL is
+  rewritten to the same route by `app/+native-intent.tsx` (`fileScreenHref`), because the
+  path-based router would read it as `/file/<segments>` and drop the `#L` range. Every other
+  `harness://` link passes through unchanged. `FileViewerScreen` (`mobile/src/screens/FileViewer.tsx`)
+  loads `FileView` and, only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs
+  (the Diff tab counts +added/−removed). Both are `FlatList`s of fixed-height rows inside one
+  horizontal `ScrollView` sized to the longest line (capped at 400 columns, clipped past that).
+  Rows never wrap, so `getItemLayout` lets the list open straight at the range
+  (`initialScrollIndex`, a few lines above it). A long file is highlighted a window at a time
+  (`highlightWindow`, 40 000 characters around what's on screen, re-centered when scrolling
+  leaves it). Colored lines stay colored as later windows land. Tokenizing from a window's first
+  line can start mid-comment, which is accepted. A patch over the highlighter's 60 000-character
+  limit (`MAX_HIGHLIGHT_CHARS`) isn't windowed: the Diff tab shows it without syntax colors, still
+  with its line tints. The Diff tab numbers each line of the patch
+  from its hunk headers (`patchRows`) and takes the colors from the whole patch highlighted as a
+  diff (`PatchRow.source` indexes parseDiff's lines). Pull to refresh reloads both. The pure
+  parts are in `mobile/src/lib/fileViewer.ts`.
 - **Plugin tabs.** `react-native-webview` loads the plugin UI from the service; the host bridge is
   the shared `createPluginHostBridge` over the WebView transport in `mobile/src/lib/pluginHost.ts`.
   Plugins get the full theme (appearance, themeId, syntaxTheme, tokens) with the old light/dark field.

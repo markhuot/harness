@@ -9,6 +9,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@harness/shared": "workspace:*",
+        "@pierre/diffs": "^1.5.1",
         "ghostty-web": "0.4.0-next.20.g1858a59",
         "node-pty": "^1",
         "react": "^19.1.0",
@@ -32,6 +33,11 @@
       "dependencies": {
         "@expo/ui": "~57.0.20",
         "@harness/shared": "workspace:*",
+        "@pierre/theme": "2.0.0",
+        "@shikijs/core": "4.4.3",
+        "@shikijs/engine-javascript": "4.4.3",
+        "@shikijs/langs": "4.4.3",
+        "@shikijs/themes": "4.4.3",
         "expo": "~57.0.25",
         "expo-camera": "~57.0.5",
         "expo-clipboard": "~57.0.2",
@@ -93,6 +99,7 @@
         "@harness/shared": "workspace:*",
       },
       "devDependencies": {
+        "@pierre/diffs": "^1.5.1",
         "@types/bun": "latest",
         "typescript": "^5.9.0",
       },
@@ -106,7 +113,7 @@
     "electron",
   ],
   "packages": {
-    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.128.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-tl5cBFZC1jVFrTuQyvQObA4WmuNgcYVeXfriqOumgtLAHUm4gPUj18YnszBW60v0PrjDB8nBDOC6wd9CmHQFlA=="],
+    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.129.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-MH7LB20kNpGLUpPTe2OG5XvL/KhX8HUO9XyBaFjgFk6TLS4Xjt0VPIuMKywe7POKKPslX+QxSlVok9e+8kG5Nw=="],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 

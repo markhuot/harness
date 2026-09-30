@@ -12,6 +12,7 @@ export * from "./types";
 export { alpha, contrast, distance, mix, over, parseColor, isColor, toHex } from "./color";
 export { harnessDark, harnessLight } from "./harness";
 export { projectKeyColors, type ProjectKeyColors } from "./projectColor";
+export { PIERRE_DEFAULT, syntaxThemeName, viewerThemes } from "./syntax";
 
 /** Every bundled theme, grouped light-then-dark in picker order. */
 export const THEMES: readonly Theme[] = [

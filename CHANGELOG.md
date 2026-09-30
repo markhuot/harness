@@ -20,11 +20,38 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Inbox outcomes are now links. Click or tap one to open that ticket, on the Mac or on iPhone and
   iPad. A key links when it belongs to one of your projects or to a ticket on the board, so text
   like UTF-8 or SHA-256 stays as it is.
+- On the Mac, code in chat messages and summaries is syntax highlighted in the same colors as the
+  Git tab, and follows your light, dark and color theme. Diffs show added and removed lines the way
+  the Git tab's diff viewer does. Hover a code block to copy it.
+- On iPhone and iPad, code in chat messages, briefs and summaries is syntax highlighted in the same
+  colors as the Mac and the Git tab, and follows your light, dark and color theme. In diffs, added
+  and removed lines get green and red backgrounds, and the code in them is colored by its file's
+  language.
+- On the Mac, clicking a file link in a chat message, summary or brief opens the whole file in a
+  new file pane beside the ticket. The file is syntax highlighted, and a link to specific lines
+  scrolls to them and highlights them. Following another link into the same file reuses its pane.
+  Click or drag the line numbers to pick lines, and use **Copy link** in the pane's More menu to
+  share them. Files that git ignores open too, marked "ignored", and file panes stay open when
+  you quit and reopen the app.
+- When a file in the file pane has uncommitted changes, a **Diff** tab shows what changed since
+  the last commit, in the same style as the Git tab, as unified or split.
+- On iPhone and iPad, tapping a file link in a chat message, brief or summary opens the file with
+  syntax highlighting and line numbers, scrolled to the linked lines and with them highlighted.
+  When the file has uncommitted changes, a Diff tab shows them. Pull down to reload. File links
+  opened from outside the app (`harness://file/…?ticket=…`) open there too.
+- On the Mac, **Open File…** (⌘P), or typing `@` in the command palette, finds any file in the
+  focused ticket's folder or the board's project, including files git ignores such as `.env` and
+  anything in `node_modules` (tagged "ignored" in the list), and opens it in a file pane. Type
+  `src/app.ts:120` or `src/app.ts#L120-L130` to open it at those lines. With nothing typed, it
+  lists the files you opened last. Typing a path in the palette without the `@` shows a few
+  matching files too.
 
 ### Changed
 
 - The Mac app's icon now uses the same purple artwork as the iPhone and iPad icon, and the white
   frame around it is gone.
+- Agents now link the code they quote in messages and summaries, so you can open the whole file
+  at those lines.
 
 ### Fixed
 

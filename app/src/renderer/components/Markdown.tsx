@@ -1,12 +1,20 @@
 // Markdown-ish rendering for agent summaries and transcript text: paragraphs, headings,
-// bullet/numbered lists, fenced code, tables, inline code, bold/italic, links, ticket keys. Parsing is shared with the
+// bullet/numbered lists, fenced code (syntax highlighted, Code.tsx), tables, inline code, bold/italic, links, ticket keys. Parsing is shared with the
 // iOS app (@harness/shared/state "markdown"); this builds React DOM nodes directly (no innerHTML),
 // so agent output can't inject markup.
+//
+// Links to files (harness://file/…, or a plain path; shared/src/fileLinks.ts) open the file pane.
+// Their path resolves in the ticket or project the text belongs to, which the view provides with
+// FileLinkScope; from inside a pane the file docks beside it. http(s) links open in the browser.
 
-import { Fragment, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useMemo, type ReactNode } from "react";
+import { parseFileLink } from "@harness/shared";
 import { inlineTokens, parseBlocks, ticketByKey, ticketLinkable } from "@harness/shared/state";
-import { useStore } from "../state/store";
-import { useOpenTicket } from "./paneContext";
+import type { FileLinkContext } from "../state/fileOpen";
+import { useOptionalStore } from "../state/store";
+import { FencedCode } from "./Code";
+import { Icon } from "./Icon";
+import { PaneContext, PaneScopeContext, useOpenTicket } from "./paneContext";
 
 export { parseBlocks, plainText } from "@harness/shared/state";
 
@@ -15,6 +23,52 @@ export interface TicketLinks {
   /** The ticket's title for the tooltip ("" when it isn't loaded yet), or null to leave the key as text. */
   title: (key: string) => string | null;
   open: (key: string) => void;
+}
+
+const FileLinkScopeContext = createContext<FileLinkContext>({});
+
+/** Where file links in the Markdown below resolve: the ticket (and project) whose text it is. */
+export function FileLinkScope({ ticketKey, projectId, children }: FileLinkContext & { children: ReactNode }) {
+  const value = useMemo(() => ({ ticketKey, projectId }), [ticketKey, projectId]);
+  return <FileLinkScopeContext.Provider value={value}>{children}</FileLinkScopeContext.Provider>;
+}
+
+function MdLink({ url, children }: { url: string; children: ReactNode }) {
+  const file = useMemo(() => parseFileLink(url), [url]);
+  const store = useOptionalStore();
+  const ctx = useContext(FileLinkScopeContext);
+  const pane = useContext(PaneContext);
+  const scope = useContext(PaneScopeContext);
+  if (!file) {
+    return (
+      <a
+        href={url}
+        onClick={(e) => {
+          e.preventDefault();
+          void window.harness?.openExternal(url);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  const where = file.ticketKey ?? ctx.ticketKey;
+  const lines = file.startLine ? (file.endLine ? `, lines ${file.startLine}–${file.endLine}` : `, line ${file.startLine}`) : "";
+  return (
+    <a
+      href={url}
+      className="file-link"
+      data-testid="file-link"
+      title={`Open ${file.path}${lines}${where ? ` (${where})` : ""}`}
+      onClick={(e) => {
+        e.preventDefault();
+        store?.openFile(file, { ...ctx, paneId: pane?.paneId ?? null, scope: pane ? scope : null });
+      }}
+    >
+      <Icon name="fileText" size={12} className="file-link-icon" />
+      {children}
+    </a>
+  );
 }
 
 export function inline(text: string, tickets?: TicketLinks, onLink?: (url: string) => void): ReactNode[] {
@@ -47,13 +101,14 @@ export function inline(text: string, tickets?: TicketLinks, onLink?: (url: strin
       case "em":
         return <em key={k}>{tok.text}</em>;
       case "link":
+        if (!onLink) return <MdLink key={k} url={tok.url}>{tok.text}</MdLink>;
         return (
           <a
             key={k}
             href={tok.url}
             onClick={(e) => {
               e.preventDefault();
-              onLink ? onLink(tok.url) : void window.harness?.openExternal(tok.url);
+              onLink(tok.url);
             }}
           >
             {tok.text}
@@ -63,7 +118,7 @@ export function inline(text: string, tickets?: TicketLinks, onLink?: (url: strin
   });
 }
 
-function withBreaks(text: string, tickets: TicketLinks) {
+function withBreaks(text: string, tickets?: TicketLinks) {
   const parts = text.split("\n");
   return parts.map((p, i) => (
     <Fragment key={i}>
@@ -73,10 +128,15 @@ function withBreaks(text: string, tickets: TicketLinks) {
   ));
 }
 
-/** Ticket keys link to the ticket (opening it the way a link in this pane does) when the store can resolve them. */
-function useTicketLinks(): TicketLinks {
-  const { state } = useStore();
+/**
+ * Ticket keys link to the ticket (opening it the way a link in this pane does) when the store can
+ * resolve them. Without a store (Markdown rendered on its own) they stay text.
+ */
+function useTicketLinks(): TicketLinks | undefined {
+  const store = useOptionalStore();
   const openTicket = useOpenTicket();
+  if (!store) return undefined;
+  const { state } = store;
   return { title: (key) => (ticketLinkable(state, key) ? (ticketByKey(state, key)?.title ?? "") : null), open: (key) => openTicket(key) };
 }
 
@@ -110,11 +170,7 @@ export function Markdown({ text, className }: { text: string; className?: string
               </ol>
             );
           case "code":
-            return (
-              <pre key={i}>
-                <code>{b.text}</code>
-              </pre>
-            );
+            return <FencedCode key={i} text={b.text} lang={b.lang} />;
           case "quote":
             return <blockquote key={i}>{withBreaks(b.text, tickets)}</blockquote>;
           case "table":

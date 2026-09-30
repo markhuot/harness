@@ -180,6 +180,13 @@ function statusList(raw: string | null): TicketStatus[] | undefined {
   return [...new Set(list)] as TicketStatus[];
 }
 
+/** The /files search's `?ignored=1&kind=file`: the file browser's options (the autocomplete sends neither). */
+function fileSearch(url: URL): { ignored: boolean; kind?: "file" | "dir" } {
+  const kind = url.searchParams.get("kind") || undefined;
+  if (kind !== undefined && kind !== "file" && kind !== "dir") throw new HarnessError(400, "kind must be file or dir");
+  return { ignored: /^(1|true)$/.test(url.searchParams.get("ignored") ?? ""), kind };
+}
+
 export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: RouteExtras = {}): Route[] {
   const { plugins, network, tokens } = extras;
   const routes: Route[] = [];
@@ -190,7 +197,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/projects", async ({ body }) => o.createProject(await body()));
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
-  add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
+  add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
+  add("GET", "/projects/:id/file", ({ params, url }) => o.projectFile(params.id!, url.searchParams.get("path") ?? ""));
+  add("GET", "/projects/:id/file/diff", ({ params, url }) => o.projectFileDiff(params.id!, url.searchParams.get("path") ?? ""));
   add("GET", "/projects/:id/branches", ({ params, url }) => o.projectBranches(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
   // Tickets
@@ -233,7 +242,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/agent-review", ({ params }) => o.rerunAgentReview(params.key!));
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
   add("GET", "/tickets/:key/summaries", ({ params }) => o.summaries(params.key!));
-  add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
+  add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
+  add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
+  add("GET", "/tickets/:key/file/diff", ({ params, url }) => o.ticketFileDiff(params.key!, url.searchParams.get("path") ?? ""));
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {

@@ -583,6 +583,7 @@ export const PROMPT_IDS = [
   "system.branches",
   "system.files",
   "system.summaries",
+  "system.file_links",
   "system.board",
   "system.board_changes",
   "system.config",
@@ -896,6 +897,60 @@ export interface BranchInfo {
    * A new ticket can't take a branch that is checked out elsewhere: it would block.
    */
   checkedOutAt: string | null;
+}
+
+/**
+ * Where a file stands in git (GET /…/file). All false when the root isn't in a repository.
+ * `dirty` is any difference from HEAD (staged, unstaged, or untracked); an ignored file is
+ * neither tracked nor untracked, and never dirty.
+ */
+export interface FileGitState {
+  repo: boolean;
+  tracked: boolean;
+  dirty: boolean;
+  untracked: boolean;
+  ignored: boolean;
+}
+
+/**
+ * A project or ticket file for the file viewer (GET /projects/:id/file, /tickets/:key/file), read
+ * from disk, gitignored files included. `contents` is null for binary files (a NUL in the first
+ * 8 KB) and files over 2 MiB (`tooLarge`). `truncated` means `contents` is only the start of the
+ * file: it grew past the cap while being read.
+ */
+export interface FileView {
+  /** Relative to `root`, "/"-separated */
+  path: string;
+  /** The folder the path is resolved in: the ticket's worktree, else its session's cwd, else the project folder */
+  root: string;
+  size: number;
+  contents: string | null;
+  binary: boolean;
+  truncated: boolean;
+  tooLarge: boolean;
+  git: FileGitState;
+}
+
+/**
+ * One file's uncommitted changes (GET /…/file/diff): the working tree against HEAD, staged and
+ * unstaged together; an untracked file shows as added. `patch` is a unified git diff ("" when the
+ * file is clean or ignored). Either side's contents is null when it doesn't exist there, is binary,
+ * or is over 2 MiB. A root outside any git repository is a 409.
+ */
+export interface FileDiff {
+  path: string;
+  patch: string;
+  oldContents: string | null;
+  newContents: string | null;
+  /** The patch is over 4 MiB, so `patch` is "" even though the file changed */
+  tooLarge: boolean;
+}
+
+/** Options for the /files search. `ignored` also indexes node_modules; `kind` keeps one kind. */
+export interface FileSearchOptions {
+  limit?: number;
+  ignored?: boolean;
+  kind?: "file" | "dir";
 }
 
 export interface HumanReviewBody {

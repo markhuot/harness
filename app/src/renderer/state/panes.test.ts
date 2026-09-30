@@ -32,6 +32,7 @@ import {
   normalize,
   orphanSessions,
   openCompose,
+  openFile,
   openTerminal,
   openTicket,
   paneInDirection,
@@ -49,6 +50,7 @@ import {
   retainScopes,
   serializePaneStore,
   serializePanes,
+  setFileView,
   setSizes,
   setTab,
   setTerminalTitle,
@@ -61,6 +63,7 @@ import {
   updatePanes,
   watchPaneStore,
   zoneAt,
+  type FileContent,
   type PaneContent,
   type PaneLeaf,
   type PaneNode,
@@ -86,7 +89,15 @@ const st = (root: PaneNode, focusedId: string | null = null, zoomedId: string | 
 
 const ticketContent = (key: string, tab: "summaries" | "transcript" = "summaries"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
 const label = (l: PaneLeaf) =>
-  l.content.kind === "board" ? "board" : l.content.kind === "ticket" ? l.content.ticketKey : l.content.kind === "compose" ? `+${l.content.id}` : `$${l.content.sessionId}`;
+  l.content.kind === "board"
+    ? "board"
+    : l.content.kind === "ticket"
+      ? l.content.ticketKey
+      : l.content.kind === "compose"
+        ? `+${l.content.id}`
+        : l.content.kind === "file"
+          ? `@${l.content.path}${l.content.startLine ? `:${l.content.startLine}${l.content.endLine ? `-${l.content.endLine}` : ""}` : ""}${l.content.tab === "diff" ? "(diff)" : ""}`
+          : `$${l.content.sessionId}`;
 const r = (n: number) => Math.round(n * 1000) / 1000;
 /** A compact picture of a tree: row[board .6, col[A .5, B .5] .4] */
 function shape(n: PaneNode): string {
@@ -1327,5 +1338,131 @@ describe("New session panes (compose)", () => {
   test("Escape closes a focused New session pane", () => {
     const s = normalize(st(row("r", [B, C("x")]), "c-x"));
     expect(shape(escapePanes(s).root)).toBe("board");
+  });
+});
+
+describe("file panes", () => {
+  const file = (path: string, extra: Partial<FileContent> = {}, root: FileContent["root"] = { ticketKey: "A-1" }): FileContent => ({ kind: "file", root, path, ...extra });
+  const F = (id: string, c: FileContent): PaneLeaf => ({ type: "leaf", id, content: c });
+
+  test("opening from a ticket pane docks the file on its right and focuses it", () => {
+    const s = valid(openFile(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), file("src/app.ts", { startLine: 10, endLine: 20 }), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.2, @src/app.ts:10-20 0.2]");
+    expect(focusedLabel(s)).toBe("@src/app.ts:10-20");
+  });
+
+  test("the same file (root + path) reuses its pane and moves it to the new lines", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("src/app.ts", { startLine: 10, endLine: 20 }))]), "A-1");
+    const s = valid(openFile(s0, file("src/app.ts", { startLine: 40 }), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.333, A-1 0.333, @src/app.ts:40 0.333]");
+    expect(s.focusedId).toBe("f");
+  });
+
+  test("following lines into an open diff switches it back to the File tab; a link without lines keeps the tab", () => {
+    const s0 = st(row("r", [B, F("f", file("a.ts", { tab: "diff" }))]));
+    expect(focusedLabel(openFile(s0, file("a.ts", { startLine: 3 })))).toBe("@a.ts:3");
+    expect(focusedLabel(openFile(s0, file("a.ts")))).toBe("@a.ts(diff)");
+  });
+
+  test("the same path under another root is a different file", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("a.ts"))]), "B");
+    const s = valid(openFile(s0, file("a.ts", {}, { projectId: "proj" }), "B"));
+    expect(leaves(s.root).filter((l) => l.content.kind === "file")).toHaveLength(2);
+  });
+
+  test("a different file replaces the file pane right after the pane it's opened from", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("a.ts", { startLine: 2 }))], [0.4, 0.3, 0.3]), "A-1");
+    const s = valid(openFile(s0, file("b.ts"), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.4, A-1 0.3, @b.ts 0.3]");
+    expect(s.focusedId).toBe("f");
+  });
+
+  test("opened from a file pane (the palette over it), a different file replaces that pane", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("a.ts", { startLine: 2 }))], [0.4, 0.3, 0.3]), "f");
+    const s = valid(openFile(s0, file("b.ts", { startLine: 5 }), "f"));
+    expect(shape(s.root)).toBe("row[board 0.4, A-1 0.3, @b.ts:5 0.3]");
+    expect(s.focusedId).toBe("f");
+    // The focused pane counts when no source is named.
+    const s2 = valid(openFile(s0, file("c.ts")));
+    expect(shape(s2.root)).toBe("row[board 0.4, A-1 0.3, @c.ts 0.3]");
+  });
+
+  test("a file pane elsewhere (not right after the source) doesn't get replaced", () => {
+    const s0 = st(row("r", [B, F("f", file("a.ts")), T("A-1")], [0.4, 0.3, 0.3]), "A-1");
+    const s = valid(openFile(s0, file("b.ts"), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.4, @a.ts 0.3, A-1 0.15, @b.ts 0.15]");
+  });
+
+  test("bad line numbers are dropped, and an end before the start isn't a range", () => {
+    const s = valid(openFile(defaultPanes(), file("a.ts", { startLine: 0, endLine: 5 })));
+    expect(focusedLabel(s)).toBe("@a.ts");
+    const s2 = valid(openFile(defaultPanes(), file("a.ts", { startLine: 7, endLine: 7 })));
+    expect(focusedLabel(s2)).toBe("@a.ts:7");
+  });
+
+  test("normalize drops a second pane on the same file; checkPanes reports it", () => {
+    const bad = st(row("r", [B, F("f1", file("a.ts")), F("f2", file("a.ts", { startLine: 3 }))]));
+    expect(checkPanes(bad).join("\n")).toContain("file a.ts is open twice");
+    expect(shape(valid(normalize(bad)).root)).toBe("row[board 0.5, @a.ts 0.5]");
+  });
+
+  test("setFileView switches tabs and lines in place, and is a no-op when nothing changes", () => {
+    const s0 = st(row("r", [B, F("f", file("a.ts", { startLine: 3 }))]), "f");
+    const diff = setFileView(s0, "f", { tab: "diff" });
+    expect(focusedLabel(diff)).toBe("@a.ts:3(diff)");
+    expect(focusedLabel(setFileView(diff, "f", { tab: "file", lines: { startLine: 8, endLine: 9 } }))).toBe("@a.ts:8-9");
+    expect(focusedLabel(setFileView(s0, "f", { lines: null }))).toBe("@a.ts");
+    expect(setFileView(s0, "f", { tab: "file", lines: { startLine: 3 } })).toBe(s0);
+    expect(setFileView(s0, "B", { tab: "diff" })).toBe(s0);
+  });
+
+  test("Escape closes a focused file pane", () => {
+    const s = normalize(st(row("r", [B, F("f", file("a.ts"))]), "f"));
+    expect(shape(escapePanes(s).root)).toBe("board");
+  });
+
+  test("paneLabel is the file's name, and file panes have a minimum width", () => {
+    expect(paneLabel(file("src/deep/app.ts"))).toBe("app.ts");
+    expect(minSize(F("f", file("a.ts")), "row")).toBe(PANE_MIN_WIDTH.file);
+  });
+
+  test("a renamed ticket's file panes follow it; a deleted ticket's close", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("a.ts")), F("g", file("b.ts", {}, { projectId: "p" }))]), "f");
+    const renamed = valid(renameTicketKey(s0, "A-1", "Z-1"));
+    const f = findLeaf(renamed.root, "f")!.content as FileContent;
+    expect(f.root).toEqual({ ticketKey: "Z-1" });
+    expect(shape(renamed.root)).toBe("row[board 0.25, Z-1 0.25, @a.ts 0.25, @b.ts 0.25]");
+    const pruned = valid(pruneTickets(s0, (k) => k !== "A-1"));
+    expect(leaves(pruned.root).map(label)).toEqual(["board", "@b.ts"]);
+  });
+
+  test("a rename onto a key whose file pane is already open closes the duplicate", () => {
+    const s0 = st(row("r", [B, F("f", file("a.ts")), F("g", file("a.ts", {}, { ticketKey: "Z-1" }))]), "f");
+    const s = valid(renameTicketKey(s0, "A-1", "Z-1"));
+    expect(shape(s.root)).toBe("row[board 0.5, @a.ts 0.5]");
+    expect(s.focusedId).toBe("g");
+  });
+
+  test("file panes persist (root, path, lines, tab) and junk file entries are dropped", () => {
+    const s0 = st(row("r", [B, F("f", file("src/a.ts", { startLine: 4, endLine: 9, tab: "diff" })), F("g", file("b.ts", {}, { projectId: "p" }))]), "f");
+    const back = parsePanes(serializePanes(s0));
+    expect(shape(back.root)).toBe(shape(s0.root));
+    expect(findLeaf(back.root, "g")!.content).toEqual(file("b.ts", {}, { projectId: "p" }));
+    const junk = JSON.stringify({
+      root: {
+        type: "split",
+        id: "r",
+        dir: "row",
+        children: [
+          { type: "leaf", id: "B", content: { kind: "board" } },
+          { type: "leaf", id: "x", content: { kind: "file", path: "a.ts", root: {} } },
+          { type: "leaf", id: "y", content: { kind: "file", path: "", root: { ticketKey: "A-1" } } },
+          { type: "leaf", id: "z", content: { kind: "file", path: "c.ts", root: { ticketKey: "A-1" }, startLine: -3, endLine: "x", tab: "weird" } },
+        ],
+        sizes: [1, 1, 1, 1],
+      },
+    });
+    const parsed = parsePanes(junk);
+    expect(shape(parsed.root)).toBe("row[board 0.5, @c.ts 0.5]");
   });
 });

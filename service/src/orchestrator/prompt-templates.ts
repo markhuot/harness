@@ -360,6 +360,16 @@ Call \`post_summary\` at meaningful milestones, not after every step.
 Show your work. {{#if submits}}\`post_summary\` and \`submit_for_review\` take{{else}}\`post_summary\` takes{{/if}} \`attachments\`: paths to image or video files (png, jpg, gif, webp, mp4, webm, mov), absolute or relative to your working directory. When the work has a visible result, such as a UI change, rendered output or a browser flow, capture it and attach it{{#if submits}}, above all to the submit summary{{/if}}: {{#if browser}}\`browser_screenshot\` with \`save_to\` writes the page to a file ({{#if readOnly}}a relative path goes to this run's scratch folder, and the result gives the full path to attach{{else}}inside your working directory, or this run's scratch folder when the ticket is read-only; the result gives the full path{{/if}}), and a simulator or app screenshot or a short screen recording works too.{{else}}a simulator or app screenshot or a short screen recording works well.{{/if}}`,
   },
 
+  "system.file_links": {
+    group: "system",
+    label: "File links",
+    description: "Every ticket run: link quoted code and file:line references with harness://file links, which open the file pane.",
+    variables: {},
+    template: `## File links
+The Harness apps open \`harness://file\` links in a file pane that shows the whole file, syntax highlighted and scrolled to the linked lines. When a message or summary quotes code from a file in the working directory (a snippet, a function, a diff hunk), put a markdown link to it right before the code fence, such as \`[src/app.ts:102-115](harness://file/src/app.ts#L102-L115)\`: the path relative to the working directory and the snippet's real line numbers in the file as it is now. A single line is \`#L42\`, and a whole file has no anchor. When you name a file and line in prose, write the same kind of link instead of a bare \`src/app.ts:102\`.
+Use relative paths, never absolute ones, URL-encode spaces and other special characters (\`my%20notes.md\`), and link only to files that exist. Add \`?ticket=KEY\` before the \`#\` only when the file is in another ticket's checkout.`,
+  },
+
   "system.board": {
     group: "system",
     label: "Board",

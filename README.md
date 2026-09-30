@@ -126,7 +126,10 @@ you answer.
 
 You can drive the whole Mac app from the keyboard. Press **?** (or **⌘/**) for the full list,
 and **⌘K** for the command palette, which finds tickets, commands and every action a ticket
-offers. The ones you'll use most:
+offers. Start the query with `>` for commands only, `#` for tickets only, or `@` for files. **⌘P**
+(Open File…) opens the palette on `@`. It searches the focused ticket's folder, or else the board's
+project, including git-ignored files, and `path:12` or `path#L12-L20` opens the file at those
+lines. The ones you'll use most:
 
 | Keys | What they do |
 |---|---|
@@ -137,6 +140,7 @@ offers. The ones you'll use most:
 | j k, Space, g G | Scroll a ticket's tab (in the sidebar and lists, j and k move between items) |
 | i | Write to the agent (Escape takes you back to the pane) |
 | / | Search the board |
+| ⌘P | Open any file in the project or ticket (the palette's `@` file browser) |
 | ⌘W | Close the focused pane |
 | ⇧⌘↩ | Maximize or restore the focused pane |
 | ⇧⌘O | Pop the focused ticket or terminal out into its own window (in that window, put it back on the board) |

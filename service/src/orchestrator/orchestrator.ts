@@ -13,7 +13,9 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
+  FileDiff,
   FileMatch,
+  FileView,
   HumanReviewBody,
   ReopenBody,
   Project,
@@ -101,7 +103,8 @@ import {
   listBranches,
   switchBranch,
 } from "./worktree";
-import { attachMentions, searchPaths } from "./files";
+import { readFileDiff, readFileView } from "./file-view";
+import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import {
   applySettingsPatch,
@@ -830,11 +833,14 @@ export class Orchestrator {
     };
   }
 
-  /** The @-mention autocomplete for a new session in `projectId`: paths under the project folder. */
-  projectFiles(projectId: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+  /**
+   * The @-mention autocomplete for a new session in `projectId`: paths under the project folder.
+   * `opts.ignored` is the file browser's search (node_modules too), `opts.kind` keeps one kind.
+   */
+  projectFiles(projectId: string, q: string, limit?: number | string | null, opts: SearchOptions = {}): Promise<FileMatch[]> {
     const project = this.store.projects.get(projectId);
     if (!project) throw notFound(`Unknown project: ${projectId}`);
-    return searchPaths(project.path, q, clampLimit(limit, 50));
+    return searchPaths(project.path, q, clampLimit(limit, 50), opts);
   }
 
   /** The branch picker for a new session in `projectId`: local branches, most recent first (BranchInfo). */
@@ -845,14 +851,51 @@ export class Orchestrator {
   }
 
   /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
-  ticketFiles(key: string, q: string, limit?: number | string | null): Promise<FileMatch[]> {
+  ticketFiles(key: string, q: string, limit?: number | string | null, opts: SearchOptions = {}): Promise<FileMatch[]> {
+    const root = this.ticketRoot(key);
+    return root ? searchPaths(root, q, clampLimit(limit, 50), opts) : Promise.resolve([]);
+  }
+
+  /** A file in the project folder for the file viewer (FileView). */
+  projectFile(projectId: string, path: string): Promise<FileView> {
+    return readFileView(this.projectRoot(projectId), path);
+  }
+
+  /** A project file's uncommitted changes (FileDiff); 409 outside a git repository. */
+  projectFileDiff(projectId: string, path: string): Promise<FileDiff> {
+    return readFileDiff(this.projectRoot(projectId), path);
+  }
+
+  /** A file where the ticket works (the same folder as ticketFiles) for the file viewer. */
+  ticketFile(key: string, path: string): Promise<FileView> {
+    return readFileView(this.requireTicketRoot(key), path);
+  }
+
+  ticketFileDiff(key: string, path: string): Promise<FileDiff> {
+    return readFileDiff(this.requireTicketRoot(key), path);
+  }
+
+  private projectRoot(projectId: string): string {
+    const project = this.store.projects.get(projectId);
+    if (!project) throw notFound(`Unknown project: ${projectId}`);
+    if (!existsSync(project.path)) throw notFound(`The project folder ${project.path} doesn't exist`);
+    return project.path;
+  }
+
+  /** Where the ticket's next run works: its worktree, else its session's cwd, else the project folder (the first that exists). */
+  private ticketRoot(key: string): string | null {
     const found = this.store.tickets.lookup(key);
     if (!found) throw notFound(`Unknown ticket: ${key}`);
     const { ticket } = found;
     const session = this.store.sessions.get(ticket.sessionId);
     const project = this.store.projects.get(ticket.projectId);
-    const root = [ticket.workdir, session?.cwd, project?.path].find((d): d is string => !!d && existsSync(d));
-    return root ? searchPaths(root, q, clampLimit(limit, 50)) : Promise.resolve([]);
+    return [ticket.workdir, session?.cwd, project?.path].find((d): d is string => !!d && existsSync(d)) ?? null;
+  }
+
+  private requireTicketRoot(key: string): string {
+    const root = this.ticketRoot(key);
+    if (!root) throw notFound(`${key} has no folder on disk`);
+    return root;
   }
 
   summaries(key: string): Summary[] {

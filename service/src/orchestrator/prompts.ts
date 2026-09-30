@@ -308,6 +308,8 @@ export function systemPrompt(info: PromptInfo): string {
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
     ticketRun && filesSection(kind, info.builtinTools ?? true, o),
     ticketRun && summariesSection(kind, browser, o),
+    // harness://file links (shared/src/fileLinks.ts) open the file pane from any message or summary.
+    ticketRun && renderPrompt("system.file_links", {}, o),
     // Read-only board tools, given to every run kind (tools/board.ts).
     renderPrompt("system.board", {}, o),
     // Board tools that change other tickets (tools/board-write.ts).

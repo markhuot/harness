@@ -583,6 +583,62 @@ describe("ticket paging + search over http", () => {
     await expect(client.ticketFiles("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
   });
 
+  test("file viewer: /file and /file/diff for projects and tickets, and the browser's /files flags", async () => {
+    const { client, dir } = await boot();
+    const git = async (...args: string[]) => {
+      const r = await runGit(args, dir);
+      if (r.code !== 0) throw new Error(r.stderr);
+    };
+    mkdirSync(join(dir, "src"));
+    mkdirSync(join(dir, "node_modules", "foo"), { recursive: true });
+    writeFileSync(join(dir, ".gitignore"), ".env\nnode_modules/\n");
+    writeFileSync(join(dir, "src", "app.ts"), "one\n");
+    await git("init", "-q");
+    await git("add", ".");
+    await git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+    writeFileSync(join(dir, "src", "app.ts"), "two\n");
+    writeFileSync(join(dir, ".env"), "S=1\n");
+    writeFileSync(join(dir, "node_modules", "foo", "index.js"), "module.exports = 1;\n");
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+
+    const view = await client.projectFile(p.id, "src/app.ts");
+    expect(view).toMatchObject({ path: "src/app.ts", root: dir, size: 4, contents: "two\n", binary: false, tooLarge: false });
+    expect(view.git).toMatchObject({ repo: true, tracked: true, dirty: true, untracked: false });
+    // The ticket has no worktree yet, so it reads from the project folder; absolute paths inside it work.
+    expect((await client.ticketFile(t.key, join(dir, ".env"))).contents).toBe("S=1\n");
+    expect((await client.ticketFile(t.key, ".env")).git.ignored).toBe(true);
+
+    const diff = await client.projectFileDiff(p.id, "src/app.ts");
+    expect(diff).toMatchObject({ path: "src/app.ts", oldContents: "one\n", newContents: "two\n", tooLarge: false });
+    expect(diff.patch).toContain("-one\n+two\n");
+    expect((await client.ticketFileDiff(t.key, ".gitignore")).patch).toBe("");
+
+    await expect(client.projectFile(p.id, "../secret")).rejects.toMatchObject({ status: 400 });
+    await expect(client.projectFile(p.id, "src")).rejects.toMatchObject({ status: 400 });
+    await expect(client.projectFile(p.id, "")).rejects.toMatchObject({ status: 400 });
+    await expect(client.ticketFile(t.key, "nope.ts")).rejects.toMatchObject({ status: 404 });
+    await expect(client.projectFile("nope", "a")).rejects.toMatchObject({ status: 404 });
+    await expect(client.ticketFileDiff("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
+
+    // The autocomplete doesn't reach into node_modules; the file browser's search does.
+    expect(await client.projectFiles(p.id, "foo/ind")).toEqual([]);
+    expect(await client.projectFiles(p.id, "foo/ind", { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file", ignored: true }]);
+    expect(await client.ticketFiles(t.key, ".env", { ignored: true, kind: "file" })).toEqual([{ path: ".env", kind: "file", ignored: true }]);
+    expect(await client.ticketFiles(t.key, "src/app", { ignored: true, kind: "file" })).toEqual([{ path: "src/app.ts", kind: "file" }]);
+    expect(await client.ticketFiles(t.key, "src", { kind: "file" })).toEqual([{ path: "src/app.ts", kind: "file" }]);
+    expect(await client.ticketFiles(t.key, "src", 1)).toEqual([{ path: "src/", kind: "dir" }]);
+    await expect(client.request("GET", `/projects/${p.id}/files?q=a&kind=folder`)).rejects.toMatchObject({ status: 400 });
+
+    // A project outside git has files but no diff.
+    const plain = join(dir, "..", "plain");
+    mkdirSync(plain);
+    writeFileSync(join(plain, "a.txt"), "a");
+    const q = await client.createProject({ path: plain });
+    expect((await client.projectFile(q.id, "a.txt")).git.repo).toBe(false);
+    await expect(client.projectFileDiff(q.id, "a.txt")).rejects.toMatchObject({ status: 409 });
+  });
+
   test("branch picker: /projects/:id/branches filters by q and caps by limit; base branches round-trip", async () => {
     const { client, dir } = await boot();
     const git = async (...args: string[]) => {

@@ -34,7 +34,7 @@ import {
   type TicketTab,
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
-import { Markdown } from "../components/Markdown";
+import { FileLinkScope, Markdown } from "../components/Markdown";
 import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
@@ -268,6 +268,7 @@ export function TicketDetail({
         })}
       </nav>
       <div className="detail-body">
+        <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
         {tab === "summaries" && <Summaries ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
         {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
@@ -281,6 +282,7 @@ export function TicketDetail({
             <div className="spinner" />
           </div>
         )}
+        </FileLinkScope>
       </div>
       {ticket.status !== "done" && <MessageComposer ticket={ticket} key={ticket.id} />}
     </aside>

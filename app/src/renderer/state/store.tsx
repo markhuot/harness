@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, type HarnessEvent, type HarnessSocket } from "@harness/shared";
+import { HarnessClient, type FileLink, type HarnessEvent, type HarnessSocket } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -32,6 +32,7 @@ import {
   newComposeContent,
   newTerminalContent,
   openCompose as openComposePane,
+  openFile as openFilePane,
   openTerminal as openTerminalPane,
   orphanSessions,
   openTicket,
@@ -45,6 +46,7 @@ import {
   watchPaneStore,
 } from "./panes";
 import { terminalCwd, terminalScope } from "./terminal";
+import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
 import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
 
@@ -90,6 +92,14 @@ export interface Store {
    * board last shown, which it goes to), beside the focused pane. `projectId` presets its project.
    */
   openCompose: (projectId?: string | null) => void;
+  /**
+   * Open a file in a file pane (views/FilePane.tsx). The link's own `?ticket=`/`?project=` names
+   * where its path resolves, else `from`'s ticket, else its project (state/fileOpen.ts). From inside
+   * a pane (`from.paneId` in `from.scope`) it docks beside that pane; otherwise it goes on the board
+   * on screen (from elsewhere, the board last shown, which it goes to), beside the focused pane.
+   * Toasts instead when nothing names a ticket or project.
+   */
+  openFile: (link: FileLink, from?: FileLinkContext & { paneId?: string | null; scope?: string | null }) => void;
   /** The service's code, from /health and service.status events (null until known) */
   serviceCode: ServiceCode;
   /** The service runs older code than this app (see state/service.ts) */
@@ -105,6 +115,9 @@ export function useStore(): Store {
   if (!s) throw new Error("useStore outside provider");
   return s;
 }
+
+/** The store, or null outside the provider (for pieces also rendered standalone, like Markdown). */
+export const useOptionalStore = (): Store | null => useContext(Ctx);
 
 /**
  * Keep the shells in the main process in step with the terminal panes: when a change (closing a
@@ -452,6 +465,19 @@ export function StoreProvider({
     [navigate],
   );
 
+  const openFile = useCallback<Store["openFile"]>(
+    (link, from = {}) => {
+      const content = fileContentFor(link, from);
+      if (!content) return toast(`Can't tell which project ${link.path} is in.`, "error");
+      if (from.paneId && from.scope) return updatePanes(from.scope, (s) => openFilePane(s, content, from.paneId));
+      const r = parseRoute(location.hash);
+      const scope = terminalScope(r, scopeRef.current);
+      updatePanes(scope, (s) => openFilePane(s, content));
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+    },
+    [navigate, toast],
+  );
+
   const value = useMemo<Store>(
     () => ({
       state,
@@ -474,8 +500,9 @@ export function StoreProvider({
       restartService,
       openTerminal,
       openCompose,
+      openFile,
     }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal, openCompose],
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal, openCompose, openFile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
