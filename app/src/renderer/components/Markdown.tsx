@@ -1,10 +1,11 @@
 // Markdown-ish rendering for agent summaries and transcript text: paragraphs, headings,
-// bullet/numbered lists, fenced code, tables, inline code, bold/italic, links. Parsing is shared with the
+// bullet/numbered lists, fenced code (syntax highlighted, Code.tsx), tables, inline code, bold/italic, links. Parsing is shared with the
 // iOS app (@harness/shared/state "markdown"); this builds React DOM nodes directly (no innerHTML),
 // so agent output can't inject markup.
 
 import { Fragment, type ReactNode } from "react";
 import { inlineTokens, parseBlocks } from "@harness/shared/state";
+import { FencedCode } from "./Code";
 
 export { parseBlocks, plainText } from "@harness/shared/state";
 
@@ -75,11 +76,7 @@ export function Markdown({ text, className }: { text: string; className?: string
               </ol>
             );
           case "code":
-            return (
-              <pre key={i}>
-                <code>{b.text}</code>
-              </pre>
-            );
+            return <FencedCode key={i} text={b.text} lang={b.lang} />;
           case "quote":
             return <blockquote key={i}>{withBreaks(b.text)}</blockquote>;
           case "table":
