@@ -2,7 +2,7 @@
 // store (ticket.upserted / summary.added keep it current; nothing polls).
 
 import { useEffect, useMemo, useRef } from "react";
-import { displayKey, keyLabel, type Ticket } from "@harness/shared";
+import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
 import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -172,7 +172,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
               >
                 {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
                 <span className="chip-label">{d.state === "done" ? "after" : d.state === "pending" ? "waiting on" : "depends on"}</span>
-                {d.ticket ? displayKey(d.ticket) : d.key}
+                {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
               </button>
             ))}
             <div className="grow" />

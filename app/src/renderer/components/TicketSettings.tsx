@@ -30,7 +30,7 @@ import { skipReviewHint } from "../state/newSession";
 import { DriverModelSelect } from "./ModelSelect";
 import { PermissionModeSelect } from "./PermissionModeSelect";
 import { BranchSelect } from "./BranchSelect";
-import { StatusDot, Switch } from "./bits";
+import { StatusDot, Switch, TicketKey } from "./bits";
 import { Icon } from "./Icon";
 import { useOpenTicket, usePaneScope } from "./paneContext";
 import { openTicket as openTicketPane, updatePanes } from "../state/panes";
@@ -247,7 +247,7 @@ function DependsOn({ ticket, editable, onPatch }: { ticket: Ticket; editable: bo
               {depStates.map((d) => (
                 <button key={d.key} className={`chip link-chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)} onClick={() => d.ticket && openTicket(d.ticket.key)} disabled={!d.ticket}>
                   {d.ticket && <StatusDot status={d.ticket.status} />}
-                  {d.ticket?.key ?? d.key}
+                  {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
                 </button>
               ))}
             </div>

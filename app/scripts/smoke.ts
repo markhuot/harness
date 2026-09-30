@@ -1994,6 +1994,57 @@ try {
     await go("#/board/all");
   }
 
+  // 6b. Remote IDs (DESIGN.md "Remote IDs"): linked tickets show their remote ID with their own
+  // key beside it, a remote-only ID opens a list of the tickets linked to it, and Ticket settings
+  // links and unlinks one.
+  {
+    const { go } = app;
+    type T = { key: string; externalRef: { key: string; url: string | null; source: string } | null };
+    await go("#/board/all");
+    const cardKey = (k: string) => js<string>(`document.querySelector('.card[data-key="${k}"] .card-key')?.textContent ?? ""`);
+    await until("MH cards", () => exists('.card[data-key="MH-124"]'), 10000);
+    check("a linked card shows its remote ID, then its own key", (await cardKey("MH-124")) === "MH-62 · MH-124" && (await cardKey("MH-130")) === "MH-62 · MH-130", `${await cardKey("MH-124")} / ${await cardKey("MH-130")}`);
+    check("the native MH-62 shows just its key", (await cardKey("MH-62")) === "MH-62", await cardKey("MH-62"));
+
+    await go("#/board/all/ticket/OPS-41");
+    const rows = await until("remote-ID pane", () => js<string[]>(`[...document.querySelectorAll("[data-testid=remote-id-ticket] .mono")].map((e) => e.textContent)`).then((r) => r.length > 0 && r));
+    check("a remote-only ID lists the tickets linked to it, newest first", rows.join(",") === "OPS-41 · MH-131,OPS-41 · MH-132", rows.join(","));
+    await js(`document.querySelector("[data-testid=remote-id-ticket]").click()`);
+    const opened = await until("linked ticket opens", () => js<string>(`document.querySelector(".detail-head .detail-key")?.textContent ?? ""`));
+    check("clicking one opens that ticket in the pane", opened === "OPS-41 · MH-131", opened);
+
+    await go("#/board/all/ticket/MH-124/details");
+    const related = await until("related list", () => js<string[]>(`[...document.querySelectorAll("[data-testid=related-tickets] .ticket-link .mono")].map((e) => e.textContent)`).then((r) => r.length > 0 && r));
+    check("the External row lists the other ticket sharing the remote ID", related.join(",") === "MH-62 · MH-130", related.join(","));
+
+    await go("#/board/all/ticket/MH-62/details");
+    await until("Remote ID row", () => exists("[data-testid=remote-id-key]"));
+    await type("[data-testid=remote-id-key]", "ops41");
+    const bad = await until("remote ID error", () => js<string>(`document.querySelector("[data-testid=remote-id-error]")?.textContent ?? ""`));
+    check("a key that isn't FOO-123 shaped is refused before saving", bad.includes("OPS41") && (await js<boolean>(`document.querySelector("[data-testid=remote-id-save]").disabled`)), bad);
+    await type("[data-testid=remote-id-key]", "ops-41");
+    await type("[data-testid=remote-id-url]", "https://happycog.atlassian.net/browse/OPS-41");
+    await js(`document.querySelector("[data-testid=remote-id-save]").click()`);
+    const linked = await until("linked", async () => {
+      const t = (await api<{ ticket: T }>("GET", "/tickets/MH-62")).ticket;
+      return t.externalRef?.key === "OPS-41" && t;
+    });
+    check("Link saves the remote ID by hand", linked.externalRef?.source === "manual" && linked.externalRef?.url === "https://happycog.atlassian.net/browse/OPS-41", JSON.stringify(linked.externalRef));
+    const head = await until("header follows", () => js<string>(`document.querySelector(".detail-head .detail-key")?.textContent ?? ""`).then((t) => t.startsWith("OPS-41") && t));
+    check("the header shows the new remote ID with the key beside it", head === "OPS-41 · MH-62", head);
+    const keys = (testid: string) => js<string[]>(`[...document.querySelectorAll("[data-testid=${testid}] .ticket-link .mono")].map((e) => e.textContent)`);
+    // The loaded MH-131 joins from the store at once; the done MH-132 comes with the refetched detail.
+    const joined = await until("related follows", () => keys("related-tickets").then((r) => r.length >= 2 && r)).catch(() => keys("related-tickets"));
+    check("the External row lists the tickets sharing OPS-41", joined.join(",") === "OPS-41 · MH-131,OPS-41 · MH-132", joined.join(","));
+    const carrying = await keys("linked-tickets");
+    check("…and the tickets carrying MH-62 as their remote ID stay in their own row", carrying.join(",") === "MH-62 · MH-130,MH-62 · MH-124", carrying.join(","));
+    await js(`document.querySelector("[data-testid=remote-id-unlink]").click()`);
+    await until("unlinked", async () => (await api<{ ticket: T }>("GET", "/tickets/MH-62")).ticket.externalRef === null);
+    const back = await until("header shows the key again", () => js<string>(`document.querySelector(".detail-head .detail-key")?.textContent ?? ""`).then((t) => t === "MH-62" && t));
+    check("Unlink drops the remote ID and the key shows again", back === "MH-62");
+    await go("#/board/all");
+  }
+
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.
   mock.kill();
   await mock.exited;

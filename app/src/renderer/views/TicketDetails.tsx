@@ -45,13 +45,20 @@ export function TicketDetails({
     () => liveRelatedTickets(state, [ticket.key, ticket.externalRef?.key], fetchedRelated, ticket),
     [state.tickets, state.keyAliases, ticket, fetchedRelated],
   );
-  const relatedList = related.length > 0 && (
-    <div className="related-tickets" data-testid="related-tickets">
-      {related.map((r) => (
-        <TicketLink key={r.key} t={{ key: r.key, title: r.title, status: r.status, externalRef: { key: r.externalKey } }} onOpen={open} />
-      ))}
-    </div>
-  );
+  // Two groups: tickets sharing this one's remote ID (the External row), and tickets carrying this
+  // one's key as their remote ID (a native MH-62 beside Jira's MH-62: a different item, but worth
+  // seeing from here).
+  const remote = ticket.externalRef?.key.toUpperCase();
+  const sharing = related.filter((r) => remote && r.externalKey.toUpperCase() === remote);
+  const carrying = related.filter((r) => !sharing.includes(r));
+  const list = (rs: RelatedTicket[], testid: string) =>
+    rs.length > 0 && (
+      <div className="related-tickets" data-testid={testid}>
+        {rs.map((r) => (
+          <TicketLink key={r.key} t={{ key: r.key, title: r.title, status: r.status, externalRef: { key: r.externalKey } }} onOpen={open} />
+        ))}
+      </div>
+    );
 
   const saveTitle = () => {
     if (title.trim() && title !== ticket.title) void act(() => client.updateTicket(ticket.key, { title: title.trim() }));
@@ -120,7 +127,7 @@ export function TicketDetails({
         )}
         <dt>Workdir</dt>
         <dd className="mono selectable">{ticket.workdir ?? <span className="muted">Not prepared yet</span>}</dd>
-        {ticket.externalRef ? (
+        {ticket.externalRef && (
           <>
             <dt>External</dt>
             <dd className="stack" data-testid="external-row">
@@ -134,26 +141,23 @@ export function TicketDetails({
                 )}
                 <span className="muted"> · via {ticket.externalRef.source}</span>
               </span>
-              {relatedList && (
+              {sharing.length > 0 && (
                 <>
                   <span className="field-hint related-hint">Also linked to {ticket.externalRef.key}:</span>
-                  {relatedList}
+                  {list(sharing, "related-tickets")}
                 </>
               )}
             </dd>
           </>
-        ) : (
-          // An unlinked ticket whose key other tickets carry as their remote ID (a native MH-62
-          // beside Jira's MH-62): they're a different item, but worth seeing from here.
-          relatedList && (
-            <>
-              <dt>Linked</dt>
-              <dd className="stack" data-testid="external-row">
-                <span className="field-hint related-hint">Tickets with {ticket.key} as their remote ID:</span>
-                {relatedList}
-              </dd>
-            </>
-          )
+        )}
+        {carrying.length > 0 && (
+          <>
+            <dt>Linked here</dt>
+            <dd className="stack" data-testid="linked-row">
+              <span className="field-hint">Tickets with {ticket.key} as their remote ID:</span>
+              {list(carrying, "linked-tickets")}
+            </dd>
+          </>
         )}
         <dt>Allowed tools</dt>
         <dd>

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { displayKey, isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   boardColumns,
@@ -389,7 +389,7 @@ const TicketCard = memo(function TicketCard({
         )}
         {parent && (
           <span className="card-parent-chip" title={`Part of ${keyLabel(parent)} · ${parent.title}`}>
-            ↳ {displayKey(parent)}
+            ↳ <TicketKey ticket={parent} />
           </span>
         )}
         <div className="grow" />
@@ -437,7 +437,7 @@ const TicketCard = memo(function TicketCard({
           {deps.map((d) => (
             <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
               {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
-              {d.ticket ? displayKey(d.ticket) : d.key}
+              {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
             </span>
           ))}
         </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { displayKey, isConductor, keyLabel, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, keyLabel, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   CHAT_PLACEHOLDER,
@@ -669,7 +669,7 @@ function Summaries({ ticket }: { ticket: Ticket }) {
           {deps.map((d) => (
             <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
               {d.done && <Icon name="check" size={9} strokeWidth={3} />}
-              {d.ticket ? displayKey(d.ticket) : d.key}
+              {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
             </span>
           ))}
         </div>
