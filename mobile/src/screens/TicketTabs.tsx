@@ -234,7 +234,7 @@ function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: s
 // ---------------------------------------------------------------------------
 
 export function DetailsTab({ ticket }: { ticket: Ticket }) {
-  const { state, client, related: fetchedRelated } = useStore();
+  const { state, client, loadDetail, related: fetchedRelated } = useStore();
   const act = useAction();
   const c = useColors();
   const now = useNow();
@@ -273,7 +273,17 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         )}
       </Field>
       <Card>
-        <TicketSettings ticket={ticket} onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))} />
+        <TicketSettings
+          ticket={ticket}
+          onPatch={(patch) =>
+            void act(() => client.updateTicket(ticket.key, patch), patch.externalRef === null ? "Remote ID unlinked" : patch.externalRef ? `Linked to ${patch.externalRef.key}` : undefined).then(
+              // A new remote ID has other tickets on it (some may not be loaded): fetch the list again.
+              (ok) => {
+                if (ok && "externalRef" in patch) loadDetail(ticket.key).catch(() => {});
+              },
+            )
+          }
+        />
         {dependents.length > 0 && (
           <Prop label="Blocks">
             <View style={{ gap: 6, alignItems: "flex-end" }}>

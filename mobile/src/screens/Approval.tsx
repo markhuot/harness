@@ -1,7 +1,7 @@
 // Tool-permission request: allow once, always allow the tool on this ticket, or deny with a note.
 import { useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
-import type { PendingApproval, Ticket } from "@harness/shared";
+import { keyLabel, type PendingApproval, type Ticket } from "@harness/shared";
 import { approvalToast, describeApprovalInput, relativeTime, shortToolName } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -24,7 +24,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
 
   const answer = async (decision: "allow_once" | "allow_tool" | "deny") => {
     setBusy(decision);
-    const ok = await act(() => client.answerApproval(ticket.key, { decision, message: message.trim() || undefined }), approvalToast(decision, tool, ticket.key));
+    const ok = await act(() => client.answerApproval(ticket.key, { decision, message: message.trim() || undefined }), approvalToast(decision, tool, keyLabel(ticket)));
     if (ok) haptic(decision === "deny" ? "warning" : "success");
     setBusy(null);
   };

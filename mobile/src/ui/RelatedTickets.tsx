@@ -8,6 +8,7 @@ import { useColors } from "../state/app";
 import { StatusDot } from "./kit";
 import { Icon } from "./Icon";
 import { TicketKey } from "./TicketKey";
+import { relatedLabel } from "../lib/related";
 
 const keyed = (r: RelatedTicket) => ({ key: r.key, externalRef: { key: r.externalKey } });
 
@@ -20,7 +21,7 @@ export function RelatedTicketRows({ related, onOpen, dividerFirst }: { related: 
           key={r.key}
           onPress={() => onOpen(r.key)}
           accessibilityRole="link"
-          accessibilityLabel={`${r.key} ${r.title || "Untitled"}, ${STATUS_LABEL[r.status]}`}
+          accessibilityLabel={`${relatedLabel(r)} ${r.title || "Untitled"}, ${STATUS_LABEL[r.status]}`}
           style={({ pressed }) => [styles.row, { borderTopColor: c.border, borderTopWidth: i || dividerFirst ? StyleSheet.hairlineWidth : 0, backgroundColor: pressed ? c.bgHover : "transparent" }]}
         >
           <StatusDot status={r.status} />

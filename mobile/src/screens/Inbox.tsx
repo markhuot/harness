@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import type { Session, Watcher } from "@harness/shared";
+import { keyLabel, type Session, type Watcher } from "@harness/shared";
 import { dispatchedKey, relativeTime, ticketByKey, TRIAGE_LABEL, triageSessions, watcherStatus } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -173,7 +173,7 @@ export function TriageScreen() {
               <Markdown text={session.outcome} size={14} />
             </Callout>
           )}
-          {dispatched && <Button title={`Open ${dispatched.key}`} icon="chevronRight" small onPress={() => router.push({ pathname: "/ticket/[key]", params: { key: dispatched.key } })} style={{ alignSelf: "flex-start" }} />}
+          {dispatched && <Button title={`Open ${keyLabel(dispatched)}`} icon="chevronRight" small onPress={() => router.push({ pathname: "/ticket/[key]", params: { key: dispatched.key } })} style={{ alignSelf: "flex-start" }} />}
         </View>
         <Transcript sessionId={session.id} emptyHint="The triage agent's reasoning appears here." />
       </View>
