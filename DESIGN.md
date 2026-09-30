@@ -712,6 +712,11 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
 ## Drivers
 
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).
+  Test-only: `createDrivers` adds it when the service's env has `HARNESS_DUMMY_DRIVER=1`, which
+  the scripts that boot `daemon.ts` set. Installs leave it out; `harness service install|ensure`
+  run with the variable set writes it into the launchd plist (acceptance.ts does this for its
+  `dummy` run), and the next one without it takes it back out. `bun test` injects `DummyDriver`
+  directly.
 - **claude-code** — wraps the `claude` CLI (`claude -p --input-format stream-json --output-format
   stream-json --verbose --include-partial-messages`), which carries your **team-plan OAuth** login
   (`claude auth login --claudeai`; status via `claude auth status --json`), plus

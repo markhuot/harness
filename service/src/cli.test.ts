@@ -125,6 +125,22 @@ describe("Cli service commands", () => {
     expect(existsSync(join(home, "token"))).toBe(true);
   });
 
+  test("HARNESS_DUMMY_DRIVER=1 adds the dummy driver to the plist; installing without it takes it out", async () => {
+    const la = fakeLaunchctl();
+    const home = tempHome();
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: home } });
+    await new Cli(d).install();
+    const plain = readFileSync(new Cli(d).plistPath, "utf8");
+    expect(plain).not.toContain("HARNESS_DUMMY_DRIVER");
+
+    const withDummy = new Cli({ ...d, env: { HARNESS_HOME: home, HARNESS_DUMMY_DRIVER: "1" } });
+    expect((await withDummy.install()).changed).toBe(true);
+    expect(readFileSync(withDummy.plistPath, "utf8")).toMatch(/<key>HARNESS_DUMMY_DRIVER<\/key>\s*<string>1<\/string>/);
+
+    expect((await new Cli(d).install()).changed).toBe(true);
+    expect(readFileSync(withDummy.plistPath, "utf8")).toBe(plain);
+  });
+
   test("ensure boots via launchd and waits for /health; prints JSON", async () => {
     const home = tempHome();
     const port = await freePort();

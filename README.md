@@ -70,7 +70,7 @@ plugin tabs), approvals, Inbox and settings. It shares its state logic with the 
 | --- | --- | --- |
 | `claude-code` | Your Claude team plan, via `claude auth login` (Settings → Drivers → Login) | Wraps the `claude` CLI. Harness tools are exposed over MCP. |
 | `anthropic-api` | API key (Settings, or `ANTHROPIC_API_KEY`) | Calls the Messages API directly and runs the tool loop itself. |
-| `dummy` | none | Returns scripted responses with no network calls. See DESIGN.md for its `/block`, `/fail`, `/browse` and `/approve` directives. |
+| `dummy` | none | Test-only: returns scripted responses with no network calls. The service offers it only when started with `HARNESS_DUMMY_DRIVER=1` (the test scripts set it; installs don't). See DESIGN.md for its `/block`, `/fail`, `/browse` and `/approve` directives. |
 
 **Permissions.** Happy Cog's org policy disables Claude Code's `bypassPermissions` mode, so
 agents run in `acceptEdits`. Any tool call that mode doesn't auto-allow (most Bash commands,

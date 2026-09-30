@@ -31,6 +31,10 @@ const cdpPort = 9500 + Math.floor(Math.random() * 300);
 const env = { ...process.env } as Record<string, string>;
 delete env.HARNESS_URL;
 delete env.HARNESS_TOKEN;
+// Installs leave the dummy driver out; with it set, the app's `service ensure` rewrites the
+// launchd plist to add it, and the next launch without it takes it back out.
+if (driver === "dummy") env.HARNESS_DUMMY_DRIVER = "1";
+else delete env.HARNESS_DUMMY_DRIVER;
 const proc = Bun.spawn([appBin, `--remote-debugging-port=${cdpPort}`], { env, stdout: "ignore", stderr: "ignore" });
 
 const target = await until(

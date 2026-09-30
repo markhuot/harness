@@ -422,7 +422,7 @@ const fakeClaude = mentionsOnly
     }
   : {};
 const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
+  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });

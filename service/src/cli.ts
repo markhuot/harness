@@ -21,6 +21,8 @@ export interface PlistOptions {
   port: number;
   logPath: string;
   userHome: string;
+  /** Add the dummy driver to the service (HARNESS_DUMMY_DRIVER=1); only acceptance runs ask for it. */
+  dummyDriver?: boolean;
 }
 
 export function launchdPath(userHome: string, bunPath: string): string {
@@ -47,6 +49,7 @@ export function buildPlist(o: PlistOptions): string {
     HOME: o.userHome,
     HARNESS_HOME: o.home,
     HARNESS_PORT: String(o.port),
+    ...(o.dummyDriver ? { HARNESS_DUMMY_DRIVER: "1" } : {}),
   };
   const envXml = Object.entries(env)
     .map(([k, v]) => `      <key>${esc(k)}</key>\n      <string>${esc(v)}</string>`)
@@ -157,6 +160,7 @@ export class Cli {
       port: this.port,
       logPath: paths.logPath,
       userHome: this.d.userHome,
+      dummyDriver: this.d.env.HARNESS_DUMMY_DRIVER === "1",
     });
   }
 

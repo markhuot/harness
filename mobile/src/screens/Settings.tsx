@@ -383,7 +383,7 @@ function PermissionsSection({ settings }: { settings: PublicSettings }) {
       <SRow title="Default mode" sub={PERMISSION_MODE_LABELS[settings.permissionMode].description}>
         <PermissionPicker value={settings.permissionMode} onChange={(m) => m && void act(() => client.updateSettings({ permissionMode: m }))} />
       </SRow>
-      <SRow title="Auto-mode classifier" sub="Judges actions in auto mode for the Anthropic API and Dummy drivers. Claude Code tickets use Claude Code's own classifier." last>
+      <SRow title="Auto-mode classifier" sub="Judges actions in auto mode for the Anthropic API driver. Claude Code tickets use Claude Code's own classifier." last>
         <Select<ClassifierBackend>
           value={settings.classifier}
           options={CLASSIFIER_BACKENDS.map((b) => ({ value: b, label: CLASSIFIER_LABELS[b] }))}
