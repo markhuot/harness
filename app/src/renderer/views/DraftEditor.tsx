@@ -162,6 +162,11 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
 
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => (project ? client.projectFiles(project.id, q) : Promise.resolve([])), [client, project?.id]);
+  // The commands of the agent this session will run with, so switching drivers switches the list.
+  const searchCommands = useCallback(
+    (q: string) => (project ? client.projectCommands(project.id, q, { driver: choice?.driver }) : Promise.resolve([])),
+    [client, project?.id, choice?.driver],
+  );
 
   const close = (keyboard = false) => {
     if (session) dropDraftSession(paneId, session);
@@ -351,6 +356,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           disabled={!session}
           onValueChange={(v) => session?.edit({ description: v })}
           search={searchFiles}
+          searchCommands={searchCommands}
         />
 
         {view && project && (

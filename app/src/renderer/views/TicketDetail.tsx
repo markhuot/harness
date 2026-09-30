@@ -637,6 +637,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
+  const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
   const [chatMode, setChat] = useState(() => isChatMode(chatModes, ticket.key, Date.now()));
   // Closing the ticket starts the chat mode's TTL; re-opening within it picks the chat back up.
   useEffect(() => {
@@ -681,6 +682,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         value={text}
         onValueChange={setText}
         search={searchFiles}
+        searchCommands={searchCommands}
         placement="above"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
