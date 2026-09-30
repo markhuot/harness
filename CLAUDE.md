@@ -5,7 +5,7 @@ README.md covers setup and use, and DESIGN.md covers the architecture. `bun run 
 
 ## Changelog
 
-Every change that someone using the Mac or iPhone app would notice gets an entry under
+Every change that someone using the Mac or iPhone/iPad app would notice gets an entry under
 `## [Unreleased]` in CHANGELOG.md, in the same commit or merge that makes the change. Group the
 entries as Added, Changed, Fixed, or Removed, and write them for the person using the app (what
 they'll see), not as commit messages. Internal-only changes (tests, sim-check, refactors) don't
@@ -13,12 +13,12 @@ need an entry.
 
 ## Releases
 
-A git tag controls every release of the Mac and iPhone apps. Nothing gets published unless its
+A git tag controls every release of the Mac and iPhone/iPad apps. Nothing gets published unless its
 commit carries a release tag, and the release is exactly that commit.
 
 **Tag names** follow `app-YYYYMMDD.HHMM`, where the timestamp is the UTC minute the release was
 prepared (for example `app-20260927.1854`). Tags must be annotated (`git tag -a`), since
-`publish-install.sh` ignores lightweight tags. The iPhone build number (`CFBundleVersion`) is the
+`publish-install.sh` ignores lightweight tags. The iOS build number (`CFBundleVersion`) is the
 tag's digits (`202609271854`), which keeps it increasing from one release to the next as iOS
 requires. The user-facing versions (`version` in `mobile/app.json` and `app/package.json`) change
 only when someone decides to bump them. They don't identify a release; the tag does.

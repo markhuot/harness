@@ -31,6 +31,13 @@ test("page: itms-services link to the manifest on the site, Mac download, sizes,
   expect(p).not.toMatch(/—/); // house style: no em dashes in page copy
 });
 
+test("page: the install steps name the install button by its label", () => {
+  const p = page(info());
+  const label = p.match(/<a class="install" href="itms-services:[^"]*">([^<]+)<\/a>/)?.[1];
+  expect(label).toBeDefined();
+  expect(p).toContain(`tap <strong>${label}</strong>`);
+});
+
 test("page without a Mac build yet: no download link, the iPhone install still works", () => {
   const p = page({ ...info(), mac: null });
   expect(p).not.toContain("Harness-mac.zip");
