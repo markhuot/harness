@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.1921](https://github.com/markhuot/harness/releases/tag/app-20260930.1921) - 2026-09-30
+
 ### Added
 
 - Tickets linked to a remote item, such as a Jira issue, now show its ID (MH-62) wherever the
