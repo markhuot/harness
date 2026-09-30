@@ -655,6 +655,7 @@ client state, not service state.
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
+| Board | start a new session or a message with an agent's `/command` or skill (autocomplete; the agent expands it) | none | agents run their own skills; `message_ticket` or `create_ticket` text that starts with `/name` still reaches a claude-code agent as a command |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
 | Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
@@ -1045,6 +1046,7 @@ GET    /health                   → { ok, version, pid, build, stale } (see "Se
 POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
+GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q=&limit=50   → CommandMatch[] (/command autocomplete; see "Slash commands")
 GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
@@ -1201,6 +1203,35 @@ file typed in full (`.env`) stays in the list, first.
   behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`, and
   come back as `{ path, kind, ignored: true }` (the autocomplete's matches never carry the field).
   `?kind=file` (or `dir`) keeps one kind, the one-level browse included.
+
+**Slash commands.** The same two fields autocomplete a `/command` or skill that starts the text,
+like Claude Code's prompt (`/code-walk this branch`). The harness doesn't read or expand skills
+itself: the driver lists what its agent offers, and the text goes to the agent as typed, so the
+agent expands the command the way it would in its own terminal. `shared/src/commands.ts` holds the
+shared parts: `activeCommand` finds the command at the caret (a `/` only counts as the text's
+first character, as in the CLI, and only until the first whitespace, so `/code-walk @src/` still
+autocompletes the `@`), `insertCommand` completes it with a trailing space for the arguments, and
+`rankCommands` orders the list: name prefix, then a prefix of a `:`/`-`/`_` part (`deploy` →
+`vercel:deploy`), then substring, and descriptions only when no name matches. Ties keep the
+driver's order. Names with whitespace (MCP prompts) can't be typed as one word and are dropped.
+
+- **Listing.** `Driver.listCommands(cwd)` is optional. claude-code starts the CLI in `cwd` in
+  stream-json input mode and sends the SDK `initialize` control request, the same one the model
+  list uses (`claude-code-models.ts`), and reads `commands` from the answer: built-ins, the user's
+  and the project's skills and commands, and plugin commands, each with its description and
+  argument hint. No user message is sent, so no tokens are spent. Internal names (`__…`) are
+  dropped. anthropic-api and dummy don't implement it, so their sessions list nothing.
+- **Which agent.** `/projects/:id/commands` asks the driver a new session will use (`?driver=`,
+  else the project's, else the settings'), in the project folder. `/tickets/:key/commands` asks the
+  ticket's driver in the folder its next run works in (as `/tickets/:key/files`), so a
+  worktree's own `.claude/skills` show up.
+- **Caching.** `CommandCatalog` (`service/src/drivers/commands.ts`) keeps a list per driver and
+  folder. Starting the CLI takes two to four seconds, so only the first lookup for a folder waits.
+  After that, lookups answer at once, and a list older than 60 seconds is refreshed in the
+  background. A failure lists nothing (or keeps the last good list) and retries after 15 seconds.
+- **Running.** Nothing changes on the way to the agent: `/name args` is the run's prompt (a new
+  ticket's first run) or the message, as typed, with any @-mentioned files appended after it.
+  The CLI treats a user message that starts with `/name` as that command.
 
 ## File viewer
 

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Settings } from "@harness/shared";
 import { ClaudeCodeDriver } from "./claude-code";
-import { CLAUDE_MODEL_ALIASES, parseClaudeModels, queryClaudeModels } from "./claude-code-models";
+import { CLAUDE_MODEL_ALIASES, parseClaudeCommands, parseClaudeModels, queryClaudeModels } from "./claude-code-models";
 import { ModelListError } from "./types";
 import { tempDir } from "@harness/shared/testing";
 
@@ -61,6 +61,51 @@ describe("parseClaudeModels", () => {
 
   test("a missing models list is an error", () => {
     expect(() => parseClaudeModels(undefined)).toThrow(/no models/);
+  });
+});
+
+describe("parseClaudeCommands", () => {
+  // Shape captured from the real CLI (2.1.x): skills, plugin commands, built-ins and an MCP prompt.
+  const REAL_COMMANDS = [
+    { name: "code-walk", description: "Walk a user through a piece of code. (user)", argumentHint: "" },
+    { name: "deep-research", description: "Deep research harness (dynamic workflow)", argumentHint: "", builtin: true },
+    { name: "vercel:deploy", description: "(vercel) Deploy the current project to Vercel.", argumentHint: "[prod]" },
+    { name: "__remote-workflow", description: "internal", argumentHint: "" },
+    { name: "code-walk", description: "a project skill shadowed by the user's", argumentHint: "" },
+    { name: "compact", argumentHint: "  " },
+    { description: "no name" },
+    null,
+  ];
+
+  test("keeps named commands in the CLI's order, without internal ones or repeats", () => {
+    expect(parseClaudeCommands(REAL_COMMANDS)).toEqual([
+      { name: "code-walk", description: "Walk a user through a piece of code. (user)" },
+      { name: "deep-research", description: "Deep research harness (dynamic workflow)" },
+      { name: "vercel:deploy", description: "(vercel) Deploy the current project to Vercel.", argumentHint: "[prod]" },
+      { name: "compact", description: "" },
+    ]);
+  });
+
+  test("a missing commands list is an error", () => {
+    expect(() => parseClaudeCommands(undefined)).toThrow(/no commands/);
+  });
+});
+
+describe("ClaudeCodeDriver.listCommands against the fake CLI", () => {
+  test("asks the CLI started in the folder the agent would work in", async () => {
+    const { record, env: e } = env({ FAKE_CLAUDE_COMMANDS: JSON.stringify([{ name: "ping-test", description: "test skill (project)", argumentHint: "<who>" }]) });
+    const driver = new ClaudeCodeDriver({ settings: () => ({}) as Settings, bin: FAKE, env: { ...e, CLAUDECODE: "1" } });
+    const cwd = tempDir("harness-ccm-cwd-");
+    expect(await driver.listCommands(cwd)).toEqual([{ name: "ping-test", description: "test skill (project)", argumentHint: "<who>" }]);
+    const [inv] = readFileSync(record, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    expect(realpathSync(inv.cwd)).toBe(realpathSync(cwd));
+    expect(inv.env.CLAUDECODE).toBeUndefined();
+  });
+
+  test("a CLI that can't answer is an error (the catalog turns it into an empty list)", async () => {
+    const { env: e } = env({ FAKE_CLAUDE_INIT: "error" });
+    const driver = new ClaudeCodeDriver({ settings: () => ({}) as Settings, bin: FAKE, env: e });
+    await expect(driver.listCommands(tmpdir())).rejects.toThrow(/Already initialized/);
   });
 });
 

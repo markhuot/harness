@@ -148,7 +148,13 @@ export function NewSessionScreen() {
   const patch = useCallback((p: UpdateTicketBody) => syncRef.current && edit(applyTicketPatch(syncRef.current.local, p)), [edit]);
   const setPrompt = useCallback((description: string) => patch({ description }), [patch]);
   const searchFiles = useCallback((q: string) => (local?.projectId ? client.projectFiles(local.projectId, q) : Promise.resolve([])), [client, local?.projectId]);
-  const mentions = useFileMentions(local?.description ?? "", setPrompt, searchFiles);
+  // The commands of the agent this session will run with, so switching drivers switches the list.
+  const commandDriver = local && project ? ticketChoice(local, project, state.settings).driver : null;
+  const searchCommands = useCallback(
+    (q: string) => (local?.projectId ? client.projectCommands(local.projectId, q, { driver: commandDriver }) : Promise.resolve([])),
+    [client, local?.projectId, commandDriver],
+  );
+  const mentions = useFileMentions(local?.description ?? "", setPrompt, searchFiles, searchCommands);
 
   // Options start collapsed, and open by themselves when the branch pick needs a look.
   const [optionsOpen, setOptionsOpen] = useState(false);

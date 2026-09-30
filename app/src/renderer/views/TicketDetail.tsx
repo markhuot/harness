@@ -708,6 +708,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
+  const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
   // Off by default and after every send: the ticket stays where it is unless asked to move first.
   const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
@@ -747,6 +748,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
         value={text}
         onValueChange={setText}
         search={searchFiles}
+        searchCommands={searchCommands}
         placement="above"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {

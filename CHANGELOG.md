@@ -23,6 +23,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   than a "not found" pane.
 - Done tickets have a message composer on the Mac and on iPhone and iPad, so you can ask the
   agent about finished work without re-opening the ticket.
+- On the Mac, iPhone and iPad, typing `/` at the start of a new session or a message lists the
+  agent's slash commands and skills with their descriptions, the same ones Claude Code offers
+  in that project: your own skills in `~/.claude/skills`, the project's, plugin commands, and
+  built-ins. Pick one to complete it, then type its arguments. Sending `/code-walk this branch`
+  runs the code-walk skill on this branch. The list follows the agent the session runs with, so
+  it's empty for agents that don't have commands.
 
 ### Changed
 
@@ -55,7 +61,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - A watcher update for a remote item (Jira MH-62) no longer lands on an unrelated local ticket
   whose key happens to be the same.
-
+- On the Mac, the `@` file list (and the new `/` command list) opens right under the line you're
+  typing on and follows you to new lines. In a New session it used to stick to the top of the
+  window, far from the text.
 - On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request
   changes…, Re-open…) after you click its card on the board, or click anywhere in its pane that
   isn't a button, such as its title or summaries. Before, those clicks left the palette with only

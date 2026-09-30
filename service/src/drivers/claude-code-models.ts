@@ -1,10 +1,11 @@
-// claude-code model list. The authoritative source is the CLI itself: in stream-json input
-// mode it answers an SDK `initialize` control request with (among other things) the models
-// the account may use: the same list `/model` shows, already filtered by the org's
-// availableModels policy. No user message is sent, so no tokens are spent.
+// claude-code model and command lists. The authoritative source is the CLI itself: in stream-json
+// input mode it answers an SDK `initialize` control request with (among other things) the models
+// the account may use (the same list `/model` shows, already filtered by the org's
+// availableModels policy) and the slash commands and skills a session in its cwd would have. No
+// user message is sent, so no tokens are spent.
 
 import { tmpdir } from "node:os";
-import type { ModelInfo } from "@harness/shared";
+import type { CommandMatch, ModelInfo } from "@harness/shared";
 import { ModelListError } from "./types";
 
 /** Used when the CLI can't be asked: the aliases every CLI version understands. */
@@ -67,7 +68,36 @@ export function parseClaudeModels(models: unknown): ModelInfo[] {
  * Ask the CLI for its models: start it in stream-json input mode, send `initialize`, read
  * lines until the matching control_response, then kill it.
  */
-export async function queryClaudeModels(opts: { bin: string; env: Record<string, string>; timeoutMs?: number; cwd?: string }): Promise<ModelInfo[]> {
+export async function queryClaudeModels(opts: InitializeOptions): Promise<ModelInfo[]> {
+  let response: any;
+  try {
+    response = await queryClaudeInitialize(opts);
+  } catch (err) {
+    throw new ModelListError(err instanceof Error ? err.message : String(err), CLAUDE_MODEL_ALIASES);
+  }
+  try {
+    const models = parseClaudeModels(response?.models);
+    if (!models.length) throw new Error("claude reported no models");
+    return models;
+  } catch (err) {
+    throw new ModelListError(err instanceof Error ? err.message : String(err), CLAUDE_MODEL_ALIASES);
+  }
+}
+
+export interface InitializeOptions {
+  bin: string;
+  env: Record<string, string>;
+  timeoutMs?: number;
+  /** Where the CLI starts: its project skills, commands and settings come from here (default: a temp folder). */
+  cwd?: string;
+}
+
+/**
+ * The CLI's answer to `initialize` (its `response`: models, commands, agents, account...). The
+ * CLI starts in stream-json input mode and is killed once it answers; no user message is sent.
+ * Throws with the reason when it can't start, doesn't answer or answers with an error.
+ */
+export async function queryClaudeInitialize(opts: InitializeOptions): Promise<any> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   let proc: ReturnType<typeof Bun.spawn>;
   try {
@@ -79,7 +109,7 @@ export async function queryClaudeModels(opts: { bin: string; env: Record<string,
       env: opts.env,
     });
   } catch (err) {
-    throw new ModelListError(`Could not start claude: ${err instanceof Error ? err.message : String(err)}`, CLAUDE_MODEL_ALIASES);
+    throw new Error(`Could not start claude: ${err instanceof Error ? err.message : String(err)}`);
   }
   let stderr = "";
   void (async () => {
@@ -103,18 +133,12 @@ export async function queryClaudeModels(opts: { bin: string; env: Record<string,
       const exit = await Promise.race([proc.exited, Bun.sleep(200).then(() => null)]);
       const tail = stderr.trim().split("\n").filter((l) => l && !/extra certs/i.test(l)).slice(-3).join("\n");
       const why = timedOut ? `timed out after ${timeoutMs} ms` : `exited${exit !== null ? ` with code ${exit}` : ""} without answering`;
-      throw new ModelListError(`claude ${why}${tail ? `: ${tail}` : ""}`, CLAUDE_MODEL_ALIASES);
+      throw new Error(`claude ${why}${tail ? `: ${tail}` : ""}`);
     }
     if (response.subtype !== "success") {
-      throw new ModelListError(`claude initialize failed: ${String(response.error ?? response.subtype ?? "unknown error")}`, CLAUDE_MODEL_ALIASES);
+      throw new Error(`claude initialize failed: ${String(response.error ?? response.subtype ?? "unknown error")}`);
     }
-    try {
-      const models = parseClaudeModels(response.response?.models);
-      if (!models.length) throw new Error("claude reported no models");
-      return models;
-    } catch (err) {
-      throw new ModelListError(err instanceof Error ? err.message : String(err), CLAUDE_MODEL_ALIASES);
-    }
+    return response.response;
   } finally {
     clearTimeout(timer);
     try {
@@ -122,6 +146,31 @@ export async function queryClaudeModels(opts: { bin: string; env: Record<string,
     } catch {}
     if (proc.exitCode === null) proc.kill("SIGTERM");
   }
+}
+
+interface CliCommand {
+  name?: unknown;
+  description?: unknown;
+  argumentHint?: unknown;
+}
+
+/**
+ * Translate the initialize response's `commands` into CommandMatch[]: built-in commands, skills
+ * and plugin commands alike, in the CLI's order (the user's own skills first). Entries without a
+ * name and internal ones ("__remote-workflow") are dropped.
+ */
+export function parseClaudeCommands(commands: unknown): CommandMatch[] {
+  if (!Array.isArray(commands)) throw new Error("initialize response has no commands list");
+  const out: CommandMatch[] = [];
+  const seen = new Set<string>();
+  for (const c of commands as CliCommand[]) {
+    if (!c || typeof c.name !== "string" || !c.name || c.name.startsWith("__") || seen.has(c.name)) continue;
+    seen.add(c.name);
+    const m: CommandMatch = { name: c.name, description: typeof c.description === "string" ? c.description : "" };
+    if (typeof c.argumentHint === "string" && c.argumentHint.trim()) m.argumentHint = c.argumentHint.trim();
+    out.push(m);
+  }
+  return out;
 }
 
 async function readControlResponse(stream: ReadableStream<Uint8Array>): Promise<any | null> {
