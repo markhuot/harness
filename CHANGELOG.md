@@ -21,6 +21,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- The iPhone and iPad app is on TestFlight, so any iPhone or iPad can install it from the public
+  link on the install page, not just devices registered to the developer team. Each release
+  shows up in TestFlight once Apple's beta review approves it, with that release's notes under
+  What to Test.
 - The install page links a privacy policy for the iPhone and iPad app (harness-install.vercel.app/privacy.html).
 
 ## [app-20260930.1358](https://github.com/markhuot/harness/releases/tag/app-20260930.1358) - 2026-09-30

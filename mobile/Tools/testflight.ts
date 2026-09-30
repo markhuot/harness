@@ -8,9 +8,9 @@
 //   bun Tools/testflight.ts uploaded <build>      exit 0 when App Store Connect already has the build
 //   bun Tools/testflight.ts link                  print the public link (empty until the group exists)
 //
-// Env: ASC_KEY_ID and ASC_ISSUER_ID (an App Store Connect API key with the App Manager role; the .p8
-// lives at ASC_KEY_PATH, default ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8, where
-// xcodebuild and altool also look). setup also reads ASC_FEEDBACK_EMAIL and ASC_CONTACT_FIRST,
+// Env: ASC_KEY_ID and ASC_ISSUER_ID (a team API key with the App Manager role or higher; export
+// them in the publishing Mac's shell profile, not in this repo); the .p8 lives at ASC_KEY_PATH, default ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8, where xcodebuild
+// and altool also look. setup also reads ASC_FEEDBACK_EMAIL and ASC_CONTACT_FIRST,
 // ASC_CONTACT_LAST, ASC_CONTACT_EMAIL, ASC_CONTACT_PHONE for the Beta App Review contact.
 //
 // App Store Connect has no API for creating the app itself: add it once in the web UI (Apps → + →
@@ -184,8 +184,15 @@ export async function setup(c: Client, env: Record<string, string | undefined>) 
 function envClient() {
   const keyId = process.env.ASC_KEY_ID;
   const issuerId = process.env.ASC_ISSUER_ID;
-  if (!keyId || !issuerId) throw new Error("set ASC_KEY_ID and ASC_ISSUER_ID (App Store Connect → Users and Access → Integrations → App Store Connect API)");
-  const pem = readFileSync(process.env.ASC_KEY_PATH ?? join(homedir(), ".appstoreconnect", "private_keys", `AuthKey_${keyId}.p8`), "utf8");
+  // Kept out of this public repo: export both in the shell profile of the Mac that publishes.
+  if (!keyId || !issuerId) throw new Error("set ASC_KEY_ID and ASC_ISSUER_ID (App Store Connect → Users and Access → Integrations → Team Keys)");
+  const keyPath = process.env.ASC_KEY_PATH ?? join(homedir(), ".appstoreconnect", "private_keys", `AuthKey_${keyId}.p8`);
+  let pem: string;
+  try {
+    pem = readFileSync(keyPath, "utf8");
+  } catch {
+    throw new Error(`no App Store Connect API key at ${keyPath}; download AuthKey_${keyId}.p8 there (App Store Connect → Users and Access → Integrations) or set ASC_KEY_ID/ASC_KEY_PATH`);
+  }
   let cached: { jwt: string; at: number } | undefined;
   return client(async () => {
     if (!cached || Date.now() - cached.at > 15 * 60_000) cached = { jwt: await token(keyId, issuerId, pem), at: Date.now() };

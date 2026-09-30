@@ -61,14 +61,36 @@ reuse a pushed tag. If a published build is broken, fix it on `main` and cut a n
 `publish-install.sh --no-publish` builds locally without any tag checks (add `--skip-ios` or
 `--skip-mac` to build one app). An untagged build numbers itself from the clock.
 
-**TestFlight.** A published release also uploads the iOS build to App Store Connect, adds it to
-the external `Public` beta group, submits it for Beta App Review, and puts the group's public link
-on the install page (`mobile/Tools/testflight.ts`). This needs `ASC_KEY_ID` and `ASC_ISSUER_ID` for
-an App Store Connect API key whose `.p8` is in `~/.appstoreconnect/private_keys/`. A rerun on the
-same tag skips an upload that already happened. `--skip-testflight` publishes without TestFlight.
-One-time setup: create the app in App Store Connect (the API can't), then run
-`bun mobile/Tools/testflight.ts setup` with `ASC_FEEDBACK_EMAIL` and the `ASC_CONTACT_*` variables
-to fill in the Test Information that Beta App Review requires.
+**TestFlight.** Step 5 also publishes the iPhone and iPad build to TestFlight
+(`mobile/Tools/testflight.ts`), and nothing else has to be run by hand:
+
+- Before building, it checks that it can reach App Store Connect: the API key, the app record for
+  `com.markhuot.harness`, and the `Public` group. It stops there if it can't.
+- After exporting the development IPA, it exports the same archive with
+  `mobile/ExportOptions-testflight.plist` and uploads it to App Store Connect, using the Apple
+  account signed in to Xcode. Warnings about missing dSYMs for prebuilt frameworks (React,
+  hermesvm, Expo) are expected.
+- It waits for App Store Connect to process the build, sets What to Test from the CHANGELOG
+  section, adds the build to the external `Public` group and submits it for Beta App Review. Testers
+  get the build once Apple approves it, usually within a day.
+- It writes the group's public link (https://testflight.apple.com/join/M8kvbuv1) on the install
+  page as the **Get it on TestFlight** button.
+
+It needs `ASC_KEY_ID` and `ASC_ISSUER_ID` exported in the shell that publishes, for the team API
+key (App Manager or higher) whose `.p8` is in `~/.appstoreconnect/private_keys/`. The IDs aren't
+secrets, but this repo is public, so they live in the shell profile, not here. A rerun on the same
+tag skips an upload that already happened, since App Store Connect never accepts a build number
+twice. `--skip-testflight` publishes without TestFlight. If Beta App Review rejects a build, the
+release still stands. Fix the cause, then cut a new tag.
+
+The app record and the Test Information (description, privacy policy, feedback email, review
+contact) are already set up. If they ever need to change, rerun `bun mobile/Tools/testflight.ts
+setup` with `ASC_FEEDBACK_EMAIL` and the `ASC_CONTACT_FIRST`/`_LAST`/`_EMAIL`/`_PHONE` variables.
+
+**The Mac zip only runs on the Mac that built it.** `app/scripts/build.ts` writes that Mac's
+Harness checkout and `bun` paths into the app, so on another Mac the service doesn't start.
+Notarizing doesn't change that. Until the app carries its own service, the install page tells
+people to build the Mac app from the repo (`MAC_SOURCE_NOTE` in `mobile/Tools/install-page.ts`).
 
 The four tags up to and including `app-20260927.1854` came from `gh release create` without
 `--verify-tag`, which made the tag at origin's `main` tip at publish time. Those tags can point at

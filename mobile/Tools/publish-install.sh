@@ -42,10 +42,6 @@ for a in "$@"; do
 done
 TESTFLIGHT=0
 [[ $PUBLISH -eq 1 && $SKIP_IOS -eq 0 && $SKIP_TESTFLIGHT -eq 0 ]] && TESTFLIGHT=1
-if [[ $TESTFLIGHT -eq 1 && ( -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ) ]]; then
-  echo "error: TestFlight needs ASC_KEY_ID and ASC_ISSUER_ID (see Tools/testflight.ts), or pass --skip-testflight" >&2
-  exit 1
-fi
 
 # xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process
 # only rather than switching it globally.
@@ -73,6 +69,13 @@ else
 fi
 OUT="$MOBILE/build/release"
 mkdir -p "$OUT"
+
+# Check App Store Connect access (API key, app record, public group) before spending time on builds.
+if [[ $TESTFLIGHT -eq 1 ]]; then
+  echo "==> Checking App Store Connect access for TestFlight"
+  TESTFLIGHT_URL=$(bun Tools/testflight.ts link) || { echo "error: can't reach App Store Connect for TestFlight (see above), or pass --skip-testflight" >&2; exit 1; }
+  echo "    public link: ${TESTFLIGHT_URL:-none yet, created on distribute}"
+fi
 
 # Install/.vercel is gitignored, so a fresh checkout or worktree isn't linked; unlinked, `vercel
 # deploy` tries to create a new project. Link the existing one now, before spending time on builds.
