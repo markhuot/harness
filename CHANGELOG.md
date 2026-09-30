@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Mac, an open ticket's title has more room below the pane header, so it no longer sits
+  right against the header's tint when the pane has focus.
+
 ## [app-20260930.0009](https://github.com/markhuot/harness/releases/tag/app-20260930.0009) - 2026-09-30
 
 ### Added
