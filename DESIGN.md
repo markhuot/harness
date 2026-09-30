@@ -626,6 +626,12 @@ edits are fine; the section overrides that, because edits in the workdir are aut
 goes to a permission prompt or the classifier. Plan, review and conductor runs get only the read
 half. We don't reimplement the file tools for claude-code: the CLI's own are used as-is.
 
+File links: every ticket run (not triage) also gets a "File links" section (`system.file_links`)
+asking the model to put a `[path:start-end](harness://file/path#Lstart-Lend)` link before any code
+it quotes from the working directory, and to use the same link for a file:line named in prose.
+The apps open those links in the file pane (`shared/src/fileLinks.ts` defines the format). Claude
+Code's own prompt asks for bare `file_path:line_number` references; the section overrides that.
+
 ## Drivers
 
 - **dummy** — deterministic, no network. Used by tests and for fast manual testing (see below).
@@ -897,7 +903,7 @@ sub-agent links to its transcript.
 
 Every agent prompt is a template in `service/src/orchestrator/prompt-templates.ts` under a stable
 id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
-context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, board,
+context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, file links, board,
 board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
 and conductor start, review, the three completions, conductor update, changes requested, reopen,
 triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and

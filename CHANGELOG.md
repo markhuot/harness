@@ -15,6 +15,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Git tab, and follows your light, dark and color theme. Diffs show added and removed lines the way
   the Git tab's diff viewer does. Hover a code block to copy it.
 
+### Changed
+
+- Agents now link the code they quote in messages and summaries, so you can open the whole file
+  at those lines.
+
 ## [app-20260930.0429](https://github.com/markhuot/harness/releases/tag/app-20260930.0429) - 2026-09-30
 
 ### Added

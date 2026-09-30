@@ -583,6 +583,7 @@ export const PROMPT_IDS = [
   "system.branches",
   "system.files",
   "system.summaries",
+  "system.file_links",
   "system.board",
   "system.board_changes",
   "system.config",
