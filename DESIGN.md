@@ -1116,7 +1116,8 @@ file typed in full (`.env`) stays in the list, first.
   file browser; the autocomplete never sends it) builds a separate, deeper index that also walks
   `node_modules` (anywhere), after everything else, with its own budget of 200,000 entries and
   1.5 seconds, cached for 30 seconds. Gitignored paths (and everything in `node_modules`) rank
-  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`.
+  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`, and
+  come back as `{ path, kind, ignored: true }` (the autocomplete's matches never carry the field).
   `?kind=file` (or `dir`) keeps one kind, the one-level browse included.
 
 ## File viewer
@@ -1573,8 +1574,8 @@ Settings, project settings, or on the board route the pane workspace.
     root, picked when the palette opens (`paletteFileRoot`): the focused ticket pane's ticket, else
     the focused file pane's root, else the board's project. The All projects board with neither
     focused has no root, and says so. It searches with `ticketFiles`/`projectFiles` and
-    `{ ignored: true, kind: "file" }` after 150 ms, keeps the server's order, and marks matches
-    with `matchLabel`. `parseFileQuery` splits `path:12`, `path:12-20` or `path#L12-L20` off the
+    `{ ignored: true, kind: "file" }` after 150 ms, keeps the server's order, marks matches
+    with `matchLabel`, and tags the matches the server says are ignored. `parseFileQuery` splits `path:12`, `path:12-20` or `path#L12-L20` off the
     query, and Enter opens the file at those lines through the store's `openFile`, beside the
     pane the palette was opened over. An empty query lists that root's recently opened files
     (`harness.palette.recentFiles`, kept apart from the commands' recents). Without a prefix, a

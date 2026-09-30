@@ -101,6 +101,7 @@ try {
   })()`);
   check("the row shows the name, then its folder", drawn.name === "index.js" && drawn.dir === "node_modules/leftpad/", JSON.stringify(drawn));
   check("matched characters are highlighted", drawn.marks > 0, JSON.stringify(drawn));
+  check("the node_modules row is tagged ignored", await js<boolean>(`!!document.querySelector('[data-testid=palette-row][data-path="node_modules/leftpad/index.js"] [data-testid=palette-ignored]')`));
   await shot("palette-files-ignored");
   await selectAndEnter("node_modules/leftpad/index.js");
   await until("palette closed", async () => !(await exists("[data-testid=palette]")));
@@ -110,6 +111,9 @@ try {
   // 3. .env (git-ignored) opens too.
   await openFiles();
   await search("@.env", ".env");
+  const tagged = (path: string) => js<boolean>(`!!document.querySelector('[data-testid=palette-row][data-path=${JSON.stringify(path)}] [data-testid=palette-ignored]')`);
+  check("the .env row is tagged ignored", await tagged(".env"));
+  await shot("palette-files-env-tag");
   await selectAndEnter(".env");
   check(".env opens in the file pane", !!(await until(".env pane", async () => (await paneFile()) === ".env").catch(() => false)));
   check("opened over a file pane, it replaces that pane", (await js<number>(`document.querySelectorAll('[data-testid="pane-file"]').length`)) === 1);
@@ -120,6 +124,7 @@ try {
   await openFiles();
   const ranged = await search("@src/app.ts:40-42", "src/app.ts");
   check("the row shows the lines it opens at", ranged.find((r) => r.path === "src/app.ts")!.text.includes(":40-42"));
+  check("the tracked src/app.ts row isn't tagged ignored", !(await tagged("src/app.ts")));
   await selectAndEnter("src/app.ts");
   const selected = await until("lines 40-42 selected", async () => {
     const sel = await js<number[] | null>(`(() => { const d = document.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot; return d ? [...new Set([...d.querySelectorAll('[data-selected-line][data-line]')].map(e => Number(e.dataset.line)))] : null; })()`);

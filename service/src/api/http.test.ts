@@ -623,7 +623,9 @@ describe("ticket paging + search over http", () => {
 
     // The autocomplete doesn't reach into node_modules; the file browser's search does.
     expect(await client.projectFiles(p.id, "foo/ind")).toEqual([]);
-    expect(await client.projectFiles(p.id, "foo/ind", { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file" }]);
+    expect(await client.projectFiles(p.id, "foo/ind", { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file", ignored: true }]);
+    expect(await client.ticketFiles(t.key, ".env", { ignored: true, kind: "file" })).toEqual([{ path: ".env", kind: "file", ignored: true }]);
+    expect(await client.ticketFiles(t.key, "src/app", { ignored: true, kind: "file" })).toEqual([{ path: "src/app.ts", kind: "file" }]);
     expect(await client.ticketFiles(t.key, "src", { kind: "file" })).toEqual([{ path: "src/app.ts", kind: "file" }]);
     expect(await client.ticketFiles(t.key, "src", 1)).toEqual([{ path: "src/", kind: "dir" }]);
     await expect(client.request("GET", `/projects/${p.id}/files?q=a&kind=folder`)).rejects.toMatchObject({ status: 400 });

@@ -108,6 +108,15 @@
 .palette-row[aria-selected="true"] .palette-file-dir {
   color: var(--text-2);
 }
+.palette-ignored {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--text-3);
+}
 .palette-lines {
   font-family: var(--mono);
 }

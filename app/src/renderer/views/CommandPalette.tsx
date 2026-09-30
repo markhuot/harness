@@ -12,7 +12,7 @@
 
 import "./palette.css";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Ticket } from "@harness/shared";
+import type { FileMatch, Ticket } from "@harness/shared";
 import { sortedProjects } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { commandKeys } from "../state/keys";
@@ -58,6 +58,8 @@ interface Entry extends PaletteItem {
   ticket?: Ticket;
   /** A file row's path, relative to the root. */
   path?: string;
+  /** A file git ignores (or in node_modules), per the search. */
+  ignored?: boolean;
   run: () => void;
 }
 
@@ -105,7 +107,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   const [recents] = useState(readRecents);
   const [fileRecents] = useState(() => readRecents(undefined, RECENT_FILES_KEY, RECENT_FILES_MAX));
   const [remote, setRemote] = useState<{ q: string; tickets: Ticket[] } | null>(null);
-  const [remoteFiles, setRemoteFiles] = useState<{ key: string; paths: string[] } | null>(null);
+  const [remoteFiles, setRemoteFiles] = useState<{ key: string; files: FileMatch[] } | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchingFiles, setSearchingFiles] = useState(false);
   const listId = useId();
@@ -170,8 +172,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     const t = setTimeout(() => {
       const opts = { limit: FILE_LIMIT, ignored: true, kind: "file" as const };
       ("ticketKey" in root ? client.ticketFiles(root.ticketKey, search, opts) : client.projectFiles(root.projectId, search, opts))
-        .then((files) => n === fileSeq.current && setRemoteFiles({ key: filesKey, paths: files.filter((f) => f.kind === "file").map((f) => f.path) }))
-        .catch(() => n === fileSeq.current && setRemoteFiles({ key: filesKey, paths: [] }))
+        .then((files) => n === fileSeq.current && setRemoteFiles({ key: filesKey, files: files.filter((f) => f.kind === "file") }))
+        .catch(() => n === fileSeq.current && setRemoteFiles({ key: filesKey, files: [] }))
         .finally(() => n === fileSeq.current && setSearchingFiles(false));
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -234,14 +236,14 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   // File rows, in the server's order (it ranks them); the recently opened ones for an empty query.
   const fileRows = useMemo((): Ranked<Entry>[] => {
     if (!wantFiles || !root) return [];
-    const file = (path: string): Ranked<Entry> => ({
-      item: { id: fileItemId(root, path), kind: "file", label: path, group: "File", path, run: () => openPath(path) },
+    const file = (path: string, ignored = false): Ranked<Entry> => ({
+      item: { id: fileItemId(root, path), kind: "file", label: path, group: "File", path, ignored, run: () => openPath(path) },
       ranges: search ? matchLabel(search.toLowerCase(), path)?.ranges ?? [] : [],
       score: 0,
     });
-    if (!search) return kind === "files" ? recentFilePaths(fileRecents, root).map(file) : [];
-    const paths = remoteFiles?.key === filesKey ? remoteFiles.paths : [];
-    return paths.slice(0, kind === "files" ? FILE_LIMIT : FILE_LIMIT_ALL).map(file);
+    if (!search) return kind === "files" ? recentFilePaths(fileRecents, root).map((p) => file(p)) : [];
+    const files = remoteFiles?.key === filesKey ? remoteFiles.files : [];
+    return files.slice(0, kind === "files" ? FILE_LIMIT : FILE_LIMIT_ALL).map((f) => file(f.path, !!f.ignored));
     // openPath reads the query's lines, which change with `q`.
   }, [wantFiles, root, search, kind, fileRecents, remoteFiles, filesKey, q]);
 
@@ -381,6 +383,11 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
                 ) : item.path !== undefined ? (
                   <>
                     <FileLabel path={item.path} ranges={ranges} />
+                    {item.ignored && (
+                      <span className="palette-ignored" data-testid="palette-ignored" title="Git ignores this file">
+                        ignored
+                      </span>
+                    )}
                     {lineHint && <span className="palette-group palette-lines">{lineHint}</span>}
                     {kind !== "files" && <span className="palette-group">{item.group}</span>}
                   </>

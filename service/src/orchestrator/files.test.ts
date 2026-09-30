@@ -114,10 +114,10 @@ describe("listPaths / searchPaths", () => {
     const root = tree({ ".gitignore": "node_modules/\ndist/\n", "src/app.ts": "x", "node_modules/foo/index.js": "x", "dist/deep/node_modules/bar/main.js": "x" });
     await git(["init", "-q"], root);
     expect(await searchPaths(root, "foo/index")).toEqual([]);
-    expect(await searchPaths(root, "foo/index", 50, { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file" }]);
+    expect(await searchPaths(root, "foo/index", 50, { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file", ignored: true }]);
     // node_modules nested in an ignored folder waits for the deep pass too.
     expect(await searchPaths(root, "bar/main")).toEqual([]);
-    expect(await searchPaths(root, "bar/main", 50, { ignored: true })).toEqual([{ path: "dist/deep/node_modules/bar/main.js", kind: "file" }]);
+    expect(await searchPaths(root, "bar/main", 50, { ignored: true })).toEqual([{ path: "dist/deep/node_modules/bar/main.js", kind: "file", ignored: true }]);
     // The default listing is unchanged by a deep one having been built.
     expect(await listPaths(root)).not.toContain("node_modules/foo/index.js");
   });
@@ -126,8 +126,24 @@ describe("listPaths / searchPaths", () => {
     const root = tree({ "lib/index.js": "x", "node_modules/a/index.js": "x" });
     expect(await searchPaths(root, "index", 50, { ignored: true, kind: "file" })).toEqual([
       { path: "lib/index.js", kind: "file" },
-      { path: "node_modules/a/index.js", kind: "file" },
+      { path: "node_modules/a/index.js", kind: "file", ignored: true },
     ]);
+  });
+
+  test("ignored: the browser's matches mark gitignored files and node_modules; the autocomplete's never do", async () => {
+    const root = tree({ ".gitignore": ".env\nnode_modules/\nbuild/\n", "src/app.ts": "x", "src/env.ts": "x", ".env": "S=1", "node_modules/x.js": "x", "build/out.js": "x" });
+    await git(["init", "-q"], root);
+    await git(["add", "."], root);
+    const byPath = (ms: { path: string; ignored?: true }[]) => Object.fromEntries(ms.map((m) => [m.path, m.ignored ?? false]));
+    const env = byPath(await searchPaths(root, "env", 50, { ignored: true, kind: "file" }));
+    expect(env[".env"]).toBe(true);
+    expect(env["src/env.ts"]).toBe(false);
+    expect(byPath(await searchPaths(root, "x.js", 50, { ignored: true }))["node_modules/x.js"]).toBe(true);
+    expect(byPath(await searchPaths(root, "out", 50, { ignored: true }))["build/out.js"]).toBe(true);
+    expect(byPath(await searchPaths(root, "app", 50, { ignored: true }))["src/app.ts"]).toBe(false);
+    // The @-mention autocomplete keeps its { path, kind } shape, ignored files included.
+    for (const m of await searchPaths(root, "env")) expect(Object.keys(m).sort()).toEqual(["kind", "path"]);
+    expect((await searchPaths(root, "env")).map((m) => m.path)).toContain(".env");
   });
 
   test("ignored: gitignored paths rank after tracked ones that match as well", async () => {
