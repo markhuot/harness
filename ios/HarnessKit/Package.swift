@@ -12,7 +12,8 @@ let package = Package(
     targets: [
         .target(
             name: "HarnessKit",
-            path: "Sources/HarnessKit"
+            path: "Sources/HarnessKit",
+            resources: [.copy("Resources")]
         ),
         .testTarget(
             name: "HarnessKitTests",
