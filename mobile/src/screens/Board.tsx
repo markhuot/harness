@@ -90,6 +90,12 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
     }
   }, [state.ready, shown]);
 
+  // Keep the current column in view when the window's width changes (an iPad rotating, or resized
+  // in Split View or Stage Manager): the pages are window-wide, so the old offset lands between two.
+  useEffect(() => {
+    pager.current?.scrollToOffset({ offset: page * width, animated: false });
+  }, [width]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const goTo = (i: number) => {
     setPage(i);
     pager.current?.scrollToIndex({ index: i, animated: true });

@@ -6,6 +6,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useApp, useColors } from "../state/app";
 import { useMaybeStore } from "../state/store";
 import { checkToken, displayHost, normalizeBaseUrl, pairParams } from "../lib/pair";
+import { DEVICE } from "../lib/device";
 import { MONO } from "../theme/tokens";
 import { Button, Callout, Spinner } from "../ui/kit";
 import { KeyboardAvoider } from "../ui/KeyboardAvoider";
@@ -77,7 +78,7 @@ export function ConnectScreen() {
             ))}
           </Group>
         )}
-        <Group title="Enter manually" footer="The token is stored in the iPhone's Keychain.">
+        <Group title="Enter manually" footer={`The token is stored in the ${DEVICE}'s Keychain.`}>
           <SRow title="Service URL" stacked>
             <TextInput style={[input, { fontFamily: MONO, fontSize: 15 }]} value={url} onChangeText={setUrl} placeholder="http://100.64.0.2:7717" placeholderTextColor={c.text3} autoCapitalize="none" autoCorrect={false} keyboardType="url" textContentType="URL" accessibilityLabel="Service URL" />
           </SRow>

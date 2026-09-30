@@ -15,6 +15,7 @@ import { RADIUS } from "../theme/tokens";
 import { clampPage, dismissOnRelease, fitSize, formatSize, pageAt, pullOf, thumbSize } from "../lib/attachments";
 import { Icon } from "./Icon";
 import { haptic } from "./haptics";
+import { ALL_ORIENTATIONS } from "./orientations";
 
 const label = (a: SummaryAttachment) => `${a.kind === "video" ? "Video" : "Image"} ${a.name}`;
 
@@ -143,7 +144,7 @@ export function AttachmentViewer({ attachments, start, onClose }: { attachments:
   const pageHeight = height - headerHeight - insets.bottom;
 
   return (
-    <Modal visible transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose} supportedOrientations={["portrait", "landscape"]}>
+    <Modal visible transparent animationType="fade" presentationStyle="overFullScreen" statusBarTranslucent onRequestClose={onClose} supportedOrientations={ALL_ORIENTATIONS}>
       <StatusBar style="light" />
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "#000", opacity: backdrop }]} />
       <Animated.View style={[s.header, { height: headerHeight, paddingTop: insets.top, paddingLeft: insets.left + 8, paddingRight: insets.right + 8, opacity: chrome }]}>

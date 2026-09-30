@@ -1,5 +1,7 @@
 // How much of a view the iOS keyboard covers, from the view's frame in window coordinates and the
-// keyboard's end frame (screen coordinates, which match the window's on iPhone).
+// keyboard's end frame (screen coordinates, which match the window's on iPhone and on an iPad
+// window that starts at the top of the screen: full screen and Split View, not a Stage Manager
+// window placed lower).
 //
 // React Native's KeyboardAvoidingView does this sum with its onLayout frame, which is relative to
 // its parent, not the window. Under a navigation header or inside a sheet that frame starts at 0
