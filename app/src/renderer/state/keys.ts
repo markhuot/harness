@@ -34,6 +34,8 @@ export interface CommandSpec {
   group: CommandGroup;
   scope: KeyScope;
   keys: Chord[];
+  /** Other words the palette matches it on, like the project boards' "Board: …" rows. */
+  keywords?: string[];
   /** Listed in the palette when a handler is available (default true). */
   palette?: boolean;
   /** Runs while a modal, menu or the palette is open (toggling the palette itself). */
@@ -56,7 +58,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "shortcuts", label: "Keyboard Shortcuts", group: "General", scope: "global", keys: [cmd("Slash"), k("Slash", { shift: true })], inOverlay: true, menu: true },
   { id: "new-session", label: "New Session…", group: "General", scope: "global", keys: [cmd("KeyN")], menu: true },
   { id: "new-terminal", label: "New Terminal", group: "General", scope: "global", keys: [cmd("KeyT")], menu: true },
-  { id: "board", label: "Go to Board", group: "General", scope: "global", keys: [cmd("Digit1")], menu: true },
+  { id: "board", label: "Go to All Projects", group: "General", scope: "global", keys: [cmd("Digit1")], menu: true, keywords: ["Board: All Projects"] },
   { id: "inbox", label: "Go to Inbox", group: "General", scope: "global", keys: [cmd("Digit2")], menu: true },
   { id: "settings", label: "Open Settings", group: "General", scope: "global", keys: [cmd("Comma")], menu: true },
   { id: "toggle-sidebar", label: "Toggle Sidebar", group: "General", scope: "global", keys: [cmd("KeyS", { ctrl: true })], menu: true },

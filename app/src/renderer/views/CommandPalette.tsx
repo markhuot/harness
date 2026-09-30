@@ -204,6 +204,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
           kind: "command",
           label: spec.label,
           group: spec.group,
+          keywords: spec.keywords,
           keys: commandKeys(spec.id)[0],
           // The overlay's toggle would close it again if it were already open; open it outright.
           run: spec.id === "shortcuts" ? onShortcuts : () => void runCommand(spec.id, origin),

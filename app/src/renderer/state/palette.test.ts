@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { COMMAND_BY_ID } from "./keys";
 import {
   fileItemId,
   looksLikePath,
@@ -93,6 +94,19 @@ describe("rankCommands", () => {
     const r = rankCommands("nyt", list);
     expect(r.map((x) => x.item.id)).toEqual(["q", "p"]);
     expect(r[1]!.ranges).toEqual([]);
+  });
+
+  test("the All projects board is found beside the project boards, by name or as a board", () => {
+    const board = COMMAND_BY_ID.get("board")!;
+    const list: PaletteItem[] = [
+      { id: "nav:project:a", label: "Board: Harness" },
+      { id: "nav:project:b", label: "Board: NYTimes" },
+      { id: "cmd:board", label: board.label, keywords: board.keywords },
+      { id: "nav:inbox", label: "Inbox" },
+    ];
+    expect(rankCommands("all projects", list).map((r) => r.item.id)).toEqual(["cmd:board"]);
+    expect(rankCommands("board", list).map((r) => r.item.id)).toEqual(["nav:project:a", "nav:project:b", "cmd:board"]);
+    expect(rankCommands("board: all", list).map((r) => r.item.id)).toEqual(["cmd:board"]);
   });
 
   test("matching ignores case", () => {

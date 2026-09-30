@@ -22,6 +22,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the Mac, the ⌘1 command is now called **Go to All Projects**, in the Go menu and the command
+  palette. Typing "board" or "all projects" in the palette finds it beside each project's board.
 - On the Mac, dragging the divider between panes now resizes every pane on each side of it
   together, keeping their proportions. With three panes, dragging the right divider to the left
   grows the right pane and shrinks the other two alike. Hold Option while dragging, or while
