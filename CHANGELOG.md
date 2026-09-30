@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request
+  changes…, Re-open…) after you click its card on the board, or click anywhere in its pane that
+  isn't a button, such as its title or summaries. Before, those clicks left the palette with only
+  the general commands.
+
 ## [app-20260930.1626](https://github.com/markhuot/harness/releases/tag/app-20260930.1626) - 2026-09-30
 
 ### Added

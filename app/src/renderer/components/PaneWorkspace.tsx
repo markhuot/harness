@@ -181,6 +181,7 @@ export function Pane({
     <section
       className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
       data-pane-id={leaf.id}
+      data-pane-ticket={c.kind === "ticket" ? c.ticketKey : undefined}
       data-testid={`pane-${c.kind}`}
       style={leafStyle(rect)}
       aria-hidden={hidden || undefined}

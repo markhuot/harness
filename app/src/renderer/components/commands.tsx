@@ -3,8 +3,9 @@
 // Areas that own commands mark themselves with data-keys-scope (their KeyScope, or several
 // separated by spaces) and data-keys-owner (a unique id), and register handlers for that owner with
 // useCommands. A key goes to the innermost area around the focus with a handler for a matching
-// command, then outward, and last to the "global" owner. With nothing focused, the focused pane
-// counts as where the focus is. The native menu (and the palette) run commands by id through the
+// command, then outward, and last to the "global" owner. With nothing focused, or the pane itself
+// focused (a click on its background), the pane's area counts as where the focus is. A board card
+// also reaches the Actions of its ticket's open pane (the palette's Approve from a clicked card). The native menu (and the palette) run commands by id through the
 // same lookup, which is how ⌘ chords reach the app from inside a plugin iframe or a terminal.
 
 import { useEffect, useRef } from "react";
@@ -67,15 +68,30 @@ export const keysArea = (scope: KeyScope | `${KeyScope} ${string}`, owner: strin
 interface Area {
   owner: string;
   scopes: KeyScope[];
+  /** Only this group's commands apply here (a board card borrowing its open ticket's Actions). */
+  only?: CommandSpec["group"];
 }
 
-/** Where commands for `el` are looked up: its areas from the innermost out, then the global owner. */
+const areaOf = (n: Element, only?: CommandSpec["group"]): Area => {
+  const h = n as HTMLElement;
+  return { owner: h.dataset.keysOwner!, scopes: (h.dataset.keysScope ?? "").split(/\s+/).filter(Boolean) as KeyScope[], ...(only ? { only } : {}) };
+};
+
+/** A pane's command area sits inside the pane, so a pane that has the focus itself (a click on its background) starts from that. */
+const paneArea = (pane: Element | null) => pane?.querySelector("[data-keys-owner]") ?? pane;
+
+/**
+ * Where commands for `el` are looked up: its areas from the innermost out, then the global owner.
+ * A board card stands for its ticket, so when that ticket is open in a pane, the pane's Actions
+ * (Approve, Re-open…) apply from the card too, after the board's own commands.
+ */
 function areasFrom(el: Element | null): Area[] {
   const out: Area[] = [];
-  for (let n = el?.closest("[data-keys-owner]") ?? null; n; n = n.parentElement?.closest("[data-keys-owner]") ?? null) {
-    const h = n as HTMLElement;
-    out.push({ owner: h.dataset.keysOwner!, scopes: (h.dataset.keysScope ?? "").split(/\s+/).filter(Boolean) as KeyScope[] });
-  }
+  const start = el?.matches(".pane") ? paneArea(el) : el;
+  for (let n = start?.closest("[data-keys-owner]") ?? null; n; n = n.parentElement?.closest("[data-keys-owner]") ?? null) out.push(areaOf(n));
+  const key = (el?.closest(".card[data-key]") as HTMLElement | null)?.dataset.key;
+  const open = key ? document.querySelector(`.pane[data-pane-ticket="${CSS.escape(key)}"] [data-keys-owner]`) : null;
+  if (open) out.push(areaOf(open, "Actions"));
   out.push({ owner: GLOBAL_OWNER, scopes: ["global"] });
   return out;
 }
@@ -84,9 +100,7 @@ function areasFrom(el: Element | null): Area[] {
 export function commandOrigin(): Element | null {
   const a = document.activeElement;
   if (a && a !== document.body && a !== document.documentElement) return a;
-  // The pane's command area sits inside the pane, so start from it (areas are looked up outward).
-  const pane = document.querySelector(".pane.active");
-  return pane?.querySelector("[data-keys-owner]") ?? pane;
+  return paneArea(document.querySelector(".pane.active"));
 }
 
 const TEXT = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color]), textarea, select, [contenteditable=""], [contenteditable=true]';
@@ -110,6 +124,7 @@ export function resolveKey(e: KeyboardEvent): { spec: CommandSpec; run: () => vo
   for (const area of areasFrom(el)) {
     for (const scope of area.scopes) {
       for (const spec of matchCommands(e, scope, ctx)) {
+        if (area.only && spec.group !== area.only) continue;
         const h = handlerFor(area.owner, spec.id);
         if (h) return { spec, run: h.run };
       }
@@ -121,7 +136,7 @@ export function resolveKey(e: KeyboardEvent): { spec: CommandSpec; run: () => vo
 function lookup(id: string, from: Element | null): { run: () => void; label?: string } | null {
   const spec = COMMAND_BY_ID.get(id);
   if (!spec) return null;
-  for (const area of areasFrom(from)) if (area.scopes.includes(spec.scope)) {
+  for (const area of areasFrom(from)) if (area.scopes.includes(spec.scope) && (!area.only || spec.group === area.only)) {
     const h = handlerFor(area.owner, id);
     if (h) return h;
   }
