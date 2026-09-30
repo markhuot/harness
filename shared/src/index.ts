@@ -8,6 +8,7 @@ export * from "./watchers";
 export * from "./commandLine";
 export * from "./projectColors";
 export * from "./mentions";
+export * from "./fileLinks";
 export * from "./templates";
 export * from "./prompts";
 export * from "./completion";
