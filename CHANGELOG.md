@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.1358](https://github.com/markhuot/harness/releases/tag/app-20260930.1358) - 2026-09-30
+
 ### Added
 
 - On the Mac, a ticket or terminal pane can pop out into a window of its own. Click the new
