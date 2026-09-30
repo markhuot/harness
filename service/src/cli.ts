@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { HarnessClient, type Ticket } from "@harness/shared";
+import { HarnessClient, keyLabel, type Ticket } from "@harness/shared";
 import { ensureHome, ensureToken, harnessPaths, readServiceJson, readToken, resolveHome, resolvePort } from "./config";
 
 export const LAUNCHD_LABEL = "com.markhuot.harness";
@@ -346,7 +346,7 @@ export class Cli {
         const [dir, ...words] = pos;
         if (!dir || !words.length) return this.usage();
         const t = await this.newTicket(dir, words.join(" "), { driver, plan });
-        print(`${t.key} ${t.title} [${t.status}]`, t);
+        print(`${keyLabel(t)} ${t.title} [${t.status}]`, t);
         return 0;
       } else if (cmd === "network") {
         const n = await this.client().network();
@@ -372,7 +372,9 @@ export class Cli {
         return 0;
       } else if (cmd === "tickets") {
         const tickets = await this.client().listTickets();
-        print(tickets.map((t) => `${t.key.padEnd(14)} ${(t.draft ? "draft" : t.status).padEnd(12)} ${t.busy ? "●" : " "} ${t.title}`).join("\n") || "(no tickets)", tickets);
+        // A linked ticket shows its remote ID with its local key: "MH-62 · MH-124".
+        const width = Math.max(14, ...tickets.map((t) => keyLabel(t).length));
+        print(tickets.map((t) => `${keyLabel(t).padEnd(width)} ${(t.draft ? "draft" : t.status).padEnd(12)} ${t.busy ? "●" : " "} ${t.title}`).join("\n") || "(no tickets)", tickets);
         return 0;
       }
       return this.usage();

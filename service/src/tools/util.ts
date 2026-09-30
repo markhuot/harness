@@ -1,7 +1,7 @@
 // Shared helpers for tool definitions: input validation, result builders, formatting.
 
 import type { Ticket } from "@harness/shared";
-import type { ApprovalMeta, JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./types";
+import type { ApprovalMeta, BoardRemoteMatches, JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./types";
 
 export function textResult(text: string, isError = false): ToolResult {
   return isError ? { content: [{ type: "text", text }], isError: true } : { content: [{ type: "text", text }] };
@@ -156,10 +156,26 @@ export function schema(properties: Record<string, unknown>, required: string[] =
   return required.length ? { type: "object", properties, required } : { type: "object", properties };
 }
 
+/**
+ * HarnessOps.getTicket for a key that no local ticket has but tickets carry as their remote ID.
+ * get_ticket turns it into a { ticket: null, requested, relatedTickets } result, not an error.
+ */
+export class RemoteIdError extends Error {
+  constructor(
+    message: string,
+    public matches: BoardRemoteMatches,
+  ) {
+    super(message);
+  }
+}
+
 /** Compact, model-friendly view of a ticket. */
 export function ticketView(t: Ticket) {
   return {
     key: t.key,
+    // The remote ID it's linked to (shown in place of key on the board); key is what tools take.
+    externalKey: t.externalRef?.key ?? null,
+    externalUrl: t.externalRef?.url ?? null,
     title: t.title,
     kind: t.kind,
     status: t.status,

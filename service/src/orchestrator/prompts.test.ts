@@ -552,6 +552,16 @@ describe("run prompts", () => {
     expect(text.match(/^- /gm)).toHaveLength(2);
   });
 
+  test("a ticket linked to a remote ID is named by it, with its local key alongside", () => {
+    const linked = ticket({ key: "NYT-124", title: "Fix it", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
+    expect(reviewPrompt(linked, [])).toContain('NYT-62 (local NYT-124) "Fix it"');
+    // A legacy mirror's key is its remote ID, and an unlinked ticket has only its key.
+    const legacy = ticket({ key: "FOO-9", title: "Old", externalRef: { source: "jira", key: "FOO-9", url: null, raw: null } });
+    expect(reviewPrompt(legacy, [])).toContain('FOO-9 "Old"');
+    expect(reviewPrompt(legacy, [])).not.toContain("(local");
+    expect(reviewPrompt(ticket({ title: "Plain" }), [])).toContain('NYT-3 "Plain"');
+  });
+
   test("workStartPrompt handles an empty description", () => {
     expect(workStartPrompt(ticket({ description: "  " }))).toContain("the title is the whole brief");
   });
@@ -701,10 +711,17 @@ describe("triagePrompt", () => {
     expect(triage()).not.toContain("was cut off");
   });
 
-  test("existing tickets are listed with their status and the forwarding behaviour", () => {
-    const text = triage({ existingTickets: [ticket({ key: "NYT-123", title: "Header overlaps logo", status: "review" })] });
-    expect(text).toContain('* NYT-123 "Header overlaps logo", status review');
-    expect(text).toContain("forwards your description to that ticket as a message");
+  test("existing tickets are listed by local key with status and remote ID, and ticket_key is how to update one", () => {
+    const text = triage({
+      existingTickets: [
+        ticket({ key: "NYT-123", title: "Header overlaps logo", status: "review" }),
+        ticket({ key: "NYT-130", title: "Header, stage 2", status: "planning", externalRef: { source: "jira", key: "NYT-123", url: null, raw: null } }),
+      ],
+    });
+    expect(text).toContain('* NYT-123 "Header overlaps logo", status review, no remote ID');
+    expect(text).toContain('* NYT-130 "Header, stage 2", status planning, remote ID NYT-123');
+    expect(text).toContain("with its local key as ticket_key");
+    expect(text).toContain("leave ticket_key out to create a new ticket linked to the same remote ID");
     expect(triage()).not.toContain("## Existing tickets");
   });
 

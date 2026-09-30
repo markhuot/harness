@@ -107,6 +107,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     }),
     getTicket: async (_ctx: ToolContext, key: string) => ({
       ticket: { ...find(key), projectKey: "TEST" },
+      relatedTickets: [],
       resolvedFrom: null,
       parent: "TEST-1",
       children: [],

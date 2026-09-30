@@ -331,15 +331,15 @@ describe("agents don't see drafts", () => {
       if (req.kind !== "triage") return;
       prompt = req.prompt;
       await req.toolContext.ops
-        .dispatchTicket(req.toolContext, { projectKey: "WEB", key: d.key, title: "t", description: "update" })
+        .dispatchTicket(req.toolContext, { projectKey: "WEB", ticketKey: d.key, title: "t", description: "update" })
         .catch((err: Error) => (error = err.message));
     };
     h.orch.triage({ source: "jira", output: { text: `about ${d.key}`, truncated: false }, prompt: "", driver: h.driver.id });
     await h.orch.idle();
-    // The draft isn't offered as an existing ticket, and dispatching under its key doesn't reach it.
+    // The draft isn't offered as an existing ticket, and naming it as ticket_key doesn't reach it.
     expect(prompt).toContain(d.key);
     expect(prompt).not.toContain("secret");
-    expect(error).toMatch(/already exists/);
+    expect(error).toMatch(/^Unknown ticket: /);
     expect(h.store.transcript.tail(d.sessionId, 50, ["text"]).length).toBe(0);
     expect(h.get(d).draft).toBe(true);
   });

@@ -10,6 +10,7 @@ import type {
   PermissionMode,
   PromptEntry,
   PublicSettings,
+  RelatedTicket,
   RunKind,
   Session,
   Ticket,
@@ -61,11 +62,19 @@ export interface BoardListFilter {
   limit?: number;
 }
 
-/** A ticket plus its project's key (mirrored keys like FOO-123 don't name their project). */
+/** A ticket plus its project's key (a legacy mirror's key like FOO-123 doesn't name its project). */
 export type BoardTicket = Ticket & { projectKey: string };
+
+/** A ticket linked to a remote ID (get_ticket's relatedTickets), with its project's key. */
+export type BoardRelatedTicket = RelatedTicket & { projectKey: string };
 
 export interface BoardTicketDetail {
   ticket: BoardTicket;
+  /**
+   * Other tickets whose remote ID is the requested key or this ticket's remote ID, newest first
+   * (drafts left out); [] when there are none.
+   */
+  relatedTickets: BoardRelatedTicket[];
   /** The old key the lookup went through, when `key` was an alias */
   resolvedFrom: string | null;
   parent: string | null;
@@ -76,6 +85,16 @@ export interface BoardTicketDetail {
   summaries: { author: string; body: string; createdAt: number; attachments: { name: string; kind: "image" | "video"; path: string }[] }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
+}
+
+/**
+ * get_ticket for a key no local ticket has (current key or alias) but that tickets carry as their
+ * remote ID: not a ticket, a pointer to the local ones.
+ */
+export interface BoardRemoteMatches {
+  ticket: null;
+  requested: string;
+  relatedTickets: BoardRelatedTicket[];
 }
 
 /** One Inbox item (a triage session), for list_inbox. */
@@ -192,6 +211,10 @@ export interface HarnessOps {
    */
   listTickets(ctx: ToolContext, filter: BoardListFilter): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }>;
   /** One ticket in any project, with summaries and optionally the last N text transcript entries. */
+  /**
+   * Local keys only (current key or alias). A key only remote IDs match throws RemoteIdError
+   * (tools/util.ts) carrying BoardRemoteMatches; one nothing matches throws a plain Error.
+   */
   getTicket(ctx: ToolContext, key: string, opts?: { transcript?: number }): Promise<BoardTicketDetail>;
   /** Full-text search across every status (Orchestrator.searchTickets ranking and cursors). */
   searchTickets(
@@ -243,10 +266,23 @@ export interface HarnessOps {
   recordPullRequest(ctx: ToolContext, url: string): Promise<string>;
 
   // --- triage runs ---
-  /** Create (and optionally start) a local ticket mirroring the external item. */
+  /**
+   * `key` is the remote ID: without `ticketKey` a new ticket (native key) is created, linked to
+   * it. `ticketKey` names an existing local ticket (current key or alias) that gets the
+   * description as a message instead, and is linked to `key` when it has no remote ID yet.
+   */
   dispatchTicket(
     ctx: ToolContext,
-    input: { projectKey: string; key?: string; url?: string; title: string; description: string; start?: boolean; conductor?: boolean },
+    input: {
+      projectKey: string;
+      key?: string;
+      ticketKey?: string;
+      url?: string;
+      title: string;
+      description: string;
+      start?: boolean;
+      conductor?: boolean;
+    },
   ): Promise<Ticket>;
   /** `title` replaces the Inbox title derived from the raw output. */
   declineWork(ctx: ToolContext, reason: string, title?: string): Promise<void>;
