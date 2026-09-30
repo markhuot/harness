@@ -9,6 +9,20 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The install page at harness-install.vercel.app is rewritten for anyone at the company, not just
+  Mark's own devices. It explains what Harness does with screenshots of the board, reviews, each
+  ticket's branch and changes, approvals, conductor tickets, watchers and the iPhone app, and a
+  Getting started section walks through setting up the Mac, adding a project, making a ticket and
+  pairing a phone. When the iPhone and iPad app has a TestFlight link, the page's main button is
+  **Get it on TestFlight** with the steps to accept the invite, and the development build becomes
+  a smaller link for devices registered to the developer team.
+
+### Added
+
+- The install page links a privacy policy for the iPhone and iPad app (harness-install.vercel.app/privacy.html).
+
 ## [app-20260930.1358](https://github.com/markhuot/harness/releases/tag/app-20260930.1358) - 2026-09-30
 
 ### Added

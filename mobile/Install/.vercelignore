@@ -1,4 +1,4 @@
-# Only the page, icons, manifest and IPA are published.
+# Only the pages, icons, screenshots (img/), manifest and IPA are published.
 .env*
 .gitignore
 .vercelignore
