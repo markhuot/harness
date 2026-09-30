@@ -1116,7 +1116,8 @@ file typed in full (`.env`) stays in the list, first.
   file browser; the autocomplete never sends it) builds a separate, deeper index that also walks
   `node_modules` (anywhere), after everything else, with its own budget of 200,000 entries and
   1.5 seconds, cached for 30 seconds. Gitignored paths (and everything in `node_modules`) rank
-  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`.
+  behind the rest of their match rank, so `util` finds `src/util.ts` before `dist/util.ts`, and
+  come back as `{ path, kind, ignored: true }` (the autocomplete's matches never carry the field).
   `?kind=file` (or `dir`) keeps one kind, the one-level browse included.
 
 ## File viewer
@@ -1464,8 +1465,9 @@ Settings, project settings, or on the board route the pane workspace.
   `?ticket=`/`?project=` names its root, else the `FileLinkScope` the text renders in (the ticket
   pane's ticket, the Inbox session's dispatched project; `state/fileOpen.ts`). `openFile` in
   `state/panes.ts` focuses the pane already showing that file and moves it to the link's lines
-  (switching to the File tab), else reuses a file pane just right of the pane the link came from,
-  else docks a new one on its right. `FileViewer.tsx` (loaded lazily) draws the file with
+  (switching to the File tab), else shows it in the pane it's opened from when that's a file pane
+  (the palette's file browser over one), else reuses a file pane just right of that pane, else
+  docks a new one on its right. `FileViewer.tsx` (loaded lazily) draws the file with
   @pierre/diffs' `File`: the syntax theme, line numbers, `startLine..endLine` as its selected
   lines, scrolled into view on open and when a link moves the pane (not when you pick lines in
   the gutter, which updates the pane's range in place with `setFileView`). A file with
@@ -1568,6 +1570,17 @@ Settings, project settings, or on the board route the pane workspace.
     subsequence matches, with a label prefix first, then word starts, then runs, then scattered
     letters, and recent picks break ties. `>` limits the list to commands and `#` to tickets. `?`
     and ⌘/ open the shortcuts overlay, which is rendered from the registry.
+  - *File browser.* `@` (or ⌘P, Open File…) turns the palette into a file browser. It searches one
+    root, picked when the palette opens (`paletteFileRoot`): the focused ticket pane's ticket, else
+    the focused file pane's root, else the board's project. The All projects board with neither
+    focused has no root, and says so. It searches with `ticketFiles`/`projectFiles` and
+    `{ ignored: true, kind: "file" }` after 150 ms, keeps the server's order, marks matches
+    with `matchLabel`, and tags the matches the server says are ignored. `parseFileQuery` splits `path:12`, `path:12-20` or `path#L12-L20` off the
+    query, and Enter opens the file at those lines through the store's `openFile`, beside the
+    pane the palette was opened over. An empty query lists that root's recently opened files
+    (`harness.palette.recentFiles`, kept apart from the commands' recents). Without a prefix, a
+    query that reads as a path (`looksLikePath`) adds up to five files after the commands and
+    tickets. `scripts/palette-files-check.ts` drives it against the real service.
   - *Rings.* `html[data-input]` is `keyboard` after a keyboard command or Tab, and `pointer` after
     any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
     (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.

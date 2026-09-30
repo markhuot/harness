@@ -1377,6 +1377,16 @@ describe("file panes", () => {
     expect(s.focusedId).toBe("f");
   });
 
+  test("opened from a file pane (the palette over it), a different file replaces that pane", () => {
+    const s0 = st(row("r", [B, T("A-1"), F("f", file("a.ts", { startLine: 2 }))], [0.4, 0.3, 0.3]), "f");
+    const s = valid(openFile(s0, file("b.ts", { startLine: 5 }), "f"));
+    expect(shape(s.root)).toBe("row[board 0.4, A-1 0.3, @b.ts:5 0.3]");
+    expect(s.focusedId).toBe("f");
+    // The focused pane counts when no source is named.
+    const s2 = valid(openFile(s0, file("c.ts")));
+    expect(shape(s2.root)).toBe("row[board 0.4, A-1 0.3, @c.ts 0.3]");
+  });
+
   test("a file pane elsewhere (not right after the source) doesn't get replaced", () => {
     const s0 = st(row("r", [B, F("f", file("a.ts")), T("A-1")], [0.4, 0.3, 0.3]), "A-1");
     const s = valid(openFile(s0, file("b.ts"), "A-1"));

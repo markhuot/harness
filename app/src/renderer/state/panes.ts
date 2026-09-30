@@ -533,7 +533,8 @@ export function openCompose(state: PaneState, fromLeafId: string | null = null, 
  * Open a file pane (following a file link, or the palette). A pane already showing the file (same
  * root and path) is focused and moved to `content`'s lines, switching to the File tab when lines
  * are given (they're lines of the file, not of the diff). Otherwise, when the pane it's opened from
- * (`fromLeafId`, else the focused pane, else the board: splitTarget) has a file pane right after it
+ * (`fromLeafId`, else the focused pane, else the board: splitTarget) is itself a file pane (the
+ * palette's file browser over one), that pane shows the new file; when it has a file pane right after it
  * in a row, that pane shows the new file, so following links from a transcript doesn't stack up a
  * pane per file; failing that, a new pane docks on its right.
  */
@@ -546,6 +547,10 @@ export function openFile(state: PaneState, content: FileContent, fromLeafId: str
   }
   const clean: FileContent = { kind: "file", root: content.root, path: content.path, ...lineRange(content), ...(content.tab === "diff" ? { tab: "diff" } : {}) };
   const from = splitTarget(state, fromLeafId);
+  const fromLeaf = findLeaf(state.root, from);
+  if (fromLeaf?.content.kind === "file") {
+    return normalize({ root: setLeafContent(state.root, from, clean), focusedId: from, zoomedId: zoomFor(state, from) });
+  }
   const step = pathTo(state.root, from)?.at(-1);
   const beside = step && step.split.dir === "row" ? step.split.children[step.index + 1] : undefined;
   if (beside?.type === "leaf" && beside.content.kind === "file") {

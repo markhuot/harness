@@ -7,6 +7,8 @@
 export interface FileMatch {
   path: string;
   kind: "file" | "dir";
+  /** Git ignores it (or it's in node_modules). Only the file browser's search (`ignored=1`) says so. */
+  ignored?: true;
 }
 
 /** The mention the caret is in: text[start, end) is replaced when one is picked. */

@@ -96,6 +96,49 @@
   color: var(--text-3);
 }
 
+/* File rows: the name, then its folder dimmed */
+.palette-file-name {
+  color: var(--text);
+}
+.palette-file-dir {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.palette-row[aria-selected="true"] .palette-file-dir {
+  color: var(--text-2);
+}
+.palette-ignored {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--text-3);
+}
+.palette-lines {
+  font-family: var(--mono);
+}
+
+/* Files mode: which folder is searched */
+.palette-root {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+}
+.palette-root strong {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.palette-root-hint {
+  margin-left: auto;
+}
+
 /* "Searching…", "No matches" */
 .palette-note {
   display: flex;

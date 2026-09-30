@@ -30,6 +30,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   syntax highlighting and line numbers, scrolled to the linked lines and with them highlighted.
   When the file has uncommitted changes, a Diff tab shows them. Pull down to reload. File links
   opened from outside the app (`harness://file/…?ticket=…`) open there too.
+- On the Mac, **Open File…** (⌘P), or typing `@` in the command palette, finds any file in the
+  focused ticket's folder or the board's project, including files git ignores such as `.env` and
+  anything in `node_modules` (tagged "ignored" in the list), and opens it in a file pane. Type
+  `src/app.ts:120` or `src/app.ts#L120-L130` to open it at those lines. With nothing typed, it
+  lists the files you opened last. Typing a path in the palette without the `@` shows a few
+  matching files too.
 
 ### Changed
 

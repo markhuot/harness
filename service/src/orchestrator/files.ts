@@ -192,7 +192,7 @@ function browse(root: string, query: string): string[] {
 export interface SearchOptions {
   /**
    * The file browser's search: also index SKIP_DIRS (node_modules), and rank ignored paths after
-   * the rest when they match equally well. The @-mention autocomplete leaves it off.
+   * the rest when they match equally well, marked `ignored: true`. The @-mention autocomplete leaves it off.
    */
   ignored?: boolean;
   /** Only files, or only folders. */
@@ -211,7 +211,12 @@ export async function searchPaths(root: string, query: string, limit = 50, opts:
   }
   if (opts.kind) paths = paths.filter((p) => p.endsWith("/") === (opts.kind === "dir"));
   const ranked = rankPaths(paths, q, limit, opts.ignored ? { demote: (p) => ignored.has(p) } : {});
-  return ranked.map((path) => ({ path, kind: path.endsWith("/") ? "dir" : "file" }));
+  return ranked.map((path): FileMatch => {
+    const m: FileMatch = { path, kind: path.endsWith("/") ? "dir" : "file" };
+    // The browser marks ignored paths; the autocomplete's shape stays { path, kind }.
+    if (opts.ignored && ignored.has(path)) m.ignored = true;
+    return m;
+  });
 }
 
 export interface Attachments {

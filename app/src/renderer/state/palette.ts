@@ -1,5 +1,6 @@
-// The command palette's pure parts: fuzzy ranking, the ">" / "#" prefixes and the recents list.
-// views/CommandPalette.tsx builds the items (commands, navigation, tickets) and renders them.
+// The command palette's pure parts: fuzzy ranking, the ">" / "#" / "@" prefixes, file queries
+// (`path:12`, `path#L12-L20`), which root the file browser searches, and the recents lists.
+// views/CommandPalette.tsx builds the items (commands, navigation, tickets, files) and renders them.
 //
 // Ranking is a case-insensitive subsequence match on the label, scored in tiers: the label starts
 // with the query, then the query starts a word ("sess" in "New Session") or picks out word
@@ -104,14 +105,80 @@ export function rankCommands<T extends PaletteItem>(query: string, items: readon
   return scored.sort((a, b) => b.score - a.score || recency(a.item) - recency(b.item) || a.i - b.i).map(({ item, ranges, score }) => ({ item, ranges, score }));
 }
 
-export type PaletteKind = "all" | "commands" | "tickets";
+export type PaletteKind = "all" | "commands" | "tickets" | "files";
 
-/** A leading ">" limits the palette to commands, "#" to tickets; the rest is the query. */
+/** A leading ">" limits the palette to commands, "#" to tickets, "@" to files; the rest is the query. */
 export function parsePaletteQuery(raw: string): { kind: PaletteKind; q: string } {
   const s = raw.trimStart();
   if (s.startsWith(">")) return { kind: "commands", q: s.slice(1).trim() };
   if (s.startsWith("#")) return { kind: "tickets", q: s.slice(1).trim() };
+  if (s.startsWith("@")) return { kind: "files", q: s.slice(1).trim() };
   return { kind: "all", q: s.trim() };
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+/** A file query: the text to search for, and the lines to open at. */
+export interface FileQuery {
+  search: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+// `path:12`, `path:12-20`, `path:12:3` (a column, dropped), `path#L12`, `path#L12-L20`, `path#L12-20`.
+const LINE_SUFFIX = /^(.*?)(?::(\d+)(?:-(\d+)|:\d+)?|#L(\d+)(?:-L?(\d+))?)$/;
+
+/**
+ * Split a trailing line or range off a file query, as editors and agents write them. The range is
+ * put in order and a one-line range is just its start; line 0 isn't a line.
+ */
+export function parseFileQuery(q: string): FileQuery {
+  const s = q.trim();
+  const m = LINE_SUFFIX.exec(s);
+  if (!m) return { search: s };
+  let start = Number(m[2] ?? m[4]);
+  let end = m[3] ?? m[5];
+  let last = end === undefined ? undefined : Number(end);
+  if (last !== undefined && last < start) [start, last] = [last, start];
+  const search = m[1]!.trim();
+  if (start < 1) return { search };
+  return last !== undefined && last !== start ? { search, startLine: start, endLine: last } : { search, startLine: start };
+}
+
+/**
+ * A query that reads as a path ("src/app", "app.ts"), so the unprefixed palette shows a few
+ * matching files too. Words alone ("settings", "new session") don't.
+ */
+export const looksLikePath = (q: string): boolean => /[/.]/.test(q) && !/\s/.test(q.trim()) && /[\p{L}\p{N}]/u.test(q);
+
+/** The folder a file browser searches: a ticket's (where its agent works) or a project's. */
+export type PaletteFileRoot = { ticketKey: string } | { projectId: string };
+
+/** What the focused pane shows, as far as picking a root cares. */
+export type FocusedContent = { kind: "ticket"; ticketKey: string } | { kind: "file"; root: PaletteFileRoot } | { kind: string };
+
+/**
+ * The root the palette's file browser searches: the focused ticket pane's ticket, else the root of
+ * the focused file pane, else the board's project. Null on the All projects board with neither
+ * focused, where there's no one folder to search.
+ */
+export function paletteFileRoot(focused: FocusedContent | null | undefined, projectId: string | null | undefined): PaletteFileRoot | null {
+  if (focused?.kind === "ticket" && "ticketKey" in focused) return { ticketKey: focused.ticketKey };
+  if (focused?.kind === "file" && "root" in focused) return focused.root;
+  return projectId ? { projectId } : null;
+}
+
+const rootPrefix = (root: PaletteFileRoot) => ("ticketKey" in root ? `file:t:${root.ticketKey}\u0000` : `file:p:${root.projectId}\u0000`);
+
+/** A file's id in the palette and its recents: its root plus its path. */
+export const fileItemId = (root: PaletteFileRoot, path: string): string => rootPrefix(root) + path;
+
+/** The paths among `recents` (fileItemIds) that belong to `root`, most recent first. */
+export function recentFilePaths(recents: readonly string[], root: PaletteFileRoot): string[] {
+  const prefix = rootPrefix(root);
+  return recents.filter((id) => id.startsWith(prefix) && id.length > prefix.length).map((id) => id.slice(prefix.length));
 }
 
 // ---------------------------------------------------------------------------
@@ -120,26 +187,29 @@ export function parsePaletteQuery(raw: string): { kind: PaletteKind; q: string }
 
 export const RECENT_KEY = "harness.palette.recent";
 export const RECENT_MAX = 8;
+/** Files opened from the palette, every root's in one list (recentFilePaths picks a root's). */
+export const RECENT_FILES_KEY = "harness.palette.recentFiles";
+export const RECENT_FILES_MAX = 30;
 
 type RecentStorage = Pick<Storage, "getItem" | "setItem">;
 const defaultStorage = (): RecentStorage | null => (typeof localStorage === "undefined" ? null : localStorage);
 
 /** Item ids run most recently first. Missing, corrupt or unreadable storage is an empty list. */
-export function readRecents(storage: RecentStorage | null = defaultStorage()): string[] {
+export function readRecents(storage: RecentStorage | null = defaultStorage(), key = RECENT_KEY, max = RECENT_MAX): string[] {
   try {
-    const v: unknown = JSON.parse(storage?.getItem(RECENT_KEY) ?? "[]");
+    const v: unknown = JSON.parse(storage?.getItem(key) ?? "[]");
     if (!Array.isArray(v)) return [];
-    return [...new Set(v.filter((x): x is string => typeof x === "string"))].slice(0, RECENT_MAX);
+    return [...new Set(v.filter((x): x is string => typeof x === "string"))].slice(0, max);
   } catch {
     return [];
   }
 }
 
-/** Put `id` at the front of the recents (once), keeping the last RECENT_MAX. Returns the new list. */
-export function pushRecent(id: string, storage: RecentStorage | null = defaultStorage()): string[] {
-  const next = [id, ...readRecents(storage).filter((x) => x !== id)].slice(0, RECENT_MAX);
+/** Put `id` at the front of the recents (once), keeping the last `max`. Returns the new list. */
+export function pushRecent(id: string, storage: RecentStorage | null = defaultStorage(), key = RECENT_KEY, max = RECENT_MAX): string[] {
+  const next = [id, ...readRecents(storage, key, max).filter((x) => x !== id)].slice(0, max);
   try {
-    storage?.setItem(RECENT_KEY, JSON.stringify(next));
+    storage?.setItem(key, JSON.stringify(next));
   } catch {}
   return next;
 }

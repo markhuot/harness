@@ -142,7 +142,9 @@ function Shell() {
     else appRef.current?.style.setProperty("--sidebar-width", `${w}px`);
   };
   // The palette remembers where the focus was, so its commands act there (and focus goes back).
-  const [palette, setPalette] = useState<Element | null>(null);
+  // `initial` is its starting query ("@" for Open File…); `n` remounts an open palette that switches to it.
+  const [palette, setPalette] = useState<{ origin: Element; initial: string; n: number } | null>(null);
+  const paletteSeq = useRef(0);
   const [shortcuts, setShortcuts] = useState(false);
 
   useEffect(() => {
@@ -162,7 +164,12 @@ function Shell() {
   useKeyboardDispatcher();
   usePaneCommands(route.view === "board" ? paneScopeOf(route) : null, !layout.sidebarCollapsed);
   useCommands(GLOBAL_OWNER, {
-    palette: () => setPalette((open) => (open ? null : commandOrigin() ?? document.body)),
+    palette: () => setPalette((open) => (open ? null : { origin: commandOrigin() ?? document.body, initial: "", n: ++paletteSeq.current })),
+    // An open palette keeps the origin it was opened from (the focus is in its input now).
+    "open-file": () => {
+      const n = ++paletteSeq.current;
+      setPalette((open) => ({ origin: open?.origin ?? commandOrigin() ?? document.body, initial: "@", n }));
+    },
     shortcuts: () => setShortcuts((open) => !open),
     "new-session": () => openCompose(),
     // A terminal needs the desktop app's PTYs.
@@ -233,7 +240,7 @@ function Shell() {
       >
         <Icon name="sidebar" />
       </button>
-      {palette && <CommandPalette origin={palette} onClose={() => setPalette(null)} onShortcuts={() => setShortcuts(true)} />}
+      {palette && <CommandPalette key={palette.n} origin={palette.origin} initial={palette.initial} onClose={() => setPalette(null)} onShortcuts={() => setShortcuts(true)} />}
       {shortcuts && <ShortcutsOverlay onClose={() => setShortcuts(false)} />}
     </div>
   );
