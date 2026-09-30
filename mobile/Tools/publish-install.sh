@@ -3,8 +3,8 @@
 #   - iPhone and iPad (one universal app): Release archive of the prebuilt ios/ workspace (JS bundle embedded, no Metro),
 #     exported as a development-signed IPA (method "debugging")
 #   - Mac: the Electron app packaged, Developer ID signed with the hardened runtime, notarized
-#     with the notarytool keychain profile NOTARY_PROFILE (default "harness" when publishing; a
-#     --no-publish build notarizes only when it's set), zipped with ditto
+#     with the App Store Connect API key when publishing (or the notarytool keychain profile
+#     NOTARY_PROFILE when that's set; a --no-publish build notarizes only then), zipped with ditto
 # A release is controlled by its git tag (CLAUDE.md → Releases): HEAD must be a commit with an
 # annotated app-YYYYMMDD.HHMM tag that is pushed and on origin/main, the tree must be clean, and
 # CHANGELOG.md must have that tag's section. Both files go to the GitHub release of that tag with
@@ -64,7 +64,12 @@ if [[ $PUBLISH -eq 1 ]]; then
   git -C "$ROOT" merge-base --is-ancestor HEAD origin/main || fail "$TAG isn't on origin/main yet; merge and push main first"
   ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || fail "GitHub already has a release for $TAG; tag a new release instead of republishing"
   # A published Mac app is notarized, so anyone who downloads it can open it without Open Anyway.
-  export NOTARY_PROFILE=${NOTARY_PROFILE:-harness}
+  # The App Store Connect API key does it unless NOTARY_PROFILE names a keychain profile: a keychain
+  # profile can't be read or saved from a background session ("User interaction is not allowed").
+  if [[ $SKIP_MAC -eq 0 && -z "${NOTARY_PROFILE:-}" ]]; then
+    [[ -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]] || fail "notarizing the Mac app needs ASC_KEY_ID and ASC_ISSUER_ID (or NOTARY_PROFILE)"
+    export NOTARIZE_WITH_ASC_KEY=1
+  fi
   echo "==> Releasing $TAG (build $BUILD_NUMBER, commit $(git -C "$ROOT" rev-parse --short HEAD))"
 else
   BUILD_NUMBER=${TAG:+$(bun Tools/release.ts check "$TAG" 2>/dev/null)}
