@@ -679,6 +679,17 @@ kbd {
   background: none;
   padding: 0;
 }
+/* A link to a project file (opens the file pane): monospace with a file glyph, like a path. */
+.md a.file-link {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.md a.file-link .file-link-icon {
+  margin-right: 3px;
+  vertical-align: -1px;
+  opacity: 0.75;
+}
 /* Fenced code (components/Code.tsx): the .md pre look, token colors from the syntax theme, and a
    copy button that shows on hover. Diffs are @pierre/diffs FileDiffs inside the same frame. */
 .code-block {

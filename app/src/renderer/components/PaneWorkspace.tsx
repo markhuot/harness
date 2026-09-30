@@ -1,5 +1,5 @@
 // The pane workspace: everything in <main> on the board route is a split tree of panes
-// (state/panes.ts). The board is one pane, and each open ticket, terminal or New session another. Panes are rendered as flat,
+// (state/panes.ts). The board is one pane, and each open ticket, terminal, file or New session another. Panes are rendered as flat,
 // absolutely positioned siblings (layoutPanes), so reshaping the tree never remounts one: the board
 // keeps its search and scroll, and a ticket keeps its transcript, browser and plugin frames.
 //
@@ -18,6 +18,7 @@ import {
   boardLeaf,
   dropPreview,
   dropTargetAt,
+  fileKey,
   focusPane,
   keySplit,
   layoutPanes,
@@ -38,6 +39,7 @@ import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { TerminalPane } from "../views/TerminalPane";
 import { DraftEditor } from "../views/DraftEditor";
+import { FilePane } from "../views/FilePane";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
@@ -186,6 +188,10 @@ function Pane({
           <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
         ) : c.kind === "compose" ? (
           <DraftEditor key={c.id} paneId={leaf.id} compose={c} zoomed={zoomed} />
+        ) : c.kind === "file" ? (
+          // Keyed by the file: a link that swaps the file in this pane starts from a clean slate
+          // (no old contents or diff under the new header, a fresh scroll to its range).
+          <FilePane key={fileKey(c)} paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : (
           <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
         )}

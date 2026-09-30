@@ -7,14 +7,16 @@
 // FileDiff (CodeDiff.tsx, loaded on first use), so they look like the Git tab's diff viewer.
 // Tokens become React spans (no innerHTML), so agent output can't inject markup.
 
-import { lazy, memo, Suspense, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { memo, Suspense, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { codeKind, codeLanguage } from "@harness/shared/state";
 import { useHighlight, useSyntaxTheme, type Lines } from "../state/syntax";
 import { Icon } from "./Icon";
+import { ChunkBoundary, retryableLazy } from "./lazyRetry";
 
 export { useSyntaxTheme, type SyntaxTheme } from "../state/syntax";
 
-const CodeDiff = lazy(() => import("./CodeDiff"));
+const codeDiff = retryableLazy(() => import("./CodeDiff").then((m) => m.default));
+const CodeDiff = codeDiff.Component;
 
 /** True once `ref` comes within a screen or so of the viewport (and stays true). */
 export function useNearViewport(ref: RefObject<Element | null>, margin = "600px"): boolean {
@@ -87,9 +89,12 @@ export const CodeBlock = memo(function CodeBlock({ text, lang }: { text: string;
 export const FencedCode = memo(function FencedCode({ text, lang }: { text: string; lang: string }) {
   if (codeKind(lang, text) === "code") return <CodeBlock text={text} lang={lang} />;
   const plain = <CodeBlock text={text} lang="diff" />;
+  // A diff renderer that fails to load leaves the plain block; the next block to mount tries again.
   return (
-    <Suspense fallback={plain}>
-      <CodeDiff text={text} fallback={plain} />
-    </Suspense>
+    <ChunkBoundary lazies={[codeDiff]} fallback={() => plain}>
+      <Suspense fallback={plain}>
+        <CodeDiff text={text} fallback={plain} />
+      </Suspense>
+    </ChunkBoundary>
   );
 });
