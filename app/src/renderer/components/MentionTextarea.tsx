@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import { activeCommand, activeMention, insertCommand, insertMention, type CommandMatch, type FileMatch } from "@harness/shared";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
+import { caretAnchor, caretOffset } from "./caretRect";
 
 type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> & {
   value: string;
@@ -33,7 +34,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   const ref = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(forwarded, () => ref.current!, []);
   const [caret, setCaret] = useState<number | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
+  const [found, setItems] = useState<Item[]>([]);
   const [index, setIndex] = useState(0);
   // Escape hides the list until the caret leaves that mention or command.
   const [dismissed, setDismissed] = useState<number | null>(null);
@@ -45,6 +46,9 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   const command = caret === null || !searchCommands ? null : activeCommand(value, caret);
   const mention = caret === null || command ? null : activeMention(value, caret);
   const active = command ?? mention;
+  // Until the new lookup answers, the last one's results stay up while the query narrows, but
+  // files never stand in for commands (or the other way round) after switching between @ and /.
+  const items = found[0]?.kind === (command ? "command" : "file") ? found : [];
   const open = !!active && dismissed !== active.start && items.length > 0;
   // "/" and "@" keep the two lookups apart when the query text is the same.
   const lookup = command ? `/${command.query}` : mention ? `@${mention.query}` : null;
@@ -86,13 +90,17 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   }, [value]);
 
   // The list is portaled with fixed positioning so the modal's or pane's overflow can't clip it.
+  // It opens under the caret's line (over it with placement "above"), not the whole field, and
+  // follows the caret as the text wraps or the field scrolls.
   useLayoutEffect(() => {
-    if (!open) return setPlace(null);
+    if (!open || caret === null) return setPlace(null);
     const measure = () => {
-      const anchor = ref.current?.getBoundingClientRect();
+      const el = ref.current;
       const menu = menuRef.current;
-      if (!anchor || !menu) return;
-      menu.style.width = `${anchor.width}px`;
+      if (!el || !menu) return;
+      const field = el.getBoundingClientRect();
+      const anchor = caretAnchor(field, caretOffset(el, caret), el.scrollTop);
+      menu.style.width = `${field.width}px`;
       const cap = menu.style.maxHeight;
       menu.style.maxHeight = "";
       const { width, height } = menu.getBoundingClientRect();
@@ -106,7 +114,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
       removeEventListener("resize", measure);
       removeEventListener("scroll", measure, true);
     };
-  }, [open, items, placement]);
+  }, [open, items, placement, caret, value]);
 
   const track = () => {
     const el = ref.current;

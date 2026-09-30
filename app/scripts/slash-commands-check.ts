@@ -71,6 +71,25 @@ try {
       return m && m.style.visibility !== "hidden" ? { label: m.getAttribute("aria-label"), rows: [...m.querySelectorAll("li")].map(li => ({ name: li.querySelector(".mention-name").textContent, text: li.textContent })) } : null;
     })()`);
   const value = (sel: string) => js<string>(`document.querySelector(${JSON.stringify(sel)}).value`);
+  /**
+   * The open menu against the field: where line `n` (1-based) ends and starts, by the field's
+   * padding and line height, and the menu's edges.
+   */
+  const geometry = (sel: string, n: number) =>
+    js<{ lineTop: number; lineBottom: number; menuTop: number; menuBottom: number }>(`(() => {
+      const t = document.querySelector(${JSON.stringify(sel)}), s = getComputedStyle(t), r = t.getBoundingClientRect();
+      const lh = parseFloat(s.lineHeight), top = r.top + parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop) - t.scrollTop + (${n} - 1) * lh;
+      const m = document.querySelector(".mention-menu").getBoundingClientRect();
+      return { lineTop: top, lineBottom: top + lh, menuTop: m.top, menuBottom: m.bottom };
+    })()`);
+  /** The menu opens 4px under line `n` (over it with `above`), give or take a pixel of rounding. */
+  const anchoredTo = async (sel: string, n: number, above = false) => {
+    const g = await until(`menu placed at line ${n}`, async () => {
+      const g = await geometry(sel, n);
+      return Math.abs(above ? g.lineTop - 4 - g.menuBottom : g.menuTop - (g.lineBottom + 4)) <= 1 ? g : null;
+    }).catch(() => geometry(sel, n));
+    return { ok: Math.abs(above ? g.lineTop - 4 - g.menuBottom : g.menuTop - (g.lineBottom + 4)) <= 1, g: JSON.stringify(g) };
+  };
 
   // 1. A New session on the project: "/co" lists the agent's commands, best first, described.
   await key("n", "KeyN", 78, 4);
@@ -96,6 +115,28 @@ try {
   await key("Enter", "Enter", 13);
   await until("the command inserted", async () => (await value(prompt)) === "/code-walk ");
   check("Enter completes /code-walk and closes the list", (await value(prompt)) === "/code-walk " && !(await menu()));
+
+  // The list opens under the line being typed on, and follows the caret to later lines.
+  await type(prompt, "/co");
+  await until("commands again", async () => (await menu())?.rows.length);
+  const first = await anchoredTo(prompt, 1);
+  check("the list opens right under the first line, not pinned to the window's top", first.ok, first.g);
+  // Lines: "/code-walk this branch", "", "see", "and", "also @sr".
+  await type(prompt, "/code-walk this branch\n\nsee\nand\nalso @sr");
+  await until("files for @sr on line 5", async () => (await menu())?.label === "Files");
+  const fifth = await anchoredTo(prompt, 5);
+  check("typing on line 5 moves the list under line 5", fifth.ok, fifth.g);
+  await shot("slash-commands-line-5");
+  // A line long enough to wrap: the mention lands on the wrapped (second) visual line.
+  const long = "word ".repeat(Math.ceil((await js<number>(`document.querySelector(".draft-prompt").clientWidth`)) / 30));
+  await type(prompt, `${long}@sr`);
+  await until("files for a wrapped @sr", async () => (await menu())?.label === "Files");
+  const lines = await js<number>(`(() => { const t = document.querySelector(".draft-prompt"), s = getComputedStyle(t);
+    const probe = document.createElement("div"); probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word";
+    for (const p of ["font","letterSpacing","width","padding","boxSizing","lineHeight"]) probe.style[p] = s[p];
+    probe.textContent = t.value; document.body.append(probe); const n = Math.round((probe.getBoundingClientRect().height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom)) / parseFloat(s.lineHeight)); probe.remove(); return n; })()`);
+  const wrapped = await anchoredTo(prompt, lines);
+  check(`a mention on a wrapped line (line ${lines}) opens under that line`, lines > 1 && wrapped.ok, wrapped.g);
 
   // 3. A part of a plugin command's name matches too.
   await type(prompt, "/deploy");
@@ -136,6 +177,8 @@ try {
   await type(composer, "/rev");
   const inComposer = await until("commands in the composer", async () => (await menu())?.rows);
   check("the composer lists /code-review for /rev", inComposer[0]?.name === "/code-review", JSON.stringify(inComposer));
+  const overComposer = await anchoredTo(composer, 1, true);
+  check("at the pane's foot the list opens just over the line being typed", overComposer.ok, overComposer.g);
   await shot("slash-commands-composer");
   await key("Tab", "Tab", 9);
   await until("the composer's command inserted", async () => (await value(composer)) === "/code-review ");

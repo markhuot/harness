@@ -20,6 +20,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the Mac, the `@` file list (and the new `/` command list) opens right under the line you're
+  typing on and follows you to new lines. In a New session it used to stick to the top of the
+  window, far from the text.
 - On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request
   changes…, Re-open…) after you click its card on the board, or click anywhere in its pane that
   isn't a button, such as its title or summaries. Before, those clicks left the palette with only
