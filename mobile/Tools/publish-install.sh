@@ -189,7 +189,7 @@ fi
 if [[ $SKIP_MAC -eq 0 ]]; then
   echo "==> Packaging the Mac app"
   (cd "$ROOT/app" && bun run package > "$OUT/mac-package.log" 2>&1) || { tail -30 "$OUT/mac-package.log" >&2; exit 1; }
-  echo "==> Signing (Developer ID, hardened runtime)${NOTARY_PROFILE:+ and notarizing}"
+  echo "==> Signing (Developer ID, hardened runtime)${NOTARY_PROFILE:+ and notarizing}${NOTARIZE_WITH_ASC_KEY:+ and notarizing}"
   (cd "$ROOT/app" && bun scripts/sign-mac.ts --zip "$OUT/Harness-mac.zip") | tee "$OUT/mac-sign.log"
   MAC_NOTARIZED=$(tail -1 "$OUT/mac-sign.log" | bun -e 'console.log(JSON.parse(await Bun.stdin.text()).notarized)')
   [[ $PUBLISH -eq 0 || "$MAC_NOTARIZED" == true ]] || { echo "error: the Mac app isn't notarized; a published build must be" >&2; exit 1; }
