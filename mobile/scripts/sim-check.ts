@@ -35,7 +35,8 @@
 //
 //   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
 //      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
-//      in the transcript); mentions-*.png
+//      in the transcript); typing `/co` in New session on a claude-code project (the fake CLI) lists
+//      its commands, a tap completes one, and the CLI gets the prompt as typed; mentions-*.png
 //
 //   --attachments (needs ffmpeg): a summary with a tall and a wide PNG, an H.264 clip and a PNG that
 //      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
@@ -405,8 +406,23 @@ const scratch = mkdtempSync(join(tmpdir(), "harness-sim-projects-"));
 const port = 7830 + Math.floor(Math.random() * 60);
 const base = `http://127.0.0.1:${port}`;
 console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
+// --mentions' /command check runs a project on the claude-code driver, pointed at the fake CLI:
+// it answers `initialize` with SLASH_COMMANDS and records each agent run's prompt.
+const SLASH_COMMANDS = [
+  { name: "code-walk", description: "Walk a user through a piece of code so they can perform a detailed code review. (user)", argumentHint: "" },
+  { name: "commit-and-pr", description: "Commit and PR (user)", argumentHint: "" },
+  { name: "vercel:deploy", description: "(vercel) Deploy the current project to Vercel.", argumentHint: "[prod]" },
+];
+const claudeRecord = join(home, "fake-claude.ndjson");
+const fakeClaude = mentionsOnly
+  ? {
+      HARNESS_CLAUDE_BIN: join(repoRoot, "service/src/drivers/__fixtures__/fake-claude.ts"),
+      FAKE_CLAUDE_COMMANDS: JSON.stringify(SLASH_COMMANDS),
+      FAKE_CLAUDE_RECORD: claudeRecord,
+    }
+  : {};
 const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "1" },
+  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });
@@ -947,13 +963,18 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
   });
 }
 
-/** --mentions: a project with a few files, and a ticket in review to message. */
-const seedMentions = () =>
-  seedTicket("MENT", "Warm up", {
+/** --mentions: a project with a few files, and a ticket in review to message; and a claude-code project for /commands. */
+async function seedMentions() {
+  const seeded = await seedTicket("MENT", "Warm up", {
     "README.md": "# Mentions\n\nThe readme the agent gets without reading it.\n",
     "src/app.ts": "export const app = 1;\n",
     "src/lib/format.ts": "export const format = 2;\n",
   });
+  const dir = join(scratch, "slash");
+  mkdirSync(dir, { recursive: true });
+  const slash = await api<Project>("POST", "/projects", { path: dir, name: "slash", key: "SLSH", defaultDriver: "claude-code" });
+  return { ...seeded, slash };
+}
 
 /** --mentions: real typing and taps in New session and the composer. */
 async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMentions>>) {
@@ -1000,6 +1021,38 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     });
     await until("Attached status", async () => (await texts(p.ticket.key)).includes("Attached @src/app.ts"), 15000);
     return "see @src/app.ts";
+  });
+
+  await check("New session: /co lists the agent's commands, a tap completes one, the CLI gets it as typed", async () => {
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.slash.id)}`, (l) => l.some((x) => x.startsWith("Prompt")));
+    await tapWhere(udid, (l) => l.startsWith("Prompt"));
+    await axe("type", "/co", "--udid", udid);
+    // The first lookup starts the (fake) CLI.
+    await until("/code-walk suggested", () => has("/code-walk"), 15000);
+    if (!(await has("/commit-and-pr")) || (await has("/vercel:deploy"))) throw new Error(`the list isn't /co's: ${JSON.stringify((await labels(udid)).filter((l) => l.startsWith("/")))}`);
+    await Bun.sleep(300);
+    await shootBoth(udid, "mentions-commands");
+    await tapWhere(udid, "/code-walk");
+    await until("list closed", async () => !(await has("/code-walk")), 4000);
+    await axe("type", "this branch", "--udid", udid);
+    await Bun.sleep(300);
+    await tapWhere(udid, "Start session");
+    moved(udid);
+    const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
+    if (t.description !== "/code-walk this branch") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    const sent = await until(
+      "the agent's prompt",
+      async () =>
+        existsSync(claudeRecord) &&
+        readFileSync(claudeRecord, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l) as { argv: string[]; stdin: string })
+          .find((r) => r.argv.includes("--mcp-config"))?.stdin,
+      15000,
+    );
+    if (!sent.startsWith("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
+    return `${t.key}: ${t.description}`;
   });
 }
 

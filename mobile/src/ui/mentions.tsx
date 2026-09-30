@@ -77,7 +77,7 @@ export function useFileMentions(
       else return;
       haptic("select");
       setValue(next.text);
-      setCaret(onPick(next.caret));
+      setCaret(onPick(next.caret, caret.at));
     },
     inputProps: {
       selection: selectionProp(caret),
