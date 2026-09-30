@@ -14,8 +14,8 @@ import type { Terminal } from "ghostty-web";
 import type { TerminalExit } from "../../main/types";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
-import { usePaneScope } from "../components/paneContext";
-import { MovePaneItems, PaneGrip } from "../components/paneHeader";
+import { usePaneScope, usePopout } from "../components/paneContext";
+import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { closePane, cwdName, paneLabel, setTerminalTitle, toggleZoom, updatePanes, type TerminalContent } from "../state/panes";
 import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors } from "../state/terminal";
 import { currentColorTheme, currentTheme, useTheme } from "../state/theme";
@@ -36,6 +36,7 @@ function monoFont(): string {
 
 export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: string; content: TerminalContent; zoomed: boolean; focused: boolean }) {
   const scope = usePaneScope();
+  const popout = usePopout();
   const { sessionId, cwd } = content;
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -167,16 +168,19 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
             </>
           )}
         </MenuButton>
-        <button
-          className="btn btn-ghost btn-icon"
-          data-testid="pane-zoom"
-          aria-pressed={zoomed}
-          onClick={zoom}
-          title={zoomed ? "Restore pane" : "Maximize pane"}
-          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
-        >
-          <Icon name={zoomed ? "shrink" : "expand"} />
-        </button>
+        <PaneWindowButton paneId={paneId} />
+        {!popout && (
+          <button
+            className="btn btn-ghost btn-icon"
+            data-testid="pane-zoom"
+            aria-pressed={zoomed}
+            onClick={zoom}
+            title={zoomed ? "Restore pane" : "Maximize pane"}
+            aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+          >
+            <Icon name={zoomed ? "shrink" : "expand"} />
+          </button>
+        )}
         <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={close} title="Close terminal" aria-label="Close pane">
           <Icon name="x" />
         </button>

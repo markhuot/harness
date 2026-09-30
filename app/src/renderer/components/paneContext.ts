@@ -20,6 +20,17 @@ export const PaneScopeContext = createContext<string>(ALL_SCOPE);
 
 export const usePaneScope = () => useContext(PaneScopeContext);
 
+/** In a pop-out window (components/PopoutWindow.tsx): its id, and the board its pane goes back to. */
+export interface PopoutInfo {
+  id: string;
+  fromScope: string;
+}
+
+/** Null in the main window. */
+export const PopoutContext = createContext<PopoutInfo | null>(null);
+
+export const usePopout = () => useContext(PopoutContext);
+
 /**
  * Open a ticket from inside a pane: it replaces this pane's content (or focuses the pane it's
  * already open in). Outside a pane it's an ordinary link to the ticket.

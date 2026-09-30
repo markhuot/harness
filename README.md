@@ -139,6 +139,7 @@ offers. The ones you'll use most:
 | / | Search the board |
 | ⌘W | Close the focused pane |
 | ⇧⌘↩ | Maximize or restore the focused pane |
+| ⇧⌘O | Pop the focused ticket or terminal out into its own window (in that window, put it back on the board) |
 | Esc | Close a menu or dialog, end a zoom, or close the ticket pane |
 
 Single keys only ever move you around, so a stray keypress can't approve, start or delete

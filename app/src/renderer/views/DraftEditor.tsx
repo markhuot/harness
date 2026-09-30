@@ -32,8 +32,8 @@ import { Icon } from "../components/Icon";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { ProjectKey } from "../components/ProjectKey";
 import { TicketSettings, useCheckoutBranch, useProjectBranches } from "../components/TicketSettings";
-import { MovePaneItems, PaneGrip } from "../components/paneHeader";
-import { usePaneScope } from "../components/paneContext";
+import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
+import { usePaneScope, usePopout } from "../components/paneContext";
 import { registerDraftCloser } from "../components/draftClose";
 import { focusPaneBy } from "../components/paneFocus";
 import { keysArea, useCommands } from "../components/commands";
@@ -96,6 +96,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   const { state, client, dispatch, toast, route } = useStore();
   const act = useAction();
   const scope = usePaneScope();
+  const popout = usePopout();
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -286,16 +287,20 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
             </>
           )}
         </MenuButton>
-        <button
-          className="btn btn-ghost btn-icon"
-          data-testid="pane-zoom"
-          aria-pressed={zoomed}
-          onClick={() => updatePanes(scope, (s) => toggleZoom(s, paneId))}
-          title={zoomed ? "Restore pane" : "Maximize pane"}
-          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
-        >
-          <Icon name={zoomed ? "shrink" : "expand"} />
-        </button>
+        {/* A saved draft is a ticket pane, which pops out; an unsaved New session doesn't. */}
+        <PaneWindowButton paneId={paneId} />
+        {!popout && (
+          <button
+            className="btn btn-ghost btn-icon"
+            data-testid="pane-zoom"
+            aria-pressed={zoomed}
+            onClick={() => updatePanes(scope, (s) => toggleZoom(s, paneId))}
+            title={zoomed ? "Restore pane" : "Maximize pane"}
+            aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+          >
+            <Icon name={zoomed ? "shrink" : "expand"} />
+          </button>
+        )}
         <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={() => requestClose()} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane">
           <Icon name="x" />
         </button>

@@ -66,6 +66,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "pane.down", label: "Focus Pane Below", group: "Panes", scope: "global", keys: [cmd("ArrowDown", { alt: true }), k("KeyJ", { ctrl: true })], menu: true },
   { id: "pane.close", label: "Close Pane", group: "Panes", scope: "global", keys: [cmd("KeyW")], menu: true },
   { id: "pane.zoom", label: "Maximize / Restore Pane", group: "Panes", scope: "global", keys: [cmd("Enter", { shift: true })], menu: true },
+  { id: "pane.popout", label: "Pop Out Pane", group: "Panes", scope: "global", keys: [cmd("KeyO", { shift: true })], menu: true },
   { id: "pane.escape", label: "End zoom, or close the ticket pane", group: "Panes", scope: "global", keys: [k("Escape")], palette: false },
 
   // Ticket pane

@@ -1450,6 +1450,24 @@ Settings, project settings, or on the board route the pane workspace.
   focused ticket pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
   pane, and a renamed key follows the rename.
+- **Pop-out windows.** A ticket or terminal pane's header has a pop-out button beside Maximize
+  (⇧⌘O for the focused pane), which moves the pane into a window of its own. The pane becomes its
+  own scope in the pane store, `popout:<id>`, whose tree is just that leaf with no board
+  (`popOut`; `popoutPanes` takes out the board the other operations put back). Everything that
+  acts on a pane's scope works there unchanged: tabs, a child link replacing the pane, a
+  terminal's title. The move is one store write, so a terminal's session never leaves every scope
+  and its shell keeps running; the pop-out's `TerminalPane` re-attaches and replays the
+  scrollback. The window opens at `#/popout/<id>/<fromScope>`, over the spot the pane had
+  (`main/popouts.ts` `popoutBounds`), and renders `PopoutWindow` instead of the shell: the one pane,
+  with "Put back on the board" in place of Maximize, and no grip or Move pane rows. Putting it back
+  (`popIn`) docks it beside the focused pane of the board it came from (All projects if that
+  project is gone), or focuses the pane already showing that ticket, and brings the main window
+  forward on that board. Closing the pane closes the window. Closing the window closes the pane:
+  the main process tells the main window (`popout:closed`), which drops the scope, so a terminal's
+  shell dies with it. At startup the main window drops pop-outs whose windows aren't open (the app
+  quit with them open). While a pop-out has focus, menu commands about its pane (⌘W, the palette, a
+  ticket's tabs) go to it, and board-level ones (⌘1, ⌘N, ⌘T, Settings) go to the main window,
+  which the Dock icon also brings back.
 - **Keyboard.** Every shortcut is a command in one registry (`state/keys.ts`): an id, a label, a
   group, a scope and its chords. The rest follows from that list.
   - *Two tiers.* ⌘ chords work everywhere, text fields and the browser canvas included. Every

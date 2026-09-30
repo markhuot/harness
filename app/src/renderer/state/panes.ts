@@ -10,7 +10,8 @@
 // counter and can be re-minted on load, and a shell must never be handed to the wrong pane.
 //
 // Every operation returns a new, normalized state (see `normalize`), so these always hold:
-//   • exactly one board leaf, a ticket key is open in at most one leaf, and so is a terminal session;
+//   • exactly one board leaf (a pop-out scope has none: see "Pop-out windows"), a ticket key is
+//     open in at most one leaf, and so is a terminal session;
 //   • no split has fewer than 2 children, and no split directly holds a split with the same dir;
 //   • a split's sizes are positive fractions that sum to 1;
 //   • focusedId/zoomedId name an existing leaf, or are null.
@@ -983,7 +984,9 @@ export function parsePaneStore(raw: string | null | undefined): PaneStore {
   const sessions = new Set<string>();
   const scopes: Record<string, PaneState> = {};
   for (const { scope, ...s } of parsed) {
-    const state = normalize(s, taken, sessions);
+    const normal = normalize(s, taken, sessions);
+    const state = isPopoutScope(scope) ? popoutPanes(normal) : normal;
+    if (!state) continue;
     allIds(state.root, taken);
     scopes[scope] = state;
   }
@@ -1000,10 +1003,84 @@ export function mapScopes(store: PaneStore, fn: (s: PaneState, scope: string) =>
   let changed = false;
   const scopes: Record<string, PaneState> = {};
   for (const [scope, s] of Object.entries(store.scopes)) {
-    scopes[scope] = fn(s, scope);
-    if (scopes[scope] !== s) changed = true;
+    // A pop-out whose pane closed (e.g. its ticket was deleted) goes.
+    const next = isPopoutScope(scope) ? popoutPanes(fn(s, scope)) : fn(s, scope);
+    if (next) scopes[scope] = next;
+    if (next !== s) changed = true;
   }
   return changed ? { scopes } : store;
+}
+
+// ---------------------------------------------------------------------------
+// Pop-out windows
+// ---------------------------------------------------------------------------
+//
+// A ticket or terminal pane can pop out into a window of its own (components/PopoutWindow.tsx).
+// The popped-out pane is its own scope, `popout:<id>`, whose tree is that one leaf and no board, so
+// everything that acts on "the pane's scope" (switching tabs, a terminal's title, following a
+// child link, closing) works there unchanged, and a terminal's shell stays in the store (it's only
+// killed once no scope shows it). Moving a pane out or back in is one write, so the shell never
+// looks closed in between. When the leaf closes, the scope goes, and the window closes with it.
+
+export const POPOUT_PREFIX = "popout:";
+export const isPopoutScope = (scope: string) => scope.startsWith(POPOUT_PREFIX);
+export const popoutScope = (id: string) => `${POPOUT_PREFIX}${id}`;
+export const popoutIdOf = (scope: string) => scope.slice(POPOUT_PREFIX.length);
+
+/** What can pop out: tickets and terminals. The board stays put, and a New session isn't stored. */
+export const canPopOut = (content: PaneContent) => content.kind === "ticket" || content.kind === "terminal";
+
+/**
+ * A pop-out scope's tree after an operation: the pane on its own. Operations keep a board in every
+ * tree (normalize puts one back), so it's taken out again here; null when no pane is left (it was
+ * closed), which means the scope goes. The same object when there was nothing to take out.
+ */
+export function popoutPanes(s: PaneState): PaneState | null {
+  const all = leaves(s.root);
+  if (all.every((l) => l.content.kind !== "board") && all.length === 1) return s;
+  const leaf = all.find((l) => l.content.kind !== "board");
+  return leaf ? { root: leaf, focusedId: leaf.id, zoomedId: null } : null;
+}
+
+/** `store` with one scope set, or removed for null; the same object when nothing changes. */
+function withScope(store: PaneStore, scope: string, next: PaneState | null): PaneStore {
+  if (store.scopes[scope] === (next ?? undefined)) return store;
+  const { [scope]: _gone, ...rest } = store.scopes;
+  return { scopes: next ? { ...rest, [scope]: next } : rest };
+}
+
+/**
+ * Pop the pane `leafId` of `scope` out into the new scope `popoutScope(id)`: it leaves the board's
+ * tree (its neighbours take its space) and becomes the pop-out's only pane, keeping its id. The same
+ * store when there's no such pane, it can't pop out, it's already popped out, or `id` is taken.
+ */
+export function popOut(store: PaneStore, scope: string, leafId: string, id: string): PaneStore {
+  const s = store.scopes[scope];
+  const leaf = s && findLeaf(s.root, leafId);
+  const target = popoutScope(id);
+  if (!leaf || !canPopOut(leaf.content) || isPopoutScope(scope) || store.scopes[target]) return store;
+  return withScope(withScope(store, scope, closePane(s, leafId)), target, { root: leaf, focusedId: leaf.id, zoomedId: null });
+}
+
+/**
+ * Put a popped-out pane back on `toScope`'s board: beside the focused pane (else the board) on its
+ * right, focused. A ticket that board already has open is focused there instead. The pop-out scope
+ * goes either way; the same store when there's no such pop-out.
+ */
+export function popIn(store: PaneStore, id: string, toScope: string): PaneStore {
+  const from = popoutScope(id);
+  const leaf = store.scopes[from] && leaves(store.scopes[from].root).find((l) => l.content.kind !== "board");
+  if (!leaf || isPopoutScope(toScope)) return store;
+  const rest = withScope(store, from, null);
+  const target = rest.scopes[toScope] ?? defaultPanes(bareBoardId(toScope));
+  const open = leafShowing(target.root, leaf.content);
+  const next = open ? focusPane(target, open.id) : dock(target, null, splitTarget(target), "right", leaf.content);
+  return withScope(rest, toScope, next);
+}
+
+/** `store` without the pop-outs `keep` rejects (their windows are gone); the same object when none go. */
+export function retainPopouts(store: PaneStore, keep: (id: string) => boolean): PaneStore {
+  return retainScopes(store, (scope) => !isPopoutScope(scope) || keep(popoutIdOf(scope)));
 }
 
 /** `store` without the scopes `keep` rejects; the same object when none go. */
@@ -1056,8 +1133,11 @@ const getStore = () => (current ??= load());
 /** A scope's panes. One that isn't stored yet gets a bare board, kept in memory until it's first changed. */
 function get(scope: string): PaneState {
   const store = getStore();
+  // A pop-out that's gone stays gone (a bare board isn't a pop-out).
+  if (isPopoutScope(scope)) return store.scopes[scope] ?? NO_POPOUT;
   return (store.scopes[scope] ??= defaultPanes(bareBoardId(scope)));
 }
+const NO_POPOUT: PaneState = defaultPanes("b:popout");
 
 function publish(next: PaneStore) {
   current = next;
@@ -1075,9 +1155,38 @@ function commit(next: PaneStore) {
 
 /** Apply an operation to one scope (e.g. `updatePanes(scope, (s) => openTicket(s, key))`); a no-op returning the same state writes nothing. */
 export function updatePanes(scope: string, fn: (s: PaneState) => PaneState) {
+  if (isPopoutScope(scope)) {
+    // A pop-out keeps just its pane, and goes when that closes (its window follows).
+    const prev = getStore().scopes[scope];
+    if (prev) commit(withScope(getStore(), scope, popoutPanes(fn(prev))));
+    return;
+  }
   const prev = get(scope);
   const next = fn(prev);
   if (next !== prev) commit({ scopes: { ...getStore().scopes, [scope]: next } });
+}
+
+/** Pop a pane out (see popOut); false when it didn't (nothing to open a window for). */
+export function popOutPane(scope: string, leafId: string, id: string): boolean {
+  get(scope);
+  const before = getStore();
+  commit(popOut(before, scope, leafId, id));
+  return getStore() !== before;
+}
+
+/** Put a popped-out pane back on `toScope`'s board (see popIn). */
+export function popInPane(id: string, toScope: string) {
+  commit(popIn(getStore(), id, toScope));
+}
+
+/** Forget the pop-outs whose windows aren't open (`open` = their ids); a terminal in one is closed with it. */
+export function retainPopoutPanes(open: ReadonlySet<string>) {
+  commit(retainPopouts(getStore(), (id) => open.has(id)));
+}
+
+/** A pop-out's window was closed: its pane closes too. */
+export function closePopoutPane(id: string) {
+  commit(retainPopouts(getStore(), (other) => other !== id));
 }
 
 /** Apply an operation to every scope (a ticket deleted or renamed can be open in several). */
@@ -1140,4 +1249,11 @@ export const getPanes = (scope: string): PaneState => get(scope);
 
 export function usePanes(scope: string): PaneState {
   return useSyncExternalStore(subscribe, () => get(scope));
+}
+
+/** A pop-out's panes, or null once it's gone (its pane was closed or went back to a board). */
+export const getPopoutPanes = (id: string): PaneState | null => getStore().scopes[popoutScope(id)] ?? null;
+
+export function usePopoutPanes(id: string): PaneState | null {
+  return useSyncExternalStore(subscribe, () => getPopoutPanes(id));
 }

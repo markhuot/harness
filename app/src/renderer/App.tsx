@@ -15,6 +15,8 @@ import { GLOBAL_OWNER, commandOrigin, useCommands, useKeyboardDispatcher } from 
 import { usePaneCommands } from "./components/paneCommands";
 import { CommandPalette } from "./views/CommandPalette";
 import { ShortcutsOverlay } from "./views/Shortcuts";
+import { PopoutWindow } from "./components/PopoutWindow";
+import { closePopoutPane, retainPopoutPanes } from "./state/panes";
 
 interface Toast {
   id: number;
@@ -77,7 +79,7 @@ export function Root() {
         <ErrorScreen error={conn} onRetry={retry} retrying={retrying} />
       ) : (
         <StoreProvider baseUrl={conn.baseUrl} token={conn.token} toast={toast} onTokenRotated={onTokenRotated}>
-          <Shell />
+          <AppWindow />
         </StoreProvider>
       )}
       <div className="toasts">
@@ -132,8 +134,41 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
   );
 }
 
+/** The main window, or a pop-out window (one pane, components/PopoutWindow.tsx), by the route it opened at. */
+function AppWindow() {
+  const { route } = useStore();
+  return route.view === "popout" ? <PopoutWindow id={route.id} fromScope={route.fromScope} /> : <Shell />;
+}
+
+/**
+ * The main window's side of pop-out windows: a window someone closed takes its pane with it, and
+ * at startup, pop-outs whose windows aren't open any more (the app quit with them open) go. The
+ * main process also sends it back to a board when a pane is put back there.
+ */
+function usePopoutWindows() {
+  useEffect(() => {
+    const popout = window.harness?.popout;
+    if (!popout) return;
+    let live = true;
+    void popout
+      .list()
+      .then((ids) => live && retainPopoutPanes(new Set(ids)))
+      .catch(() => {});
+    const offClosed = popout.onClosed(closePopoutPane);
+    const offNavigate = popout.onNavigate((route) => {
+      if (location.hash !== route) location.hash = route;
+    });
+    return () => {
+      live = false;
+      offClosed();
+      offNavigate();
+    };
+  }, []);
+}
+
 function Shell() {
   const { route, state, openTerminal, openCompose, navigate } = useStore();
+  usePopoutWindows();
   const layout = useLayout();
   const appRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);

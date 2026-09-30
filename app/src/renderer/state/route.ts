@@ -6,8 +6,10 @@
 //   #/inbox[/<sessionId>]
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
+//   #/popout/<id>/<fromScope>   a pop-out window's one pane (components/PopoutWindow.tsx), which
+//                               goes back to the board of `fromScope` when popped back in
 
-import { isTicketTab, scopeOf, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, isTicketTab, scopeOf, type TicketTab } from "@harness/shared/state";
 
 // Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
@@ -16,7 +18,8 @@ export type Route =
   | { view: "board"; projectId: string | null; ticketKey: string | null; tab: TicketTab }
   | { view: "inbox"; sessionId: string | null }
   | { view: "settings"; section: string | null }
-  | { view: "project"; projectId: string };
+  | { view: "project"; projectId: string }
+  | { view: "popout"; id: string; fromScope: string };
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -24,6 +27,7 @@ export function parseRoute(hash: string): Route {
   if (view === "inbox") return { view: "inbox", sessionId: rest[0] ?? null };
   if (view === "settings") return { view: "settings", section: rest[0] ?? null };
   if (view === "project" && rest[0]) return { view: "project", projectId: rest[0] };
+  if (view === "popout" && rest[0]) return { view: "popout", id: rest[0], fromScope: rest[1] ?? ALL_SCOPE };
   let projectId: string | null = null;
   let i = 0;
   if (rest[0] && rest[0] !== "ticket") {
@@ -49,6 +53,8 @@ export function formatRoute(r: Route): string {
       return r.section ? `#/settings/${e(r.section)}` : "#/settings";
     case "project":
       return `#/project/${e(r.projectId)}/settings`;
+    case "popout":
+      return `#/popout/${e(r.id)}/${e(r.fromScope)}`;
     case "board": {
       let s = `#/board/${r.projectId ? e(r.projectId) : "all"}`;
       if (r.ticketKey) s += `/ticket/${e(r.ticketKey)}` + (r.tab !== "summaries" ? `/${r.tab}` : "");

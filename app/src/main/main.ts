@@ -7,7 +7,8 @@ import { dirname, join } from "node:path";
 import { nodePtySpawn } from "./pty";
 import { ensureService, reloadToken, restartService } from "./service";
 import { TerminalManager } from "./terminals";
-import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, ThemePatch, ThemeState } from "./types";
+import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
+import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
 import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
 import { applyPatch, effectiveSource, forcedAppearance, parseForcedTheme, parseForcedThemeId, parseStoredChoice, storedChoiceFields, themeStateFor, windowBackground } from "./theme";
 
@@ -147,7 +148,33 @@ function broadcastTheme() {
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow() {
+const webPreferences = (): Electron.WebPreferences => ({
+  preload: join(appRoot, "dist", "main", "preload.cjs"),
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: true,
+  // The renderer is a file:// page (Origin: null) talking to http://127.0.0.1:<port>. The
+  // service answers CORS preflights for null/file:// origins, so same-origin checks stay on.
+  webSecurity: true,
+  spellcheck: true,
+});
+
+/** External links open in the default browser; a window itself never navigates away. */
+function keepInApp(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (e, url) => {
+    if (!url.startsWith("file://")) {
+      e.preventDefault();
+      if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    }
+  });
+  win.webContents.on("preload-error", (_e, path, error) => console.error(`preload error in ${path}:`, error));
+}
+
+function createWindow(route?: string) {
   const bounds = loadBounds();
   const win = new BrowserWindow({
     x: bounds.x,
@@ -161,16 +188,7 @@ function createWindow() {
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: windowBackground(themeState()),
     show: false,
-    webPreferences: {
-      preload: join(appRoot, "dist", "main", "preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      // The renderer is a file:// page (Origin: null) talking to http://127.0.0.1:<port>. The
-      // service answers CORS preflights for null/file:// origins, so same-origin checks stay on.
-      webSecurity: true,
-      spellcheck: true,
-    },
+    webPreferences: webPreferences(),
   });
   mainWindow = win;
   if (bounds.maximized) win.maximize();
@@ -192,26 +210,11 @@ function createWindow() {
     if (mainWindow === win) mainWindow = null;
   });
 
-  // External links open in the default browser; the window itself never navigates away.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  win.webContents.on("will-navigate", (e, url) => {
-    if (!url.startsWith("file://")) {
-      e.preventDefault();
-      if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    }
-  });
+  keepInApp(win);
+  logConsole(win);
 
-  win.webContents.on("preload-error", (_e, path, error) => console.error(`preload error in ${path}:`, error));
-  if (debug.capture || process.env.HARNESS_DEBUG) {
-    win.webContents.on("console-message", (e) => {
-      if (e.level === "error" || e.level === "warning") console.error(`[renderer ${e.level}] ${e.message} (${e.sourceId}:${e.lineNumber})`);
-    });
-  }
-
-  void win.loadFile(rendererIndex, debug.route ? { hash: debug.route.replace(/^#/, "") } : undefined);
+  const hash = route ?? debug.route;
+  void win.loadFile(rendererIndex, hash ? { hash: hash.replace(/^#/, "") } : undefined);
 
   if (debug.capture) {
     win.webContents.once("did-finish-load", () => {
@@ -237,16 +240,70 @@ function createWindow() {
   return win;
 }
 
+function logConsole(win: BrowserWindow) {
+  if (!debug.capture && !process.env.HARNESS_DEBUG) return;
+  win.webContents.on("console-message", (e) => {
+    if (e.level === "error" || e.level === "warning") console.error(`[renderer ${e.level}] ${e.message} (${e.sourceId}:${e.lineNumber})`);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pop-out windows: one pane each (renderer/components/PopoutWindow.tsx). The pane itself lives in
+// the renderers' shared pane store; a window here is just where it's shown.
+// ---------------------------------------------------------------------------
+
+const popouts = new Map<string, BrowserWindow>();
+/** Pop-outs being closed because their pane already went (closed, or back on a board). */
+const closingQuietly = new Set<string>();
+
+function createPopout({ id, route, bounds }: PopoutOpenOptions) {
+  const open = popouts.get(id);
+  if (open && !open.isDestroyed()) return void open.focus();
+  const display = bounds ? screen.getDisplayMatching(bounds) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const win = new BrowserWindow({
+    ...popoutBounds(bounds, display.workArea),
+    minWidth: POPOUT_MIN.width,
+    minHeight: POPOUT_MIN.height,
+    title: "Harness",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 16 },
+    backgroundColor: windowBackground(themeState()),
+    show: false,
+    webPreferences: webPreferences(),
+  });
+  popouts.set(id, win);
+  win.once("ready-to-show", () => win.show());
+  win.on("closed", () => {
+    if (popouts.get(id) === win) popouts.delete(id);
+    // Closed by the user (the close button, ⌘W with no pane focused): the pane closes too. The
+    // main window writes that to the store; with no main window, the next one drops it at startup.
+    if (!closingQuietly.delete(id) && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("popout:closed", id);
+  });
+  keepInApp(win);
+  logConsole(win);
+  void win.loadFile(rendererIndex, { hash: route.replace(/^#/, "") });
+}
+
+/** The main window, brought forward (made if there's none, at `route`). */
+function showMain(route?: string) {
+  if (!mainWindow || mainWindow.isDestroyed()) return createWindow(route);
+  if (route) mainWindow.webContents.send("navigate", route);
+  mainWindow.show();
+  return mainWindow;
+}
+
 /** `viaKey`: the item's shortcut was pressed (Electron's triggeredByAccelerator), not the item clicked. */
 function sendMenu(cmd: MenuCommand, viaKey = false) {
-  const win = mainWindow ?? BrowserWindow.getAllWindows()[0];
-  if (!win) {
+  // A pop-out takes the commands about its pane; the rest are the main window's.
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && [...popouts.values()].includes(focused) && !commandGoesToMain(cmd)) return void focused.webContents.send("menu", cmd, viaKey);
+  if (!mainWindow || mainWindow.isDestroyed()) {
     // With no window there's no pane to close; anything else opens one.
     if (cmd !== "pane.close") createWindow();
     return;
   }
-  win.webContents.send("menu", cmd, viaKey);
-  win.show();
+  mainWindow.webContents.send("menu", cmd, viaKey);
+  mainWindow.show();
 }
 
 /**
@@ -311,6 +368,7 @@ function buildMenu() {
         commandItem("pane.up"),
         commandItem("pane.down"),
         commandItem("pane.zoom", "Maximize Pane"),
+        commandItem("pane.popout", "Pop Out Pane"),
         { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },
@@ -391,6 +449,20 @@ ipcMain.on("harness:sidebarVisible", (_e, visible: unknown) => {
 ipcMain.handle("harness:openExternal", async (_e, url: unknown) => {
   if (typeof url === "string" && /^(https?|mailto):/.test(url)) await shell.openExternal(url);
 });
+ipcMain.handle("harness:popout:open", (_e, raw: unknown) => {
+  const opts = parsePopoutOptions(raw);
+  if (opts) createPopout(opts);
+});
+ipcMain.handle("harness:popout:close", (_e, id: unknown) => {
+  const win = typeof id === "string" ? popouts.get(id) : undefined;
+  if (!win || win.isDestroyed()) return;
+  closingQuietly.add(id as string);
+  win.close();
+});
+ipcMain.handle("harness:popout:showMain", (_e, route: unknown) => {
+  showMain(typeof route === "string" && route.startsWith("#/board/") ? route : undefined);
+});
+ipcMain.handle("harness:popout:list", () => [...popouts.keys()]);
 
 // Terminals: PTYs live here, keyed by the renderer's pane leaf id, and outlive pane remounts.
 // Output and exits go to every window; the renderer picks its ids. node-pty loads on first use.
@@ -425,8 +497,9 @@ app.whenReady().then(() => {
   buildMenu();
   void getConnection(); // start ensuring the service while the window loads
   createWindow();
+  // Clicking the Dock icon brings the main window back, even with only pop-outs open.
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   });
 });
 
