@@ -23,6 +23,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A chat message (the composer's "Move to in progress" or "Revise the plan" switch turned off) no
+  longer limits what the agent can do. It reads the code, runs commands, and makes changes you ask
+  for with the same permissions as the ticket's regular runs, and the ticket still stays in its
+  column without starting another review.
 - Typing a new session's prompt on the Mac no longer stops after the first letter. When the draft
   saves and its pane picks up the ticket's key, the prompt keeps the keyboard, so you can keep
   typing. Moving a draft to another project doesn't interrupt your typing either.

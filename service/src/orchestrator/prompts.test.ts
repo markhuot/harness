@@ -144,7 +144,7 @@ describe("systemPrompt tool references", () => {
       // complete runs have no browser, so no save_to hint
       expect(s!.includes("`save_to`")).toBe(kind !== "complete");
       // read-only run kinds are told their save_to goes to the scratch folder
-      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan" || kind === "review" || kind === "chat");
+      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan" || kind === "review");
     }
     expect(summariesOf(sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } }))).toBeNull();
   });

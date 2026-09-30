@@ -138,8 +138,8 @@ describe("guard rails", () => {
     const me = await h.make("me");
     const other = await h.make("other");
     for (const kind of ["plan", "review", "complete", "triage"] as RunKind[]) {
-      await expect(h.orch.ops.createTicket(h.ctx(kind, me), { title: "x", description: "y" })).rejects.toThrow("only available in work and conductor runs");
-      await expect(h.orch.ops.moveTicket(h.ctx(kind, me), other.key, "in_progress")).rejects.toThrow("only available in work and conductor runs");
+      await expect(h.orch.ops.createTicket(h.ctx(kind, me), { title: "x", description: "y" })).rejects.toThrow("only available in work, conductor and chat runs");
+      await expect(h.orch.ops.moveTicket(h.ctx(kind, me), other.key, "in_progress")).rejects.toThrow("only available in work, conductor and chat runs");
     }
     expect(h.get(other).status).toBe("planning");
     expect(h.store.tickets.list({ projectId: h.web.id })).toHaveLength(2);
@@ -171,7 +171,7 @@ describe("guard rails", () => {
     await expect(h.orch.ops.completeTicket(h.ctx("work", me), plain.key)).rejects.toThrow(`${plain.key} is not a child of ${me.key}`);
     // A review run can't stand in for the parent even on its own child.
     const kid = await h.make("kid", { parentId: me.id, status: "review" });
-    await expect(h.orch.ops.reviewTicket(h.ctx("review", me), kid.key, "approve", "")).rejects.toThrow("only available in work and conductor runs");
+    await expect(h.orch.ops.reviewTicket(h.ctx("review", me), kid.key, "approve", "")).rejects.toThrow("only available in work, conductor and chat runs");
     expect(h.get(plain).humanReview).toBe("pending");
     expect(h.get(kid).humanReview).toBe("pending");
   });

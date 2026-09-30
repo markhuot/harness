@@ -144,10 +144,9 @@ export const PERMISSION_PROMPT_TOOL = `${MCP_PREFIX}permission_prompt`;
  */
 export const CLI_PERMISSION_MODES: Record<PermissionMode, string> = { auto: "auto", ask: "acceptEdits", read_only: "dontAsk" };
 
-/** The --permission-mode a run gets: plan runs always "plan", chat runs "dontAsk", else the mapped harness mode. */
+/** The --permission-mode a run gets: plan runs always "plan", else the mapped harness mode. */
 export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode">, settings: Pick<Settings, "permissionMode">): string {
   if (req.kind === "plan") return "plan";
-  if (req.kind === "chat") return CLI_PERMISSION_MODES.read_only;
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
 

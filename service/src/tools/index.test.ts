@@ -34,7 +34,7 @@ describe("toolsForRun", () => {
     complete: ["post_summary", "record_pull_request", ...BOARD, ...CONFIG_READ],
     conductor: ["post_summary", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
-    chat: ["post_summary", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    chat: ["post_summary", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...BROWSER],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -43,7 +43,7 @@ describe("toolsForRun", () => {
     complete: NATIVE_FULL,
     conductor: NATIVE_READ,
     triage: [],
-    chat: NATIVE_READ,
+    chat: NATIVE_FULL,
   };
 
   for (const kind of Object.keys(harnessByKind) as RunKind[]) {
@@ -56,8 +56,8 @@ describe("toolsForRun", () => {
     });
   }
 
-  test("review and chat runs can never write files", () => {
-    for (const kind of ["review", "chat"] as RunKind[]) {
+  test("review runs can never write files", () => {
+    for (const kind of ["review"] as RunKind[]) {
       const tools = names(kind, bare);
       expect(tools).not.toContain("write_file");
       expect(tools).not.toContain("edit_file");
@@ -76,8 +76,9 @@ describe("toolsForRun", () => {
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor", "chat"]);
     for (const read of BOARD) expect(who(read)).toEqual(kinds);
-    for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor"]);
-    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["work", "conductor"]);
+    for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor", "chat"]);
+    for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["work", "conductor", "chat"]);
+    expect(who("update_branch")).toEqual(["work", "conductor", "chat"]);
   });
 
   test("config reads go to every run kind; config writes only to work and conductor runs", () => {

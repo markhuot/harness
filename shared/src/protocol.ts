@@ -306,7 +306,7 @@ export interface Session {
 
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
-/** chat: the human talks with the ticket's agent without changing its status (read-only). */
+/** chat: the human talks with the ticket's agent without changing its status (same tools and permission mode as a work run, minus the lifecycle tools). */
 export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -914,7 +914,7 @@ export interface HumanReviewBody {
 export interface MessageBody {
   text: string;
   /**
-   * true: just talk with the agent; the ticket keeps its status (a read-only chat run). Default:
+   * true: just talk with the agent; the ticket keeps its status (a chat run). Default:
    * the message moves a blocked or review ticket back to in progress and the agent acts on it.
    */
   chat?: boolean;

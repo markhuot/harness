@@ -223,8 +223,14 @@ export interface IngestInput {
 const RUNNABLE_WORK: RunKind[] = ["work", "conductor"];
 /** Run kinds with a human in the loop for tool-permission prompts */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor"];
-/** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
-const READ_ONLY_RUNS: RunKind[] = ["plan", "triage", "chat"];
+/**
+ * Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. Chat runs
+ * aren't: they get the ticket's own mode, and only never hold an approval card (that would block
+ * the ticket, and a chat keeps its status).
+ */
+const READ_ONLY_RUNS: RunKind[] = ["plan", "triage"];
+/** Run kinds that get the board write tools (create_ticket, message_ticket, update_branch, ...) */
+const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor"];
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
@@ -1159,8 +1165,9 @@ export class Orchestrator {
 
   /**
    * A human message to the ticket's agent. By default it acts on the ticket: a blocked or review
-   * ticket goes back to in progress. With chat, the agent answers in a read-only chat run and the
-   * ticket keeps its status and reviews.
+   * ticket goes back to in progress. With chat, the agent answers in a chat run, with the ticket's
+   * own permission mode and a work run's tools minus the ones that move it, and the ticket keeps
+   * its status and reviews.
    */
   async sendMessage(key: string, text: string, opts: { chat?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
@@ -1915,11 +1922,11 @@ export class Orchestrator {
     return { items, total: matches.length };
   }
 
-  // --- board (write): work and conductor runs; the HTTP API's code paths plus guard rails ---
+  // --- board (write): work, conductor and chat runs; the HTTP API's code paths plus guard rails ---
 
   /** The caller's ticket, for a run kind that may change the board. */
   private boardActor(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind !== "work" && ctx.runKind !== "conductor") throw new Error(`${tool} is only available in work and conductor runs`);
+    if (!BOARD_WRITE_RUNS.includes(ctx.runKind)) throw new Error(`${tool} is only available in work, conductor and chat runs`);
     return this.ctxTicket(ctx);
   }
 
@@ -2394,6 +2401,12 @@ export class Orchestrator {
     input: unknown,
     meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
+    if (ctx.runKind === "chat") {
+      return {
+        behavior: "deny",
+        message: `${toolName} needs a human's approval, and a chat can't ask for one: that would block the ticket, and a chat leaves its status alone. Proceed without it, and say in your answer what you couldn't run.`,
+      };
+    }
     if (!APPROVABLE_RUNS.includes(ctx.runKind) || !ctx.ticket) {
       return {
         behavior: "deny",
@@ -2443,10 +2456,15 @@ export class Orchestrator {
     }
   }
 
-  /** RunRequest.grants: human grants for runs that act for the ticket (not review/plan/triage, not read_only). */
+  /**
+   * RunRequest.grants: human grants for runs that act for the ticket (not review/plan/triage, not
+   * read_only). Chat runs get the ticket's "always allow" tools, but its one-time grants wait for
+   * the work run they were given to.
+   */
   private runGrants(kind: RunKind, ticket: Ticket | null, project: Project | null, active: ActiveRun): RunGrants | undefined {
-    if (!ticket || !APPROVABLE_RUNS.includes(kind)) return undefined;
+    if (!ticket || (!APPROVABLE_RUNS.includes(kind) && kind !== "chat")) return undefined;
     if (this.permissionModeFor(ticket, project) === "read_only") return undefined;
+    if (kind === "chat") return { tools: ticket.allowedTools.filter((name) => !GATED_TOOL_NAMES.has(name)), once: [] };
     const grants = this.store.tickets.listGrants(ticket.id);
     active.offeredGrants = grants.map((g) => g.id);
     // Gated harness tools consume their grants in-process (requestApproval); the driver never
@@ -2666,8 +2684,8 @@ export class Orchestrator {
   /** HarnessOps.checkPermission: run a native tool call through the PermissionGate. */
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
-    // Plan, triage and chat runs are read-only for every driver (claude-code runs plan runs in
-    // --permission-mode plan, chat runs in dontAsk).
+    // Plan and triage runs are read-only for every driver (claude-code runs plan runs in
+    // --permission-mode plan).
     const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
     return this.gate.check(toolName, input, this.gateEnv(ctx, ticket ?? null, mode));
   }
@@ -2679,7 +2697,9 @@ export class Orchestrator {
       runKind: ctx.runKind,
       cwd: ctx.cwd,
       signal: ctx.signal,
-      isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
+      // A chat leaves one-time grants to the work run they were given to (see runGrants).
+      isGranted: (tool, i) =>
+        !!ticket && ((ctx.runKind !== "chat" && this.store.tickets.consumeGrant(ticket.id, tool, i)) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
       // A soft denial is the agent's to work around first; surfaceDenial turns the run's last
       // one into a card if the run ends stuck on it (runs that can hold a card only).
@@ -3097,7 +3117,7 @@ export class Orchestrator {
           }),
           cwd,
           model,
-          permissionMode: run.kind === "chat" ? "read_only" : this.permissionModeFor(ticket, project),
+          permissionMode: this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
           state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
           tools,

@@ -267,7 +267,7 @@ function filesSection(kind: RunKind, builtinTools: boolean, o: PromptOverrides |
   const t = builtinTools
     ? { readTool: "`Read`", searchTools: "`Grep` and `Glob`", editTool: "`Edit`", writeTool: "`Write`", shell: "Bash" }
     : { readTool: "`read_file`", searchTools: "`list_files`", editTool: "`edit_file`", writeTool: "`write_file`", shell: "bash" };
-  return renderPrompt("system.files", { ...t, canEdit: kind === "work" || kind === "complete" }, o);
+  return renderPrompt("system.files", { ...t, canEdit: kind === "work" || kind === "complete" || kind === "chat" }, o);
 }
 
 /**
@@ -280,7 +280,7 @@ function summariesSection(kind: RunKind, browser: boolean, o: PromptOverrides | 
     {
       submits: kind === "work" || kind === "conductor",
       // Mirrors fileOutputScope: these run kinds may only save into their scratch folder.
-      readOnly: kind === "plan" || kind === "review" || kind === "chat",
+      readOnly: kind === "plan" || kind === "review",
       browser,
     },
     o,

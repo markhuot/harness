@@ -333,7 +333,7 @@ describe("update_branch", () => {
     expect(h.get(t).baseBranch).toBe("develop");
     expect(await h.orch.ops.updateBranch(h.ctx("work", t), { baseBranch: null })).toContain("Base branch: main (inherited from Settings)");
     await expect(h.orch.ops.updateBranch(h.ctx("work", t), {})).rejects.toThrow(/Nothing to update/);
-    await expect(h.orch.ops.updateBranch(h.ctx("review", t), { branch: "x" })).rejects.toThrow(/only available in work and conductor runs/);
+    await expect(h.orch.ops.updateBranch(h.ctx("review", t), { branch: "x" })).rejects.toThrow(/only available in work, conductor and chat runs/);
     const plain = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", useWorktree: false });
     await h.orch.idle();
     await expect(h.orch.ops.updateBranch(h.ctx("work", plain), { branch: "x" })).rejects.toThrow(/runs in the project checkout/);

@@ -61,7 +61,7 @@ export const allTools: ToolDefinition[] = [
  * Harness tools per run kind (see DESIGN.md "Tools"), plus which native set the
  * kind gets when the driver has no built-in tools:
  *  - "full": bash, read_file, write_file, edit_file, list_files
- *  - "read": read_file, list_files, bash (review and chat; also plan and conductor, which
+ *  - "read": read_file, list_files, bash (review; also plan and conductor, which
  *    shouldn't edit the tree: plan runs are read-only in claude-code's plan mode too,
  *    and a conductor's children work in the same checkout)
  *  - "none": triage only routes work
@@ -76,7 +76,9 @@ const RUN_TOOLS: Record<RunKind, { harness: ToolDefinition[]; native: "full" | "
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
-  chat: { harness: [postSummary, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  // A work run's tools minus the ones that move the ticket (submit_for_review, block) and the
+  // human-gated config writes: a chat never holds an approval card, since that blocks the ticket.
+  chat: { harness: [postSummary, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...browserTools], native: "full" },
 };
 
 /**

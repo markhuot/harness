@@ -134,7 +134,9 @@ describe("fileOutputScope (browser_screenshot save_to)", () => {
     const t = await h.make();
     const scope = (kind: RunKind, ticket = h.store.tickets.get(t.id)!) => h.orch.ops.fileOutputScope({ ...h.ctx(ticket), runKind: kind });
     expect(await scope("work")).toEqual({ scratchDir: join(h.paths.scratchDir, t.sessionId), readOnly: false });
-    for (const kind of ["plan", "review", "chat"] as RunKind[]) expect((await scope(kind)).readOnly).toBe(true);
+    for (const kind of ["plan", "review"] as RunKind[]) expect((await scope(kind)).readOnly).toBe(true);
+    // A chat run saves where a work run would: it has the ticket's own mode.
+    expect((await scope("chat")).readOnly).toBe(false);
 
     h.store.settings.set({ permissionMode: "read_only" });
     expect((await scope("work")).readOnly).toBe(true);
