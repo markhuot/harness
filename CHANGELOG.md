@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.0009](https://github.com/markhuot/harness/releases/tag/app-20260930.0009) - 2026-09-30
+
 ### Added
 
 - New sessions are saved as drafts while you type. A draft is a ticket that hasn't started yet,
