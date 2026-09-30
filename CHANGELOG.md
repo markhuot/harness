@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.0148](https://github.com/markhuot/harness/releases/tag/app-20260930.0148) - 2026-09-30
+
 ### Changed
 
 - Messages you send to a working ticket now reach the running agent right away, instead of
