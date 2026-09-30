@@ -24,6 +24,7 @@ const lines = Array.from({ length: 120 }, (_, i) => `export const value${i + 1} 
 mkdirSync(join(projectDir, "src"), { recursive: true });
 writeFileSync(join(projectDir, "src/app.ts"), lines.join("\n") + "\n");
 writeFileSync(join(projectDir, "src/clean.ts"), "export function clean() {\n  return 1;\n}\n");
+writeFileSync(join(projectDir, "src/long.ts"), Array.from({ length: 200 }, (_, i) => `const long${i + 1} = "row ${i + 1}";`).join("\n") + "\n");
 writeFileSync(join(projectDir, ".gitignore"), "debug.log\n");
 git("init", "-q", "-b", "main");
 git("add", ".");
@@ -56,7 +57,7 @@ try {
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "files", key: "FILES" });
   const brief = [
     "Look at [app.ts:10-20](harness://file/src/app.ts#L10-L20) first,",
-    "then [the tail](harness://file/src/app.ts#L100-L104), [clean.ts](src/clean.ts#L2),",
+    "then [the tail](harness://file/src/app.ts#L100-L104), [long.ts:150-152](src/long.ts#L150-L152), [clean.ts](src/clean.ts#L2),",
     "the log [debug.log](debug.log) and [a missing one](harness://file/nope.ts).",
   ].join(" ");
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: brief, driver: "dummy", start: false });
@@ -65,7 +66,7 @@ try {
   const { js, exists, go } = app;
   await until("sidebar shows the project", () => js<boolean>(`document.querySelector(".sidebar")?.textContent.includes("files")`), 10000);
   await go(`#/board/${project.id}/ticket/${ticket.key}`);
-  await until("the brief's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 5 && n), 10000); // the dummy plan run may repeat them
+  await until("the brief's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000); // the dummy plan run may repeat them
 
   const clickLink = (text: string) =>
     js<boolean>(`(() => { const a = [...document.querySelectorAll('.pane-ticket [data-testid="file-link"]')].find(e => e.textContent.includes(${JSON.stringify(text)})); a?.click(); return !!a; })()`);
@@ -82,6 +83,20 @@ try {
       const b = body.getBoundingClientRect();
       return { selected: [...new Set(sel)], top: el.getBoundingClientRect().top - b.top, height: b.height, panes: document.querySelectorAll('[data-testid="pane-file"]').length };
     })()`);
+
+  // 0. The viewer's chunk failing to load shows an error in the pane (the rest of the workspace
+  // stays up), and Reload window brings the pane back with the viewer once it's reachable.
+  await app.cdp("Network.enable");
+  await app.cdp("Network.setBlockedURLs", { urls: ["*FileViewer-*"] });
+  check("clicked app.ts:10-20 (viewer chunk blocked)", await clickLink("app.ts:10-20"));
+  const failed = await until("viewer load error in the pane", () => js<string>(`document.querySelector('.file-pane [data-testid="file-problem"]')?.textContent ?? ""`), 10000).catch(() => "");
+  check("a chunk that won't load shows an error state in the pane", failed.includes("Couldn't show this file"), failed);
+  check("the ticket pane survives the failed chunk", await exists('[data-testid="pane-ticket"] .detail'));
+  await app.cdp("Network.setBlockedURLs", { urls: [] });
+  check("the error offers Reload window", (await js<string>(`document.querySelector('[data-testid="file-retry"]')?.textContent ?? ""`)).includes("Reload window"));
+  await js(`document.querySelector('[data-testid="file-retry"]').click()`);
+  check("reloading restores the pane with the viewer", !!(await until("viewer after reload", () => js<boolean>(`!!document.querySelector('[data-testid="file-body"] diffs-container')`), 15000).catch(() => false)));
+  await until("brief links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000);
 
   // 1. A ranged link opens the file beside the ticket, highlighted and scrolled to.
   check("clicked app.ts:10-20", await clickLink("app.ts:10-20"));
@@ -140,6 +155,32 @@ try {
     })()`), 10000);
   check("diff shows additions and deletions", diff.adds >= 4 && diff.dels >= 1, JSON.stringify(diff));
   await shot("file-pane-diff");
+
+  // 3b. Another file replaces app.ts beside the ticket. Its header must never sit over app.ts's
+  // text or diff, and it scrolls to its own range. A MutationObserver watches every frame.
+  await js(`(() => {
+    window.__staleFile = [];
+    const look = () => {
+      const pane = document.querySelector(".file-pane");
+      if (pane?.querySelector(".file-name")?.textContent !== "long.ts") return; // what the header says, not data-file
+      const d = pane.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot;
+      const text = (d?.textContent ?? "") + (pane.querySelector(".file-plain")?.textContent ?? "");
+      if (text.includes("export const value")) window.__staleFile.push(text.slice(0, 80));
+    };
+    window.__staleObs = new MutationObserver(look);
+    window.__staleObs.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  })()`);
+  check("clicked long.ts:150-152", await clickLink("long.ts:150-152"));
+  const long = await until("long.ts shows 150-152 selected", async () => {
+    const s = await fileState(150);
+    return s && s.selected.includes(150) && s.selected.includes(152) && s;
+  }, 10000);
+  const stale = await js<string[]>(`(window.__staleObs.disconnect(), window.__staleFile)`);
+  check("B's header never shows A's contents or diff", stale.length === 0, stale.slice(0, 2).join(" | "));
+  check("B opens on the File tab", await js<boolean>(`document.querySelector('[data-testid="file-body"]').dataset.tab === "file"`));
+  check("B replaced A (still one file pane)", long.panes === 1);
+  check("B scrolls to its range", long.top >= 0 && long.top < long.height, `top=${long.top} height=${long.height}`);
+  check("B's range is exactly 150-152", long.selected.length === 3, JSON.stringify(long.selected));
 
   // 4. A clean file: no Diff tab; the link replaces the file pane beside the ticket.
   check("clicked clean.ts", await clickLink("clean.ts"));

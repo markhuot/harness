@@ -9,20 +9,23 @@
 // worktree or branch changes, and with the refresh button; what's on screen stays until the new
 // copy arrives.
 
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { formatFileLink, type FileDiff, type FileView } from "@harness/shared";
 import { ticketByKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
 import { usePaneScope } from "../components/paneContext";
 import { MovePaneItems, PaneGrip } from "../components/paneHeader";
+import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
 import { closePane, fileRootTicket, paneLabel, setFileView, toggleZoom, updatePanes, type FileContent, type FileTab } from "../state/panes";
 import { useStore } from "../state/store";
 import "./file.css";
 
 const viewer = () => import("./FileViewer");
-const FileCode = lazy(() => viewer().then((m) => ({ default: m.FileCode })));
-const FileChanges = lazy(() => viewer().then((m) => ({ default: m.FileChanges })));
+const fileCode = retryableLazy(() => viewer().then((m) => m.FileCode));
+const fileChanges = retryableLazy(() => viewer().then((m) => m.FileChanges));
+const FileCode = fileCode.Component;
+const FileChanges = fileChanges.Component;
 
 type Failure = { status: number; message: string };
 type Fetched<T> = { data: T | null; error: Failure | null; loading: boolean };
@@ -81,7 +84,7 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
       (e) => live && setDiff({ data: null, error: failureOf(e), loading: false }),
     );
     return () => void (live = false);
-  }, [tab, view]);
+  }, [client, rootKey, path, tab, view]);
   const [diffStyle, setDiffStyle] = useState<"unified" | "split">("unified");
 
   // --- lines ---------------------------------------------------------------------------------
@@ -242,9 +245,11 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
           ) : !diff.data.patch ? (
             <FileProblem icon="checkCircle" title="No uncommitted changes" detail="The file matches HEAD." />
           ) : (
-            <Suspense fallback={null}>
-              <FileChanges name={view.path} diff={diff.data} diffStyle={diffStyle} />
-            </Suspense>
+            <ChunkBoundary lazies={[fileChanges]} fallback={viewerFailed}>
+              <Suspense fallback={null}>
+                <FileChanges name={view.path} diff={diff.data} diffStyle={diffStyle} />
+              </Suspense>
+            </ChunkBoundary>
           )
         ) : view.binary ? (
           <FileProblem icon="image" title="Binary file" detail={`${formatSize(view.size)}; it can't be shown as text.`} />
@@ -253,9 +258,11 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
         ) : (
           <>
             {view.truncated && <div className="file-note">The file grew while it was read; this is only its start.</div>}
-            <Suspense fallback={null}>
-              <FileCode name={view.path} contents={view.contents} selected={selected} onSelect={onSelect} onRendered={scrollToPending} />
-            </Suspense>
+            <ChunkBoundary lazies={[fileCode]} fallback={viewerFailed}>
+              <Suspense fallback={null}>
+                <FileCode name={view.path} contents={view.contents} selected={selected} onSelect={onSelect} onRendered={scrollToPending} />
+              </Suspense>
+            </ChunkBoundary>
           </>
         )}
       </div>
@@ -263,15 +270,40 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   );
 }
 
-function FileProblem({ icon, title, detail }: { icon: "alert" | "fileText" | "image" | "checkCircle"; title: string; detail: string }) {
+function FileProblem({
+  icon,
+  title,
+  detail,
+  onRetry,
+  retryLabel = "Try again",
+}: {
+  icon: "alert" | "fileText" | "image" | "checkCircle";
+  title: string;
+  detail: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
   return (
     <div className="empty" data-testid="file-problem" style={{ flex: 1 }}>
       <Icon name={icon} />
       <strong>{title}</strong>
       {detail}
+      {onRetry && (
+        <button className="btn btn-sm" data-testid="file-retry" onClick={onRetry}>
+          <Icon name="refresh" /> {retryLabel}
+        </button>
+      )}
     </div>
   );
 }
+
+/**
+ * The code viewer's chunk (or the viewer itself) failed: say so in the pane, with a retry. The
+ * retry reloads the window: Chromium remembers a failed import() of a URL for the page's life, and
+ * the usual cause (the app rebuilt underneath, so the chunk's name changed) needs the new page
+ * anyway. The panes are stored, so this one comes back.
+ */
+const viewerFailed = () => <FileProblem icon="alert" title="Couldn't show this file" detail="The file viewer didn't load." retryLabel="Reload window" onRetry={() => location.reload()} />;
 
 /**
  * Scroll `scroller` so lines `start`..`end` of the rendered file sit in view: the whole range

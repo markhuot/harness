@@ -18,6 +18,7 @@ import {
   boardLeaf,
   dropPreview,
   dropTargetAt,
+  fileKey,
   focusPane,
   keySplit,
   layoutPanes,
@@ -188,7 +189,9 @@ function Pane({
         ) : c.kind === "compose" ? (
           <DraftEditor key={c.id} paneId={leaf.id} compose={c} zoomed={zoomed} />
         ) : c.kind === "file" ? (
-          <FilePane paneId={leaf.id} content={c} zoomed={zoomed} />
+          // Keyed by the file: a link that swaps the file in this pane starts from a clean slate
+          // (no old contents or diff under the new header, a fresh scroll to its range).
+          <FilePane key={fileKey(c)} paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : (
           <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
         )}
