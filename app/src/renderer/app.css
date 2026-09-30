@@ -471,7 +471,7 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   font-weight: 500;
 }
 .detail-hero {
-  padding: 2px 20px 14px;
+  padding: 12px 20px 14px;
 }
 .detail-title {
   font-size: 18px;
