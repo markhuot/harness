@@ -21,6 +21,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A ticket's details list the other tickets that share its remote ID. Opening a remote ID that
   isn't any ticket's own key, from a link for example, shows those tickets to choose from rather
   than a "not found" pane.
+- Done tickets have a message composer on the Mac and on iPhone and iPad, so you can ask the
+  agent about finished work without re-opening the ticket.
 
 ### Changed
 
@@ -31,6 +33,23 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   same ID. Triage now either picks the ticket to update or starts a new one, and it sees every
   ticket already linked to that issue when it chooses. A review that goes through three rounds
   can be three tickets.
+- When you reply to a blocked ticket, it stays in Blocked until its agent picks the work back up.
+  If your reply answers what the agent asked, the agent moves the ticket to In progress and carries
+  on, and if you only asked it something, it answers and the ticket keeps waiting on its question.
+  Before, a reply sent with the composer's switch off left the agent unable to send its finished
+  work to review, so the ticket sat in Blocked.
+- A message to a ticket in review or a done ticket leaves it where it is, and the agent can still
+  change the work and send it back to review. To move the ticket first, turn on **Move to in
+  progress** (review) or **Re-open and move to in progress** (done) above the composer. The switch
+  starts off on every ticket and turns itself off after each message.
+- A message to a planning ticket always goes to its planning agent, which revises the plan.
+- When the agent asks for an approval while answering your message, the card shows on the ticket
+  without moving it to Blocked.
+
+### Removed
+
+- The composer's **Revise the plan** switch, and the switch remembering its setting for each
+  ticket.
 
 ### Fixed
 

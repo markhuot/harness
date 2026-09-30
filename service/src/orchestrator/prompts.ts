@@ -262,7 +262,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       const status = ticket?.status;
       return renderPrompt(
         "system.chat",
-        { status: status ?? "", planning: status === "planning", blocked: status === "blocked", review: status === "review", done: status === "done" },
+        { status: status ?? "", blocked: status === "blocked", blockedReason: ticket?.blockedReason ?? "", review: status === "review", done: status === "done" },
         o,
       );
     }
@@ -282,14 +282,14 @@ function filesSection(kind: RunKind, builtinTools: boolean, o: PromptOverrides |
 }
 
 /**
- * Summaries, with attachments for showing the work. Only work and conductor runs have
+ * Summaries, with attachments for showing the work. Only work, conductor and chat runs have
  * submit_for_review; complete runs have no browser.
  */
 function summariesSection(kind: RunKind, browser: boolean, o: PromptOverrides | null | undefined): string {
   return renderPrompt(
     "system.summaries",
     {
-      submits: kind === "work" || kind === "conductor",
+      submits: kind === "work" || kind === "conductor" || kind === "chat",
       // Mirrors fileOutputScope: these run kinds may only save into their scratch folder.
       readOnly: kind === "plan" || kind === "review",
       browser,
@@ -303,17 +303,20 @@ export function systemPrompt(info: PromptInfo): string {
   const o = info.overrides;
   const ticketRun = kind !== "triage";
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
-  const changes = kind === "work" || kind === "conductor";
+  // A chat is the ticket's agent with its work tools (tools/index.ts toolsForRun).
+  const changes = kind === "work" || kind === "conductor" || kind === "chat";
+  const conductor = kind === "conductor" || (kind === "chat" && ticket?.kind === "conductor");
   return join(
     renderPrompt("system.intro", {}, o),
     contextSection(info, o),
     ticketRun && renderPrompt("system.lifecycle", {}, o),
     instructionsSection(info, o),
     // A task ticket that has taken children conducts them too; conductor runs list theirs in their instructions.
-    kind === "work" &&
+    // A chat (conductor tickets too) gets the same child-steering notes, since its instructions don't list them.
+    (kind === "work" || kind === "chat") &&
       !!info.children?.length &&
       renderPrompt("system.children", { children: info.children.map(childLine).join("\n"), branch: ticket?.branch ?? "" }, o),
-    // update_branch (tools/ticket.ts): work and conductor runs of a ticket with a worktree.
+    // update_branch (tools/ticket.ts): work, conductor and chat runs of a ticket with a worktree.
     changes &&
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
@@ -324,10 +327,10 @@ export function systemPrompt(info: PromptInfo): string {
     // Read-only board tools, given to every run kind (tools/board.ts).
     renderPrompt("system.board", {}, o),
     // Board tools that change other tickets (tools/board-write.ts).
-    changes && renderPrompt("system.board_changes", { conductor: kind === "conductor" }, o),
+    changes && renderPrompt("system.board_changes", { conductor }, o),
     // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
     renderPrompt("system.config", { canChange: changes }, o),
-    (kind === "work" || kind === "complete" || kind === "conductor") && renderPrompt("system.approvals", { canBlock: kind === "work" }, o),
+    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || (kind === "chat" && !conductor) }, o),
     browser && renderPrompt("system.browser", {}, o),
   );
 }

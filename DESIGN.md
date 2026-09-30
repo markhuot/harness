@@ -139,6 +139,15 @@ place of the key.
 Columns: **planning → in_progress → blocked → review → done**.
 Humans own planning and blocked, agents own in_progress, review is shared.
 
+**Messages.** A human message never moves the ticket unless asked to (`POST /messages {text,
+move?}`, `Orchestrator.sendMessage`). Code moves a ticket only before a run starts: `move: true`
+sends a review ticket back to in progress and re-opens a done one (the composer's switch, off by
+default and after every send); planning starts with Start. Otherwise the ticket's own agent gets
+the message where the ticket is, with its work tools, and moves the ticket itself: `unblock` once
+the message resolves its block, then `submit_for_review` or `block`. A planning ticket's message
+goes to its plan run, so a planning agent is always in Claude Code's plan mode (`--permission-mode
+plan`; the `mcp__harness` allow rule keeps `update_plan` and `post_summary` running there).
+
 | Trigger | Effect |
 | --- | --- |
 | Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
@@ -148,11 +157,14 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Human message in planning | a plan run that's going takes it in (see "Steering"); otherwise enqueue plan run with the message |
 | `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
 | Human message in in_progress | a work/conductor run that's going takes it in (see "Steering"); otherwise enqueue work run with the message |
-| Agent calls `block(question)` | status `blocked`, `blockedReason` set, summary posted |
-| Human message while blocked | status `in_progress`, reason cleared, enqueue work run with the message |
-| Human chat message (`POST /messages {text, chat: true}`), any status | status and reviews unchanged; human summary with the message; enqueue a **chat** run that resumes the session's conversation; its last text is posted as an agent summary. A chat run has the ticket's own permission mode and a work run's tools minus the ones that move the ticket (`submit_for_review`, `block`) and the human-gated config writes, so the agent can read, run and change code like a work run. It never holds an approval card (that would block the ticket): `requestApproval` denies with guidance, and one-time grants are left for the work run they were given to (only "always allow" tools reach it). 409 while a tool approval is pending or the ticket is completing. A failed chat run blocks nothing. The apps send it when the composer's "Move to in progress" switch (planning: "Revise the plan") is off, which they remember per ticket while it's open and for 5 minutes after it's closed (`shared/src/state/chatMode.ts`) |
-| Agent calls `submit_for_review(summary)` | status `review`, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
-| Work run ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author) |
+| Agent calls `block(question)` (in_progress, blocked or review) | status `blocked`, `blockedReason` set, summary posted. From blocked it replaces the question; from review both reviews reset to pending (queued agent reviews are dropped). Refused in planning and done |
+| Human message while blocked | status and `blockedReason` unchanged; a **chat** run that's going takes it in (see "Steering"), otherwise enqueue one with the message. The agent's prompt (not the transcript) ends with a harness note naming the question and saying to call `unblock` when the message resolves it, else to answer and leave the ticket blocked. A blocked ticket without a workdir (or whose worktree is gone) gets one first, its status unchanged |
+| Agent calls `unblock(note?)` | blocked → `in_progress`, `blockedReason` cleared, status "Unblocked by the agent"; the run carries on. Refused unless blocked, and while a tool approval is pending |
+| Human message in review or done | status and reviews unchanged; human summary with the message; a **chat** run that's going takes it in, otherwise enqueue one. When the chat leaves the ticket where it is, its last text is posted as an agent summary |
+| Human message with `move: true` in review | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
+| Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is posts its answer and neither auto-submits nor blocks. A failed chat adds a "Run failed" summary and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
+| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
+| Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author). A trailing question blocks with it instead |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
 | Agent `review_decision(approve)` | `agentReview=approved` |
@@ -161,7 +173,7 @@ Humans own planning and blocked, agents own in_progress, review is shared.
 | Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -279,9 +291,10 @@ in, so the driver copies the session transcript under the new workdir's project 
 
 ### Steering
 
-A human message to an in-progress or planning ticket (or a chat message) goes into the run that's
-going, when that run is the kind the message would queue (work/conductor, plan, chat) and its
-driver has `supportsSteering` (claude-code, anthropic-api). There's no setting: steering is how
+A human message goes into the run that's going, when that run is the kind the message would
+queue (plan for planning; the agent's own runs, work/conductor/chat, steer each other, so a chat
+that unblocked its ticket still takes the next message) and its driver has `supportsSteering`
+(claude-code, anthropic-api). A message to a blocked ticket carries the unblock note either way. There's no setting: steering is how
 messages work, and the queue is only the fallback (HARNESS-68).
 
 - `sendMessage` → `steerOrEnqueue`. The message is written to the transcript as a `user` entry
@@ -480,10 +493,11 @@ Harness tools (always exposed, via MCP for claude-code):
 | --- | --- | --- |
 | `post_summary` | all ticket kinds | `{ summary, attachments?: string[] }` (image/video paths, see "Summary attachments") |
 | `update_plan` | plan | `{ plan, title? }` |
-| `block` | work | `{ question }` |
-| `submit_for_review` | work, conductor | `{ summary, attachments?: string[], skip_agent_review? }`: `skip_agent_review` sets the ticket's `skipAgentReview` first (true is refused when the project doesn't require a human review; see "Skipping the agent review") |
+| `block` | work, chat (not a conductor ticket's) | `{ question }` |
+| `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
+| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review? }`: `skip_agent_review` sets the ticket's `skipAgentReview` first (true is refused when the project doesn't require a human review; see "Skipping the agent review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
-| `update_branch` | work, conductor | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
+| `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
 | `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` sets `skipAgentReview`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
@@ -493,7 +507,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
-| `message_ticket` | work, conductor | `{ key, text }` → `sendMessage`, as a human message |
+| `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
@@ -504,7 +518,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
 | `list_drivers` | all | `{}` → drivers with their models |
-| `create_watcher` | work, conductor (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
+| `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
@@ -524,7 +538,7 @@ The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---
 `HarnessOps`) only read: every run kind gets them so an agent can look up related or earlier
 work anywhere on the board, or check what a watcher it set up has put in the Inbox. Each prompt
 has a short "Board" section naming them, and a "Harness configuration" section naming the
-config reads. Work and conductor prompts add the board write tools and the gated config tools,
+config reads. Work, conductor and chat prompts add the board write tools and the gated config tools,
 and say that every config call waits for a human and is then repeated exactly.
 
 ### Board changes by agents
@@ -735,7 +749,9 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
 `auto`). Null at a level means "inherit". Plan and triage runs are always read-only; chat
-runs follow the ticket's mode like work runs.
+runs follow the ticket's mode, grants and approvals like work runs. A plan run's `ExitPlanMode`
+(Claude Code's plan mode asking to leave it) is denied with `PLAN_APPROVAL_MESSAGE`: the human
+approves the plan with Start.
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -771,7 +787,7 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
 system prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer
 route to the same goal if there is one (not the same action reworded or moved to another tool),
 and to block (complete/conductor runs: stop) only when nothing else gets the task done. The
-orchestrator collects a work/complete/conductor run's `permission_denied` events and the
+orchestrator collects a work/complete/conductor/chat run's `permission_denied` events and the
 PermissionGate's deferred soft denials, dropping any whose exact call (`grantKey`) later
 succeeded in the same run. When the run succeeds and a denial is left:
 - the agent submitted (a work or conductor run): it got there another way, so the review goes
@@ -779,16 +795,17 @@ succeeded in the same run. When the run succeeds and a denial is left:
 - otherwise the last denial becomes a `pendingApproval` (`source: "classifier"`, `reason` = the
   classifier's reason, tool + input of the denied tool_use). If the agent called `block`, the
   approval is attached to that block and its question stays `blockedReason`; if not,
-  in_progress (or review, for a complete run) → blocked, as `requestApproval` does.
+  in_progress (or review, for a complete run) → blocked, as `requestApproval` does. A chat's
+  card leaves the ticket in its column.
 - The tool is already in `ticket.allowedTools` (auto mode ignores bare `Bash`, below): no
   card; the call gets a one-time grant and the run is resumed ("…the human allows Bash on this
-  ticket. Retry it now"), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
+  ticket. Retry it now"; a chat retries as a chat, where the ticket is), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
   (a human answer or message resets the count).
 Not in read_only, not for review/plan/triage runs. allow_once / allow_tool / deny answer it like
 any card; allow_tool on a classifier card also adds a one-time grant for the denied call, so
 the retry passes as an exact rule.
 
-**Human grants → the CLI.** Work/complete/conductor runs get `RunRequest.grants` = `{ tools:
+**Human grants → the CLI.** Work/complete/conductor/chat runs get `RunRequest.grants` = `{ tools:
 ticket.allowedTools, once: the ticket's one-time grants }`; review runs don't (reviewers are
 independent and start fresh), nor plan/triage runs or read_only tickets. claude-code
 (`planGrants`) appends them to `--allowedTools` after `mcp__harness`, one argv entry per rule:
@@ -1009,6 +1026,7 @@ Directives are read from the run prompt:
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
 | work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
+| chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
 | complete | text + `post_summary("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 | triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key (remote ID) is the first `KEY-123` in the fenced output, and a `[dummy:ticket KEY]` in the prompt section passes `ticket_key`. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
@@ -1034,7 +1052,7 @@ GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages {text, chat?} | /review | /reopen | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages {text, move?} | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/summaries   → Summary[] (each with attachments)
 GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=

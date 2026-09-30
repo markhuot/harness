@@ -42,7 +42,7 @@ function setup(sim: Partial<Sim> = {}) {
   const project = h.orch.createProject({ path: dir });
   let n = 0;
   driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
-    if (req.kind !== "work" && req.kind !== "complete") return;
+    if (req.kind !== "work" && req.kind !== "complete" && req.kind !== "chat") return;
     if (req.prompt.includes("The human denied")) {
       yield { type: "text", text: "Did it another way." };
       return;
@@ -143,10 +143,40 @@ describe("classifier denials → approval cards", () => {
     expect(ticket(h, t.key).status).toBe("review"); // the retry ran and the run auto-submitted
     expect(h.store.tickets.listGrants(t.id)).toEqual([]); // grant_applied consumed it
     // one time only: the next run doesn't get it, so the same call is denied again
-    await h.orch.sendMessage(t.key, "scaffold it again");
+    await h.orch.sendMessage(t.key, "scaffold it again", { move: true });
     await h.orch.idle();
     expect(work(h)[2]!.grants).toEqual({ tools: [], once: [] });
     expect(ticket(h, t.key).pendingApproval).toMatchObject({ toolName: "Bash", source: "classifier" });
+  });
+
+  test("a chat's classifier denial opens a card without moving the ticket; answering it retries in a chat", async () => {
+    const h = setup({ after: "submit" });
+    const t = await denied(h);
+    expect(ticket(h, t.key).status).toBe("review");
+    h.sim.after = "none";
+    await h.orch.sendMessage(t.key, "can you scaffold it after all?");
+    await h.orch.idle();
+    let cur = ticket(h, t.key);
+    expect(cur).toMatchObject({ status: "review", pendingApproval: { toolName: "Bash", source: "classifier" }, blockedReason: null });
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    const chats = h.driver.calls.filter((c) => c.kind === "chat");
+    expect(chats.map((c) => c.grants?.once)).toEqual([[], [{ toolName: "Bash", input: CALL }]]);
+    cur = ticket(h, t.key);
+    expect([cur.status, cur.pendingApproval]).toEqual(["review", null]);
+    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Scaffolded the project." });
+  });
+
+  test("a chat's denial of a tool the ticket allows is retried as a chat, where the ticket is", async () => {
+    const h = setup({ after: "submit" });
+    const t = await denied(h);
+    h.store.tickets.update(t.id, { allowedTools: ["Bash"] });
+    h.sim.after = "none";
+    await h.orch.sendMessage(t.key, "scaffold it");
+    await h.orch.idle();
+    expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work", "review", "chat", "chat"]);
+    expect(h.driver.calls.at(-1)!.prompt).toContain("was denied by Claude Code's classifier, but the human allows Bash on this ticket");
+    expect(ticket(h, t.key)).toMatchObject({ status: "review", pendingApproval: null });
   });
 
   test("allow_tool on a classifier denial: the tool is always allowed and the denied call also gets a one-time grant", async () => {
@@ -164,7 +194,7 @@ describe("classifier denials → approval cards", () => {
     const t = await denied(h);
     await h.orch.answerApproval(t.key, { decision: "allow_tool" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "scaffold once more");
+    await h.orch.sendMessage(t.key, "scaffold once more", { move: true });
     await h.orch.idle();
     // run 3 was denied (auto mode ignores bare Bash), run 4 retried it with the exact grant
     expect(work(h).map((c) => c.grants?.once.length)).toEqual([0, 1, 0, 1]);
@@ -210,7 +240,7 @@ describe("classifier denials → approval cards", () => {
     expect(ticket(h, t.key).status).toBe("review"); // ran without the prompt tool
     expect(h.store.tickets.listGrants(t.id)).toEqual([]);
     // the next run isn't handed the stale grant (which would put it in ask mode)
-    await h.orch.sendMessage(t.key, "and one more thing");
+    await h.orch.sendMessage(t.key, "and one more thing", { move: true });
     await h.orch.idle();
     expect(work(h)[3]!.grants).toEqual({ tools: [], once: [] });
   });
@@ -227,10 +257,10 @@ describe("classifier denials → approval cards", () => {
     expect(h.store.runs.listBySession(t.sessionId).at(-1)!.status).toBe("failed");
     expect(h.store.tickets.listGrants(t.id)).toHaveLength(1);
     h.driver.script = script;
+    // The failed run left the ticket blocked; the human's message goes to a chat, which gets the grant.
     await h.orch.sendMessage(t.key, "try again");
     await h.orch.idle();
-    expect(work(h).at(-1)!.grants!.once).toEqual([{ toolName: "Bash", input: CALL }]);
-    expect(ticket(h, t.key).status).toBe("review");
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", grants: { once: [{ toolName: "Bash", input: CALL }] } });
   });
 
   test("deny still resumes with the denial and no grant", async () => {

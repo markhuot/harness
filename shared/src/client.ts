@@ -183,8 +183,8 @@ export class HarnessClient {
   submitTicket(key: string, body: SubmitTicketBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
-  sendMessage(key: string, text: string, opts: { chat?: boolean } = {}) {
-    const body: MessageBody = opts.chat ? { text, chat: true } : { text };
+  sendMessage(key: string, text: string, opts: { move?: boolean } = {}) {
+    const body: MessageBody = opts.move ? { text, move: true } : { text };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {

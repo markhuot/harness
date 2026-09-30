@@ -97,6 +97,20 @@ describe("ticket tools → HarnessOps", () => {
     ]);
   });
 
+  test("unblock passes its note along and tells the model to carry on, not stop", async () => {
+    const ops = fakeOps();
+    const r = await tool("unblock").execute({ note: "they picked Postgres" }, fakeContext({ ops }));
+    expect(text(r)).toContain("Carry on with the work");
+    expect(text(r)).not.toContain("Stop here");
+    await tool("unblock").execute({}, fakeContext({ ops }));
+    expect(ops.calls.map((c) => [c.method, c.args[0]])).toEqual([
+      ["unblock", "they picked Postgres"],
+      ["unblock", undefined],
+    ]);
+    const refusing = fakeOps({ unblock: async () => { throw new Error("ACME-1 is review, not blocked"); } });
+    await expect(tool("unblock").execute({}, fakeContext({ ops: refusing }))).rejects.toThrow("not blocked");
+  });
+
   test("review_decision rejects an unknown decision without calling ops", async () => {
     const ops = fakeOps();
     const bad = await tool("review_decision").execute({ decision: "maybe", notes: "" } as any, fakeContext({ ops }));

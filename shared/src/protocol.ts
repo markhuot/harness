@@ -333,7 +333,7 @@ export interface Session {
 
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
-/** chat: the human talks with the ticket's agent without changing its status (same tools and permission mode as a work run, minus the lifecycle tools). */
+/** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
 export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -909,10 +909,6 @@ export interface SubmitTicketBody {
   start: boolean;
 }
 
-export interface MessageBody {
-  text: string;
-}
-
 /**
  * One local branch of a project's repository, from GET /projects/:id/branches?q=&limit=
  * (ApiClient.projectBranches), for the new-session branch picker. Most recent commit first; `q`
@@ -1001,10 +997,11 @@ export interface HumanReviewBody {
 export interface MessageBody {
   text: string;
   /**
-   * true: just talk with the agent; the ticket keeps its status (a chat run). Default:
-   * the message moves a blocked or review ticket back to in progress and the agent acts on it.
+   * true: move the ticket before its agent gets the message: a review ticket back to in
+   * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
+   * (planning → the plan run; blocked, review, done → a chat run with the work tools).
    */
-  chat?: boolean;
+  move?: boolean;
 }
 
 /** Re-open a done ticket: back to in progress, with notes for the agent */

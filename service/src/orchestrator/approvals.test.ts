@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import type { HarnessEvent } from "@harness/shared";
 import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 import { migrate, MIGRATIONS } from "../db";
-import { APPROVAL_PENDING_MESSAGE, endsWithQuestion, summarizeToolInput } from "./orchestrator";
+import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, endsWithQuestion, summarizeToolInput } from "./orchestrator";
 import { DEFAULT_SETTINGS, resolveSettings } from "./settings";
 
 function setup(driver?: FakeDriver) {
@@ -71,7 +71,7 @@ describe("tool permission approvals", () => {
     expect(h.driver.approvals.map((a) => a.behavior)).toEqual(["deny", "allow", "allow"]);
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval).toBeNull();
     // other tools still need approval
-    await h.orch.sendMessage(t.key, 'more /tool Bash {"command":"rm -rf x"}');
+    await h.orch.sendMessage(t.key, 'more /tool Bash {"command":"rm -rf x"}', { move: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
   });
@@ -142,6 +142,21 @@ describe("tool permission approvals", () => {
   });
 });
 
+describe("plan mode", () => {
+  test("a plan run's ExitPlanMode is denied: the human approves the plan with Start", async () => {
+    const driver = new FakeDriver();
+    let answer: unknown = null;
+    driver.script = async function* (req) {
+      if (req.kind === "plan") answer = await req.toolContext.ops.requestApproval(req.toolContext, "ExitPlanMode", { plan: "1. Do it" });
+    };
+    const h = setup(driver);
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await h.orch.idle();
+    expect(answer).toEqual({ behavior: "deny", message: PLAN_APPROVAL_MESSAGE });
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", pendingApproval: null });
+  });
+});
+
 describe("agent review ping-pong cap", () => {
   test("third consecutive agent request_changes blocks instead of starting more work; human action resets", async () => {
     const driver = new FakeDriver();
@@ -154,8 +169,8 @@ describe("agent review ping-pong cap", () => {
     expect(cur.blockedReason).toBe("Agent review requested changes 3 times — needs a human decision");
     expect(kinds(h, t.sessionId)).toEqual(["work", "review", "work", "review", "work", "review"]);
 
-    // human reply resets the counter: the loop gets a fresh budget of 3
-    await h.orch.sendMessage(t.key, "keep going");
+    // human reply resets the counter: the agent picks the work back up with a fresh budget of 3
+    await h.orch.sendMessage(t.key, "keep going /unblock");
     await h.orch.idle();
     cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");

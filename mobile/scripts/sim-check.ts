@@ -800,11 +800,11 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   const key = p.ticket.key;
   const H = (await tree(udid))[0]!.frame.height;
   // The list's viewport: below the tab strip, above the composer and the switch over it ("Move to
-  // in progress", moveSwitchLabel in shared/state/chatMode).
+  // in progress", moveSwitchLabel in shared/state/format).
   async function listView() {
     const all = await nodes(udid);
     const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Summaries"));
-    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Move to in progress" || n.AXLabel === "Revise the plan");
+    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Move to in progress" || n.AXLabel === "Re-open and move to in progress");
     const top = tab ? tab.frame.y + tab.frame.height : 100;
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the

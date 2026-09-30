@@ -103,14 +103,36 @@ describe("steering a running agent", () => {
     expect(statuses(h, t)).not.toContain(STEER_FALLBACK_STATUS);
   });
 
-  test("a chat question doesn't go into a running work run", async () => {
+  test("a message to a blocked ticket steers its running chat, with the unblock note for the agent", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Build it /hold /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "hmm /hold");
     await untilHolding(h);
-    await h.orch.sendMessage(t.key, "How's it going?", { chat: true });
-    expect(runs(h, t)).toEqual(["work:running", "chat:queued"]);
+    await h.orch.sendMessage(t.key, "Postgres");
+    expect(runs(h, t)).toEqual(["work:succeeded", "chat:running"]);
     h.driver.release();
     await h.orch.idle();
-    expect(texts(h, t)).not.toContain("Steered: How's it going?");
+    expect(runs(h, t)).toEqual(["work:succeeded", "chat:succeeded"]);
+    // The agent read the note; the transcript has only the human's words.
+    expect(texts(h, t)).toContain("Steered: Postgres\n\n[Harness note: this ticket is blocked on: Which database?. If this message resolves that, call unblock before you continue the work; if it doesn't, answer and leave the ticket blocked.]");
+    expect(userTexts(h, t)).toContain("Postgres");
+    expect(userTexts(h, t).some((u) => u.includes("[Harness note"))).toBe(false);
+  });
+
+  test("once a chat has unblocked the ticket, a message to it (now in progress) still reaches that chat", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "Postgres /hold");
+    await untilHolding(h);
+    h.store.tickets.update(t.id, { status: "in_progress", blockedReason: null }); // as unblock does
+    await h.orch.sendMessage(t.key, "and add an index");
+    expect(runs(h, t)).toEqual(["work:succeeded", "chat:running"]);
+    h.driver.release();
+    await h.orch.idle();
+    // No blocked note once it's in progress, and no second run.
+    expect(texts(h, t)).toContain("Steered: and add an index");
+    expect(runs(h, t)).toEqual(["work:succeeded", "chat:succeeded", "review:succeeded"]);
   });
 });

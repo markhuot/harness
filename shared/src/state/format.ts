@@ -6,6 +6,7 @@ import type {
   PermissionDecisionLog,
   PermissionMode,
   Session,
+  Ticket,
   TicketKind,
   TicketStatus,
   TranscriptEntry,
@@ -62,23 +63,48 @@ export const tildify = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 // Composers
 // ---------------------------------------------------------------------------
 
-/** Ticket message composer placeholder by status ("" = no composer: done tickets). */
+/** Ticket message composer placeholder by status. */
 export const COMPOSER_PLACEHOLDER: Record<TicketStatus, string> = {
   planning: "Refine the plan…",
   in_progress: "Send a follow-up…",
   blocked: "Answer the agent…",
-  review: "Send a follow-up…",
-  done: "",
+  review: "Ask about the work, or ask for a change…",
+  done: "Ask about the finished work…",
 };
 
 /**
- * Hint under the ticket message composer. While the agent is working on an in-progress or
- * planning ticket, a message goes into its run (steering); a blocked or review ticket's message
- * moves it and waits for the run that's going.
+ * The composer's switch, where a message can move the ticket before its agent gets it (off by
+ * default, and back off after each send): a review ticket back to in progress, a done one
+ * re-opened. Elsewhere there's none: the agent moves a planning, in-progress or blocked ticket
+ * itself, and a message to a ticket waiting on a tool approval answers the approval.
  */
-export function composerHint(t: { busy: boolean; status: TicketStatus }): string {
+export function moveSwitchLabel(t: Pick<Ticket, "status" | "pendingApproval">): string | null {
+  if (t.pendingApproval) return null;
+  if (t.status === "review") return "Move to in progress";
+  if (t.status === "done") return "Re-open and move to in progress";
+  return null;
+}
+
+/**
+ * Hint under the ticket message composer. While the agent is working on an in-progress or
+ * planning ticket, a message goes into its run (steering); otherwise it waits for the run that's
+ * going. Idle, it says what the message does to the ticket (`move`: the switch is on).
+ */
+export function composerHint(t: { busy: boolean; status: TicketStatus }, move = false): string {
   if (t.busy) return t.status === "in_progress" || t.status === "planning" ? "Sent to the running agent" : "Queued behind the current run";
-  return t.status === "planning" ? "The planning agent will revise" : "";
+  if (move) return "";
+  switch (t.status) {
+    case "planning":
+      return "The planning agent will revise";
+    case "blocked":
+      return "The agent picks the work back up once this answers it";
+    case "review":
+      return "Stays in review unless the agent submits it again";
+    case "done":
+      return "Stays done: the agent only answers";
+    default:
+      return "";
+  }
 }
 
 /** New-session prompt placeholder. Start vs plan is picked when it's submitted, so only the kind matters. */

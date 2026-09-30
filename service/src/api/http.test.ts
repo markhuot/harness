@@ -139,14 +139,23 @@ describe("http api", () => {
     const t = await client.createTicket({ projectId: p.id, prompt: "please /block Which color?" });
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.blockedReason).toBe("Which color?");
-    const chatted = await client.sendMessage(t.key, "which colors are there?", { chat: true });
+    // A message moves nothing: a side question leaves the ticket blocked...
+    const chatted = await client.sendMessage(t.key, "which colors are there?");
     expect(chatted.status).toBe("blocked");
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.status).toBe("blocked");
-    const replied = await client.sendMessage(t.key, "blue");
-    expect(replied.status).toBe("in_progress");
+    // ...and the answer to its question lets the agent unblock it and finish the work.
+    const replied = await client.sendMessage(t.key, "blue [dummy:unblock]");
+    expect(replied.status).toBe("blocked");
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.status).toBe("review");
+    // move sends a review ticket back to in progress first; the old chat flag is ignored.
+    const moved = await client.request<any>("POST", `/tickets/${t.key}/messages`, { text: "darker", move: true });
+    expect(moved.status).toBe("in_progress");
+    await h.orchestrator.idle();
+    const stays = await client.request<any>("POST", `/tickets/${t.key}/messages`, { text: "why?", chat: false });
+    expect(stays.status).toBe("review");
+    await h.orchestrator.idle();
 
     const f = await client.createTicket({ projectId: p.id, prompt: "long /hold", driver: "fake" });
     await Bun.sleep(10);

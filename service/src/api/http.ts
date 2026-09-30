@@ -229,7 +229,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { chat: b?.chat === true });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();

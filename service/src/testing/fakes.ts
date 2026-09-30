@@ -77,7 +77,8 @@ export interface RecordedCall {
  *
  * work directives: `/block <q>`, `/fail <msg>`, `/hold` (wait for release()/abort),
  * `/nosubmit` (end without submitting → auto-submit), `/throw <msg>`.
- * Steering (only with supportsSteering): after a /hold (work and plan runs) the run takes the
+ * chat directives: `/unblock`, then `/submit`, `/block <q>` or `/ask`; `/tool` and `/hold` as in work.
+ * Steering (only with supportsSteering): after a /hold (work, plan and chat runs) the run takes the
  * messages sent meanwhile and answers each with `Steered: <text>`; `/deaf` never takes them in.
  * review: request_changes while `rejectsLeft > 0` or the prompt contains [dummy:reject].
  */
@@ -250,8 +251,48 @@ export class FakeDriver implements Driver {
         return;
       }
       case "chat": {
-        yield { type: "text", text: `Chatting about: ${p}?` };
+        if (p.includes("/hold")) {
+          await this.hold(req);
+          if (req.signal.aborted) return;
+          yield* this.steered(req);
+        }
+        const said = p.split("\n\n[Harness note:")[0]!;
+        yield { type: "text", text: `Chatting about: ${said}.` };
         yield { type: "state", state: { turns } };
+        const tool = /\/tool (\S+) (\{.*\})/.exec(p);
+        if (tool) this.lastTool = { name: tool[1]!, input: JSON.parse(tool[2]!) };
+        if (tool || (p.includes("Retry it now") && this.lastTool)) {
+          const r = await ops.requestApproval(ctx, this.lastTool!.name, this.lastTool!.input);
+          this.approvals.push({ name: this.lastTool!.name, behavior: r.behavior });
+          if (r.behavior === "deny") {
+            yield { type: "text", text: `Denied: ${r.message}` };
+            return;
+          }
+          yield { type: "text", text: "Tool ran." };
+        }
+        // Lifecycle directives: /unblock, then /submit, /block <q> or /ask (a trailing question).
+        const attempt = async (f: () => Promise<void>) => {
+          try {
+            await f();
+            return null;
+          } catch (err) {
+            return (err as Error).message;
+          }
+        };
+        if (said.includes("/unblock")) {
+          const refused = await attempt(() => ops.unblock(ctx, "answered"));
+          if (refused) yield { type: "text", text: `Refused: ${refused}` };
+        }
+        const block = /\/block (.+)/.exec(said);
+        if (block) {
+          const refused = await attempt(() => ops.block(ctx, block[1]!));
+          if (refused) yield { type: "text", text: `Refused: ${refused}` };
+        } else if (said.includes("/submit")) {
+          const refused = await attempt(() => ops.submitForReview(ctx, "Done from chat."));
+          if (refused) yield { type: "text", text: `Refused: ${refused}` };
+        } else if (said.includes("/ask")) {
+          yield { type: "text", text: "Which color should it be?" };
+        }
         return;
       }
       case "complete": {

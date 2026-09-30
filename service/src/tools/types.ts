@@ -184,9 +184,11 @@ export interface HarnessOps {
   /** Replace the ticket brief/plan (planning agent). */
   updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void>;
 
-  // --- work runs ---
+  // --- work, conductor and chat runs ---
   /** Move ticket to blocked with a question for the human. The run should end after this. */
   block(ctx: ToolContext, question: string): Promise<void>;
+  /** A human's message resolved the block: blocked → in progress, and the run carries on with the work. */
+  unblock(ctx: ToolContext, note?: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
   /** skipAgentReview sets the ticket's skipAgentReview first (true is refused without a human review). */
   submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void>;
