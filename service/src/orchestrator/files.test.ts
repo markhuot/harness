@@ -110,6 +110,46 @@ describe("listPaths / searchPaths", () => {
     expect(await searchPaths(root, "node_modules/pkg/")).toEqual([{ path: "node_modules/pkg/index.js", kind: "file" }]);
   });
 
+  test("ignored: node_modules is walked too, only for the file browser's search", async () => {
+    const root = tree({ ".gitignore": "node_modules/\ndist/\n", "src/app.ts": "x", "node_modules/foo/index.js": "x", "dist/deep/node_modules/bar/main.js": "x" });
+    await git(["init", "-q"], root);
+    expect(await searchPaths(root, "foo/index")).toEqual([]);
+    expect(await searchPaths(root, "foo/index", 50, { ignored: true })).toEqual([{ path: "node_modules/foo/index.js", kind: "file" }]);
+    // node_modules nested in an ignored folder waits for the deep pass too.
+    expect(await searchPaths(root, "bar/main")).toEqual([]);
+    expect(await searchPaths(root, "bar/main", 50, { ignored: true })).toEqual([{ path: "dist/deep/node_modules/bar/main.js", kind: "file" }]);
+    // The default listing is unchanged by a deep one having been built.
+    expect(await listPaths(root)).not.toContain("node_modules/foo/index.js");
+  });
+
+  test("ignored: a plain folder's node_modules is walked and ranks after equal matches", async () => {
+    const root = tree({ "lib/index.js": "x", "node_modules/a/index.js": "x" });
+    expect(await searchPaths(root, "index", 50, { ignored: true, kind: "file" })).toEqual([
+      { path: "lib/index.js", kind: "file" },
+      { path: "node_modules/a/index.js", kind: "file" },
+    ]);
+  });
+
+  test("ignored: gitignored paths rank after tracked ones that match as well", async () => {
+    const root = tree({ ".gitignore": "out/\n", "src/util.ts": "x", "out/util.ts": "x" });
+    await git(["init", "-q"], root);
+    // Equal score and length: alphabetical for the autocomplete, tracked first for the browser.
+    expect((await searchPaths(root, "util")).map((m) => m.path)).toEqual(["out/util.ts", "src/util.ts"]);
+    expect((await searchPaths(root, "util", 50, { ignored: true })).map((m) => m.path)).toEqual(["src/util.ts", "out/util.ts"]);
+    // A better match still wins over rank order.
+    expect((await searchPaths(root, "out/u", 50, { ignored: true })).map((m) => m.path)).toEqual(["out/util.ts"]);
+  });
+
+  test("kind keeps only files or only folders, the browse fallback included", async () => {
+    const root = tree({ "src/app.ts": "x", "app/main.ts": "x", "node_modules/react/index.js": "x", "node_modules/react/cjs/r.js": "x" });
+    expect(await searchPaths(root, "app", 50, { kind: "file" })).toEqual([
+      { path: "app/main.ts", kind: "file" },
+      { path: "src/app.ts", kind: "file" },
+    ]);
+    expect(await searchPaths(root, "app", 50, { kind: "dir" })).toEqual([{ path: "app/", kind: "dir" }]);
+    expect(await searchPaths(root, "node_modules/react/", 50, { kind: "file" })).toEqual([{ path: "node_modules/react/index.js", kind: "file" }]);
+  });
+
   test("a missing folder has no files", async () => {
     expect(await searchPaths(join(tempHome("harness-files-"), "gone"), "")).toEqual([]);
   });

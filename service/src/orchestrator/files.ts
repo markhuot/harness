@@ -18,86 +18,132 @@ const SKIP_DIRS = new Set(["node_modules"]);
 const JUNK_FILES = new Set([".DS_Store"]);
 /** Most files a walk collects (in a git repo, on top of git's list), so a huge folder stays fast. */
 const WALK_LIMIT = 20_000;
+/**
+ * The deep index (`ignored`, for the file browser) also walks SKIP_DIRS, after everything else,
+ * with its own budget of entries and time so a huge node_modules can't hang the search.
+ */
+const DEEP_WALK_LIMIT = 200_000;
+const DEEP_WALK_MS = 1_500;
 /** How long a directory's listing is reused, so each keystroke doesn't re-run git. */
 const LIST_TTL_MS = 5_000;
+/** The deep index costs up to DEEP_WALK_MS to build, so it's kept longer. */
+const DEEP_LIST_TTL_MS = 30_000;
 
 export const MAX_FILE_BYTES = 256 * 1024;
 export const MAX_ATTACH_BYTES = 1024 * 1024;
 const MAX_DIR_ENTRIES = 500;
 
-const cache = new Map<string, { at: number; paths: Promise<string[]> }>();
+/** A folder's index: its paths, and which of them git ignores (or sit inside SKIP_DIRS). */
+export interface PathIndex {
+  paths: string[];
+  ignored: Set<string>;
+}
+
+const cache = new Map<string, { at: number; index: Promise<PathIndex> }>();
 
 /**
  * Every file under `root` (relative, "/"-separated) plus every folder that holds one ("src/"),
  * gitignored ones included: build output, local specs and .env files are worth mentioning too.
  * A git repo lists its tracked and untracked files, then its ignored folders are walked; other
- * folders are walked from the top. Either way SKIP_DIRS show up as folders but aren't walked,
- * and VCS_DIRS and JUNK_FILES are left out.
+ * folders are walked from the top. Either way SKIP_DIRS show up as folders but aren't walked
+ * (unless `deep`, which walks them last), and VCS_DIRS and JUNK_FILES are left out.
  */
-export function listPaths(root: string, now = Date.now()): Promise<string[]> {
-  const hit = cache.get(root);
-  if (hit && now - hit.at < LIST_TTL_MS) return hit.paths;
-  const paths = collect(root).then(withDirs);
-  cache.set(root, { at: now, paths });
-  paths.catch(() => cache.delete(root));
-  return paths;
+export function indexPaths(root: string, opts: { now?: number; deep?: boolean } = {}): Promise<PathIndex> {
+  const now = opts.now ?? Date.now();
+  const deep = !!opts.deep;
+  const key = `${deep ? "deep" : "std"}\0${root}`;
+  const hit = cache.get(key);
+  if (hit && now - hit.at < (deep ? DEEP_LIST_TTL_MS : LIST_TTL_MS)) return hit.index;
+  const index = collect(root, deep).then(({ paths, ignored }) => ({ paths: withDirs(paths), ignored }));
+  cache.set(key, { at: now, index });
+  index.catch(() => cache.delete(key));
+  return index;
 }
 
-async function collect(root: string): Promise<string[]> {
-  if (!existsSync(root)) return [];
+export async function listPaths(root: string, now = Date.now(), opts: { deep?: boolean } = {}): Promise<string[]> {
+  return (await indexPaths(root, { now, deep: opts.deep })).paths;
+}
+
+async function collect(root: string, deep: boolean): Promise<{ paths: string[]; ignored: Set<string> }> {
+  const ignored = new Set<string>();
+  if (!existsSync(root)) return { paths: [], ignored };
+  const deferred: Dir[] = [];
+  const finish = async (out: Set<string>) => {
+    if (deep && deferred.length) await walk(root, deferred, out, ignored, { limit: out.size + DEEP_WALK_LIMIT, descend: true, deadline: Date.now() + DEEP_WALK_MS });
+    return { paths: [...out], ignored };
+  };
   if (await isGitRepo(root)) {
-    const [listed, ignored] = await Promise.all([
+    const [listed, ignoredList] = await Promise.all([
       git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], root),
       // --directory reports an ignored folder once ("dist/") instead of every file in it.
       git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], root),
     ]);
     if (listed.code === 0) {
       const out = new Set(listed.stdout.split("\0").filter((p) => p && !JUNK_FILES.has(basename(p))));
-      const dirs: string[] = [];
-      for (const p of ignored.code === 0 ? ignored.stdout.split("\0").filter(Boolean) : []) {
+      const dirs: Dir[] = [];
+      for (const p of ignoredList.code === 0 ? ignoredList.stdout.split("\0").filter(Boolean) : []) {
         if (!p.endsWith("/")) {
-          if (!JUNK_FILES.has(basename(p))) out.add(p);
+          if (JUNK_FILES.has(basename(p))) continue;
         } else if (VCS_DIRS.has(basename(p))) continue;
-        else if (SKIP_DIRS.has(basename(p))) out.add(p);
-        else {
-          out.add(p);
-          dirs.push(p.slice(0, -1));
-        }
+        else if (SKIP_DIRS.has(basename(p))) deferred.push({ rel: p.slice(0, -1), ignored: true });
+        else dirs.push({ rel: p.slice(0, -1), ignored: true });
+        out.add(p);
+        ignored.add(p);
       }
       // Its own budget: a big repo's tracked files shouldn't crowd out its ignored ones.
-      walk(root, dirs, out, out.size + WALK_LIMIT);
-      return [...out];
+      await walk(root, dirs, out, ignored, { limit: out.size + WALK_LIMIT, deferred });
+      return finish(out);
     }
   }
   const out = new Set<string>();
-  walk(root, [""], out, WALK_LIMIT);
-  return [...out];
+  await walk(root, [{ rel: "", ignored: false }], out, ignored, { limit: WALK_LIMIT, deferred });
+  return finish(out);
+}
+
+/** A folder to walk, relative to the root, and whether what's in it counts as ignored. */
+interface Dir {
+  rel: string;
+  ignored: boolean;
 }
 
 /**
  * Add the files under each of `starts` (relative to `root`) to `out` until it holds `limit`
- * entries, breadth first so shallow files make the cut. A SKIP_DIRS folder is added as "name/",
- * unwalked.
+ * entries (or `deadline` passes), breadth first so shallow files make the cut. A SKIP_DIRS folder
+ * is added as "name/" and, unless `descend`, left unwalked (queued on `deferred`); everything in
+ * one counts as ignored. Yields to the event loop now and then, since a deep walk can be long.
  */
-function walk(root: string, starts: string[], out: Set<string>, limit: number) {
+async function walk(root: string, starts: Dir[], out: Set<string>, ignored: Set<string>, opts: { limit: number; descend?: boolean; deferred?: Dir[]; deadline?: number }) {
+  const add = (path: string, ign: boolean) => {
+    out.add(path);
+    if (ign) ignored.add(path);
+  };
   const queue = [...starts];
-  for (let i = 0; i < queue.length && out.size < limit; i++) {
-    const rel = queue[i]!;
+  for (let i = 0; i < queue.length && out.size < opts.limit; i++) {
+    if (i && i % 200 === 0) {
+      if (opts.deadline && Date.now() > opts.deadline) break;
+      await new Promise((r) => setImmediate(r));
+    }
+    const dir = queue[i]!;
     let entries;
     try {
-      entries = readdirSync(join(root, rel), { withFileTypes: true });
+      entries = readdirSync(join(root, dir.rel), { withFileTypes: true });
     } catch {
       continue;
     }
-    if (rel && !entries.length) out.add(`${rel}/`);
+    if (dir.rel && !entries.length) add(`${dir.rel}/`, dir.ignored);
     for (const e of entries) {
-      const path = rel ? `${rel}/${e.name}` : e.name;
+      const path = dir.rel ? `${dir.rel}/${e.name}` : e.name;
       if (!e.isDirectory()) {
-        if (!JUNK_FILES.has(e.name)) out.add(path);
+        if (!JUNK_FILES.has(e.name)) add(path, dir.ignored);
       } else if (VCS_DIRS.has(e.name)) continue;
-      else if (SKIP_DIRS.has(e.name)) out.add(`${path}/`);
-      else queue.push(path);
-      if (out.size >= limit) break;
+      else if (SKIP_DIRS.has(e.name)) {
+        add(`${path}/`, true);
+        (opts.descend ? queue : opts.deferred)?.push({ rel: path, ignored: true });
+      } else {
+        if (dir.ignored) ignored.add(`${path}/`);
+        queue.push({ rel: path, ignored: dir.ignored });
+      }
+      if (out.size >= opts.limit) break;
     }
   }
 }
@@ -143,17 +189,29 @@ function browse(root: string, query: string): string[] {
   }
 }
 
+export interface SearchOptions {
+  /**
+   * The file browser's search: also index SKIP_DIRS (node_modules), and rank ignored paths after
+   * the rest when they match equally well. The @-mention autocomplete leaves it off.
+   */
+  ignored?: boolean;
+  /** Only files, or only folders. */
+  kind?: FileMatch["kind"];
+}
+
 /** The autocomplete: files and folders under `root` matching `query`, best first. */
-export async function searchPaths(root: string, query: string, limit = 50): Promise<FileMatch[]> {
+export async function searchPaths(root: string, query: string, limit = 50, opts: SearchOptions = {}): Promise<FileMatch[]> {
   const q = query.trim();
-  const indexed = await listPaths(root);
+  const { paths: indexed, ignored } = await indexPaths(root, { deep: opts.ignored });
   const browsed = browse(root, q);
   let paths = indexed;
   if (browsed.length) {
     const have = new Set(indexed);
     paths = [...indexed, ...browsed.filter((p) => !have.has(p))];
   }
-  return rankPaths(paths, q, limit).map((path) => ({ path, kind: path.endsWith("/") ? "dir" : "file" }));
+  if (opts.kind) paths = paths.filter((p) => p.endsWith("/") === (opts.kind === "dir"));
+  const ranked = rankPaths(paths, q, limit, opts.ignored ? { demote: (p) => ignored.has(p) } : {});
+  return ranked.map((path) => ({ path, kind: path.endsWith("/") ? "dir" : "file" }));
 }
 
 export interface Attachments {
@@ -240,7 +298,8 @@ export async function attachMentions(prompt: string, cwd: string): Promise<Attac
   return result;
 }
 
-async function readHead(path: string, max: number): Promise<Uint8Array> {
+/** Up to the first `max` bytes of the file at `path`. */
+export async function readHead(path: string, max: number): Promise<Uint8Array> {
   const fh = await open(path, "r");
   try {
     const buf = new Uint8Array(max);
