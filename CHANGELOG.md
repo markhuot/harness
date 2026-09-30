@@ -26,6 +26,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   you quit and reopen the app.
 - When a file in the file pane has uncommitted changes, a **Diff** tab shows what changed since
   the last commit, in the same style as the Git tab, as unified or split.
+- On iPhone and iPad, tapping a file link in a chat message, brief or summary opens the file with
+  syntax highlighting and line numbers, scrolled to the linked lines and with them highlighted.
+  When the file has uncommitted changes, a Diff tab shows them. Pull down to reload. File links
+  opened from outside the app (`harness://file/…?ticket=…`) open there too.
 
 ### Changed
 
