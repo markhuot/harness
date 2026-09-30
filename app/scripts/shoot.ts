@@ -208,6 +208,12 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "board-hidden", route: `#/board/${harness}` },
   { name: "board-options", route: `#/board/${harness}`, setup: `document.querySelector("[data-testid=search-options]")?.click()` },
   { name: "board-search", route: "#/board/all", setup: search("the") },
+  // The command palette's boards: All projects (⌘1) beside each project's.
+  {
+    name: "palette-boards",
+    route: `#/board/${harness}`,
+    setup: `dispatchEvent(new KeyboardEvent("keydown", { code: "KeyK", key: "k", metaKey: true, bubbles: true })); setTimeout(() => { const el = document.querySelector("[data-testid=palette] input"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, "board"); el.dispatchEvent(new Event("input", { bubbles: true })); }, 300)`,
+  },
   { name: "sidebar-collapsed", route: "#/board/all", setup: collapseSidebar },
   { name: "ticket-collapsed", route: "#/board/all/ticket/NYTIMES-4", setup: collapseSidebar },
   {

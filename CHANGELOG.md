@@ -34,6 +34,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   pairing a phone. When the iPhone and iPad app has a TestFlight link, the page's main button is
   **Get it on TestFlight** with the steps to accept the invite, and the development build becomes
   a smaller link for devices registered to the developer team.
+- On the Mac, ⌘1 is now labeled for where it goes: **Go to All Projects** in the command palette
+  and **All Projects** in the File menu. Typing "board" or "all projects" in the palette finds it
+  next to each project's board.
 - On the Mac, dragging the divider between panes now resizes every pane on each side of it
   together, keeping their proportions. With three panes, dragging the right divider to the left
   grows the right pane and shrinks the other two alike. Hold Option while dragging, or while
