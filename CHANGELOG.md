@@ -21,6 +21,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   iPad. A key links when it belongs to one of your projects or to a ticket on the board, so text
   like UTF-8 or SHA-256 stays as it is.
 
+### Changed
+
+- The Mac app's icon now uses the same purple artwork as the iPhone and iPad icon, and the white
+  frame around it is gone.
+
 ### Fixed
 
 - A chat message (the composer's "Move to in progress" or "Revise the plan" switch turned off) no
