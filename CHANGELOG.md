@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, iPhone and iPad, typing `/` at the start of a new session or a message lists the
+  agent's slash commands and skills with their descriptions, the same ones Claude Code offers
+  in that project: your own skills in `~/.claude/skills`, the project's, plugin commands, and
+  built-ins. Pick one to complete it, then type its arguments. Sending `/code-walk this branch`
+  runs the code-walk skill on this branch. The list follows the agent the session runs with, so
+  it's empty for agents that don't have commands.
+
 ### Fixed
 
 - On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request
