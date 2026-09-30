@@ -64,6 +64,14 @@ plugin tabs), approvals, Inbox and settings. It shares its state logic with the 
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 
+### Native iOS app (ios/)
+
+`ios/` is a SwiftUI rewrite of the iPhone app, in progress. It lives beside `mobile/` until it
+reaches parity. It's an XcodeGen project (`cd ios && xcodegen`) plus the `HarnessKit` Swift
+package (`cd ios/HarnessKit && swift test`), which holds the protocol types, client and logic,
+checked against `shared/` through generated fixtures. See [ios/README.md](ios/README.md) and
+[ios/ARCHITECTURE.md](ios/ARCHITECTURE.md).
+
 ## Drivers
 
 | Driver | Auth | Notes |
