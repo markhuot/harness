@@ -42,6 +42,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Drive and others) from their first reply. Before this, triage often declined work with "the
   Jira MCP isn't available" or "needs re-authorization", because the connectors were still
   connecting when the agent answered.
+- A task ticket that does some of the work itself now commits it before completing one of its
+  child tickets. Before, its uncommitted changes could stop the child's work from merging into
+  its branch.
 
 ## [app-20260929.2219](https://github.com/markhuot/harness/releases/tag/app-20260929.2219) - 2026-09-29
 
