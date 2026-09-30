@@ -61,6 +61,15 @@ reuse a pushed tag. If a published build is broken, fix it on `main` and cut a n
 `publish-install.sh --no-publish` builds locally without any tag checks (add `--skip-ios` or
 `--skip-mac` to build one app). An untagged build numbers itself from the clock.
 
+**TestFlight.** A published release also uploads the iOS build to App Store Connect, adds it to
+the external `Public` beta group, submits it for Beta App Review, and puts the group's public link
+on the install page (`mobile/Tools/testflight.ts`). This needs `ASC_KEY_ID` and `ASC_ISSUER_ID` for
+an App Store Connect API key whose `.p8` is in `~/.appstoreconnect/private_keys/`. A rerun on the
+same tag skips an upload that already happened. `--skip-testflight` publishes without TestFlight.
+One-time setup: create the app in App Store Connect (the API can't), then run
+`bun mobile/Tools/testflight.ts setup` with `ASC_FEEDBACK_EMAIL` and the `ASC_CONTACT_*` variables
+to fill in the Test Information that Beta App Review requires.
+
 The four tags up to and including `app-20260927.1854` came from `gh release create` without
 `--verify-tag`, which made the tag at origin's `main` tip at publish time. Those tags can point at
 a slightly different commit than the one that was built. Leave them as they are.
