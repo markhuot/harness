@@ -29,6 +29,7 @@ import { AttachmentRow } from "../ui/Attachments";
 import { Markdown } from "../ui/Markdown";
 import { ProgressBar } from "../ui/Conductor";
 import { useStickToBottom } from "../ui/stickToBottom";
+import { useHeroScroll } from "../ui/heroCollapse";
 import { Prop } from "../ui/Prop";
 import { TicketSettings } from "../ui/TicketSettings";
 import { TicketKey } from "../ui/TicketKey";
@@ -54,7 +55,7 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
   // Newest is last; open scrolled to it and follow new summaries until the user scrolls up.
   const stick = useStickToBottom<ScrollView>();
   return (
-    <ScrollView {...stick} contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 30 }} keyboardDismissMode="interactive">
+    <ScrollView {...useHeroScroll(stick)} contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 30 }} keyboardDismissMode="interactive">
       {!!ticket.description && (
         <Card style={{ padding: 13, gap: 8 }}>
           <SectionTitle>{ticket.status === "planning" ? "Plan" : "Brief"}</SectionTitle>
@@ -105,6 +106,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
+  const heroScroll = useHeroScroll();
 
   const fetched = useRef(new Set<string>());
   useEffect(() => {
@@ -135,7 +137,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
     );
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 30 }}>
+    <ScrollView {...heroScroll} contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 30 }}>
       <Card style={{ padding: 13, gap: 9 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text style={{ color: c.text, fontSize: 14.5, fontWeight: "500", flex: 1 }}>{progressLabel(progress)}</Text>
@@ -258,7 +260,7 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
   const input = { borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 15.5 } as const;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+    <ScrollView {...useHeroScroll()} contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
       <Field label="Title">
         <TextInput style={input} value={title} editable={editable} onChangeText={setTitle} onBlur={saveTitle} onSubmitEditing={saveTitle} returnKeyType="done" />
       </Field>

@@ -26,7 +26,8 @@
 //
 //   --stick: a ticket with a long brief and a long transcript; swipes the Transcript tab and checks it
 //      follows new content at the bottom, stays put once scrolled up, and follows again after
-//      scrolling back down; the Summaries tab opens at the bottom and follows
+//      scrolling back down; the Summaries tab opens at the bottom and follows; the ticket's hero
+//      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
@@ -901,6 +902,30 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
   }
   await shot(udid, "stick-summaries");
+
+  // The hero (title, badges, the review buttons) scrolls out of the way with the tab body, and
+  // the tab strip moves up into its place (lib/heroCollapse has the rules, unit-tested).
+  const heroShown = async () => (await labels(udid)).includes("Request changes");
+  const stripY = async () => (await nodes(udid)).find((n) => n.AXLabel === "Transcript")?.frame.y ?? null;
+  await check("the hero scrolls away with the transcript and comes back", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
+    await until("the hero", async () => (await heroShown()) || null, 8000);
+    const before = await stripY();
+    await swipe("down", 2); // away from the bottom, toward older messages: nothing to hide yet
+    if (!(await heroShown())) throw new Error("hid while scrolling back");
+    await swipe("up", 1);
+    if (await heroShown()) throw new Error("still shown after scrolling forward");
+    const after = await stripY();
+    if (before === null || after === null || after >= before - 40) throw new Error(`tab strip ${before}→${after}`);
+    await shot(udid, "hero-hidden");
+    await swipe("down", 1);
+    if (!(await heroShown())) throw new Error("didn't come back after scrolling back");
+    await swipe("up", 1);
+    if (await heroShown()) throw new Error("didn't hide a second time");
+    await tapLabel(udid, "Transcript");
+    await until("the hero after tapping the tab", async () => (await heroShown()) || null, 3000);
+    return `tab strip ${Math.round(before)}→${Math.round(after)}; back on scrolling back and on a tap on the tab`;
+  });
 }
 
 /** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
