@@ -14,7 +14,7 @@ const home = tempDir("harness-changes-home-");
 const port = 7800 + Math.floor(Math.random() * 90);
 const base = `http://127.0.0.1:${port}`;
 const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DELAY_MS: "5" },
+  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "5" },
   stdout: "inherit",
   stderr: "inherit",
 });

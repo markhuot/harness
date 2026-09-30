@@ -25,7 +25,7 @@ export function PermissionsSection({ settings }: { settings: PublicSettings }) {
         </Row>
         <Row
           title="Auto-mode classifier"
-          sub="Judges actions in auto mode for the Anthropic API and Dummy drivers, using Claude Code's auto-mode rules. Claude Code tickets use Claude Code's own classifier."
+          sub="Judges actions in auto mode for the Anthropic API driver, using Claude Code's auto-mode rules. Claude Code tickets use Claude Code's own classifier."
         >
           <select className="select" aria-label="Classifier" data-testid="classifier-backend" value={settings.classifier} onChange={(e) => save({ classifier: e.target.value as ClassifierBackend })}>
             {CLASSIFIER_BACKENDS.map((b) => (

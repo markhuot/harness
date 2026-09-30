@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+
+- The Dummy driver no longer appears in the driver and model pickers or under Settings →
+  Drivers. It only ever returned canned replies for testing, and now shows up only in test runs.
+
 ## [app-20260930.1921](https://github.com/markhuot/harness/releases/tag/app-20260930.1921) - 2026-09-30
 
 ### Added
