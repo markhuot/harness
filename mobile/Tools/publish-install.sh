@@ -3,7 +3,8 @@
 #   - iPhone and iPad (one universal app): Release archive of the prebuilt ios/ workspace (JS bundle embedded, no Metro),
 #     exported as a development-signed IPA (method "debugging")
 #   - Mac: the Electron app packaged, Developer ID signed with the hardened runtime, notarized
-#     when NOTARY_PROFILE names a notarytool keychain profile, zipped with ditto
+#     with the notarytool keychain profile NOTARY_PROFILE (default "harness" when publishing; a
+#     --no-publish build notarizes only when it's set), zipped with ditto
 # A release is controlled by its git tag (CLAUDE.md → Releases): HEAD must be a commit with an
 # annotated app-YYYYMMDD.HHMM tag that is pushed and on origin/main, the tree must be clean, and
 # CHANGELOG.md must have that tag's section. Both files go to the GitHub release of that tag with
@@ -52,6 +53,8 @@ if [[ $PUBLISH -eq 1 ]]; then
   git -C "$ROOT" fetch --quiet origin main
   git -C "$ROOT" merge-base --is-ancestor HEAD origin/main || fail "$TAG isn't on origin/main yet; merge and push main first"
   ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || fail "GitHub already has a release for $TAG; tag a new release instead of republishing"
+  # A published Mac app is notarized, so anyone who downloads it can open it without Open Anyway.
+  export NOTARY_PROFILE=${NOTARY_PROFILE:-harness}
   echo "==> Releasing $TAG (build $BUILD_NUMBER, commit $(git -C "$ROOT" rev-parse --short HEAD))"
 else
   BUILD_NUMBER=${TAG:+$(bun Tools/release.ts check "$TAG" 2>/dev/null)}
@@ -143,6 +146,7 @@ if [[ $SKIP_MAC -eq 0 ]]; then
   echo "==> Signing (Developer ID, hardened runtime)${NOTARY_PROFILE:+ and notarizing}"
   (cd "$ROOT/app" && bun scripts/sign-mac.ts --zip "$OUT/Harness-mac.zip") | tee "$OUT/mac-sign.log"
   MAC_NOTARIZED=$(tail -1 "$OUT/mac-sign.log" | bun -e 'console.log(JSON.parse(await Bun.stdin.text()).notarized)')
+  [[ $PUBLISH -eq 0 || "$MAC_NOTARIZED" == true ]] || { echo "error: the Mac app isn't notarized; a published build must be" >&2; exit 1; }
   MAC_VERSION=$(bun -e "console.log(require('$ROOT/app/package.json').version)")
   CHECK=build/mac-check
   rm -rf "$CHECK"; mkdir -p "$CHECK"

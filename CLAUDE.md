@@ -44,7 +44,9 @@ later work, and it never covers moving, deleting, or force-pushing a tag or `mai
    building, it checks that HEAD carries an annotated `app-*` tag, the tree is clean, the tag's
    CHANGELOG section exists and is the newest, [Unreleased] is empty, origin has the tag at the
    same commit, the commit is on `origin/main`, and no GitHub release exists for the tag yet. It
-   then builds the IPA and the Mac zip and creates the GitHub release with
+   then builds the IPA and the Mac zip, notarizing the Mac app with the notarytool keychain
+   profile `harness` (override with `NOTARY_PROFILE`; the publish stops if Gatekeeper doesn't
+   see a notarized app), and creates the GitHub release with
    `gh release create --verify-tag`, using the CHANGELOG section as the notes. Finally, it
    redeploys https://harness-install.vercel.app.
 6. Commit the regenerated `mobile/Install/` files on `main` as `Install page: release app-…`. This

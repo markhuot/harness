@@ -47,6 +47,9 @@ if (process.env.NOTARY_PROFILE) {
   await run(["xcrun", "notarytool", "submit", tmp, "--keychain-profile", process.env.NOTARY_PROFILE, "--wait"]);
   await run(["xcrun", "stapler", "staple", app]);
   rmSync(tmp, { force: true });
+  // Gatekeeper's verdict is what a downloader gets; notarytool can "finish" a rejected submission.
+  const assessment = await run(["spctl", "--assess", "--type", "execute", "-vv", app]);
+  if (!/source=Notarized Developer ID/.test(assessment)) throw new Error(`Gatekeeper doesn't see a notarized app:\n${assessment}`);
   notarized = true;
 } else {
   console.log("NOTARY_PROFILE not set: skipping notarization (open with right-click → Open the first time)");

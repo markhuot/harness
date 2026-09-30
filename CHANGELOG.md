@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The Mac app on the install page is now notarized by Apple, so anyone can download it and open
+  it like any other app. The first launch no longer stops at "Apple could not verify" or needs
+  Open Anyway in System Settings → Privacy & Security.
+
 ## [app-20260930.1358](https://github.com/markhuot/harness/releases/tag/app-20260930.1358) - 2026-09-30
 
 ### Added
