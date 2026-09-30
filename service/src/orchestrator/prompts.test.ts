@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Project, RunKind, Session, Summary, Ticket } from "@harness/shared";
+import { parseFileLink } from "@harness/shared";
 import {
   changesRequestedPrompt,
   completePrompt,
@@ -470,6 +471,34 @@ describe("systemPrompt file tools", () => {
   test("triage runs get no Files section", () => {
     const text = sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } });
     expect(text).not.toContain("## Files");
+  });
+});
+
+describe("systemPrompt file links", () => {
+  /** Every markdown link to a harness://file URL in a rendered prompt, with the parsed target. */
+  function fileLinks(text: string) {
+    return [...text.matchAll(/\[([^\]]+)\]\((harness:\/\/file\/[^)\s]+)\)/g)].map((m) => ({ label: m[1]!, url: m[2]!, link: parseFileLink(m[2]!) }));
+  }
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "chat"];
+
+  for (const kind of kinds) {
+    test(`${kind} runs show a harness://file link the app's parser opens at the lines its label names`, () => {
+      const t = kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree);
+      const links = fileLinks(sys(kind, t));
+      expect(links.length).toBeGreaterThan(0);
+      for (const { label, link } of links) {
+        expect(link).not.toBeNull();
+        expect(link!.absolute).toBe(false);
+        // The label reads `path:start-end`, and must agree with what the link opens.
+        const range = link!.endLine ? `${link!.startLine}-${link!.endLine}` : `${link!.startLine}`;
+        expect(label).toBe(`${link!.path}:${range}`);
+      }
+    });
+  }
+
+  test("triage runs get no file-link guidance", () => {
+    const text = sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } });
+    expect(text).not.toContain("harness://file");
   });
 });
 
