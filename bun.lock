@@ -9,6 +9,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@harness/shared": "workspace:*",
+        "@pierre/diffs": "^1.5.1",
         "ghostty-web": "0.4.0-next.20.g1858a59",
         "node-pty": "^1",
         "react": "^19.1.0",
