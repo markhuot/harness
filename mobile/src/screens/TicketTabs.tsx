@@ -33,7 +33,7 @@ import { Prop } from "../ui/Prop";
 import { TicketSettings } from "../ui/TicketSettings";
 import { TicketKey } from "../ui/TicketKey";
 import { RelatedTicketRows } from "../ui/RelatedTickets";
-import { relatedOf } from "../lib/related";
+import { depOpens, relatedOf } from "../lib/related";
 
 export function useOpenTicket() {
   const router = useRouter();
@@ -45,7 +45,7 @@ export function useOpenTicket() {
 // ---------------------------------------------------------------------------
 
 export function SummariesTab({ ticket }: { ticket: Ticket }) {
-  const { state } = useStore();
+  const { state, related } = useStore();
   const c = useColors();
   const now = useNow();
   const open = useOpenTicket();
@@ -65,7 +65,7 @@ export function SummariesTab({ ticket }: { ticket: Ticket }) {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           <SectionTitle>Depends on</SectionTitle>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => open(d.ticket?.key ?? d.key)} />
+            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={depOpens(d, related.byRemoteKey) ? () => open(d.ticket?.key ?? d.key) : undefined} />
           ))}
         </View>
       )}
@@ -172,7 +172,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 }
 
 function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: string) => void; first: boolean }) {
-  const { state } = useStore();
+  const { state, related } = useStore();
   const c = useColors();
   const deps = dependencyStates(state, ch);
   const summary = latestSummary(state, ch.sessionId);
@@ -218,7 +218,7 @@ function ChildRow({ child: ch, onOpen, first }: { child: Ticket; onOpen: (key: s
       {(deps.length > 0 || showDriver || ch.model) && (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
           {deps.map((d) => (
-            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => onOpen(d.ticket?.key ?? d.key)} />
+            <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} prefix={d.done ? "after" : "waiting on"} done={d.done} unknown={d.state === "unknown"} onPress={depOpens(d, related.byRemoteKey) ? () => onOpen(d.ticket?.key ?? d.key) : undefined} />
           ))}
           <View style={{ flex: 1 }} />
           {showDriver && <DriverBadge driver={ch.driver} />}

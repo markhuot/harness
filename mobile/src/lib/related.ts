@@ -76,3 +76,11 @@ export function remoteIdPatch(
   if (current && up(current.key) === key && (current.url ?? null) === url) return undefined;
   return { externalRef: { key, url } };
 }
+
+/**
+ * Whether a dependency chip opens something: a key the service 404'd doesn't, unless it's a remote
+ * ID some tickets carry (it opens the Remote ID screen listing them).
+ */
+export function depOpens(d: { key: string; missing?: boolean }, byRemoteKey: Record<string, RelatedTicket[]>): boolean {
+  return !d.missing || !!byRemoteKey[up(d.key)]?.length;
+}

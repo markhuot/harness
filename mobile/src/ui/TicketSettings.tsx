@@ -32,7 +32,7 @@ import { skipReviewHint } from "../lib/newSession";
 import { BranchPicker } from "./BranchPicker";
 import { DriverModelPicker } from "./DriverModelPicker";
 import { Button, Chip } from "./kit";
-import { remoteIdPatch } from "../lib/related";
+import { depOpens, remoteIdPatch } from "../lib/related";
 import { Prop } from "./Prop";
 import { PermissionPicker } from "./selects";
 
@@ -180,7 +180,7 @@ export function TicketSettings({ ticket, onPatch, branches: given, last }: { tic
 
 /** Depends on: ticket keys typed comma- or space-separated, saved on blur / return; chips open them. */
 function DependsOnProp({ ticket, project, editable, onPatch, last }: { ticket: Ticket; project: Project | undefined; editable: boolean; onPatch: (patch: UpdateTicketBody) => void; last?: boolean }) {
-  const { state } = useStore();
+  const { state, related } = useStore();
   const c = useColors();
   const router = useRouter();
   const [text, setText] = useState(ticket.dependsOn.join(", "));
@@ -202,7 +202,7 @@ function DependsOnProp({ ticket, project, editable, onPatch, last }: { ticket: T
     ) : deps.length > 0 ? (
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
         {deps.map((d) => (
-          <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => router.push({ pathname: "/ticket/[key]", params: { key: d.ticket?.key ?? d.key } })} />
+          <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={!depOpens(d, related.byRemoteKey) ? undefined : () => router.push({ pathname: "/ticket/[key]", params: { key: d.ticket?.key ?? d.key } })} />
         ))}
       </View>
     ) : undefined;

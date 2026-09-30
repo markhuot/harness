@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { HarnessApiError, isTicketKey, type RelatedTicket, type Ticket } from "@harness/shared";
-import { relatedLabel, relatedOf, remoteIdPatch, remoteMatchesOf } from "./related";
+import { depOpens, relatedLabel, relatedOf, remoteIdPatch, remoteMatchesOf } from "./related";
 
 let n = 0;
 const tk = (key: string, remote: string | null, extra: Partial<Ticket> = {}): Ticket =>
@@ -73,4 +73,12 @@ test("remoteIdPatch links, relinks, unlinks and refuses bad input", () => {
   expect(remoteIdPatch(none, { key: "", url: "https://x" }, isTicketKey)).toHaveProperty("error");
   expect(remoteIdPatch(none, { key: "not a key", url: "" }, isTicketKey)).toEqual({ error: "Not a ticket key: NOT A KEY" });
   expect(remoteIdPatch(none, { key: "MH-62", url: "jira/MH-62" }, isTicketKey)).toHaveProperty("error");
+});
+
+test("a dependency the service 404'd opens only when it's a remote ID with linked tickets", () => {
+  const byRemoteKey = { "JIRA-9": [rel("MH-124", "JIRA-9")], "GONE-1": [] };
+  expect(depOpens({ key: "MH-3", missing: false }, byRemoteKey)).toBe(true);
+  expect(depOpens({ key: "jira-9", missing: true }, byRemoteKey)).toBe(true);
+  expect(depOpens({ key: "GONE-1", missing: true }, byRemoteKey)).toBe(false);
+  expect(depOpens({ key: "NOPE-2", missing: true }, byRemoteKey)).toBe(false);
 });
