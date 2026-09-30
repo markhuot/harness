@@ -416,6 +416,10 @@ function Composer({ ticket }: { ticket: Ticket }) {
     setMoveFirst(on);
   };
   const hint = composerHint(ticket, move);
+  // The switch and hint only matter while writing: shown once the input is focused, and kept after
+  // a blur only while there's a message to send.
+  const [focused, setFocused] = useState(false);
+  const writing = focused || !!text.trim();
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;
@@ -432,7 +436,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
       <MentionList mentions={mentions} maxHeight={200} />
-      {(!!switchLabel || !!hint) && (
+      {writing && (!!switchLabel || !!hint) && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 6 }}>
           {switchLabel && (
             <>
@@ -459,6 +463,8 @@ function Composer({ ticket }: { ticket: Ticket }) {
           multiline
           value={text}
           onChangeText={setText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}

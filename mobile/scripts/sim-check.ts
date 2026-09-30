@@ -934,6 +934,15 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     await until("the hero after tapping the tab", async () => (await heroShown()) || null, 3000);
     return `tab strip ${Math.round(before)}→${Math.round(after)}; back on scrolling back and on a tap on the tab`;
   });
+
+  // The blur half (the keyboard going down) is in --keyboard, which has the software keyboard.
+  await check("the composer's switch waits for the field to be focused", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    if ((await labels(udid)).includes("Move to in progress")) throw new Error("shown before the field was focused");
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await until("the switch after focusing", async () => (await labels(udid)).includes("Move to in progress") || null, 3000);
+    return "hidden, then shown on focus";
+  });
 }
 
 /** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
@@ -944,6 +953,31 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
+
+  // The composer's "Move to in progress" switch and hint show only while writing: once the field
+  // is focused, and after a blur only while it holds a message. Dragging the list down dismisses
+  // the keyboard, which blurs the field.
+  const switchShown = async () => (await labels(udid)).includes("Move to in progress");
+  const dismiss = async (top: number) => {
+    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
+    await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
+  };
+  await check("the composer's switch shows while writing", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    if (await switchShown()) throw new Error("shown before the field was focused");
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    const top = await until("keyboard up", keyboardTop, 8000);
+    if (!(await switchShown())) throw new Error("no switch once focused");
+    await dismiss(top);
+    await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await until("keyboard up", keyboardTop, 8000);
+    await axe("type", "Draft", "--udid", udid);
+    await dismiss(top);
+    await Bun.sleep(400);
+    if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
+    return "hidden until focused, gone after an empty blur, kept with a draft";
+  });
 
   await check("ticket composer sits on top of the keyboard", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
