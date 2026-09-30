@@ -39,10 +39,11 @@ Native, expo-router) with the desktop's board, ticket tabs (including the live b
 plugin tabs), approvals, Inbox and settings. It shares its state logic with the desktop through
 `@harness/shared/state`.
 
-- **Install:** open https://harness-install.vercel.app in Safari on a registered iPhone or iPad.
-  The build is development-signed, so a device has to be registered to the Apple Developer team
-  (plug it into the Mac once with Xcode open, or add its UDID in the developer portal) before the
-  release that installs on it is built. The page also has the signed Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
+- **Install:** open https://harness-install.vercel.app on the iPhone or iPad and follow its
+  TestFlight link (any device, through Apple's TestFlight app). Each release also carries a
+  development-signed build for devices registered to the Apple Developer team (plug it into the
+  Mac once with Xcode open, or add its UDID in the developer portal) before the release that
+  installs on it is built. The page also has the notarized Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
   CLAUDE.md → Releases and CHANGELOG.md); `bun run release:publish` builds the tagged commit,
   publishes both apps as a GitHub release and redeploys the page.
 - **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone

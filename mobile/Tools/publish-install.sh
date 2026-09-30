@@ -11,10 +11,16 @@
 # the section as its notes; the iOS build number is the tag's digits. The install page and the OTA
 # manifest.plist (HTTPS, text/xml) are regenerated and deployed to https://harness-install.vercel.app.
 # Neither artifact carries a token: pairing provides it.
+# A published release also goes to TestFlight: the same archive is exported for App Store Connect
+# and uploaded (ExportOptions-testflight.plist, with the Xcode account's credentials), then
+# Tools/testflight.ts adds it to the external "Public" group, submits it for Beta App Review and
+# hands the group's public link to the install page. That step needs ASC_KEY_ID and ASC_ISSUER_ID
+# (see Tools/testflight.ts); --skip-testflight leaves TestFlight alone.
 #
-#   mobile/Tools/publish-install.sh [--skip-ios] [--skip-mac] [--no-publish]
+#   mobile/Tools/publish-install.sh [--skip-ios] [--skip-mac] [--skip-testflight] [--no-publish]
 #
-# --no-publish builds without the tag checks (untagged builds number themselves by the clock).
+# --no-publish builds without the tag checks (untagged builds number themselves by the clock) and
+# never uploads to TestFlight.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,14 +31,18 @@ TEAM_ID=47P4ZSALX4
 SITE=https://harness-install.vercel.app
 REPO=markhuot/harness
 VERCEL_PROJECT=harness-install
-SKIP_IOS=0; SKIP_MAC=0; PUBLISH=1
+SKIP_IOS=0; SKIP_MAC=0; SKIP_TESTFLIGHT=0; PUBLISH=1
 for a in "$@"; do
   case "$a" in
     --skip-ios) SKIP_IOS=1 ;;
     --skip-mac) SKIP_MAC=1 ;;
+    --skip-testflight) SKIP_TESTFLIGHT=1 ;;
     --no-publish) PUBLISH=0 ;;
+    *) echo "error: unknown option $a" >&2; exit 2 ;;
   esac
 done
+TESTFLIGHT=0
+[[ $PUBLISH -eq 1 && $SKIP_IOS -eq 0 && $SKIP_TESTFLIGHT -eq 0 ]] && TESTFLIGHT=1
 
 # xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process
 # only rather than switching it globally.
@@ -62,6 +72,13 @@ else
 fi
 OUT="$MOBILE/build/release"
 mkdir -p "$OUT"
+
+# Check App Store Connect access (API key, app record, public group) before spending time on builds.
+if [[ $TESTFLIGHT -eq 1 ]]; then
+  echo "==> Checking App Store Connect access for TestFlight"
+  TESTFLIGHT_URL=$(bun Tools/testflight.ts link) || { echo "error: can't reach App Store Connect for TestFlight (see above), or pass --skip-testflight" >&2; exit 1; }
+  echo "    public link: ${TESTFLIGHT_URL:-none yet, created on distribute}"
+fi
 
 # Install/.vercel is gitignored, so a fresh checkout or worktree isn't linked; unlinked, `vercel
 # deploy` tries to create a new project. Link the existing one now, before spending time on builds.
@@ -137,6 +154,25 @@ if [[ $SKIP_IOS -eq 0 ]]; then
   rm -rf "$CHECK"
   cp "$IPA" "$OUT/Harness.ipa"
   echo "    $BUNDLE_ID $IOS_VERSION ($IOS_BUILD), main.jsbundle embedded, no token found"
+
+  if [[ $TESTFLIGHT -eq 1 ]]; then
+    # A rerun of a publish that failed later on finds the build already uploaded; build numbers can't be reused.
+    if bun Tools/testflight.ts uploaded "$BUILD_NUMBER"; then
+      echo "==> TestFlight already has build $BUILD_NUMBER; not uploading again"
+    else
+      echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
+      xcodebuild -exportArchive \
+        -archivePath build/Harness.xcarchive \
+        -exportOptionsPlist ExportOptions-testflight.plist \
+        -exportPath build/ipa-testflight \
+        -allowProvisioningUpdates > build/upload.log 2>&1 || { tail -40 build/upload.log >&2; exit 1; }
+    fi
+    echo "==> Distributing to the TestFlight public group (waits for App Store Connect to process the build)"
+    TF_JSON=$(TESTFLIGHT_WHATS_NEW="$(bun Tools/release.ts notes "$TAG")" bun Tools/testflight.ts distribute "$BUILD_NUMBER")
+    TESTFLIGHT_URL=$(bun -e 'console.log(JSON.parse(process.argv[1]).publicLink ?? "")' "$TF_JSON")
+    echo "    $TF_JSON"
+    [[ -n "$TESTFLIGHT_URL" ]] || { echo "error: the TestFlight group has no public link" >&2; exit 1; }
+  fi
 fi
 
 # ------------------------------------------------------------------ Mac
@@ -164,7 +200,7 @@ NOTES="$(bun Tools/release.ts notes "$TAG")
 
 ---
 
-iPhone and iPad: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), development build for registered devices. Install from $SITE
+iPhone and iPad: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), $([[ -n "${TESTFLIGHT_URL:-}" ]] && echo "on TestFlight: $TESTFLIGHT_URL (a development build for registered devices is attached too)" || echo "development build for registered devices"). Install from $SITE
 Mac (Apple silicon): Harness ${MAC_VERSION:-?}, Developer ID signed$([[ "${MAC_NOTARIZED:-false}" == true ]] && echo ' and notarized' || echo ', not notarized (System Settings → Privacy & Security → Open Anyway the first time)').
 Commit $(git -C "$ROOT" rev-parse --short HEAD)."
 # --verify-tag: never let gh invent the tag on the remote's main tip; the release is the pushed tag.
@@ -182,13 +218,13 @@ IPA_LEN=$(curl -sSIL "$IPA_URL" | awk 'tolower($1)=="content-length:"{v=$2} END{
 # ------------------------------------------------------------------ Install page
 echo "==> Writing and deploying the install page"
 INFO=$(bun -e '
-  const [site, tag, repo, ipaUrl, macUrl, iosV, iosB, macV, notarized, ipa, zip] = process.argv.slice(1);
+  const [site, tag, repo, ipaUrl, macUrl, iosV, iosB, macV, notarized, ipa, zip, testflightUrl] = process.argv.slice(1);
   const fs = require("node:fs");
   console.log(JSON.stringify({
     site, tag, releaseUrl: `https://github.com/${repo}/releases/tag/${tag}`, date: new Date().toISOString().slice(0, 10),
-    ios: { url: ipaUrl, version: iosV, build: iosB, bytes: fs.statSync(ipa).size },
+    ios: { url: ipaUrl, version: iosV, build: iosB, bytes: fs.statSync(ipa).size, testflightUrl: testflightUrl || null },
     mac: { url: macUrl, version: macV, bytes: fs.statSync(zip).size, notarized: notarized === "true" },
-  }));' "$SITE" "$TAG" "$REPO" "$IPA_URL" "$MAC_URL" "${IOS_VERSION:-1.0.0}" "${IOS_BUILD:-$BUILD_NUMBER}" "${MAC_VERSION:-0.0.0}" "${MAC_NOTARIZED:-false}" "$OUT/Harness.ipa" "$OUT/Harness-mac.zip")
+  }));' "$SITE" "$TAG" "$REPO" "$IPA_URL" "$MAC_URL" "${IOS_VERSION:-1.0.0}" "${IOS_BUILD:-$BUILD_NUMBER}" "${MAC_VERSION:-0.0.0}" "${MAC_NOTARIZED:-false}" "$OUT/Harness.ipa" "$OUT/Harness-mac.zip" "${TESTFLIGHT_URL:-}")
 bun Tools/install-page.ts "$INFO"
 rm -f Install/Harness.ipa
 check_no_token Install

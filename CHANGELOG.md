@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- The iPhone and iPad app is on TestFlight, so any iPhone or iPad can install it from the public
+  link on the install page, not just devices registered to the developer team. Each release
+  shows up in TestFlight once Apple's beta review approves it, with that release's notes under
+  What to Test.
+- The install page links a privacy policy for the iPhone and iPad app (harness-install.vercel.app/privacy.html).
 - On the Mac, **Equalize Panes** (⌘=, also in the View menu and the command palette) gives every
   pane except the board an even share of the room beside its siblings. Three panes side by side
   each get a third of the space the board leaves, and two panes stacked in one of them each get
@@ -22,6 +27,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The install page at harness-install.vercel.app is rewritten for anyone at the company, not just
+  Mark's own devices. It explains what Harness does with screenshots of the board, reviews, each
+  ticket's branch and changes, approvals, conductor tickets, watchers and the iPhone app, and a
+  Getting started section walks through setting up the Mac, adding a project, making a ticket and
+  pairing a phone. When the iPhone and iPad app has a TestFlight link, the page's main button is
+  **Get it on TestFlight** with the steps to accept the invite, and the development build becomes
+  a smaller link for devices registered to the developer team.
 - On the Mac, dragging the divider between panes now resizes every pane on each side of it
   together, keeping their proportions. With three panes, dragging the right divider to the left
   grows the right pane and shrinks the other two alike. Hold Option while dragging, or while
