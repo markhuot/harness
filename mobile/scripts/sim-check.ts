@@ -620,6 +620,11 @@ async function seed() {
   // A brief with a relative file link, which opens in the ticket's own worktree.
   // The link is a paragraph of its own, so a tap near the paragraph's start lands on it.
   const fileLink = await create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true });
+  // Two stages of one Jira issue: both linked to the remote ID JIRA-62, so each card and header shows
+  // "JIRA-62 · GREET-n", Details lists the other, and harness://ticket/JIRA-62 lists both.
+  const jira62 = { source: "jira", key: "JIRA-62", url: "https://example.com/browse/JIRA-62", raw: null };
+  const linked = await create(project.id, "Review the empty-name crash fix", { start: false, externalRef: jira62 });
+  const linkedStage = await create(project.id, "Ship the empty-name crash fix", { start: false, externalRef: jira62 });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -654,6 +659,8 @@ async function seed() {
     settle(code.key, (t) => t.status === "review" && !t.busy),
     settle(diff.key, (t) => t.status === "review" && !t.busy),
     settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
+    settle(linked.key, (t) => t.status === "planning" && !t.busy),
+    settle(linkedStage.key, (t) => t.status === "planning" && !t.busy),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -668,7 +675,7 @@ async function seed() {
   writeFileSync(join(wd, GREETINGS_PATH), greetings(true));
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff, fileLink };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff, fileLink, linked, linkedStage };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1196,6 +1203,17 @@ function screens(s: Seeded): Screen[] {
     { name: "new-session-skip-review", url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 8, prepare: (udid) => openOptions(udid).then(() => scrollTo(udid, (l) => l === "Skip agent review")).then(() => Bun.sleep(500)) },
     // A ticket in review whose agent review was skipped: the muted mark in the header, and the
     // switch (on) on its Details tab.
+    // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n", and Details the External
+    // row with the other ticket on JIRA-62 under it.
+    {
+      name: "ticket-linked",
+      url: `harness://ticket/${k(s.linked)}?tab=details`,
+      ready: (l) => l.includes("Remote ID"),
+      seconds: 6,
+      prepare: (udid) => scrollTo(udid, (l) => l === "Also linked to JIRA-62").then(() => Bun.sleep(400)),
+    },
+    // A remote ID that no local key matches opens to the tickets linked to it, not a dead end.
+    { name: "ticket-remote-id", url: "harness://ticket/JIRA-62", ready: (l) => l.includes("Remote ID JIRA-62") && l.some((x) => x.startsWith(`JIRA-62 · ${s.linkedStage.key} `)) },
     { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
     // Details' one Model picker (driver + model) with its sheet open.
     {
