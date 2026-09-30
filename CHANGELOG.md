@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20260930.1424](https://github.com/markhuot/harness/releases/tag/app-20260930.1424) - 2026-09-30
+
 ### Changed
 
 - The Mac app on the install page is now notarized by Apple, so anyone can download it and open
