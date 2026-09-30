@@ -3,7 +3,8 @@
 // absolutely positioned siblings (layoutPanes), so reshaping the tree never remounts one: the board
 // keeps its search and scroll, and a ticket keeps its transcript, browser and plugin frames.
 //
-// Dividers between split children resize with the pointer or the keyboard. While dragging, the
+// Dividers between split children resize with the pointer or the keyboard: every pane on each side
+// of the divider scales together, or with ⌥ held only the two touching it. While dragging, the
 // new layout is written straight to the DOM (no React render per pointermove) and committed to
 // the store once on release.
 //
@@ -221,15 +222,15 @@ function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: Pane
   const row = split.dir === "row";
   const [dragging, setDragging] = useState(false);
   const overlay = useDragOverlay(dragging ? (row ? "x" : "y") : null);
-  const drag = useRef<{ start: number; total: number; mins: [number, number]; last: number[] | null } | null>(null);
+  const drag = useRef<{ start: number; at: number; total: number; mins: number[]; last: number[] | null } | null>(null);
   const panesRef = useRef(panes);
   panesRef.current = panes;
 
-  /** The split's length along its axis, and the least each side of this divider may shrink to. */
+  /** The split's length along its axis, and the least each of its children may shrink to. */
   const measure = () => {
     const ws = workspace.current?.getBoundingClientRect();
     const total = ws ? (row ? rect.w * ws.width : rect.h * ws.height) : 0;
-    const mins: [number, number] = [minSize(split.children[index]!, split.dir), minSize(split.children[index + 1]!, split.dir)];
+    const mins = split.children.map((c) => minSize(c, split.dir));
     return { total, mins };
   };
   const preview = (sizes: number[] | null) => {
@@ -247,6 +248,27 @@ function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: Pane
     else preview(null);
   };
   const share = shown.slice(0, index + 1).reduce((a, b) => a + b, 0);
+  /** Preview the drag with the pointer at `at`: every pane on each side scales, or with ⌥ (`pair`) just the two touching the divider. */
+  const follow = (at: number, pair: boolean) => {
+    const d = drag.current;
+    if (!d) return;
+    d.at = at;
+    d.last = resizeSplit(shown, index, at - d.start, d.total, d.mins, pair);
+    preview(d.last);
+  };
+  // Pressing or releasing ⌥ mid-drag switches modes without waiting for the pointer to move.
+  useEffect(() => {
+    if (!dragging) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Alt" && drag.current) follow(drag.current.at, e.altKey);
+    };
+    addEventListener("keydown", onKey);
+    addEventListener("keyup", onKey);
+    return () => {
+      removeEventListener("keydown", onKey);
+      removeEventListener("keyup", onKey);
+    };
+  });
 
   return (
     <div
@@ -260,28 +282,24 @@ function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: Pane
       aria-valuemin={0}
       aria-valuemax={100}
       tabIndex={0}
-      title="Drag to resize (double-click to make them equal)"
+      title="Drag to resize (⌥-drag to resize only these two, double-click to make them equal)"
       style={dividerStyle(box)}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { start: row ? e.clientX : e.clientY, ...measure(), last: null };
+        const start = row ? e.clientX : e.clientY;
+        drag.current = { start, at: start, ...measure(), last: null };
         setDragging(true);
       }}
-      onPointerMove={(e) => {
-        const d = drag.current;
-        if (!d) return;
-        d.last = resizeSplit(shown, index, (row ? e.clientX : e.clientY) - d.start, d.total, d.mins);
-        preview(d.last);
-      }}
+      onPointerMove={(e) => follow(row ? e.clientX : e.clientY, e.altKey)}
       onPointerUp={() => end(true)}
       onPointerCancel={() => end(false)}
       onLostPointerCapture={() => drag.current && end(true)}
       onDoubleClick={() => commit(split.sizes.map(() => 1))}
       onKeyDown={(e) => {
         const { total, mins } = measure();
-        const sizes = keySplit(e.key, e.shiftKey, split.dir, shown, index, total, mins);
+        const sizes = keySplit(e.key, e.shiftKey, split.dir, shown, index, total, mins, e.altKey);
         if (!sizes) return;
         e.preventDefault();
         commit(sizes);

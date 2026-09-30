@@ -14,6 +14,7 @@ import {
   dropContent,
   dropPreview,
   dropTargetAt,
+  equalizePanes,
   escapePanes,
   findLeaf,
   focusedTicket,
@@ -293,7 +294,8 @@ describe("dropContent", () => {
 
   test("dropping the board moves the one board rather than adding another", () => {
     const s = valid(dropContent(base(), "A-1", "right", { kind: "board" }));
-    expect(shape(s.root)).toBe("row[A-1 0.5, board 0.5]");
+    expect(shape(s.root)).toBe("row[A-1 0.4, board 0.6]");
+    expect(shape(valid(dropContent(base(), "A-1", "bottom", { kind: "board" })).root)).toBe("col[A-1 0.5, board 0.5]");
   });
 
   test("an unknown target changes nothing", () => {
@@ -313,6 +315,31 @@ describe("movePane", () => {
   test("moving a pane beside its own sibling in the same split", () => {
     const s = valid(movePane(st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25])), "A-2", "A-1", "left"));
     expect(shape(s.root)).toBe("row[board 0.5, A-2 0.25, A-1 0.25]");
+  });
+
+  test("a pane moved along its own split keeps its size, and so does every other pane", () => {
+    const start = st(row("r", [B, T("A"), T("C")], [0.25, 0.5, 0.25]));
+    const s = valid(movePane(start, "C", "A", "left"));
+    expect(shape(s.root)).toBe("row[board 0.25, C 0.25, A 0.5]");
+    expect(s.focusedId).toBe("C");
+    expect(shape(valid(movePane(start, "C", "B", "left")).root)).toBe("row[C 0.25, board 0.25, A 0.5]");
+    expect(shape(valid(movePane(start, "B", "C", "right")).root)).toBe("row[A 0.5, C 0.25, board 0.25]");
+    // Stacked panes too.
+    const stacked = st(row("r", [B, col("c", [T("A"), T("C"), T("D")], [0.2, 0.3, 0.5])], [0.5, 0.5]));
+    expect(shape(valid(movePane(stacked, "D", "A", "top")).root)).toBe("row[board 0.5, col[D 0.5, A 0.2, C 0.3] 0.5]");
+  });
+
+  test("dropping a pane where it already is changes nothing (no preview)", () => {
+    const start = st(row("r", [B, T("A"), T("C")], [0.25, 0.5, 0.25]));
+    expect(movePane(start, "C", "A", "right")).toBe(start);
+    expect(movePane(start, "A", "C", "left")).toBe(start);
+    expect(applyDrop(start, { kind: "ticket", ticketKey: "C" }, "A", "right")).toBe(start);
+  });
+
+  test("a move across the split's axis, or into another split, splits the target's space evenly", () => {
+    const start = st(row("r", [B, T("A"), T("C")], [0.25, 0.5, 0.25]));
+    // C can't keep its width once it's stacked with A: A's column (with C's old share) is shared 50/50.
+    expect(shape(valid(movePane(start, "C", "A", "bottom")).root)).toBe("row[board 0.25, col[A 0.5, C 0.5] 0.75]");
   });
 
   test("the board can be moved, and moving onto itself or an unknown pane is a no-op", () => {
@@ -435,19 +462,35 @@ describe("setSizes", () => {
 });
 
 describe("resizeSplit", () => {
-  test("moves only the divider's two neighbours", () => {
-    expect(resizeSplit([0.5, 0.25, 0.25], 1, 100, 1000, 50).map(r)).toEqual([0.5, 0.35, 0.15]);
+  test("every pane on each side of the divider scales, keeping their proportions", () => {
+    // Dragging the last divider 200px left: the last pane grows, the first two shrink alike (2:1).
+    expect(resizeSplit([0.5, 0.25, 0.25], 1, -200, 1000, 50).map(r)).toEqual([0.367, 0.183, 0.45]);
+    // Dragging the first divider right: the two after it shrink alike (1:1).
+    expect(resizeSplit([0.5, 0.25, 0.25], 0, 100, 1000, 50).map(r)).toEqual([0.6, 0.2, 0.2]);
     expect(resizeSplit([0.5, 0.5], 0, -100, 1000, 50).map(r)).toEqual([0.4, 0.6]);
+  });
+
+  test("with pair (⌥) only the divider's two neighbours move", () => {
+    expect(resizeSplit([0.5, 0.25, 0.25], 1, 100, 1000, 50, true).map(r)).toEqual([0.5, 0.35, 0.15]);
+    expect(resizeSplit([0.5, 0.25, 0.25], 1, -200, 1000, 50, true).map(r)).toEqual([0.5, 0.05, 0.45]);
+  });
+
+  test("a pane that reaches its minimum stops there while the rest of its side keeps shrinking", () => {
+    // [500, 400 (at its min), 100] with mins [300, 400, 100]: the last pane grows 200px, all taken from the first.
+    expect(resizeSplit([0.5, 0.4, 0.1], 1, -200, 1000, [300, 400, 100]).map(r)).toEqual([0.3, 0.4, 0.3]);
+    // …and the side can't shrink past the sum of its minimums.
+    expect(resizeSplit([0.5, 0.4, 0.1], 1, -10_000, 1000, [300, 400, 100]).map(r)).toEqual([0.3, 0.4, 0.3]);
   });
 
   test("clamps each side at the minimum", () => {
     expect(resizeSplit([0.5, 0.5], 0, 10_000, 1000, 100).map(r)).toEqual([0.9, 0.1]);
     expect(resizeSplit([0.5, 0.5], 0, -10_000, 1000, 100).map(r)).toEqual([0.1, 0.9]);
+    expect(resizeSplit([0.4, 0.3, 0.3], 0, 10_000, 1000, 100).map(r)).toEqual([0.8, 0.1, 0.1]);
   });
 
   test("when the pair can't fit two minimums, they share it equally", () => {
-    expect(resizeSplit([0.8, 0.1, 0.1], 1, 30, 1000, 150).map(r)).toEqual([0.8, 0.1, 0.1]);
-    expect(resizeSplit([0.8, 0.15, 0.05], 1, -50, 1000, 150).map(r)).toEqual([0.8, 0.1, 0.1]);
+    expect(resizeSplit([0.8, 0.1, 0.1], 1, 30, 1000, 150, true).map(r)).toEqual([0.8, 0.1, 0.1]);
+    expect(resizeSplit([0.8, 0.15, 0.05], 1, -50, 1000, 150, true).map(r)).toEqual([0.8, 0.1, 0.1]);
   });
 
   test("a bad index or size leaves the sizes alone", () => {
@@ -462,7 +505,7 @@ describe("resizeSplit", () => {
     expect(resizeSplit([0.6, 0.4], 0, -10_000, 1000, [320, 360]).map(r)).toEqual([0.32, 0.68]);
     expect(resizeSplit([0.6, 0.4], 0, 10_000, 1000, [320, 360]).map(r)).toEqual([0.64, 0.36]);
     // Too small for both: shared in proportion to the minimums (100:300 of 400px).
-    expect(resizeSplit([0.2, 0.2, 0.6], 0, 50, 1000, [100, 300]).map(r)).toEqual([0.1, 0.3, 0.6]);
+    expect(resizeSplit([0.2, 0.2, 0.6], 0, 50, 1000, [100, 300, 100], true).map(r)).toEqual([0.1, 0.3, 0.6]);
   });
 });
 
@@ -490,10 +533,43 @@ describe("keySplit", () => {
     expect(keySplit("End", false, "column", [0.5, 0.5], 0, 1000, 100)!.map(r)).toEqual([0.9, 0.1]);
   });
 
+  test("the arrows scale each side's panes together; ⌥ (pair) moves only the two touching it", () => {
+    expect(keySplit("ArrowLeft", true, "row", [0.5, 0.25, 0.25], 1, 1000, 50)!.map(r)).toEqual([0.457, 0.229, 0.314]);
+    expect(keySplit("ArrowLeft", true, "row", [0.5, 0.25, 0.25], 1, 1000, 50, true)!.map(r)).toEqual([0.5, 0.186, 0.314]);
+  });
+
   test("cross-axis arrows and other keys aren't resize keys", () => {
     expect(keySplit("ArrowUp", false, "row", [0.5, 0.5], 0, 1000, 50)).toBeNull();
     expect(keySplit("ArrowLeft", false, "column", [0.5, 0.5], 0, 1000, 50)).toBeNull();
     expect(keySplit("a", false, "row", [0.5, 0.5], 0, 1000, 50)).toBeNull();
+  });
+});
+
+describe("equalizePanes", () => {
+  test("siblings share the room evenly, nested splits included", () => {
+    // Three panes side by side under the board, the last stacked in two.
+    const start = st(col("top", [B, row("r", [T("A"), T("C"), col("c", [T("D"), T("E")], [0.8, 0.2])], [0.5, 0.3, 0.2])], [0.3, 0.7]));
+    expect(shape(valid(equalizePanes(start)).root)).toBe("col[board 0.3, row[A 0.333, C 0.333, col[D 0.5, E 0.5] 0.333] 0.7]");
+  });
+
+  test("the board keeps its share and the other panes split what's left", () => {
+    const start = st(row("r", [B, T("A"), T("C")], [0.25, 0.5, 0.25]));
+    expect(shape(valid(equalizePanes(start)).root)).toBe("row[board 0.25, A 0.375, C 0.375]");
+    // A split holding the board keeps its share too, and inside it the board keeps its own.
+    const nested = st(row("r", [col("c", [B, T("A")], [0.7, 0.3]), T("C"), T("D")], [0.4, 0.1, 0.5]));
+    expect(shape(valid(equalizePanes(nested)).root)).toBe("row[col[board 0.7, A 0.3] 0.4, C 0.3, D 0.3]");
+  });
+
+  test("already even (or just the board) is a no-op", () => {
+    const even = st(row("r", [B, T("A"), T("C")], [0.4, 0.3, 0.3]));
+    expect(equalizePanes(even)).toBe(even);
+    const lone = defaultPanes();
+    expect(equalizePanes(lone)).toBe(lone);
+  });
+
+  test("keeps focus and zoom", () => {
+    const s = equalizePanes(st(row("r", [T("A"), T("C")], [0.9, 0.1]), "C", "C"));
+    expect([s.focusedId, s.zoomedId]).toEqual(["C", "C"]);
   });
 });
 
@@ -1062,7 +1138,8 @@ describe("terminal panes alongside the other operations", () => {
   test("moving a terminal pane keeps its session and leaf", () => {
     const s = valid(movePane(st(row("r", [B, TT("t:1"), T("A-1")])), "$t:1", "A-1", "right"));
     expect(terminalLeafBySession(s.root, "t:1")!.id).toBe("$t:1");
-    expect(shape(s.root)).toBe(`row[board ${r(1 / 2)}, A-1 ${r(1 / 4)}, $t:1 ${r(1 / 4)}]`);
+    // A move along its own row: every pane keeps its third.
+    expect(shape(s.root)).toBe(`row[board ${r(1 / 3)}, A-1 ${r(1 / 3)}, $t:1 ${r(1 / 3)}]`);
   });
 
   test("Escape-style closing and ticket bookkeeping leave terminals alone", () => {

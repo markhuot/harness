@@ -9,6 +9,27 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, **Equalize Panes** (⌘=, also in the View menu and the command palette) gives every
+  pane except the board an even share of the room beside its siblings. Three panes side by side
+  each get a third of the space the board leaves, and two panes stacked in one of them each get
+  half its height.
+
+### Changed
+
+- On the Mac, dragging the divider between panes now resizes every pane on each side of it
+  together, keeping their proportions. With three panes, dragging the right divider to the left
+  grows the right pane and shrinks the other two alike. Hold Option while dragging, or while
+  using the arrow keys on a focused divider, to resize only the two panes touching it.
+- On the Mac, dragging a pane between two of its neighbors in the same row or column keeps every
+  pane's size. Before, the widths were reshuffled on drop.
+
+### Removed
+
+- On the Mac, View → Zoom In and Zoom Out (⌘= and ⌘-) are gone, since ⌘= now equalizes panes.
+  View → Actual Size (⌘0) is still there to undo an earlier zoom.
+
 ## [app-20260930.1424](https://github.com/markhuot/harness/releases/tag/app-20260930.1424) - 2026-09-30
 
 ### Changed
