@@ -33,6 +33,11 @@
       "dependencies": {
         "@expo/ui": "~57.0.20",
         "@harness/shared": "workspace:*",
+        "@pierre/theme": "2.0.0",
+        "@shikijs/core": "4.4.3",
+        "@shikijs/engine-javascript": "4.4.3",
+        "@shikijs/langs": "4.4.3",
+        "@shikijs/themes": "4.4.3",
         "expo": "~57.0.25",
         "expo-camera": "~57.0.5",
         "expo-clipboard": "~57.0.2",

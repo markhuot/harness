@@ -463,6 +463,54 @@ const TABLE_BRIEF = [
   "```",
 ].join("\n");
 
+/** Fenced code in three languages, syntax highlighted by CodeBlock (lib/highlight). */
+const CODE_BRIEF = [
+  "Greet from the API",
+  "",
+  "```ts",
+  "export function greet(name: string, excited = false): string {",
+  "  // One greeting, shared by the CLI and the API",
+  "  return `Hello, ${name}${excited ? \"!\" : \".\"}`;",
+  "}",
+  "```",
+  "```php",
+  "<?php",
+  "Route::get('/greet/{name}', fn (string $name) => response()->json(['text' => \"Hello, {$name}\"]));",
+  "```",
+  "```yml",
+  "greeter:",
+  "  excited: true   # the CLI's default",
+  "  names: [world, Mark]",
+  "```",
+].join("\n");
+
+/** A git diff (colored by its file's language) and an untagged hand-written one. */
+const DIFF_BRIEF = [
+  "Make the greeting excited",
+  "",
+  "```diff",
+  "diff --git a/src/app.ts b/src/app.ts",
+  "--- a/src/app.ts",
+  "+++ b/src/app.ts",
+  "@@ -1,3 +1,4 @@",
+  '+import { greet } from "./lib/greet";',
+  ' export function main(name = "world") {',
+  '-  console.log("Hello, " + name);',
+  "+  console.log(greet(name, true));",
+  " }",
+  "```",
+  "",
+  "And in the config:",
+  "```",
+  "--- a/config.yml",
+  "+++ b/config.yml",
+  "@@ -1,2 +1,2 @@",
+  " greeter:",
+  "-  excited: false",
+  "+  excited: true",
+  "```",
+].join("\n");
+
 /**
  * Settings → Prompts: a working override of the review message, and a broken one of the Files
  * section. The API refuses a template naming a variable the prompt doesn't have, so the broken one
@@ -531,6 +579,9 @@ async function seed() {
   const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
   // A New session saved as a draft: a dashed card in Planning that reopens in the editor, never run.
   const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
+  // Briefs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
+  const code = await create(other.id, CODE_BRIEF, { skipAgentReview: true });
+  const diff = await create(other.id, DIFF_BRIEF, { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -562,6 +613,8 @@ async function seed() {
     settle(waiting.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
     settle(agents.key, (t) => t.status === "review" && !t.busy),
     settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
+    settle(code.key, (t) => t.status === "review" && !t.busy),
+    settle(diff.key, (t) => t.status === "review" && !t.busy),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -575,7 +628,7 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1037,6 +1090,9 @@ function screens(s: Seeded): Screen[] {
     { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
     { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
     { name: "ticket-transcript-tables", url: `harness://ticket/${k(s.tables)}?tab=transcript`, ready: (l) => l.some((x) => x.startsWith("Run finished (review)")) },
+    // The brief's fenced code: plain at first, colored once its grammar has loaded.
+    { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=summaries`, wait: 1500 },
+    { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=summaries`, wait: 1500 },
     { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
     { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
     { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },

@@ -1,12 +1,13 @@
 // Agent markdown with native <Text>: blocks and inline tokens come from the shared parser
 // (@harness/shared/state "markdown"); links open in Safari, and wide tables scroll sideways.
-// Nothing is ever interpreted as markup.
+// Fenced code is syntax highlighted (CodeBlock). Nothing is ever interpreted as markup.
 
 import { Fragment, useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { inlineTokens, parseBlocks, type Block, type InlineToken } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
+import { CodeBlock } from "./CodeBlock";
 
 function Inline({ tokens, base }: { tokens: InlineToken[]; base: StyleProp<TextStyle> }) {
   const c = useColors();
@@ -90,13 +91,7 @@ export function Markdown({ text, size = 15, color }: { text: string; size?: numb
               </View>
             );
           case "code":
-            return (
-              <ScrollView key={i} horizontal style={[styles.code, { backgroundColor: c.bgSunken, borderColor: c.border }]} contentContainerStyle={{ padding: 10 }}>
-                <Text style={{ fontFamily: MONO, fontSize: 12.5, lineHeight: 18, color: c.text }} selectable>
-                  {b.text}
-                </Text>
-              </ScrollView>
-            );
+            return <CodeBlock key={i} code={b.text} lang={b.lang} />;
           case "quote":
             return (
               <View key={i} style={{ borderLeftWidth: 3, borderLeftColor: c.borderStrong, paddingLeft: 10 }}>
@@ -169,7 +164,6 @@ function Table({ block, size, color }: { block: Extract<Block, { t: "table" }>; 
 }
 
 const styles = StyleSheet.create({
-  code: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
   table: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
   // Wide enough that no hidden column is ever squeezed; absolute, so it never sizes the scroll content.
   measure: { position: "absolute", width: 10000, opacity: 0, flexDirection: "row", alignItems: "flex-start" },
