@@ -11,6 +11,16 @@ export interface FileLinkContext {
   projectId?: string;
 }
 
+/**
+ * Where a triage session's file links resolve (it has no folder of its own): the project of the
+ * ticket it dispatched, as on the desktop; that ticket's key when it isn't loaded (an older done
+ * ticket), which the service resolves to its folder; nothing when it dispatched nothing.
+ */
+export function triageLinkContext(dispatchedKey: string | undefined, dispatched: { projectId: string } | undefined): FileLinkContext {
+  if (dispatched) return { projectId: dispatched.projectId };
+  return dispatchedKey ? { ticketKey: dispatchedKey } : {};
+}
+
 /** app/file.tsx's params. Strings, because that's what the router hands back. */
 export interface FileRouteParams {
   path: string;

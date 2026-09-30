@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { formatFileLink, parseFileLink } from "@harness/shared";
-import { fileLines, fileRouteFor, fileScreenHref, formatSize, highlightWindow, initialScrollIndex, patchRows, readFileParams } from "./fileViewer";
+import { fileLines, fileRouteFor, fileScreenHref, formatSize, highlightWindow, initialScrollIndex, patchRows, readFileParams, triageLinkContext } from "./fileViewer";
 
 const link = (url: string) => parseFileLink(url)!;
 
@@ -52,6 +52,23 @@ describe("fileScreenHref", () => {
         .map((kv) => kv.split("=").map(decodeURIComponent) as [string, string]),
     );
     expect(readFileParams(params)).toEqual({ root: { kind: "ticket", key: "K-1" }, path: "src/app.ts", range: [2, 5] });
+  });
+});
+
+describe("triageLinkContext", () => {
+  test("the dispatched ticket's project, as the desktop Inbox does", () => {
+    expect(triageLinkContext("GREET-4", { projectId: "p1" })).toEqual({ projectId: "p1" });
+    // So a relative link in the outcome opens in that project.
+    expect(fileRouteFor(link("src/app.ts#L3"), triageLinkContext("GREET-4", { projectId: "p1" }))).toEqual({ path: "src/app.ts", project: "p1", start: "3" });
+  });
+
+  test("the ticket's key when it isn't loaded", () => {
+    expect(triageLinkContext("GREET-4", undefined)).toEqual({ ticketKey: "GREET-4" });
+  });
+
+  test("no scope when it dispatched nothing, so a relative link has no root", () => {
+    expect(triageLinkContext(undefined, undefined)).toEqual({});
+    expect(fileRouteFor(link("src/app.ts"), triageLinkContext(undefined, undefined))).toBeNull();
   });
 });
 

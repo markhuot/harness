@@ -9,6 +9,8 @@ import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
 import { Badge, Button, Callout, Empty, Spinner, useNow } from "../ui/kit";
 import { Markdown } from "../ui/Markdown";
+import { FileLinkScope } from "../ui/fileLinks";
+import { triageLinkContext } from "../lib/fileViewer";
 import { Transcript } from "./Transcript";
 import { ConnectionBanner } from "./ConnectionBanner";
 
@@ -151,28 +153,31 @@ export function TriageScreen() {
     );
   const key = dispatchedKey(session);
   const dispatched = key ? ticketByKey(state, key) : undefined;
+  // A triage session has no folder of its own: file links resolve where it dispatched to.
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <Stack.Screen options={{ title: session.key }} />
-      <View style={{ padding: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
-        <Text style={{ color: c.text, fontSize: 19, fontWeight: "700" }}>{session.title}</Text>
-        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-          <TriageBadge session={session} />
-          <Badge outline>{session.driver}</Badge>
+    <FileLinkScope {...triageLinkContext(key, dispatched)}>
+      <View style={{ flex: 1, backgroundColor: c.bg }}>
+        <Stack.Screen options={{ title: session.key }} />
+        <View style={{ padding: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
+          <Text style={{ color: c.text, fontSize: 19, fontWeight: "700" }}>{session.title}</Text>
+          <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+            <TriageBadge session={session} />
+            <Badge outline>{session.driver}</Badge>
+          </View>
+          {!!session.outcome && (
+            <Callout
+              tone={session.triageStatus === "dispatched" ? "green" : session.triageStatus === "failed" ? "red" : "neutral"}
+              icon={session.triageStatus === "dispatched" ? "checkCircle" : "alert"}
+              title="Outcome"
+            >
+              <Markdown text={session.outcome} size={14} />
+            </Callout>
+          )}
+          {dispatched && <Button title={`Open ${dispatched.key}`} icon="chevronRight" small onPress={() => router.push({ pathname: "/ticket/[key]", params: { key: dispatched.key } })} style={{ alignSelf: "flex-start" }} />}
         </View>
-        {!!session.outcome && (
-          <Callout
-            tone={session.triageStatus === "dispatched" ? "green" : session.triageStatus === "failed" ? "red" : "neutral"}
-            icon={session.triageStatus === "dispatched" ? "checkCircle" : "alert"}
-            title="Outcome"
-          >
-            <Markdown text={session.outcome} size={14} />
-          </Callout>
-        )}
-        {dispatched && <Button title={`Open ${dispatched.key}`} icon="chevronRight" small onPress={() => router.push({ pathname: "/ticket/[key]", params: { key: dispatched.key } })} style={{ alignSelf: "flex-start" }} />}
+        <Transcript sessionId={session.id} emptyHint="The triage agent's reasoning appears here." />
       </View>
-      <Transcript sessionId={session.id} emptyHint="The triage agent's reasoning appears here." />
-    </View>
+    </FileLinkScope>
   );
 }
 

@@ -1717,8 +1717,10 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   http(s) and mailto open outside the app, and a file link (`parseFileLink`) pushes `app/file.tsx`
   with `path`, `ticket` or `project`, `start` and `end`. A relative link resolves in the ticket
   that `FileLinkScope` provides (`app/ticket/[key].tsx` wraps the ticket screen in one), unless the
-  link carries its own `?ticket=`/`?project=`. The Inbox's triage transcripts have no scope, so
-  only a link that names its own context opens from there. An OS-level `harness://file/…` URL is
+  link carries its own `?ticket=`/`?project=`. A triage session (the Inbox) has no folder, so its
+  outcome and transcript resolve in the project of the ticket it dispatched, as on the desktop.
+  When that ticket isn't loaded, they use its key instead (`triageLinkContext`). A session that
+  dispatched nothing has no scope, and a relative link from it shows a toast. An OS-level `harness://file/…` URL is
   rewritten to the same route by `app/+native-intent.tsx` (`fileScreenHref`), because the
   path-based router would read it as `/file/<segments>` and drop the `#L` range. Every other
   `harness://` link passes through unchanged. `FileViewerScreen` (`mobile/src/screens/FileViewer.tsx`)
@@ -1729,7 +1731,9 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   (`initialScrollIndex`, a few lines above it). A long file is highlighted a window at a time
   (`highlightWindow`, 40 000 characters around what's on screen, re-centered when scrolling
   leaves it). Colored lines stay colored as later windows land. Tokenizing from a window's first
-  line can start mid-comment, which is accepted. The Diff tab numbers each line of the patch
+  line can start mid-comment, which is accepted. A patch over the highlighter's 60 000-character
+  limit (`MAX_HIGHLIGHT_CHARS`) isn't windowed: the Diff tab shows it without syntax colors, still
+  with its line tints. The Diff tab numbers each line of the patch
   from its hunk headers (`patchRows`) and takes the colors from the whole patch highlighted as a
   diff (`PatchRow.source` indexes parseDiff's lines). Pull to refresh reloads both. The pure
   parts are in `mobile/src/lib/fileViewer.ts`.
