@@ -308,6 +308,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -369,6 +370,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -430,6 +432,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -491,6 +494,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -552,6 +556,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -619,6 +624,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -686,6 +692,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -753,6 +760,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -820,6 +828,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -887,6 +896,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -954,6 +964,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -1021,6 +1032,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -1088,6 +1100,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -1155,6 +1168,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -1221,6 +1235,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -1281,6 +1296,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -1345,6 +1361,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Branches
@@ -1413,6 +1430,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -4820,6 +4838,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Your child tickets
@@ -4892,6 +4911,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Your child tickets
@@ -4970,6 +4990,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files
@@ -6951,6 +6972,7 @@ End the run with exactly one of these, never both, and stop after calling it:
 * \`submit_for_review\` { summary } when the work is done. The summary says what changed and how you verified it. The ticket moves to review, where an independent reviewer agent checks it. Pass \`skip_agent_review\` true when the human asked for no agent review (for example "no bot review" or "don't review this"), or when the request was conversational and you changed no files; the ticket then waits only on the human.
 * \`block\` { question } only when you cannot continue without a human: a decision with real consequences, missing credentials or access, or a destructive or irreversible step. Ask one specific question and include the options you see. The ticket waits in blocked and the human's reply resumes this conversation.
 Never end a run with a question to the human in plain text; nobody reads it as a question. Call \`block\` { question } instead.
+When you start something long-running in the background (a monitor, an import, a job that could take hours or days), don't just wait for it to finish: nothing ends the wait for you. Also start a check-in timer, such as a background \`sleep 1800\`, so you wake up periodically to look at its progress, post a summary, and decide whether to keep waiting, change course, or stop it.
 Use \`post_summary\` for progress on long work. When a reviewer requests changes you will get their notes as a new message: address every point, then call \`submit_for_review\` again.
 
 ## Files

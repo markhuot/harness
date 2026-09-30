@@ -27,6 +27,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Removed
 
+- A Claude Code agent waiting on its own background job (a long monitor, an import that runs for
+  days) no longer gives up after 30 minutes. It keeps waiting as long as the job runs, and it
+  wakes up now and then to check on the job and post progress to the ticket. Stop the ticket if
+  you want the wait to end sooner.
 - On the Mac, View → Zoom In and Zoom Out (⌘= and ⌘-) are gone, since ⌘= now equalizes panes.
   View → Actual Size (⌘0) is still there to undo an earlier zoom.
 

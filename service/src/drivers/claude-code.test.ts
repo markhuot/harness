@@ -640,7 +640,7 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(error).toBeNull(); // the fake exits 7 if stdin is never closed
     expect(s.marks()).toEqual([{ label: "after first turn", stdinClosed: false }]);
     expect(events.filter((e) => e.type === "status")).toEqual([
-      { type: "status", text: "Waiting for a background task to finish (Run suites), up to 30 min." },
+      { type: "status", text: "Waiting for a background task to finish (Run suites)." },
     ]);
     expect(events.filter((e) => e.type === "text").map((e) => (e as { text: string }).text)).toEqual([
       "I'll be notified when the background test run completes.",
