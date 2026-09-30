@@ -16,6 +16,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   window near where it was. A terminal keeps its shell and everything it printed. Click the same
   button in that window, or press ⇧⌘O again, to put the pane back on its board. Closing the
   window closes the pane, and closing the pane closes the window. View → Pop Out Pane does the same.
+- Ticket keys such as HARNESS-12 in summaries, comments, ticket briefs, transcript messages, and
+  Inbox outcomes are now links. Click or tap one to open that ticket, on the Mac or on iPhone and
+  iPad. A key links when it belongs to one of your projects or to a ticket on the board, so text
+  like UTF-8 or SHA-256 stays as it is.
 
 ### Fixed
 

@@ -383,6 +383,19 @@ export function ticketByKey(state: State, key: string): Ticket | undefined {
   return aliased ? state.tickets[aliased] : undefined;
 }
 
+/**
+ * Whether markdown should link a ticket-shaped word (FOO-12) to the ticket: it's loaded, or its
+ * prefix is a project's key (done tickets aren't all in memory; the detail fetches it). Keys the
+ * service already 404'd, and look-alikes such as UTF-8, stay plain text.
+ */
+export function ticketLinkable(state: State, key: string): boolean {
+  const upper = key.toUpperCase();
+  if (state.missingKeys[upper]) return false;
+  if (ticketByKey(state, upper)) return true;
+  const prefix = upper.slice(0, upper.lastIndexOf("-"));
+  return Object.values(state.projects).some((p) => p.key.toUpperCase() === prefix);
+}
+
 export function triageSessions(state: State): Session[] {
   return Object.values(state.sessions)
     .filter((s) => s.kind === "triage")

@@ -1,21 +1,35 @@
 // Agent markdown with native <Text>: blocks and inline tokens come from the shared parser
-// (@harness/shared/state "markdown"); links open in Safari, and wide tables scroll sideways.
+// (@harness/shared/state "markdown"); links open in Safari, ticket keys open the ticket, and wide
+// tables scroll sideways.
 // Nothing is ever interpreted as markup.
 
 import { Fragment, useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
-import { inlineTokens, parseBlocks, type Block, type InlineToken } from "@harness/shared/state";
+import { useRouter } from "expo-router";
+import { inlineTokens, parseBlocks, ticketLinkable, type Block, type InlineToken } from "@harness/shared/state";
 import { useColors } from "../state/app";
+import { useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
 
 function Inline({ tokens, base }: { tokens: InlineToken[]; base: StyleProp<TextStyle> }) {
   const c = useColors();
+  const { state } = useStore();
+  const router = useRouter();
   return (
     <>
       {tokens.map((t, i) => {
         switch (t.t) {
           case "text":
             return <Fragment key={i}>{t.text}</Fragment>;
+          case "ticket":
+            // A key the store can resolve (or in a project's key space) opens that ticket; look-alikes stay text.
+            return ticketLinkable(state, t.key) ? (
+              <Text key={i} style={{ color: c.accentText }} accessibilityRole="link" onPress={() => router.push({ pathname: "/ticket/[key]", params: { key: t.key } })}>
+                {t.key}
+              </Text>
+            ) : (
+              <Fragment key={i}>{t.key}</Fragment>
+            );
           case "code":
             return (
               <Text key={i} style={{ fontFamily: MONO, fontSize: 13, backgroundColor: c.bgActive, color: c.text }}>
