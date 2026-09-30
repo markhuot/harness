@@ -1,5 +1,5 @@
 // Writes Install/index.html and Install/manifest.plist for a release. The page links the iPhone
-// build (OTA via itms-services + manifest.plist, which must be served from HTTPS as text/xml) and
+// and iPad build (OTA via itms-services + manifest.plist, which must be served from HTTPS as text/xml) and
 // the Mac build; both files live on the GitHub release. No secrets go in either file.
 //
 //   bun Tools/install-page.ts '<json>'   (see ReleaseInfo)
@@ -198,15 +198,15 @@ export function page(r: ReleaseInfo): string {
           <span class="tag">Release ${esc(r.tag)}</span>
         </div>
       </header>
-      <p>These builds are for Mark's own Macs and iPhones. The Mac app runs agents from a local Harness checkout, and the iPhone app connects to it.</p>
+      <p>These builds are for Mark's own Macs, iPhones and iPads. The Mac app runs agents from a local Harness checkout, and the iPhone and iPad app connects to it.</p>
     </section>
 
     <section>
-      <h2>iPhone</h2>
-      <p>This is a development build, so it only installs on iPhones registered to the Apple Developer team.</p>
-      <a class="install" href="${esc(itms)}">Install on iPhone</a>
+      <h2>iPhone and iPad</h2>
+      <p>This is a development build, so it only installs on iPhones and iPads registered to the Apple Developer team. A newly registered device needs a new release before it can install.</p>
+      <a class="install" href="${esc(itms)}">Install on iPhone or iPad</a>
       <ol>
-        <li>Open this page in Safari on the iPhone and tap <strong>Install on iPhone</strong>.</li>
+        <li>Open this page in Safari on the iPhone or iPad and tap <strong>Install on iPhone or iPad</strong>.</li>
         <li>If iOS says the developer isn't trusted, open Settings &rarr; General &rarr; VPN &amp; Device Management and trust <code>Apple Development: Mark Huot</code>.</li>
       </ol>
       <div class="meta">Version ${esc(r.ios.version)} (${esc(r.ios.build)}) &middot; ${mb(r.ios.bytes)} &middot; ${esc(r.date)}</div>
@@ -224,9 +224,9 @@ ${
     </section>
 
     <section class="pair">
-      <h2>Pair your phone</h2>
-      <p>On the Mac, open Harness &rarr; Settings &rarr; Network, choose <strong>Tailscale</strong>, then scan the QR code with the iPhone's camera.</p>
-      <p class="foot">Neither build contains a token. Pairing hands the phone one, and it's kept in the iPhone's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a></p>
+      <h2>Pair your iPhone or iPad</h2>
+      <p>On the Mac, open Harness &rarr; Settings &rarr; Network, choose <strong>Tailscale</strong>, then scan the QR code with the iPhone or iPad camera.</p>
+      <p class="foot">Neither build contains a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a></p>
     </section>
   </div>
 </body>

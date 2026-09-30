@@ -32,24 +32,29 @@ the modes and what exposing the token means.
 Everything the service stores lives under `~/.harness/`: the database, the API token,
 logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different location.
 
-## iPhone app
+## iPhone and iPad app
 
-`mobile/` is a native iPhone app (Expo SDK 57, React Native, expo-router) with the desktop's
-board, ticket tabs (including the live browser and plugin tabs), approvals, Inbox and settings.
-It shares its state logic with the desktop through `@harness/shared/state`.
+`mobile/` is a native iOS app for iPhone and iPad (one universal build; Expo SDK 57, React
+Native, expo-router) with the desktop's board, ticket tabs (including the live browser and
+plugin tabs), approvals, Inbox and settings. It shares its state logic with the desktop through
+`@harness/shared/state`.
 
-- **Install:** open https://harness-install.vercel.app in Safari on a registered iPhone. The page
-  also has the signed Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
+- **Install:** open https://harness-install.vercel.app in Safari on a registered iPhone or iPad.
+  The build is development-signed, so a device has to be registered to the Apple Developer team
+  (plug it into the Mac once with Xcode open, or add its UDID in the developer portal) before the
+  release that installs on it is built. The page also has the signed Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
   CLAUDE.md → Releases and CHANGELOG.md); `bun run release:publish` builds the tagged commit,
   publishes both apps as a GitHub release and redeploys the page.
 - **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone
-  camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
+  or iPad camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
 - **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,
   then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
   throwaway daemon, taps through opening a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
   and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
   board + settings shots per color theme). It splits the work across its own simulators,
-  "sim-check 1" to "sim-check 3" (`--shards=N`), which it creates the first time. With
+  "sim-check 1" to "sim-check 3" (`--shards=N`), which it creates the first time. `--ipad`
+  saves the same screens from iPad simulators ("sim-check iPad 1", …) to
+  `mobile/build/screens-ipad/`, without the tap checks. With
   `--no-build` and those simulators booted, a run takes about a minute, and
   `mobile/build/screens/timings.json` shows where the time went. `ios/` is gitignored and outlives dependency changes, so
   `release:publish` regenerates it on every build, and sim-check does whenever it doesn't link

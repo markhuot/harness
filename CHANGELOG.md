@@ -1,6 +1,6 @@
 # Changelog
 
-This file tracks releases of the Harness Mac and iPhone apps. Each release is an annotated git tag
+This file tracks releases of the Harness Mac and iPhone/iPad apps. Each release is an annotated git tag
 named `app-YYYYMMDD.HHMM` (the UTC minute the release was prepared) with a GitHub release of the
 same name that carries the iPhone IPA and the Mac zip. CLAUDE.md has the release steps.
 
@@ -8,6 +8,14 @@ Add entries under [Unreleased] as changes land on `main`, grouped as Added, Chan
 Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
+
+### Added
+
+- Harness now runs on iPad as a full iPad app, in portrait and landscape and alongside other
+  apps in Split View and Stage Manager. The install page's **Install on iPhone or iPad** button
+  installs it on any iPad registered to the developer team. Register a new iPad before the
+  release that should install on it is built. On an iPad, the app's messages about pairing and
+  tokens say "iPad" instead of "iPhone".
 
 ## [app-20260930.0148](https://github.com/markhuot/harness/releases/tag/app-20260930.0148) - 2026-09-30
 

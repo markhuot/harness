@@ -41,9 +41,14 @@
 //      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
 //      pages, Close and swipe-down close it; attachments-*.png
 //
+//   --ipad: the walk-through's screens on iPad simulators instead ("sim-check iPad 1", …, an
+//      iPad Pro 11-inch), saved to mobile/build/screens-ipad/ in whatever orientation each
+//      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
+//      checks and the modes above tap at iPhone coordinates, so they don't run here.
+//
 //   Every run prints its slowest steps and writes them all to mobile/build/screens/timings.json.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -58,7 +63,8 @@ const flag = (name: string) => args.includes(`--${name}`);
 const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
-const shots = join(here, "build", "screens");
+const ipad = args.includes("--ipad");
+const shots = join(here, "build", ipad ? "screens-ipad" : "screens");
 const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
@@ -68,6 +74,7 @@ const keyboardOnly = flag("keyboard");
 const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly);
+if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions or --attachments");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 3) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 
@@ -198,12 +205,19 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
 /**
  * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
  * sits in the upper middle of the screen. Elements scrolled far out of view may be missing from
- * the tree, so it swipes a fixed distance until one shows up, then just far enough.
+ * the tree, so it swipes a fixed distance until one shows up, then just far enough. One above the
+ * screen (or under the header) is scrolled back down to.
  */
 async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
   for (let i = 0; i < tries; i++) {
     const el = await findElement(udid, match);
     if (el && el.frame.y >= 140 && el.frame.y <= 520) return;
+    if (el && el.frame.y < 140) {
+      const by = Math.min(420, Math.round(300 - el.frame.y));
+      await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(300 + by), "--duration", "0.8", "--udid", udid);
+      await Bun.sleep(400);
+      continue;
+    }
     const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 300)) : 380;
     await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
     await Bun.sleep(400);
@@ -236,16 +250,17 @@ async function running(udid: string): Promise<boolean> {
 }
 
 /**
- * The simulators to drive: --udid=a,b, or "sim-check 1" … "sim-check N", created (iPhone 18 Pro on
- * the newest iOS runtime) and booted as needed. They're sim-check's own, so a run never takes over
- * a simulator someone (or another agent) is using.
+ * The simulators to drive: --udid=a,b, or "sim-check 1" … "sim-check N" ("sim-check iPad 1" … with
+ * --ipad), created (iPhone 18 Pro or iPad Pro 11-inch on the newest iOS runtime) and booted as
+ * needed. They're sim-check's own, so a run never takes over a simulator someone (or another agent)
+ * is using.
  */
 async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
   const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
   const all = Object.values(list.devices).flat();
-  const wanted = given ?? Array.from({ length: n }, (_, i) => `sim-check ${i + 1}`);
+  const wanted = given ?? Array.from({ length: n }, (_, i) => `sim-check ${ipad ? "iPad " : ""}${i + 1}`);
   return Promise.all(
     wanted.map(async (id) => {
       let d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
@@ -266,8 +281,10 @@ async function createDevice(name: string): Promise<string> {
     .sort((a, b) => Bun.semver.order(b.version, a.version));
   // The newest runtime that runs an iPhone 18 Pro (the taps' coordinates are its), else any iPhone.
   const pick = (want: (n: string) => boolean) => runtimes.map((r) => ({ r, type: r.supportedDeviceTypes?.find((t) => want(t.name)) })).find((x) => x.type);
-  const found = pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
-  if (!found) throw new Error("no iOS runtime with an iPhone simulator available");
+  const found = ipad
+    ? pick((n) => /^iPad Pro 11-inch \(M\d+\)$/.test(n)) ?? pick((n) => /^iPad/.test(n))
+    : pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
+  if (!found) throw new Error(`no iOS runtime with an ${ipad ? "iPad" : "iPhone"} simulator available`);
   console.log(`creating simulator "${name}" (${found.type!.name}, iOS ${found.r.version})`);
   return simctl("create", name, found.type!.identifier, found.r.identifier);
 }
@@ -1355,6 +1372,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const saved = await until("override saved", async () => ((v) => (v?.includes("Mind the {{branch}}.") ? v : null))(await override("system.work")), 8000);
         await until("Reset button", async () => (await labels(udid)).includes("Reset to built-in"), 5000);
         await shot(udid, "prompt-saved-light");
+        // Typing left the editor scrolled to the end of the long work prompt, above the button.
+        await scrollTo(udid, (l) => l === "Reset to built-in");
         await tapWhere(udid, "Reset to built-in");
         await tapWhere(udid, "Reset"); // the confirm alert
         await until("override cleared", async () => (await override("system.work")) === null, 8000);
@@ -1457,7 +1476,7 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
     if (crashed.length) ok = false;
   }
   // The checks change tickets the screens show, so they start once every screen is saved.
-  if (hasAxe && !only) {
+  if (hasAxe && !only && !ipad) {
     await s.browsed.catch(() => {}); // Move to Done moves it out of Review
     const chains = interactionChains(s).sort((a, b) => b.seconds - a.seconds); // longest first deals best
     const byDevice = lanes(chains, udids.length, (c) => c.seconds);

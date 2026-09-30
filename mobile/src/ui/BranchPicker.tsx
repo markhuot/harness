@@ -15,6 +15,7 @@ import { MONO } from "../theme/tokens";
 import { Button } from "./kit";
 import { Icon } from "./Icon";
 import { haptic } from "./haptics";
+import { ALL_ORIENTATIONS } from "./orientations";
 
 const DEBOUNCE_MS = 150;
 
@@ -133,7 +134,7 @@ function BranchSheet({
   const { matches, loading, error } = useBranchSearch(projectId, query);
   const rows = useMemo(() => branchRows(matches, query, defaultLabel, newLabel), [matches, query, defaultLabel, newLabel]);
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} supportedOrientations={ALL_ORIENTATIONS}>
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={{ flexDirection: "row", alignItems: "center", padding: 14, gap: 10 }}>
           <Button title="Cancel" variant="ghost" onPress={onClose} hapticKind={null} />

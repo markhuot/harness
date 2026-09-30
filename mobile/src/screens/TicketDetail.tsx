@@ -68,6 +68,7 @@ import { ChildrenTab, DetailsTab, SummariesTab } from "./TicketTabs";
 import { AgentsTab, SubagentView } from "./AgentsTab";
 import { BrowserTab } from "./BrowserTab";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
+import { ALL_ORIENTATIONS } from "../ui/orientations";
 
 export function TicketDetailScreen() {
   const params = useLocalSearchParams<{ key: string; tab?: string }>();
@@ -442,7 +443,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
 function SheetFrame({ title, subtitle, onClose, children, primary }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode; primary: React.ReactNode }) {
   const c = useColors();
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} supportedOrientations={ALL_ORIENTATIONS}>
       <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={{ flexDirection: "row", alignItems: "center", padding: 14, gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }}>
           <Button title="Cancel" variant="ghost" onPress={onClose} hapticKind={null} />

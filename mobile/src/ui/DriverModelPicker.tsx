@@ -16,6 +16,7 @@ import { useStore } from "../state/store";
 import { Button } from "./kit";
 import { Icon } from "./Icon";
 import { haptic } from "./haptics";
+import { ALL_ORIENTATIONS } from "./orientations";
 
 /**
  * Model lists for every driver the picker may show (installed and signed in, plus the picked and
@@ -138,7 +139,7 @@ function ModelSheet({
   const [query, setQuery] = useState("");
   const sections = useMemo(() => choiceSections(choices, query, driverNames), [choices, query, driverNames]);
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} supportedOrientations={ALL_ORIENTATIONS}>
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={{ flexDirection: "row", alignItems: "center", padding: 14, gap: 10 }}>
           <Button title="Cancel" variant="ghost" onPress={onClose} hapticKind={null} />

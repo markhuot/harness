@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds, signs and publishes Harness for Mark's devices:
-#   - iPhone: Release archive of the prebuilt ios/ workspace (JS bundle embedded, no Metro),
+#   - iPhone and iPad (one universal app): Release archive of the prebuilt ios/ workspace (JS bundle embedded, no Metro),
 #     exported as a development-signed IPA (method "debugging")
 #   - Mac: the Electron app packaged, Developer ID signed with the hardened runtime, notarized
 #     when NOTARY_PROFILE names a notarytool keychain profile, zipped with ditto
@@ -160,7 +160,7 @@ NOTES="$(bun Tools/release.ts notes "$TAG")
 
 ---
 
-iPhone: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), development build for registered devices. Install from $SITE
+iPhone and iPad: Harness ${IOS_VERSION:-?} (${IOS_BUILD:-?}), development build for registered devices. Install from $SITE
 Mac (Apple silicon): Harness ${MAC_VERSION:-?}, Developer ID signed$([[ "${MAC_NOTARIZED:-false}" == true ]] && echo ' and notarized' || echo ', not notarized (System Settings → Privacy & Security → Open Anyway the first time)').
 Commit $(git -C "$ROOT" rev-parse --short HEAD)."
 # --verify-tag: never let gh invent the tag on the remote's main tip; the release is the pushed tag.

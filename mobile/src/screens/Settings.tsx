@@ -10,6 +10,7 @@ import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { useDriverModels } from "../state/models";
 import { displayHost } from "../lib/pair";
+import { DEVICE } from "../lib/device";
 import { MONO } from "../theme/tokens";
 import { Badge, Button, ProjectKey, Segmented, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
@@ -79,10 +80,10 @@ function ConnectionSection() {
     });
     if (v === "use") void activate(id);
     if (v === "rename") Alert.prompt("Rename", undefined, (name) => rename(id, name ?? ""), "plain-text", s.name);
-    if (v === "forget" && (await confirm(`Forget ${s.name}?`, "Its token is removed from this iPhone.", "Forget"))) void forget(id);
+    if (v === "forget" && (await confirm(`Forget ${s.name}?`, `Its token is removed from this ${DEVICE}.`, "Forget"))) void forget(id);
   };
   const rotate = async () => {
-    if (!(await confirm("Rotate the token?", "Every client using the current token is disconnected, including the desktop app until it reconnects. This iPhone switches to the new token.", "Rotate"))) return;
+    if (!(await confirm("Rotate the token?", `Every client using the current token is disconnected, including the desktop app until it reconnects. This ${DEVICE} switches to the new token.`, "Rotate"))) return;
     const res = await act(() => client.rotateToken(), "Token rotated");
     if (res) await pair({ baseUrl, token: res.token }, { skipProbe: true });
   };
@@ -126,7 +127,7 @@ function NetworkSection() {
   if (!net) return null;
   const change = async (v: ListenMode) => {
     if (v === net.mode) return;
-    if (v === "localhost" && !(await confirm("Listen on this Mac only?", "This iPhone will lose its connection until you change it back on the Mac.", "Change"))) return;
+    if (v === "localhost" && !(await confirm("Listen on this Mac only?", `This ${DEVICE} will lose its connection until you change it back on the Mac.`, "Change"))) return;
     await act(() => client.updateSettings({ listen: { mode: v } } as never), "Network updated");
     setTimeout(load, 800);
   };
