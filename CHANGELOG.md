@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac board, ⇧⌘↩ opens the card under the keyboard cursor in a new pane instead of
+  replacing the ticket you already have open. With the board and one ticket open, you get the
+  board, that ticket, and the new one side by side. Plain Enter still opens the card in the
+  ticket pane beside the board.
+
 ## [app-20260930.1424](https://github.com/markhuot/harness/releases/tag/app-20260930.1424) - 2026-09-30
 
 ### Changed

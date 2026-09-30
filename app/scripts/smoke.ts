@@ -1801,6 +1801,29 @@ try {
     await press.l();
     check("l returns from the sidebar to the board", !!(await until("board again", async () => ((await active()).card ? true : null)).catch(() => false)));
 
+    // ⇧⌘Enter on a card opens it in a new pane right of the ticket beside the board, where Enter
+    // would have replaced it: [board, A] → [board, A, B]. It wins over Maximize (the same chord).
+    await setPanes(boardOnly);
+    await until("board only", async () => (await openTickets()).length === 0);
+    await js(`document.querySelector(".card.cursor")?.focus()`);
+    await press.k();
+    const a = (await active()).card!;
+    await press.enter();
+    await until("A open", async () => ((await openTickets()).join() === a && (await active()).pane === "pane-ticket" ? true : null));
+    await press.paneLeft();
+    await until("board again", async () => ((await active()).card === a ? true : null));
+    await press.j();
+    const b = (await active()).card!;
+    await key("Enter", "Enter", 13, 4 | 8);
+    const split = await until("new split", async () => ((await openTickets()).length === 2 ? openTickets() : null)).catch(() => openTickets());
+    const stored = await js<{ zoomedId: string | null }>(`JSON.parse(localStorage.getItem("harness.panes")).scopes["*"]`);
+    await screenshot("/tmp/harness-119-open-split.png");
+    check(
+      "⇧⌘Enter on a card opens it in a new pane beside the open ticket (not replacing it, not zooming)",
+      a !== b && split.join() === `${a},${b}` && (await active()).pane === "pane-ticket" && stored.zoomedId === null,
+      `${a}, ${b} → ${split.join()} (zoomed ${stored.zoomedId})`,
+    );
+
     await setPanes(boardOnly);
   }
 

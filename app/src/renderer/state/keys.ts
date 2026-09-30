@@ -91,6 +91,8 @@ export const COMMANDS: CommandSpec[] = [
   { id: "board.first", label: "First card in the column", group: "Board", scope: "board", keys: [k("KeyG")], palette: false },
   { id: "board.last", label: "Last card in the column", group: "Board", scope: "board", keys: [k("KeyG", { shift: true })], palette: false },
   { id: "board.open", label: "Open the card", group: "Board", scope: "board", keys: [k("Enter")], palette: false },
+  // Shares ⇧⌘↩ with pane.zoom: the board's scope is innermost, so on a card this wins.
+  { id: "board.openSplit", label: "Open the card in a new split", group: "Board", scope: "board", keys: [cmd("Enter", { shift: true })], palette: false },
   { id: "board.search", label: "Search tickets", group: "Board", scope: "board", keys: [k("Slash")] },
 
   // Lists (the sidebar, the inbox, a conductor's Tickets tab)
