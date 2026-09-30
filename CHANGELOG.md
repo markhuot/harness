@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, a ticket's header (its title, badges and buttons) now slides out of the way
+  when you scroll down its Summaries, Transcript, Tickets, Agents or Details tab, leaving the tabs
+  pinned at the top and more room to read. Scroll back up a little, tap the current tab, or tap the
+  status bar to bring it back. It also comes back on its own when the ticket changes status or needs
+  an approval.
+- On iPhone and iPad, the **Move to in progress** switch and the hint over a ticket's message box
+  now appear only once you tap into the box. If you leave it empty, they go away again. If you've
+  typed a message, they stay until you send it.
+
 ### Removed
 
 - The Dummy driver no longer appears in the driver and model pickers or under Settings →
