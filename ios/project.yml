@@ -1,0 +1,86 @@
+# XcodeGen spec for the native iPhone/iPad app. `cd ios && xcodegen` writes Harness.xcodeproj
+# (gitignored, regenerated like Expo's CNG). Sources are folder-globbed: add files under Harness/
+# and they're in the target, no edits here needed. Portable logic lives in the HarnessKit package.
+name: Harness
+options:
+  bundleIdPrefix: com.markhuot
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: 47P4ZSALX4
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  HarnessKit:
+    path: HarnessKit
+targets:
+  Harness:
+    type: application
+    platform: iOS
+    sources:
+      - path: Harness
+    dependencies:
+      - package: HarnessKit
+    info:
+      path: Harness/Info.plist
+      properties:
+        CFBundleDisplayName: $(HARNESS_DISPLAY_NAME)
+        CFBundleName: Harness
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [harness]
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        # Only NSAllowsArbitraryLoads: iOS ignores it when NSAllowsLocalNetworking or the
+        # ...InWebContent / ...ForMedia keys are present, which breaks http to a Tailscale 100.x
+        # address (ios/Tools/config.test.ts guards this, as mobile/Tools/ats-config.test.ts does).
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: Harness connects to the harness service running on your Mac over your local network or Tailscale.
+        NSCameraUsageDescription: Harness uses the camera to scan the pairing QR code shown in the desktop app.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: SplashIcon
+          UIImageRespectsSafeAreaInsets: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.dev
+          HARNESS_DISPLAY_NAME: Harness Dev
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
+          HARNESS_DISPLAY_NAME: Harness
+schemes:
+  Harness:
+    build:
+      targets:
+        Harness: all
+    run:
+      config: Debug
+    archive:
+      config: Release

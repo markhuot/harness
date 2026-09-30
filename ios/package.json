@@ -1,0 +1,16 @@
+{
+  "name": "@harness/ios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ./Tools",
+    "typecheck": "tsc --noEmit -p .",
+    "fixtures": "bun ../shared/scripts/export-fixtures.ts"
+  },
+  "devDependencies": {
+    "@harness/shared": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "~5.9.0"
+  }
+}

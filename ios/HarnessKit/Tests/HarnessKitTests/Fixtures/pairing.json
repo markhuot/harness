@@ -1,0 +1,129 @@
+{
+  "buildPairUrlCases": [
+    {
+      "name": "plain tailscale url",
+      "input": {
+        "baseUrl": "http://100.107.188.66:7717",
+        "token": "abc"
+      },
+      "output": "harness://pair?url=http%3A%2F%2F100.107.188.66%3A7717&token=abc"
+    },
+    {
+      "name": "token with reserved characters",
+      "input": {
+        "baseUrl": "http://100.107.188.66:7717",
+        "token": "a&b=c d"
+      },
+      "output": "harness://pair?url=http%3A%2F%2F100.107.188.66%3A7717&token=a%26b%3Dc%20d"
+    },
+    {
+      "name": "ipv6 host",
+      "input": {
+        "baseUrl": "http://[fd7a::1]:7717",
+        "token": "t"
+      },
+      "output": "harness://pair?url=http%3A%2F%2F%5Bfd7a%3A%3A1%5D%3A7717&token=t"
+    },
+    {
+      "name": "unicode and unreserved marks",
+      "input": {
+        "baseUrl": "https://mac.local/harness",
+        "token": "é!~*'()-_.é"
+      },
+      "output": "harness://pair?url=https%3A%2F%2Fmac.local%2Fharness&token=%C3%A9!~*'()-_.%C3%A9"
+    }
+  ],
+  "parsePairUrlCases": [
+    {
+      "name": "round trip",
+      "input": "harness://pair?url=http%3A%2F%2F100.107.188.66%3A7717&token=a%26b%3Dc%20d",
+      "output": {
+        "url": "http://100.107.188.66:7717",
+        "token": "a&b=c d"
+      }
+    },
+    {
+      "name": "ipv6 round trip",
+      "input": "harness://pair?url=http%3A%2F%2F%5Bfd7a%3A%3A1%5D%3A7717&token=t",
+      "output": {
+        "url": "http://[fd7a::1]:7717",
+        "token": "t"
+      }
+    },
+    {
+      "name": "surrounding whitespace",
+      "input": "  harness://pair?url=http%3A%2F%2Fh%3A1&token=t\n",
+      "output": {
+        "url": "http://h:1",
+        "token": "t"
+      }
+    },
+    {
+      "name": "other scheme",
+      "input": "https://pair?url=x&token=y",
+      "output": null
+    },
+    {
+      "name": "no question mark",
+      "input": "harness://pair",
+      "output": null
+    },
+    {
+      "name": "missing token",
+      "input": "harness://pair?url=http%3A%2F%2Fh",
+      "output": null
+    },
+    {
+      "name": "empty token",
+      "input": "harness://pair?url=http%3A%2F%2Fh&token=",
+      "output": null
+    },
+    {
+      "name": "ftp url",
+      "input": "harness://pair?url=ftp%3A%2F%2Fh&token=t",
+      "output": null
+    },
+    {
+      "name": "url without host",
+      "input": "harness://pair?url=http%3A%2F%2F&token=t",
+      "output": null
+    },
+    {
+      "name": "bad escape",
+      "input": "harness://pair?url=%E0%A4%A&token=t",
+      "output": null
+    },
+    {
+      "name": "uppercase HTTPS accepted",
+      "input": "harness://pair?url=HTTPS%3A%2F%2Fh&token=t",
+      "output": {
+        "url": "HTTPS://h",
+        "token": "t"
+      }
+    },
+    {
+      "name": "part without equals is skipped",
+      "input": "harness://pair?junk&url=http%3A%2F%2Fh&token=t",
+      "output": {
+        "url": "http://h",
+        "token": "t"
+      }
+    },
+    {
+      "name": "later duplicate wins",
+      "input": "harness://pair?url=http%3A%2F%2Fa&url=http%3A%2F%2Fb&token=t",
+      "output": {
+        "url": "http://b",
+        "token": "t"
+      }
+    },
+    {
+      "name": "value containing equals",
+      "input": "harness://pair?url=http%3A%2F%2Fh&token=a=b",
+      "output": {
+        "url": "http://h",
+        "token": "a=b"
+      }
+    }
+  ]
+}

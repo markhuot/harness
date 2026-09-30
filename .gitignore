@@ -5,3 +5,10 @@ dist
 out
 *.log
 .DS_Store
+# Native iOS app (ios/): XcodeGen output and build products are regenerated
+ios/*.xcodeproj
+ios/Harness/Info.plist
+ios/build/
+DerivedData/
+.build/
+.swiftpm/
