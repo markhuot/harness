@@ -170,7 +170,7 @@ describe("pop-outs in the pane store (localStorage)", () => {
     popOutPane("a", "t1", "w1");
     updatePanes(popoutScope("w1"), (s) => closePane(s, "t1"));
     expect(getPopoutPanes("w1")).toBeNull();
-    expect(getPanes(popoutScope("w1")).root.content).toEqual({ kind: "board" });
+    expect(labels(getPanes(popoutScope("w1")))).toEqual(["board"]);
     updatePanes(popoutScope("w1"), (s) => s);
     updatePanes("a", (s) => s);
     expect(Object.keys(getPaneStore().scopes)).toEqual(["a"]);
