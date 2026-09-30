@@ -198,6 +198,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
   add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
+  add("GET", "/projects/:id/commands", ({ params, url }) =>
+    o.projectCommands(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), url.searchParams.get("driver")),
+  );
   add("GET", "/projects/:id/file", ({ params, url }) => o.projectFile(params.id!, url.searchParams.get("path") ?? ""));
   add("GET", "/projects/:id/file/diff", ({ params, url }) => o.projectFileDiff(params.id!, url.searchParams.get("path") ?? ""));
   add("GET", "/projects/:id/branches", ({ params, url }) => o.projectBranches(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
@@ -243,6 +246,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
   add("GET", "/tickets/:key/summaries", ({ params }) => o.summaries(params.key!));
   add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
+  add("GET", "/tickets/:key/commands", ({ params, url }) => o.ticketCommands(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
   add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
   add("GET", "/tickets/:key/file/diff", ({ params, url }) => o.ticketFileDiff(params.key!, url.searchParams.get("path") ?? ""));
 

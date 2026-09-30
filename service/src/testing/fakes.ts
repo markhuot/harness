@@ -1,6 +1,6 @@
 // Test doubles shared by service tests. Not imported by production code.
 
-import { reviewPassed, type BrowserState, type DriverInfo, type ModelInfo } from "@harness/shared";
+import { reviewPassed, type BrowserState, type CommandMatch, type DriverInfo, type ModelInfo } from "@harness/shared";
 import { onTempCleanup, tempDir } from "@harness/shared/testing";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
 import { outputKey, watcherProject } from "../drivers/dummy";
@@ -99,6 +99,10 @@ export class FakeDriver implements Driver {
   /** What listModels() returns (or throws, when a function throws) */
   models: ModelInfo[] | (() => Promise<ModelInfo[]>) = [{ id: "fake-model", name: "Fake Model", default: true }];
   listModelsCalls = 0;
+  /** What listCommands() returns (or throws, when a function throws); null → the driver has no listCommands */
+  commands: CommandMatch[] | ((cwd: string) => Promise<CommandMatch[]>) | null = null;
+  /** The cwd of every listCommands() call */
+  listCommandsCalls: string[] = [];
   /** Optional per-run override */
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
 
@@ -113,6 +117,15 @@ export class FakeDriver implements Driver {
   async listModels(): Promise<ModelInfo[]> {
     this.listModelsCalls++;
     return typeof this.models === "function" ? this.models() : this.models;
+  }
+
+  get listCommands(): ((cwd: string) => Promise<CommandMatch[]>) | undefined {
+    const commands = this.commands;
+    if (commands === null) return undefined;
+    return async (cwd) => {
+      this.listCommandsCalls.push(cwd);
+      return typeof commands === "function" ? commands(cwd) : commands;
+    };
   }
 
   /** Release every run currently waiting on /hold. */

@@ -1,7 +1,7 @@
 // Driver contract. A driver turns one "run" (a prompt in the context of a session)
 // into a stream of events. Drivers never touch the DB; the orchestrator persists events.
 
-import type { DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentStatus } from "@harness/shared";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 import type { RunInput } from "./input";
 
@@ -139,6 +139,13 @@ export interface Driver {
    * fallback list (shown alongside the error). The orchestrator caches the result.
    */
   listModels(): Promise<ModelInfo[]>;
+  /**
+   * The slash commands and skills an agent working in `cwd` could run, for the composers'
+   * `/command` autocomplete (DESIGN.md "Slash commands"). Only drivers whose agent expands a
+   * leading `/name` itself implement it; the harness passes the text through as written. Throw on
+   * failure; the orchestrator caches the result per driver and folder.
+   */
+  listCommands?(cwd: string): Promise<CommandMatch[]>;
 }
 
 /** A model-list failure that still has something useful to offer (e.g. well-known aliases). */

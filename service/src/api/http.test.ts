@@ -583,6 +583,32 @@ describe("ticket paging + search over http", () => {
     await expect(client.ticketFiles("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
   });
 
+  test("command autocomplete: /projects/:id/commands and /tickets/:key/commands ask the session's driver", async () => {
+    const { client, fake, dir } = await boot();
+    fake.commands = [
+      { name: "code-walk", description: "Walk a user through code" },
+      { name: "code-review", description: "Review the diff", argumentHint: "[pr]" },
+      { name: "vercel:deploy", description: "Deploy" },
+    ];
+    const p = await client.createProject({ path: dir });
+    // The settings' driver (dummy) has no commands; the new session's driver does.
+    expect(await client.projectCommands(p.id, "code")).toEqual([]);
+    expect((await client.projectCommands(p.id, "code", { driver: "fake" })).map((c) => c.name)).toEqual(["code-walk", "code-review"]);
+    expect(await client.projectCommands(p.id, "deploy", { driver: "fake", limit: 1 })).toEqual([{ name: "vercel:deploy", description: "Deploy" }]);
+    await client.updateProject(p.id, { defaultDriver: "fake" });
+    expect((await client.projectCommands(p.id, "")).map((c) => c.name)).toEqual(["code-walk", "code-review", "vercel:deploy"]);
+    expect(fake.listCommandsCalls).toEqual([dir]);
+
+    const onDummy = await client.createTicket({ projectId: p.id, prompt: "x", start: false, driver: "dummy" });
+    expect(await client.ticketCommands(onDummy.key, "code")).toEqual([]);
+    const onFake = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    expect((await client.ticketCommands(onFake.key, "review"))[0]).toEqual({ name: "code-review", description: "Review the diff", argumentHint: "[pr]" });
+
+    await expect(client.projectCommands(p.id, "a", { driver: "nope" })).rejects.toMatchObject({ status: 400 });
+    await expect(client.projectCommands("nope", "a")).rejects.toMatchObject({ status: 404 });
+    await expect(client.ticketCommands("NOPE-9", "a")).rejects.toMatchObject({ status: 404 });
+  });
+
   test("file viewer: /file and /file/diff for projects and tickets, and the browser's /files flags", async () => {
     const { client, dir } = await boot();
     const git = async (...args: string[]) => {

@@ -26,6 +26,7 @@ const env = process.env;
 // SDK control protocol (`-p --input-format stream-json`): answer `initialize` like the real
 // CLI (models etc.), then idle until stdin closes or we're killed. Env:
 //   FAKE_CLAUDE_MODELS       JSON array for response.models (default: two models + "default")
+//   FAKE_CLAUDE_COMMANDS     JSON array for response.commands (default: [])
 //   FAKE_CLAUDE_INIT         "error" → error control_response; "exit" → exit 2 with stderr, no answer;
 //                            "hang" → never answer; "noise" → junk lines + an unrelated response first
 const streamInput = argv[0] === "-p" && argv[argv.indexOf("--input-format") + 1] === "stream-json";
@@ -70,7 +71,10 @@ if (streamInput && !argv.includes("--mcp-config")) {
         say({ type: "control_response", response: { subtype: "success", request_id: "someone-else", response: { models: [] } } });
       }
       if (mode === "error") say({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Already initialized" } });
-      else say({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { commands: [], models, account: { email: "x@y" } } } });
+      else {
+        const commands = env.FAKE_CLAUDE_COMMANDS ? JSON.parse(env.FAKE_CLAUDE_COMMANDS) : [];
+        say({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { commands, models, account: { email: "x@y" } } } });
+      }
     }
   }
   process.exit(0);

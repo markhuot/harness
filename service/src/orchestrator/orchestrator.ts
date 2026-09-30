@@ -15,6 +15,7 @@ import type {
   DriverInfo,
   FileDiff,
   FileMatch,
+  CommandMatch,
   FileView,
   HumanReviewBody,
   ReopenBody,
@@ -57,6 +58,7 @@ import {
   resolvePermissionMode,
   reviewPassed,
   PROMPT_IDS,
+  rankCommands,
   TICKET_STATUSES,
   watcherDriver,
   watcherModel,
@@ -119,6 +121,7 @@ import {
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
+import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands";
 import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
@@ -157,6 +160,8 @@ export interface OrchestratorOptions {
   log?: (msg: string) => void;
   /** Model-list cache tuning (tests) */
   modelCatalog?: ModelCatalogOptions;
+  /** Slash-command list cache tuning (tests) */
+  commandCatalog?: CommandCatalogOptions;
   /**
    * Auto-mode classifier for native-tool drivers. Default: built from settings.classifier
    * (claude-cli / anthropic-api / off). null → none: auto mode asks a human instead.
@@ -377,6 +382,7 @@ export class Orchestrator {
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
+  private commandCatalog: CommandCatalog;
   private gate: PermissionGate;
   private autoModeRules: AutoModeRulesProvider;
   private classifierOption: Classifier | null | undefined;
@@ -411,6 +417,7 @@ export class Orchestrator {
     this.tools = opts.tools ?? ((kind, driver) => toolsForRun(kind, driver));
     this.baseUrl = opts.baseUrl ?? (() => "http://127.0.0.1:0");
     this.log = opts.log ?? ((m) => console.log(`[orchestrator] ${m}`));
+    this.commandCatalog = new CommandCatalog({ log: this.log, ...opts.commandCatalog });
     this.queue = new RunQueue({
       limit: () => this.settings().maxConcurrentRuns,
       execute: (job) => this.execute(job),
@@ -854,6 +861,28 @@ export class Orchestrator {
   ticketFiles(key: string, q: string, limit?: number | string | null, opts: SearchOptions = {}): Promise<FileMatch[]> {
     const root = this.ticketRoot(key);
     return root ? searchPaths(root, q, clampLimit(limit, 50), opts) : Promise.resolve([]);
+  }
+
+  /**
+   * The `/command` autocomplete for a new session in `projectId`: the slash commands and skills
+   * `driverId`'s agent (default: the project's, then the settings') offers in the project folder.
+   */
+  async projectCommands(projectId: string, q: string, limit?: number | string | null, driverId?: string | null): Promise<CommandMatch[]> {
+    const project = this.store.projects.get(projectId);
+    if (!project) throw notFound(`Unknown project: ${projectId}`);
+    const id = driverId || project.defaultDriver || this.settings().defaultDriver;
+    const driver = this.drivers.get(id);
+    if (!driver) throw badRequest(`Unknown driver: ${id}`);
+    return rankCommands(await this.commandCatalog.get(driver, project.path), q.trim(), clampLimit(limit, 50));
+  }
+
+  /** The `/command` autocomplete for a follow-up: what the ticket's agent offers where its next run works. */
+  async ticketCommands(key: string, q: string, limit?: number | string | null): Promise<CommandMatch[]> {
+    const root = this.ticketRoot(key);
+    const { ticket } = this.store.tickets.lookup(key)!;
+    const driver = this.drivers.get(ticket.driver ?? this.store.sessions.get(ticket.sessionId)?.driver ?? "");
+    if (!root || !driver) return [];
+    return rankCommands(await this.commandCatalog.get(driver, root), q.trim(), clampLimit(limit, 50));
   }
 
   /** A file in the project folder for the file viewer (FileView). */

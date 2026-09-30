@@ -4,8 +4,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, ModelInfo, PermissionMode, Settings, SubagentStatus, ToolResultContent } from "@harness/shared";
-import { queryClaudeModels } from "./claude-code-models";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentStatus, ToolResultContent } from "@harness/shared";
+import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
@@ -656,6 +656,15 @@ export class ClaudeCodeDriver implements Driver {
   /** The models the CLI offers this account (org availableModels applied), via `initialize`. */
   async listModels(): Promise<ModelInfo[]> {
     return queryClaudeModels({ bin: this.bin(), env: cleanClaudeEnv(this.env) });
+  }
+
+  /**
+   * The CLI's slash commands and skills for a session in `cwd` (built-ins, ~/.claude and project
+   * skills and commands, plugins), via `initialize`. A prompt that starts with `/name` is expanded
+   * by the CLI itself, so the driver sends it as written.
+   */
+  async listCommands(cwd: string): Promise<CommandMatch[]> {
+    return parseClaudeCommands((await queryClaudeInitialize({ bin: this.bin(), env: cleanClaudeEnv(this.env), cwd }))?.commands);
   }
 
   async login(): Promise<{ url: string | null; message: string }> {
