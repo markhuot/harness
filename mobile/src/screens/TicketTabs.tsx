@@ -311,13 +311,13 @@ export function DetailsTab({ ticket }: { ticket: Ticket }) {
         {ticket.externalRef && (
           <Prop label="External">
             <Text
-              style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14, fontFamily: MONO, textAlign: "right", flexShrink: 1 }}
+              style={{ color: ticket.externalRef.url ? c.accentText : c.text, fontSize: 14, textAlign: "right", flexShrink: 1 }}
               accessibilityRole={ticket.externalRef.url ? "link" : undefined}
               onPress={ticket.externalRef.url ? () => void Linking.openURL(ticket.externalRef!.url!) : undefined}
             >
-              {ticket.externalRef.key}
+              <Text style={{ fontFamily: MONO }}>{ticket.externalRef.key}</Text>
               {ticket.externalRef.url ? " ↗" : ""}
-              <Text style={{ color: c.text3, fontFamily: undefined }}> · {ticket.externalRef.source === "manual" ? "set by hand" : `via ${ticket.externalRef.source}`}</Text>
+              <Text style={{ color: c.text3 }}> · {ticket.externalRef.source === "manual" ? "set by hand" : `via ${ticket.externalRef.source}`}</Text>
             </Text>
           </Prop>
         )}
