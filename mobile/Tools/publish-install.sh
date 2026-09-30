@@ -12,7 +12,7 @@
 # manifest.plist (HTTPS, text/xml) are regenerated and deployed to https://harness-install.vercel.app.
 # Neither artifact carries a token: pairing provides it.
 # A published release also goes to TestFlight: the same archive is exported for App Store Connect
-# and uploaded (ExportOptions-testflight.plist, with the Xcode account's credentials), then
+# and uploaded (ExportOptions-testflight.plist, signed in with the ASC API key), then
 # Tools/testflight.ts adds it to the external "Public" group, submits it for Beta App Review and
 # hands the group's public link to the install page. That step needs ASC_KEY_ID and ASC_ISSUER_ID
 # (see Tools/testflight.ts); --skip-testflight leaves TestFlight alone.
@@ -161,10 +161,15 @@ if [[ $SKIP_IOS -eq 0 ]]; then
       echo "==> TestFlight already has build $BUILD_NUMBER; not uploading again"
     else
       echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
+      # Sign in with the same API key testflight.ts uses, not the Apple account in Xcode's settings,
+      # whose keychain token expires ("Failed to Use Accounts ... missing Xcode-Token").
       xcodebuild -exportArchive \
         -archivePath build/Harness.xcarchive \
         -exportOptionsPlist ExportOptions-testflight.plist \
         -exportPath build/ipa-testflight \
+        -authenticationKeyPath "${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8}" \
+        -authenticationKeyID "$ASC_KEY_ID" \
+        -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
         -allowProvisioningUpdates > build/upload.log 2>&1 || { tail -40 build/upload.log >&2; exit 1; }
     fi
     echo "==> Distributing to the TestFlight public group (waits for App Store Connect to process the build)"
