@@ -8,6 +8,7 @@ import { ProjectKey } from "../components/ProjectKey";
 import { forgetProjectPanes } from "../state/panes";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
+import { countSegments, sidebarCounts, type StatusCounts } from "../state/sidebarCounts";
 
 export function Sidebar({
   onNewSession,
@@ -39,12 +40,7 @@ export function Sidebar({
   useRovingList(local, { owner: "sidebar" });
   useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
-  const openCounts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const t of Object.values(state.tickets)) if (t.status !== "done") c[t.projectId] = (c[t.projectId] ?? 0) + 1;
-    return c;
-  }, [state.tickets]);
-  const totalOpen = Object.values(openCounts).reduce((a, b) => a + b, 0);
+  const counts = useMemo(() => sidebarCounts(Object.values(state.tickets)), [state.tickets]);
   const triaging = triageSessions(state).filter((s) => s.triageStatus === "triaging" || s.busy).length;
 
   const addProject = async () => {
@@ -148,7 +144,7 @@ export function Sidebar({
               label="All projects"
               active={onBoard && route.projectId === null}
               onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" })}
-              count={totalOpen}
+              counts={counts.total}
             />
           </nav>
 
@@ -172,7 +168,7 @@ export function Sidebar({
                   prefix={<ProjectKey project={p} />}
                   active={(onBoard && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id)}
                   onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" })}
-                  count={openCounts[p.id]}
+                  counts={counts.byProject[p.id]}
                 />
                 <button className="nav-gear" title={`${p.name} settings`} aria-label={`${p.name} settings`} onClick={() => openSettings(p)}>
                   <Icon name="settings" size={13} />
@@ -208,7 +204,7 @@ function NavItem(props: {
   title?: string;
   active?: boolean;
   onClick: () => void;
-  count?: number;
+  counts?: StatusCounts;
   badge?: React.ReactNode;
 }) {
   return (
@@ -217,7 +213,25 @@ function NavItem(props: {
       {props.prefix}
       <span className="grow truncate">{props.label}</span>
       {props.badge}
-      {!props.badge && props.count ? <span className="nav-count">{props.count}</span> : null}
+      {!props.badge && <CountPill counts={props.counts} />}
     </button>
+  );
+}
+
+const LABEL = { in_progress: "in progress", blocked: "blocked", review: "in review" } as const;
+
+/** In progress, blocked and review as one pill of colored segments, leaving out the zeros. */
+function CountPill({ counts }: { counts?: StatusCounts }) {
+  const segs = countSegments(counts);
+  if (!segs.length) return null;
+  const label = segs.map((s) => `${s.n} ${LABEL[s.status]}`).join(", ");
+  return (
+    <span className="nav-count" role="img" aria-label={label} title={label}>
+      {segs.map((s) => (
+        <span key={s.status} className="nav-count-seg" style={{ ["--seg" as string]: `var(--c-${s.status})` }}>
+          {s.n}
+        </span>
+      ))}
+    </span>
   );
 }

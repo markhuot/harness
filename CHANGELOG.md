@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On the Mac, the sidebar's ticket count next to All projects and each project is now a small
+  colored pill that splits the count into in progress (yellow), blocked (red), and in review
+  (purple). A status with no tickets drops out, so a board with one ticket in progress shows a
+  single yellow 1. Planning and done tickets aren't counted. Hover the pill to see what each
+  number means.
+
 ## [app-20260930.0009](https://github.com/markhuot/harness/releases/tag/app-20260930.0009) - 2026-09-30
 
 ### Added

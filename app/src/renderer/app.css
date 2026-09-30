@@ -154,10 +154,27 @@
   color: var(--text-3);
   font-weight: 400;
 }
+/* In progress / blocked / review: one rounded pill, a tinted segment per nonzero column. */
 .nav-count {
-  font-size: 11px;
-  color: var(--text-3);
+  display: inline-flex;
+  flex: none;
+  height: 16px;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+.nav-count-seg {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  padding: 0 5px;
+  background: color-mix(in srgb, var(--seg) 24%, transparent);
+  color: color-mix(in srgb, var(--seg) 88%, var(--text));
+}
+.nav-count-seg + .nav-count-seg {
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--bg-sidebar) 60%, transparent);
 }
 .nav-live {
   font-size: 10.5px;
