@@ -131,11 +131,16 @@ export type InlineToken =
   | { t: "code"; text: string }
   | { t: "strong"; text: string }
   | { t: "em"; text: string }
-  | { t: "link"; text: string; url: string };
+  | { t: "link"; text: string; url: string }
+  | { t: "ticket"; key: string };
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)/g;
+const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)/g;
 
-/** Inline markup of one line. Links are only produced for http(s) URLs; other [label](x) keep the label. */
+/**
+ * Inline markup of one line. Links are only produced for http(s) URLs; other [label](x) keep the label.
+ * An UPPERCASE-NN word is a "ticket" token; renderers link it only when it names a ticket they
+ * can open (ticketLinkable), so "UTF-8" or "SHA-256" stay plain text.
+ */
 export function inlineTokens(text: string): InlineToken[] {
   const out: InlineToken[] = [];
   let last = 0;
@@ -150,6 +155,7 @@ export function inlineTokens(text: string): InlineToken[] {
       const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s)!;
       out.push(/^https?:/.test(mm[2]!) ? { t: "link", text: mm[1]!, url: mm[2]! } : { t: "text", text: mm[1]! });
     } else if (m[5]) out.push({ t: "link", text: s, url: s });
+    else if (m[6]) out.push({ t: "ticket", key: s });
     last = idx + s.length;
   }
   if (last < text.length) out.push({ t: "text", text: text.slice(last) });
