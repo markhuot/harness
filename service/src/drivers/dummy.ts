@@ -85,7 +85,16 @@ export function watcherProject(prompt: string): string | null {
   return promptSection(prompt, "What the human wants").match(/\[dummy:project ([A-Za-z0-9_]+)\]/)?.[1] ?? null;
 }
 
-/** The first external key (FOO-123) in the watcher's output: the key a dispatch mirrors. */
+/**
+ * The `[dummy:ticket KEY]` a watcher's prompt names, if any: the existing local ticket a dispatch
+ * sends its update to (dispatch_ticket's ticket_key). Only the watcher's prompt counts, so a test
+ * says which ticket it means; the output's key alone never picks one.
+ */
+export function watcherTicket(prompt: string): string | null {
+  return promptSection(prompt, "What the human wants").match(/\[dummy:ticket ([A-Za-z][A-Za-z0-9_]*-\d+)\]/)?.[1]?.toUpperCase() ?? null;
+}
+
+/** The first external key (FOO-123) in the watcher's output: the remote ID a dispatch links. */
 export function outputKey(prompt: string): string | undefined {
   return watcherOutput(prompt).match(/\b[A-Z][A-Z0-9_]*-\d+\b/)?.[0];
 }
@@ -425,9 +434,11 @@ export class DummyDriver implements Driver {
 
       case "triage": {
         // The watcher's prompt names the project (`[dummy:project KEY]`); the output can't. The
-        // first external key in the output is the key to mirror.
+        // first external key in the output is the remote ID to link, and `[dummy:ticket KEY]` in
+        // the watcher's prompt names an existing ticket to send the update to instead.
         const project = watcherProject(prompt);
         const key = outputKey(prompt);
+        const ticketKey = watcherTicket(prompt);
         const title = prompt.match(/^Inbox title:[ \t]*"(.+)"$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
         // A watcher prompt can also carry a rule: `[dummy:dispatch-if /regex/flags]`. Only the
         // watcher's prompt sets it and only the output is matched.
@@ -443,6 +454,7 @@ export class DummyDriver implements Driver {
             yield* say(`Dispatching to ${project}.`);
             const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}`, start: true };
             if (key) input.key = key;
+            if (ticketKey) input.ticket_key = ticketKey;
             yield* call("dispatch_ticket", input);
           }
         } else if (prompt.includes("[unscoped]")) {
@@ -456,6 +468,7 @@ export class DummyDriver implements Driver {
           yield* say(`Dispatching to ${project}${big ? " as a conductor ticket" : ""}.`);
           const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}` };
           if (key) input.key = key;
+          if (ticketKey) input.ticket_key = ticketKey;
           input.start = true;
           if (big) input.conductor = true;
           yield* call("dispatch_ticket", input);

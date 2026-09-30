@@ -28,6 +28,8 @@ import type {
   SummaryAttachment,
   SummaryAuthor,
   Ticket,
+  RelatedTicket,
+  RemoteKeyMatches,
   TicketDetail,
   TicketStatus,
   TranscriptContent,
@@ -36,7 +38,7 @@ import type {
   Watcher,
 } from "@harness/shared";
 import type { PromptEntry, PromptId } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, isCompletionAction, LISTEN_MODES, normalizeProjectColor, offeredCompletionActions, outputTitle, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
+import { buildPairUrl, checkProjectKey, isCompletionAction, isLegacyMirror, isTicketKey, LISTEN_MODES, normalizeProjectColor, offeredCompletionActions, outputTitle, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
 import type { CompletionAction } from "@harness/shared";
 // The real catalog, so the Prompts screen shows the text runs get.
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
@@ -886,6 +888,69 @@ function seed() {
   }
   site.nextSeq = 131;
 
+  // Remote IDs (DESIGN.md "Remote IDs"): a native MH-62, and two tickets with their own keys
+  // linked to Jira's MH-62 (a PR review's stages), so the board shows "MH-62 · MH-124" and
+  // "MH-62 · MH-130" beside the native MH-62. OPS-41 is a remote ID with no local ticket of that
+  // key: opening it (#/board/all/ticket/OPS-41) lists the two tickets linked to it.
+  const mh = seedProject("MH", "markhuot.com", "/Users/markhuot/Sites/markhuot.com", true, "teal", true, "github.com");
+  const jira = (key: string, summary: string): Ticket["externalRef"] => ({ source: "jira", key, url: `https://happycog.atlassian.net/browse/${key}`, raw: { key, summary } });
+  seedTicket({
+    project: mh,
+    key: "MH-62",
+    title: "Newsletter signup posts twice on slow connections",
+    description: "The signup form doesn't disable its button while the request is in flight.",
+    status: "in_progress",
+    driver: "claude-code",
+    ageMin: 400,
+    summaries: [["agent", "Reproduced with network throttling. The button re-enables before the response lands."]],
+  });
+  seedTicket({
+    project: mh,
+    key: "MH-124",
+    title: "Review the checkout PR: API changes",
+    description: "Jira MH-62, stage 1: review the order API changes in the checkout PR.",
+    status: "review",
+    driver: "claude-code",
+    agentReview: "approved",
+    externalRef: jira("MH-62", "Checkout rewrite"),
+    ageMin: 180,
+    summaries: [["agent", "Reviewed the order API. Two comments on idempotency keys; otherwise good."]],
+  });
+  seedTicket({
+    project: mh,
+    key: "MH-130",
+    title: "Review the checkout PR: UI pass",
+    description: "Jira MH-62, stage 2: review the checkout UI once the API changes land.",
+    status: "in_progress",
+    driver: "claude-code",
+    externalRef: jira("MH-62", "Checkout rewrite"),
+    dependsOn: ["MH-124"],
+    ageMin: 60,
+  });
+  seedTicket({
+    project: mh,
+    key: "MH-131",
+    title: "Rotate the CDN signing key",
+    description: "Jira OPS-41: rotate the key and update the edge config.",
+    status: "planning",
+    driver: "claude-code",
+    externalRef: jira("OPS-41", "Rotate CDN keys"),
+    ageMin: 45,
+  });
+  seedTicket({
+    project: mh,
+    key: "MH-132",
+    title: "Rotate the CDN signing key on staging",
+    description: "Jira OPS-41, staging first.",
+    status: "done",
+    driver: "claude-code",
+    agentReview: "approved",
+    humanReview: "approved",
+    externalRef: jira("OPS-41", "Rotate CDN keys"),
+    ageMin: 50,
+  });
+  mh.nextSeq = 133;
+
   // Triage sessions
   const t1 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Paywall meter counts AMP pageviews twice", now() - 95 * 60_000);
   t1.triageStatus = "dispatched";
@@ -896,6 +961,10 @@ function seed() {
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 3, role: "tool", content: { type: "tool_result", callId: "c1", name: "dispatch_ticket", output: [{ type: "text", text: "Created FOO-123" }], isError: false }, createdAt: t1.createdAt + 6000 },
     { id: newId("te"), sessionId: t1.id, runId: null, seq: 4, role: "system", content: { type: "status", text: "Dispatched to NYTIMES" }, createdAt: t1.createdAt + 7000 },
   );
+  const t3 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", mh.path, "Checkout rewrite: UI ready for review", now() - 61 * 60_000);
+  t3.triageStatus = "dispatched";
+  t3.outcome = "Dispatched to MH-130 (MH-62) in MH (started).";
+  transcripts.get(t3.id)!.push({ id: newId("te"), sessionId: t3.id, runId: null, seq: 1, role: "user", content: { type: "text", text: "New output from watcher jira:\n\nMH-62 Checkout rewrite: UI ready for review" }, createdAt: t3.createdAt });
   const t2 = makeSession(`TRIAGE-${++triageSeq}`, "triage", null, "claude-code", ny.path, "Recipe card print styles broken in Safari", now() - 2 * 60_000);
   t2.triageStatus = "triaging";
   t2.busy = true;
@@ -971,9 +1040,21 @@ const ok = (data: unknown, status = 200) => Response.json({ data }, { status, he
 const fail = (status: number, error: string) => Response.json({ error }, { status, headers: CORS });
 
 class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public data?: unknown) {
     super(message);
   }
+}
+
+/**
+ * Like the service's relatedTickets: tickets linked to `requested` as their remote ID, or to the
+ * found ticket's own remote ID, newest first, without the ticket itself or drafts.
+ */
+function relatedTickets(requested: string, t?: Ticket): RelatedTicket[] {
+  const ids = new Set([requested.toUpperCase(), ...(t?.externalRef ? [t.externalRef.key.toUpperCase()] : [])]);
+  return [...tickets.values()]
+    .filter((o) => o !== t && !o.draft && !!o.externalRef && ids.has(o.externalRef.key.toUpperCase()))
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((o) => ({ key: o.key, title: o.title, status: o.status, projectId: o.projectId, externalKey: o.externalRef!.key }));
 }
 
 /** By current key, else by an old key (resolvedFrom = the alias it came through). */
@@ -1004,6 +1085,9 @@ function searchRank(t: Ticket, q: string): number | null {
   const needle = q.toLowerCase();
   const keys = [t.key, ...[...keyAliases].filter(([, id]) => id === t.id).map(([k]) => k)].map((k) => k.toLowerCase());
   if (keys.some((k) => k === needle || k.startsWith(needle))) return 0;
+  // A remote ID hit ranks after local keys, above the title.
+  const remote = t.externalRef?.key.toLowerCase();
+  if (remote && (remote === needle || remote.startsWith(needle))) return 0.5;
   if (t.title.toLowerCase().includes(needle)) return 1;
   const latest = summaries.filter((s) => s.ticketId === t.id).at(-1)?.body ?? "";
   if (t.description.toLowerCase().includes(needle) || latest.toLowerCase().includes(needle)) return 2;
@@ -1020,12 +1104,12 @@ function paginate(list: Ticket[], url: URL) {
   return { tickets: page, nextCursor: offset + limit < list.length ? `o:${offset + limit}` : null, total: list.length };
 }
 
-/** Same rules as the service: native OLD-n → NEW-n, external mirrors keep their keys. */
+/** Same rules as the service: native OLD-n → NEW-n (linked tickets too), legacy mirrors (key = remote ID) keep their keys. */
 function renameProjectKey(p: Project, key: string) {
   const other = [...projects.values()].find((o) => o.id !== p.id && o.key === key);
   if (other) throw new HttpError(409, `Project key ${key} is already used by ${other.name}`);
   const prefix = `${p.key}-`;
-  const native = [...tickets.values()].filter((t) => t.projectId === p.id && !t.externalRef && t.key.startsWith(prefix) && /^\d+$/.test(t.key.slice(prefix.length)));
+  const native = [...tickets.values()].filter((t) => t.projectId === p.id && !isLegacyMirror(t) && t.key.startsWith(prefix) && /^\d+$/.test(t.key.slice(prefix.length)));
   const map = new Map(native.map((t) => [t.key, `${key}-${t.key.slice(prefix.length)}`]));
   const clash = [...map.values()].filter((k) => {
     const hit = byKey(k);
@@ -1060,6 +1144,7 @@ function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDeta
     runs: [...runs.values()].filter((r) => r.sessionId === t.sessionId),
     dependents: [...tickets.values()].filter((o) => o.dependsOn.includes(t.key)).map((o) => o.key),
     children: [...tickets.values()].filter((o) => o.parentId === t.id),
+    relatedTickets: relatedTickets(resolvedFrom ?? t.key, t),
   };
 }
 
@@ -1371,7 +1456,13 @@ async function route(req: Request, url: URL): Promise<Response> {
     }
     if (!b && method === "POST") return ok(createTicket(await readBody(req)), 201);
     const found = lookupTicket(b!);
-    if (!found) throw new HttpError(404, `Ticket ${b} not found`);
+    if (!found) {
+      // A remote ID never opens a ticket: GET points to the tickets linked to it.
+      const requested = decodeURIComponent(b!).toUpperCase();
+      const related = !c && method === "GET" ? relatedTickets(requested) : [];
+      if (related.length) throw new HttpError(404, `${requested} is a remote ID, not a ticket key`, { requested, relatedTickets: related } satisfies RemoteKeyMatches);
+      throw new HttpError(404, `Ticket ${b} not found`);
+    }
     const t = found.ticket;
     if (!c) {
       if (method === "GET") return ok(ticketDetail(t, found.alias));
@@ -1398,6 +1489,16 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (body.model !== undefined) t.model = body.model || null;
         if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
         if (body.baseBranch !== undefined) t.baseBranch = body.baseBranch || null;
+        if (body.externalRef !== undefined) {
+          if (body.externalRef === null) t.externalRef = null;
+          else {
+            const key = String(body.externalRef.key ?? "").trim().toUpperCase();
+            if (!isTicketKey(key)) throw new HttpError(400, `externalRef.key must look like FOO-123 (got "${body.externalRef.key ?? ""}")`);
+            const url = typeof body.externalRef.url === "string" && body.externalRef.url.trim() ? body.externalRef.url.trim() : null;
+            if (url && !/^https?:\/\//i.test(url)) throw new HttpError(400, "externalRef.url must be an http(s) URL");
+            t.externalRef = { source: "manual", key, url, raw: null };
+          }
+        }
         if (body.branch !== undefined) {
           if (t.branch) throw new HttpError(409, `${t.key} already has a worktree on ${t.branch}; ask its agent to move it with update_branch`);
           t.requestedBranch = body.branch || null;
@@ -2050,7 +2151,7 @@ const server = Bun.serve<WsData>({
     try {
       return await route(req, url);
     } catch (e) {
-      if (e instanceof HttpError) return fail(e.status, e.message);
+      if (e instanceof HttpError) return e.data === undefined ? fail(e.status, e.message) : Response.json({ error: e.message, data: e.data }, { status: e.status, headers: CORS });
       console.error(e);
       return fail(500, e instanceof Error ? e.message : String(e));
     }

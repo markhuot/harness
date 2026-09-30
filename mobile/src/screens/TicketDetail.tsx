@@ -7,7 +7,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextIn
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { approveLabel, completionOptions, isConductor, type CompletionAction, type Ticket } from "@harness/shared";
+import { approveLabel, completionOptions, isConductor, keyLabel, secondaryKey, type CompletionAction, type RelatedTicket, type Ticket } from "@harness/shared";
 import {
   CHAT_PLACEHOLDER,
   chatHint,
@@ -40,7 +40,7 @@ import {
 import { useColors } from "../state/app";
 import { useAction, useStore } from "../state/store";
 import { MONO } from "../theme/tokens";
-import { Badge, Button, DriverBadge, Empty, KindBadge, ProjectKey, ReviewMark, Spinner, StatusPill } from "../ui/kit";
+import { Badge, Button, Card, DriverBadge, Empty, KindBadge, ProjectKey, ReviewMark, Spinner, StatusPill } from "../ui/kit";
 import { KeyboardAvoider, useKeyboardShown } from "../ui/KeyboardAvoider";
 import { ModelBadge } from "../ui/selects";
 import { ParentCrumb } from "../ui/Conductor";
@@ -69,11 +69,13 @@ import { AgentsTab, SubagentView } from "./AgentsTab";
 import { BrowserTab } from "./BrowserTab";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ALL_ORIENTATIONS } from "../ui/orientations";
+import { TicketKey } from "../ui/TicketKey";
+import { RelatedTicketRows } from "../ui/RelatedTickets";
 
 export function TicketDetailScreen() {
   const params = useLocalSearchParams<{ key: string; tab?: string }>();
   const ticketKey = String(params.key ?? "");
-  const { state, loadDetail, watchKey, epoch } = useStore();
+  const { state, loadDetail, watchKey, epoch, related } = useStore();
   const router = useRouter();
   const c = useColors();
   const [missing, setMissing] = useState(false);
@@ -121,6 +123,10 @@ export function TicketDetailScreen() {
   useEffect(() => {
     if (isDraft) router.replace({ pathname: "/new", params: { key: ticketKey } });
   }, [isDraft, ticketKey, router]);
+
+  // A remote ID never opens a ticket (DESIGN.md "Remote IDs"): it lists the tickets linked to it.
+  const remote = missing && !ticket ? related.byRemoteKey[ticketKey.toUpperCase()] : undefined;
+  if (remote?.length) return <RemoteIdScreen remoteKey={ticketKey.toUpperCase()} related={remote} />;
 
   if (!ticket || ticket.draft) {
     return (
@@ -170,21 +176,41 @@ export function TicketDetailScreen() {
   );
 }
 
+/** A key that is only a remote ID: the tickets linked to it, to open one. */
+function RemoteIdScreen({ remoteKey, related }: { remoteKey: string; related: RelatedTicket[] }) {
+  const c = useColors();
+  const router = useRouter();
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: c.bg }} contentContainerStyle={{ padding: 14, gap: 14, paddingTop: 28 }}>
+      <Stack.Screen options={{ title: remoteKey }} />
+      <Empty icon="link" title={`Remote ID ${remoteKey}`}>
+        {related.length === 1 ? "One ticket is linked to it." : `${related.length} tickets are linked to it.`}
+      </Empty>
+      <Card>
+        <RelatedTicketRows related={related} onOpen={(key) => router.replace({ pathname: "/ticket/[key]", params: { key } })} />
+      </Card>
+    </ScrollView>
+  );
+}
+
 function Header({ ticket }: { ticket: Ticket }) {
   const { client } = useStore();
   const c = useColors();
   const act = useAction();
   const router = useRouter();
   const k = ticket.key;
+  const label = keyLabel(ticket);
   const remove = async () => {
-    if (!(await confirm(`Delete ${k}?`, "Its transcript and summaries are removed too.", "Delete"))) return;
-    const ok = await act(() => client.deleteTicket(k), `${k} deleted`);
+    if (!(await confirm(`Delete ${label}?`, "Its transcript and summaries are removed too.", "Delete"))) return;
+    const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
     if (ok) router.back();
   };
   return (
     <Stack.Screen
       options={{
-        title: k,
+        title: label,
+        // Linked to a remote ID: the local key after it, muted (the title string is the back button's).
+        ...(secondaryKey(ticket) ? { headerTitle: () => <TicketKey ticket={ticket} size={17} color={c.text} style={{ fontWeight: "600" }} /> } : {}),
         headerTitleStyle: { fontFamily: MONO, color: c.text } as never,
         unstable_headerRightItems: () => [
           menuItem("More", "ellipsis.circle", [
@@ -193,7 +219,7 @@ function Header({ ticket }: { ticket: Ticket }) {
             ...(ticket.busy ? [action("Cancel run", "stop.circle", () => void act(() => client.cancelTicket(k), "Run cancelled"), { destructive: true })] : []),
             ...(ticket.pullRequestUrl ? [action("Open pull request", "arrow.triangle.pull", () => void Linking.openURL(ticket.pullRequestUrl!))] : []),
             // In review, the Approve menu's "Approve and take no action" does this (and records the approval).
-            ...(ticket.status !== "done" && ticket.status !== "review" ? [action("Mark done", "checkmark.circle", () => void act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`))] : []),
+            ...(ticket.status !== "done" && ticket.status !== "review" ? [action("Mark done", "checkmark.circle", () => void act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`))] : []),
             action("Delete ticket", "trash", () => void remove(), { destructive: true }),
           ]),
         ],
@@ -220,22 +246,23 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
   const k = ticket.key;
+  const label = keyLabel(ticket);
   const opts = completionOptions(ticket, project, parent);
   const send = (req: ApproveRequest, toast: string) => act(() => (req.via === "review" ? client.humanReview(k, req.body) : client.completeTicket(k, req.body)), toast);
   const approveMenu = async () => {
-    const choice = await pick({ title: `Approve ${k}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: approveMenuChoices(opts) });
+    const choice = await pick({ title: `Approve ${label}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: approveMenuChoices(opts) });
     if (!choice) return;
     if (choice === "custom") return setApprovingCustom(true);
     haptic("success");
-    await send(approveRequest(choice), approveToast(choice, k));
+    await send(approveRequest(choice), approveToast(choice, label));
   };
   // After the human approved: complete another way, or take no action (no agent run).
   const completeMenu = async () => {
-    const choice = await pick({ title: `Complete ${k}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: completeMenuChoices(opts, ready && !ticket.busy) });
+    const choice = await pick({ title: `Complete ${label}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: completeMenuChoices(opts, ready && !ticket.busy) });
     if (!choice) return;
     if (choice === "custom") return setCompleting("custom");
     haptic("success");
-    await act(() => client.completeTicket(k, completeMenuRequest(choice)), choice === "none" ? `${k} marked done` : "Completion run queued");
+    await act(() => client.completeTicket(k, completeMenuRequest(choice)), choice === "none" ? `${label} marked done` : "Completion run queued");
   };
 
   return (
@@ -474,7 +501,7 @@ function RequestChanges({ ticket, onClose, reopen = false }: { ticket: Ticket; o
     if (ok) onClose();
   };
   return (
-    <SheetFrame title={reopen ? "Re-open" : "Request changes"} subtitle={ticket.key} onClose={onClose} primary={<Button title="Send" variant="primary" disabled={!notes.trim()} onPress={() => void submit()} />}>
+    <SheetFrame title={reopen ? "Re-open" : "Request changes"} subtitle={keyLabel(ticket)} onClose={onClose} primary={<Button title="Send" variant="primary" disabled={!notes.trim()} onPress={() => void submit()} />}>
       <TextInput autoFocus multiline placeholder={reopen ? "What should the agent do now?" : "What should the agent change?"} placeholderTextColor={c.text3} value={notes} onChangeText={setNotes} style={{ minHeight: 160, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
       <Text style={{ color: c.text3, fontSize: 13 }}>
         {reopen
@@ -513,7 +540,7 @@ function ApproveCustom({ ticket, onClose }: { ticket: Ticket; onClose: () => voi
     }
   };
   return (
-    <SheetFrame title="Approve and…" subtitle={ticket.key} onClose={onClose} primary={<Button title="Approve" variant="primary" disabled={!instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
+    <SheetFrame title="Approve and…" subtitle={keyLabel(ticket)} onClose={onClose} primary={<Button title="Approve" variant="primary" disabled={!instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
       <TextInput autoFocus multiline placeholder="What should the agent do with the work? e.g. “deploy it to staging, then open a PR”" placeholderTextColor={c.text3} value={instructions} onChangeText={setInstructions} accessibilityLabel="Completion instructions" style={{ minHeight: 140, textAlignVertical: "top", borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bgElev, color: c.text, padding: 12, fontSize: 16 }} />
       <Text style={{ color: c.text3, fontSize: 13 }}>Once the ticket is ready, the agent finishes the work following these instructions and marks it done.</Text>
     </SheetFrame>
@@ -540,7 +567,7 @@ function Complete({ ticket, initialAction, onClose }: { ticket: Ticket; initialA
   };
   const what = opts.parentBranch ? `merges the branch into ${opts.parentBranch}` : { merge: "merges the worktree branch", pr: "pushes the branch and opens a pull request", custom: "follows your instructions" }[choice];
   return (
-    <SheetFrame title={`Complete ${ticket.key}`} onClose={onClose} primary={<Button title="Complete" variant="primary" disabled={choice === "custom" && (choose || !!initialAction) && !instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
+    <SheetFrame title={`Complete ${keyLabel(ticket)}`} onClose={onClose} primary={<Button title="Complete" variant="primary" disabled={choice === "custom" && (choose || !!initialAction) && !instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
       {choose && (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
           <Text style={{ color: c.text, fontSize: 15 }}>When approved</Text>

@@ -956,7 +956,7 @@ describe("triage", () => {
 
   const ROUTE = "Dispatch Jira work. [dummy:project ACME]";
 
-  test("the watcher's prompt names the project; the output's key becomes the ticket key", async () => {
+  test("the watcher's prompt names the project; the output's key becomes the ticket's remote ID", async () => {
     const h = setup();
     const s = await h.orch.injectOutput("jira", { key: "FOO-123", summary: "Fix login", url: "https://x/FOO-123", updated: "1" }, ROUTE);
     expect(s!.key).toBe("TRIAGE-1");
@@ -967,9 +967,11 @@ describe("triage", () => {
     await h.orch.idle();
     const session = h.orch.getSession(s!.id);
     expect(session.triageStatus).toBe("dispatched");
-    expect(session.outcome).toBe("Dispatched to FOO-123 in ACME");
+    expect(session.outcome).toBe("Dispatched to ACME-1 (FOO-123) in ACME");
     expect(session.title).toBe("Work for FOO-123"); // triage's title replaces the first line
-    const t = h.orch.ticketDetail("FOO-123").ticket;
+    // The ticket gets the project's next key; the remote ID is only a link, never a lookup key.
+    expect(() => h.orch.ticketDetail("FOO-123")).toThrow(expect.objectContaining({ status: 404 }));
+    const t = h.orch.ticketDetail("ACME-1").ticket;
     expect(t.projectId).toBe(h.project.id);
     expect(t.externalRef).toMatchObject({ source: "jira", key: "FOO-123", url: "https://x/FOO-123" });
     expect(t.status).toBe("review"); // start: true → worked → reviewed
@@ -1017,20 +1019,20 @@ describe("triage", () => {
     await h.orch.idle();
   });
 
-  test("an existing ticket mentioned in the output gets a message instead of a duplicate", async () => {
+  test("a ticket linked to the output's key is listed for triage, and ticket_key sends it the update", async () => {
     const h = setup();
     await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v1", updated: "1" }, ROUTE);
     await h.orch.idle();
-    const before = h.orch.ticketDetail("FOO-9");
+    const before = h.orch.ticketDetail("ACME-1");
     expect(before.ticket.status).toBe("review");
-    const s2 = await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v2", updated: "2" }, ROUTE);
-    expect(lastTriagePrompt(h)).toMatch(/## Existing tickets\n[^\n]*\n\* FOO-9 "Work for FOO-9", status review/);
+    const s2 = await h.orch.injectOutput("jira", { key: "FOO-9", summary: "v2", updated: "2" }, `${ROUTE} [dummy:ticket ACME-1]`);
+    expect(lastTriagePrompt(h)).toMatch(/## Existing tickets\n[^\n]*\n\* ACME-1 "Work for FOO-9", status review, remote ID FOO-9/);
     await h.orch.idle();
-    expect(h.orch.getSession(s2!.id).outcome).toBe("Sent update to existing FOO-9");
-    expect(h.orch.listTickets().filter((t) => t.key === "FOO-9").length).toBe(1);
+    expect(h.orch.getSession(s2!.id).outcome).toBe("Sent update to existing ACME-1");
+    expect(h.orch.listTickets().length).toBe(1);
     const lastWork = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect(lastWork.prompt).toBe("Handle FOO-9");
-    expect(h.orch.ticketDetail("FOO-9").runs.length).toBeGreaterThan(before.runs.length);
+    expect(h.orch.ticketDetail("ACME-1").runs.length).toBeGreaterThan(before.runs.length);
   });
 
   test("dispatch without a key uses the project's next key and makes no mirror", async () => {
@@ -1051,21 +1053,21 @@ describe("triage", () => {
     let declineErr: unknown = null;
     h.driver.script = async function* (req) {
       const ops = req.toolContext.ops;
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "ACME-7", title: "First", description: "one" });
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "ACME-8", title: "Second", description: "two" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-7", title: "First", description: "one" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-8", title: "Second", description: "two" });
       try {
         await ops.declineWork(req.toolContext, "changed my mind");
       } catch (e) {
         declineErr = e;
       }
     };
-    const s = await h.orch.injectOutput("jira", '{"key":"ACME-7"}\n{"key":"ACME-8"}');
+    const s = await h.orch.injectOutput("jira", '{"key":"JIRA-7"}\n{"key":"JIRA-8"}');
     await h.orch.idle();
     const session = h.orch.getSession(s!.id);
     expect(session.triageStatus).toBe("dispatched");
-    expect(session.outcome).toBe("Dispatched to ACME-7 in ACME; Dispatched to ACME-8 in ACME");
+    expect(session.outcome).toBe("Dispatched to ACME-1 (JIRA-7) in ACME; Dispatched to ACME-2 (JIRA-8) in ACME");
     expect(session.title).toBe("First");
-    expect(h.orch.listTickets().map((t) => t.key).sort()).toEqual(["ACME-7", "ACME-8"]);
+    expect(h.orch.listTickets().map((t) => [t.key, t.externalRef?.key]).sort()).toEqual([["ACME-1", "JIRA-7"], ["ACME-2", "JIRA-8"]]);
     expect(String(declineErr)).toContain("already dispatched");
   });
 
@@ -1085,7 +1087,7 @@ describe("triage", () => {
     const h = setup();
     await h.orch.injectOutput("jira", { key: "FOO-50", summary: "[big] migrate everything" }, ROUTE);
     await Bun.sleep(20);
-    expect(h.orch.ticketDetail("FOO-50").ticket.kind).toBe("conductor");
+    expect(h.orch.ticketDetail("ACME-1").ticket).toMatchObject({ kind: "conductor", externalRef: { key: "FOO-50" } });
     await h.orch.idle(20_000);
 
     h.driver.script = async function* () {

@@ -198,6 +198,13 @@ describe("Cli new / tickets", () => {
     out.length = 0;
     expect(await cli.run(["tickets"])).toBe(0);
     expect(out[0]).toMatch(/MYAPP-3\s+draft\s/);
+    // A ticket linked to a remote ID is listed by it, with its local key alongside.
+    await running.orchestrator.createTicket({ projectId: project.id, prompt: "From jira", start: false, driver: "dummy", externalRef: { source: "jira", key: "JIRA-5", url: null, raw: null } });
+    await running.orchestrator.idle();
+    out.length = 0;
+    expect(await cli.run(["tickets"])).toBe(0);
+    expect(out[0]).toMatch(/^JIRA-5 · MYAPP-4\s+planning\s/m);
+    expect(out[0]).toMatch(/^MYAPP-1\s+review/m);
   });
 });
 

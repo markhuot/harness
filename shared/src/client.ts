@@ -53,6 +53,8 @@ export class HarnessApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The error response's `data`, when the service sent one (e.g. RemoteKeyMatches on a 404) */
+    public data?: unknown,
   ) {
     super(message);
   }
@@ -94,7 +96,7 @@ export class HarnessClient {
     });
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
-    if (!res.ok) throw new HarnessApiError(res.status, json.error ?? res.statusText);
+    if (!res.ok) throw new HarnessApiError(res.status, json.error ?? res.statusText, json.data);
     return json.data as T;
   }
 

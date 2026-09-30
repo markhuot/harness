@@ -380,6 +380,16 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text-3);
   letter-spacing: 0.01em;
 }
+/* A linked ticket's own key after its remote ID ("MH-62 · MH-124", bits.tsx TicketKey): muted and
+   a step smaller than whatever key it follows. The remote ID in front reads a shade stronger. */
+.key-local {
+  color: var(--text-3);
+  font-size: 0.9em;
+  font-weight: 400;
+}
+:is(.card-key, .child-key):has(.key-local) {
+  color: var(--text-2);
+}
 .card-title {
   font-weight: 500;
   font-size: 13px;
@@ -881,6 +891,53 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text-2);
   font-size: 11.5px;
   flex: none;
+}
+/* The External row's tickets sharing the remote ID (TicketDetails), under its link */
+.related-hint {
+  margin-top: 6px;
+}
+.related-tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+/* Ticket settings → Remote ID: the key, an optional link, Save/Link and Unlink */
+.remote-id-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.remote-id-inputs {
+  gap: 6px;
+}
+.remote-id-inputs .remote-id-key {
+  flex: 0 1 130px;
+  min-width: 90px;
+}
+.remote-id-inputs .remote-id-url {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.remote-id-inputs .btn {
+  flex: none;
+}
+/* A pane opened on a remote ID that isn't a ticket key: the tickets linked to it */
+.remote-id-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  width: min(440px, 100%);
+}
+.remote-id-list .ticket-link {
+  margin-left: 0;
+  padding: 5px 8px;
+  color: var(--text);
+}
+.remote-id-project {
+  margin-left: auto;
+  flex: none;
+  font-size: 11.5px;
 }
 .link-chip {
   background: none;

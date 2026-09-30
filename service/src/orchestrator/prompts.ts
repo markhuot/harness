@@ -13,7 +13,7 @@
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
 import type { CompletionAction, Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
-import { harnessBranch, plannedBranch, resolveBaseBranch } from "@harness/shared";
+import { displayKey, harnessBranch, plannedBranch, resolveBaseBranch, secondaryKey } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
 
@@ -77,8 +77,19 @@ function quote(s: string): string {
   return `"${oneLine(s)}"`;
 }
 
-function ticketLabel(t: Pick<Ticket, "key" | "title">): string {
-  return `${t.key} ${quote(t.title)}`;
+/**
+ * `KEY "title"`, or `MH-62 (local MH-124) "title"` for a ticket linked to a remote ID: the remote
+ * ID is what people call it, the local key is what every tool takes.
+ */
+function ticketLabel(t: Pick<Ticket, "key" | "title"> & { externalRef?: Ticket["externalRef"] }): string {
+  const local = secondaryKey(t);
+  return local ? `${displayKey(t)} (local ${local}) ${quote(t.title)}` : `${t.key} ${quote(t.title)}`;
+}
+
+/** An "Existing tickets" line for triage: the local key first (what ticket_key takes), then its remote ID. */
+function existingTicketLine(t: Ticket): string {
+  const remote = t.externalRef?.key ? `, remote ID ${t.externalRef.key}` : ", no remote ID";
+  return `* ${t.key} ${quote(t.title)}, status ${t.status}${remote}`;
 }
 
 function join(...parts: (string | null | undefined | false)[]): string {
@@ -430,7 +441,7 @@ export function triagePrompt(
     /** The watcher's prompt ("" → none) */
     prompt: string;
     projects: Project[];
-    /** Local tickets whose keys appear in the output */
+    /** Local tickets a key in the output names: by local key (or alias), or linked to it as a remote ID */
     existingTickets: Ticket[];
   },
   overrides?: PromptOverrides | null,
@@ -443,7 +454,7 @@ export function triagePrompt(
       source: oneLine(source),
       title: oneLine(title),
       prompt: prompt.trim(),
-      existingTickets: existingTickets.map((t) => `* ${ticketLabel(t)}, status ${t.status}`).join("\n"),
+      existingTickets: existingTickets.map(existingTicketLine).join("\n"),
       output: `${fence}\n${text}\n${fence}`,
       truncated,
       projects: projects.map((p) => `* ${p.key}: ${p.name} (${p.path})`).join("\n"),

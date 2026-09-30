@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
+import { keyLabel, TICKET_STATUSES, type Ticket, type TicketStatus } from "@harness/shared";
 import { boardColumns, COLUMN_EMPTY_TEXT, doneCount, scopeOf, searchColumns, searchStatusText, STATUS_LABEL } from "@harness/shared/state";
 import { columnCount, moveBody, visibleColumns } from "../lib/boardColumns";
 import { useApp, useColors } from "../state/app";
@@ -116,7 +116,7 @@ export function BoardScreen({ mode = "board" }: { mode?: "board" | "search" }) {
       const { body, completedAt } = m;
       // Optimistic; the service's event confirms it.
       dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: { ...t, ...body, completedAt, updatedAt: t.updatedAt } } });
-      const res = await act(() => client.updateTicket(t.key, body), t.status !== status ? `${t.key} → ${STATUS_LABEL[status]}` : undefined);
+      const res = await act(() => client.updateTicket(t.key, body), t.status !== status ? `${keyLabel(t)} → ${STATUS_LABEL[status]}` : undefined);
       if (!res) void refresh();
     },
     [state, projectId, dispatch, act, client, refresh],

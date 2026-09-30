@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { isConductor, TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   boardColumns,
@@ -22,7 +22,7 @@ import {
   type State,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot } from "../components/bits";
+import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
@@ -46,8 +46,8 @@ export function BoardPane() {
   // A draft's delete is Discard; it asks only when there's a prompt to lose.
   const discardDraft = useCallback(
     (t: Ticket) => {
-      if (t.description.trim() && !confirm(`Discard the draft ${t.key}? Its prompt and settings are deleted.`)) return;
-      void act(() => client.deleteTicket(t.key), `${t.key} discarded`);
+      if (t.description.trim() && !confirm(`Discard the draft ${keyLabel(t)}? Its prompt and settings are deleted.`)) return;
+      void act(() => client.deleteTicket(t.key), `${keyLabel(t)} discarded`);
     },
     [act, client],
   );
@@ -367,10 +367,10 @@ const TicketCard = memo(function TicketCard({
       onMouseLeave={isConductor(t) ? () => onHoverConductor(null) : undefined}
       onClick={() => onOpen(t.key)}
       // Drag onto a half of the board or an open ticket to open it in a split there.
-      {...dragProps(t.key, t.title)}
+      {...dragProps(t.key, t.title, undefined, keyLabel(t))}
       onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}
       role="button"
-      aria-label={`${draft ? "Draft " : ""}${t.key} ${t.title || "Untitled"}`}
+      aria-label={`${draft ? "Draft " : ""}${keyLabel(t)} ${t.title || "Untitled"}`}
       tabIndex={isCursor ? 0 : -1}
       data-pane-autofocus={isCursor || undefined}
       // Enter is board.open (the dispatcher); Space, as on any button, does the same.
@@ -379,15 +379,17 @@ const TicketCard = memo(function TicketCard({
       <div className="card-top">
         {showProject && project && <ProjectKey project={project} size="sm" />}
         {draft && <Icon name="edit" size={11} className="card-draft-icon" />}
-        <span className="card-key">{t.key}</span>
+        <span className="card-key">
+          <TicketKey ticket={t} />
+        </span>
         {draft && (
           <span className="badge draft-badge" data-testid="card-draft" title="A draft: it runs once you start it or plan it">
             Draft
           </span>
         )}
         {parent && (
-          <span className="card-parent-chip" title={`Part of ${parent.key} · ${parent.title}`}>
-            ↳ {parent.key}
+          <span className="card-parent-chip" title={`Part of ${keyLabel(parent)} · ${parent.title}`}>
+            ↳ <TicketKey ticket={parent} />
           </span>
         )}
         <div className="grow" />
@@ -435,7 +437,7 @@ const TicketCard = memo(function TicketCard({
           {deps.map((d) => (
             <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
               {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
-              {d.ticket?.key ?? d.key}
+              {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
             </span>
           ))}
         </div>

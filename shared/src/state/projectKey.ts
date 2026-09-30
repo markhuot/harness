@@ -2,7 +2,7 @@
 // Mirrors the service's rules (checkProjectKey + Orchestrator.updateProject collisions) so the
 // field can explain a rename before it's saved; the service stays the authority.
 
-import { checkProjectKey, type Project, type Ticket } from "../index";
+import { checkProjectKey, isLegacyMirror, type Project, type Ticket } from "../index";
 
 export interface KeyPreview {
   /** Normalized (trimmed, upper-cased) draft */
@@ -13,7 +13,7 @@ export interface KeyPreview {
   changed: boolean;
   /** Native tickets that would be renamed, in number order */
   renames: { from: string; to: string }[];
-  /** Mirrored tickets that keep their keys */
+  /** Legacy mirrors (key = remote ID) that keep their keys */
   kept: string[];
   /** The next two native keys under the draft */
   next: string[];
@@ -21,11 +21,14 @@ export interface KeyPreview {
   message: string;
 }
 
-/** Native tickets of a project: `<KEY>-<n>`, not mirrored from an external system. */
+/**
+ * Native tickets of a project: `<KEY>-<n>`. A ticket linked to a remote ID is native too; only a
+ * legacy mirror, whose key is its remote ID, keeps its key (`isLegacyMirror`).
+ */
 export function nativeTickets(project: Project, tickets: Ticket[]): { ticket: Ticket; suffix: string; n: number }[] {
   const prefix = `${project.key}-`;
   return tickets
-    .filter((t) => t.projectId === project.id && !t.externalRef && t.key.startsWith(prefix) && /^\d+$/.test(t.key.slice(prefix.length)))
+    .filter((t) => t.projectId === project.id && !isLegacyMirror(t) && t.key.startsWith(prefix) && /^\d+$/.test(t.key.slice(prefix.length)))
     .map((t) => ({ ticket: t, suffix: t.key.slice(prefix.length), n: Number(t.key.slice(prefix.length)) }))
     .sort((a, b) => a.n - b.n);
 }
@@ -48,7 +51,7 @@ export function previewProjectKey(project: Project, projects: Project[], tickets
   const changed = key !== project.key;
   const native = nativeTickets(project, tickets);
   const renaming = new Set(native.map((x) => x.ticket.id));
-  const kept = tickets.filter((t) => t.projectId === project.id && t.externalRef).map((t) => t.key);
+  const kept = tickets.filter((t) => t.projectId === project.id && isLegacyMirror(t)).map((t) => t.key);
   const renames = changed && !checked.error ? native.map((x) => ({ from: x.ticket.key, to: `${key}-${x.suffix}` })) : [];
 
   let error: string | null = checked.error;

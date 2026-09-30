@@ -40,3 +40,39 @@ export function checkProjectKey(raw: string): { key: string; error: null } | { k
   if ((RESERVED_PROJECT_KEYS as readonly string[]).includes(key)) return { key, error: `${key} is reserved` };
   return { key, error: null };
 }
+
+// ---------------------------------------------------------------------------
+// Remote IDs (DESIGN.md "Remote IDs"). A ticket's `key` is its only identity; a linked remote
+// item's key (externalRef.key, e.g. a Jira issue) is what the board shows in its place.
+// ---------------------------------------------------------------------------
+
+type Keyed = { key: string; externalRef?: { key: string } | null };
+
+/** The identifier to show for a ticket: its remote ID when it's linked to one, else its key. */
+export function displayKey(t: Keyed): string {
+  return t.externalRef?.key || t.key;
+}
+
+/**
+ * The local key to show next to `displayKey` ("MH-62 · MH-124"), or null when the two are the
+ * same (an unlinked ticket, or one created before remote IDs had their own field, whose key is
+ * its remote ID). Shown wherever a display key is, so tickets sharing a remote ID stay apart.
+ */
+export function secondaryKey(t: Keyed): string | null {
+  const shown = displayKey(t);
+  return shown === t.key ? null : t.key;
+}
+
+/** "MH-62 · MH-124" (or just the key): one-line label for toasts, titles and menus. */
+export function keyLabel(t: Keyed): string {
+  const local = secondaryKey(t);
+  return local ? `${displayKey(t)} · ${local}` : t.key;
+}
+
+/**
+ * A ticket created before remote IDs had their own field: triage gave it its remote ID as its
+ * key. It keeps that key through project renames (it isn't the project's numbering).
+ */
+export function isLegacyMirror(t: Keyed): boolean {
+  return !!t.externalRef && t.externalRef.key === t.key;
+}

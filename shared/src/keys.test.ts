@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { checkProjectKey, parseTicketKey, PROJECT_KEY_RE, projectKeyFromPath } from "./keys";
+import { checkProjectKey, displayKey, isLegacyMirror, keyLabel, parseTicketKey, PROJECT_KEY_RE, projectKeyFromPath, secondaryKey } from "./keys";
 
 describe("projectKeyFromPath", () => {
   test("uses the directory basename, upper-cased", () => {
@@ -46,5 +46,32 @@ describe("checkProjectKey", () => {
   test("agrees with PROJECT_KEY_RE on every accepted key", () => {
     for (const k of ["HEL", "X1", "ABCDEFGHIJKLMNOP"]) expect(PROJECT_KEY_RE.test(checkProjectKey(k).key)).toBe(true);
     for (const k of ["1A", "A_B", "ABCDEFGHIJKLMNOPQ"]) expect(PROJECT_KEY_RE.test(k)).toBe(false);
+  });
+});
+
+describe("remote IDs", () => {
+  const unlinked = { key: "MH-62", externalRef: null };
+  const linked = { key: "MH-124", externalRef: { key: "MH-62" } };
+  const legacy = { key: "CEPFR-12", externalRef: { key: "CEPFR-12" } };
+
+  test("an unlinked ticket shows its key alone", () => {
+    expect(displayKey(unlinked)).toBe("MH-62");
+    expect(secondaryKey(unlinked)).toBeNull();
+    expect(keyLabel(unlinked)).toBe("MH-62");
+  });
+  test("a linked ticket shows its remote ID with the local key beside it", () => {
+    expect(displayKey(linked)).toBe("MH-62");
+    expect(secondaryKey(linked)).toBe("MH-124");
+    expect(keyLabel(linked)).toBe("MH-62 · MH-124");
+  });
+  test("a legacy mirror (key equals remote ID) doesn't repeat its key", () => {
+    expect(displayKey(legacy)).toBe("CEPFR-12");
+    expect(secondaryKey(legacy)).toBeNull();
+    expect(keyLabel(legacy)).toBe("CEPFR-12");
+  });
+  test("only a ticket whose key is its remote ID is a legacy mirror", () => {
+    expect(isLegacyMirror(legacy)).toBe(true);
+    expect(isLegacyMirror(linked)).toBe(false);
+    expect(isLegacyMirror(unlinked)).toBe(false);
   });
 });

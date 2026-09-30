@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { isConductor, type CompletionAction, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, keyLabel, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   CHAT_PLACEHOLDER,
@@ -37,7 +37,7 @@ import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope, Markdown } from "../components/Markdown";
 import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
-import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusPill, Switch, useNow } from "../components/bits";
+import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusDot, StatusPill, Switch, TicketKey, useNow } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
 import { landCommands, landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
@@ -57,6 +57,7 @@ import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHea
 import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
+import { liveRelatedTickets, remoteKeyMatches } from "../state/remoteIds";
 
 /** What a command's tooltip adds: " (⇧⌘])", or nothing for a command without keys. */
 const keyHint = (id: string) => {
@@ -100,10 +101,16 @@ export function TicketDetail({
 }) {
   const { state, client, dispatch, epoch } = useStore();
   const scope = usePaneScope();
-  const [missing, setMissing] = useState(false);
+  // Not found: gone (true), or a remote ID that linked tickets carry (their list, remote-only pane).
+  const [missing, setMissing] = useState<boolean | RemoteKeyMatches>(false);
   // By key, or by an old key the service already resolved (the effect below redirects to the new one).
   const ticket = useMemo(() => ticketByKey(state, ticketKey), [state.tickets, state.keyAliases, ticketKey]);
   const pluginTabs = usePluginTabs(ticket);
+  // The detail's relatedTickets (the Details tab's External row); refetched when the link changes.
+  const [related, setRelated] = useState<RelatedTicket[] | undefined>(undefined);
+  const remoteId = ticket?.externalRef?.key ?? null;
+  /** The remote ID `related` was fetched for (undefined until the detail loads) */
+  const relatedFor = useRef<string | null | undefined>(undefined);
 
   // Detail (summaries, runs, session) — refetch on reconnect.
   useEffect(() => {
@@ -113,15 +120,34 @@ export function TicketDetail({
       .then((detail) => {
         if (cancelled) return;
         dispatch({ type: "detail", detail, requestedKey: ticketKey });
+        setRelated(detail.relatedTickets);
+        relatedFor.current = detail.ticket.externalRef?.key ?? null;
+        setMissing(false);
         // An old key (from before a project rename) resolves to the ticket's current key; follow it
         // on every board (another board's panes may have it open under the old key too).
         if (detail.ticket.key !== ticketKey) updateAllPanes((s) => renameTicketKey(s, ticketKey, detail.ticket.key));
       })
-      .catch(() => !cancelled && setMissing(true));
+      .catch((e) => !cancelled && setMissing(remoteKeyMatches(e) ?? true));
     return () => {
       cancelled = true;
     };
   }, [client, dispatch, ticketKey, epoch]);
+  // Linked, unlinked or relinked since (Ticket settings, triage): the related list is another one.
+  useEffect(() => {
+    if (relatedFor.current === undefined || relatedFor.current === remoteId) return;
+    let cancelled = false;
+    client.getTicket(ticketKey).then(
+      (detail) => {
+        if (cancelled) return;
+        relatedFor.current = detail.ticket.externalRef?.key ?? null;
+        setRelated(detail.relatedTickets);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, ticketKey, remoteId]);
 
   // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
@@ -195,6 +221,8 @@ export function TicketDetail({
     e.preventDefault();
     goTab(to);
   };
+
+  if (!ticket && typeof missing === "object") return <RemoteIdPane paneId={paneId} owner={owner} matches={missing} onClose={close} />;
 
   if (!ticket) {
     return (
@@ -275,7 +303,7 @@ export function TicketDetail({
         {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
         {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
-        {tab === "details" && <TicketDetails ticket={ticket} />}
+        {tab === "details" && <TicketDetails ticket={ticket} related={related} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
         {wantPlugin && !pluginTabs && (
           <div className="empty" style={{ flex: 1 }}>
@@ -317,10 +345,12 @@ function DetailHeader({
   const project = state.projects[ticket.projectId];
   const ready = isReady(ticket);
   const k = ticket.key;
+  // What confirms and toasts call it: "MH-62 · MH-124" for a linked ticket (its remote ID first).
+  const label = keyLabel(ticket);
 
   const remove = async () => {
-    if (!confirm(`Delete ${k}? Its transcript and summaries are removed too.`)) return;
-    const ok = await act(() => client.deleteTicket(k), `${k} deleted`);
+    if (!confirm(`Delete ${label}? Its transcript and summaries are removed too.`)) return;
+    const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
     if (ok) onClose();
   };
   // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
@@ -332,7 +362,7 @@ function DetailHeader({
   const land = landMenu(landMode, ticket, project, parent);
   const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
   const completeWith = (action: CompletionAction, instructions?: string) => act(() => client.completeTicket(k, { action, ...(instructions ? { instructions } : {}) }), "Completion run queued");
-  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} approved, no action taken`);
+  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
   const choose = (mode: LandMode) => (c: LandChoice) => {
     if (c.kind === "none") return void approveNoAction();
     if (c.kind === "sheet") return setSheet({ mode, action: c.action, required: c.required });
@@ -341,7 +371,7 @@ function DetailHeader({
   const approve = () => choose("approve")(landMenu("approve", ticket, project, parent).primary);
   const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
   const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
-  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${k} marked done`);
+  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
   const copyKey = () => void navigator.clipboard.writeText(k);
   const external = ticket.externalRef?.url;
   const reviewing = ticket.status === "review";
@@ -374,8 +404,10 @@ function DetailHeader({
   return (
     <div className="detail-head">
       <div className="view-header detail-titlebar">
-        <PaneGrip paneId={paneId} chip={k} title={ticket.title} />
-        <span className="detail-key selectable">{k}</span>
+        <PaneGrip paneId={paneId} chip={k} label={label} title={ticket.title} />
+        <span className="detail-key selectable" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} (via ${ticket.externalRef.source}) · ticket ${k}` : undefined}>
+          <TicketKey ticket={ticket} />
+        </span>
         <StatusPill status={ticket.status} />
         <ModelBadge model={ticket.model} driver={ticket.driver} />
         <div className="grow" />
@@ -522,6 +554,52 @@ function DetailHeader({
   );
 }
 
+/**
+ * A pane opened on a remote ID that no local ticket has as its key (a pasted link, a dependency
+ * chip, a plugin's navigate): the service found tickets linked to it, so this lists them to open,
+ * instead of a dead "not found".
+ */
+function RemoteIdPane({ paneId, owner, matches, onClose }: { paneId: string; owner: string; matches: RemoteKeyMatches; onClose: () => void }) {
+  const { state } = useStore();
+  const openTicket = useOpenTicket();
+  const list = liveRelatedTickets(state, [matches.requested], matches.relatedTickets);
+  return (
+    <aside className="detail" {...keysArea("ticket", owner)}>
+      <div className="view-header detail-titlebar">
+        <PaneGrip paneId={paneId} chip={matches.requested} title="" />
+        <span className="detail-key">{matches.requested}</span>
+        <div className="grow" />
+        <button className="btn btn-ghost btn-icon" onClick={onClose} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane" data-pane-autofocus>
+          <Icon name="x" />
+        </button>
+      </div>
+      <div className="empty remote-id-empty" data-testid="remote-id-pane" style={{ flex: 1 }}>
+        <Icon name="link" />
+        <strong>Remote ID {matches.requested}</strong>
+        {list.length === 0
+          ? "No ticket is linked to it any more."
+          : list.length === 1
+            ? "It isn't a ticket key here. This ticket is linked to it:"
+            : `It isn't a ticket key here. These ${list.length} tickets are linked to it:`}
+        {list.length > 0 && (
+          <div className="remote-id-list">
+            {list.map((r) => (
+              <button key={r.key} className="ticket-link" data-testid="remote-id-ticket" onClick={() => openTicket(r.key)} title={`Open ${r.key}`}>
+                <StatusDot status={r.status} />
+                <span className="mono">
+                  <TicketKey ticket={{ key: r.key, externalRef: { key: r.externalKey } }} />
+                </span>
+                <span className="truncate">{r.title || "Untitled"}</span>
+                {state.projects[r.projectId] && <span className="muted remote-id-project">{state.projects[r.projectId]!.name}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 /** Notes for the agent that send the ticket back to In progress: request changes (review) or re-open (done). */
 function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean }) {
   const { client } = useStore();
@@ -538,7 +616,7 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
     <Modal onClose={onClose}>
       <div className="modal-head">
         <strong>{reopen ? "Re-open" : "Request changes"}</strong>
-        <span className="muted mono">{ticket.key}</span>
+        <span className="muted mono">{keyLabel(ticket)}</span>
       </div>
       <div className="modal-body">
         <textarea
@@ -591,7 +669,7 @@ function Summaries({ ticket }: { ticket: Ticket }) {
           {deps.map((d) => (
             <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
               {d.done && <Icon name="check" size={9} strokeWidth={3} />}
-              {d.ticket?.key ?? d.key}
+              {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
             </span>
           ))}
         </div>

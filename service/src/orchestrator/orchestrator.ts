@@ -13,6 +13,7 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   DriverInfo,
+  ExternalRef,
   FileDiff,
   FileMatch,
   FileView,
@@ -20,6 +21,8 @@ import type {
   ReopenBody,
   Project,
   PublicSettings,
+  RelatedTicket,
+  RemoteKeyMatches,
   Run,
   RunKind,
   Session,
@@ -72,6 +75,7 @@ import type {
   ApprovalMeta,
   BoardListFilter,
   BoardScope,
+  BoardRelatedTicket,
   BoardTicket,
   BoardTicketDetail,
   CreateTicketInput,
@@ -82,7 +86,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "../tools/types";
-import { truncateMiddle } from "../tools/util";
+import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
@@ -696,9 +700,10 @@ export class Orchestrator {
 
   /**
    * Patch a project. Changing `key` renames the project's native tickets OLD-n → NEW-n
-   * (sessions and dependencies follow, numbers and nextSeq are kept). Tickets mirrored from an
-   * external system keep their keys, and existing branches / worktree directories keep the
-   * old name: they're stored on the ticket, so work in progress isn't disturbed.
+   * (sessions and dependencies follow, numbers and nextSeq are kept), tickets linked to a remote
+   * ID included. Legacy mirrors (key = remote ID) keep their keys, and existing branches /
+   * worktree directories keep the old name: they're stored on the ticket, so work in progress
+   * isn't disturbed.
    */
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
     const existing = this.store.projects.get(id);
@@ -816,12 +821,53 @@ export class Orchestrator {
     return found && !found.ticket.draft ? found : null;
   }
 
+  /**
+   * Tickets linked to a remote ID equal to `requested` or to `ticket`'s own remote ID, newest
+   * first, without `ticket` itself. `drafts: false` leaves drafts out (what agents see). A remote
+   * ID never resolves to a ticket (lookup is local keys only); this is how it points to them.
+   */
+  private relatedTickets(requested: string, ticket: Ticket | null, opts: { drafts?: boolean } = {}): Ticket[] {
+    const remoteIds = new Set([requested.trim().toUpperCase(), ticket?.externalRef?.key?.trim().toUpperCase() ?? ""].filter(Boolean));
+    const seen = new Set(ticket ? [ticket.id] : []);
+    const out: Ticket[] = [];
+    for (const k of remoteIds) {
+      for (const t of this.store.tickets.byExternalKey(k, opts)) {
+        if (seen.has(t.id)) continue;
+        seen.add(t.id);
+        out.push(t);
+      }
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+  }
+
+  private relatedView(t: Ticket): RelatedTicket {
+    return { key: t.key, title: t.title, status: t.status, projectId: t.projectId, externalKey: t.externalRef?.key ?? "" };
+  }
+
+  /** "MH-62 is a remote ID, not a local ticket key. Open MH-124 or MH-130." */
+  private remoteOnlyMessage(requested: string, related: Ticket[]): string {
+    const keys = related.map((t) => t.key);
+    const list = keys.length <= 1 ? keys.join("") : `${keys.slice(0, -1).join(", ")} or ${keys.at(-1)}`;
+    return `${requested} is a remote ID, not a local ticket key. Tickets linked to it: ${list}.`;
+  }
+
   ticketDetail(key: string): TicketDetail {
     const found = this.store.tickets.lookup(key);
-    if (!found) throw notFound(`Unknown ticket: ${key}`);
+    if (!found) {
+      const requested = String(key ?? "").trim().toUpperCase();
+      const related = requested ? this.relatedTickets(requested, null) : [];
+      if (related.length) {
+        throw new HarnessError(404, this.remoteOnlyMessage(requested, related), {
+          requested,
+          relatedTickets: related.map((t) => this.relatedView(t)),
+        } satisfies RemoteKeyMatches);
+      }
+      throw notFound(`Unknown ticket: ${key}`);
+    }
     const { ticket } = found;
     return {
       ...(found.alias ? { resolvedFrom: found.alias } : {}),
+      relatedTickets: this.relatedTickets(found.alias ?? ticket.key, ticket).map((t) => this.relatedView(t)),
       ticket,
       session: this.store.sessions.get(ticket.sessionId)!,
       summaries: this.store.summaries.listBySession(ticket.sessionId),
@@ -1121,7 +1167,15 @@ export class Orchestrator {
     const skip = validBoolean("skipAgentReview", body.skipAgentReview);
     if (skip !== undefined && skip !== !!ticket.skipAgentReview) patch.skipAgentReview = skip;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
+    const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket, body.externalRef) : undefined;
     if (moveTo) ticket = this.moveDraft(ticket, moveTo);
+    if (externalRef !== undefined) {
+      const before = ticket.externalRef?.key ?? null;
+      ticket = this.store.tickets.setExternalRef(ticket.id, externalRef)!;
+      const after = externalRef?.key ?? null;
+      if (after !== before) this.appendStatus(ticket.sessionId, null, after ? `Linked to ${after}` : `Unlinked from ${before}`);
+      this.touchSession(ticket.sessionId);
+    }
     if (Object.keys(patch).length) {
       ticket = this.store.tickets.update(ticket.id, patch)!;
       if (patch.title) this.store.sessions.update(ticket.sessionId, { title: patch.title });
@@ -1150,6 +1204,25 @@ export class Orchestrator {
     }
     if (patch.dependsOn) this.kickScheduler();
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * PATCH externalRef: a remote ID set by hand ({ key, url? }, source "manual"), or null to unlink.
+   * The key is upper-cased and must look like FOO-123. Changing only the link of the remote ID
+   * the ticket already carries keeps where it came from (a watcher's source and raw item).
+   */
+  private manualExternalRef(ticket: Ticket, input: UpdateTicketBody["externalRef"]): ExternalRef | null {
+    if (input === null) return null;
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw badRequest("externalRef must be { key, url? } or null");
+    if (typeof input.key !== "string") throw badRequest("externalRef.key must be a remote ID like FOO-123");
+    const key = input.key.trim().toUpperCase();
+    if (!isTicketKey(key)) throw badRequest(`Invalid remote ID: ${input.key} (expected a key like FOO-123)`);
+    if (input.url !== undefined && input.url !== null && typeof input.url !== "string") throw badRequest("externalRef.url must be a string or null");
+    const url = input.url?.trim() || null;
+    if (url && !/^https?:\/\/\S+$/i.test(url)) throw badRequest("externalRef.url must be an http(s) link");
+    const current = ticket.externalRef;
+    if (current && current.key.toUpperCase() === key) return { ...current, key, url };
+    return { source: "manual", key, url, raw: null };
   }
 
   /**
@@ -1696,11 +1769,16 @@ export class Orchestrator {
   triage(input: Omit<IngestInput, "sourceId">): Session {
     const { source, output, prompt, driver, watcherId = null } = input;
     const projects = this.store.projects.list();
-    const keys = findKeys(output.text);
-    const existingTickets = keys.flatMap((key) => {
-      const t = this.agentLookup(key)?.ticket;
-      return t ? [t] : [];
-    });
+    // Every ticket a key in the output could mean: the local ticket with that key (or alias), and
+    // every ticket linked to it as a remote ID. Triage picks one (ticket_key) or starts another.
+    const seen = new Set<string>();
+    const existingTickets = findKeys(output.text).flatMap((key) =>
+      [this.agentLookup(key)?.ticket, ...this.store.tickets.byExternalKey(key, { drafts: false })].filter((t): t is Ticket => {
+        if (!t || seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      }),
+    );
     const title = outputTitle(output.text);
     const n = this.store.counters.next("triage");
     const session = this.store.sessions.create({
@@ -1890,12 +1968,26 @@ export class Orchestrator {
     return { tickets: sorted.slice(0, limit).map((t) => this.boardTicket(t)), total: sorted.length, scope };
   }
 
+  private boardRelated(t: Ticket): BoardRelatedTicket {
+    return { ...this.relatedView(t), projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
+  }
+
   async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number } = {}): Promise<BoardTicketDetail> {
     const found = this.agentLookup(key);
-    if (!found) throw new Error(`Unknown ticket: ${key}`);
+    if (!found) {
+      const requested = String(key ?? "").trim().toUpperCase();
+      const related = requested ? this.relatedTickets(requested, null, { drafts: false }) : [];
+      if (!related.length) throw new Error(`Unknown ticket: ${key}`);
+      throw new RemoteIdError(`${this.remoteOnlyMessage(requested, related)} Call get_ticket with one of those keys.`, {
+        ticket: null,
+        requested,
+        relatedTickets: related.map((r) => this.boardRelated(r)),
+      });
+    }
     const t = found.ticket;
     const detail: BoardTicketDetail = {
       ticket: this.boardTicket(t),
+      relatedTickets: this.relatedTickets(found.alias ?? t.key, t, { drafts: false }).map((r) => this.boardRelated(r)),
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
       children: this.store.tickets.list({ parentId: t.id, drafts: false }).map((c) => c.key),
@@ -2246,32 +2338,62 @@ export class Orchestrator {
     return { session, meta };
   }
 
+  /**
+   * dispatch_ticket. `key` is the remote ID and never looks a ticket up: without `ticketKey` it
+   * creates a new ticket with the project's next native key, linked to the remote ID (any number
+   * of tickets can link one). `ticketKey` sends the update to that local ticket (current key or
+   * alias) and links it to `key` when it has no remote ID yet. Reusing a ticket is the triage
+   * agent's call, made from the "Existing tickets" list; nothing matches automatically.
+   */
   async dispatchTicket(ctx: ToolContext, input: Parameters<HarnessOps["dispatchTicket"]>[1]): Promise<Ticket> {
     const { session, meta } = this.triageMeta(ctx, true);
     const project = this.store.projects.getByKey(input.projectKey ?? "");
     if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
     const key = input.key?.trim().toUpperCase() || null;
-    // A draft isn't there for triage: its key is taken, so creating one under it fails below.
-    const existing = key ? (this.agentLookup(key)?.ticket ?? null) : null;
-    if (existing) {
+    if (key && !isTicketKey(key)) throw new Error(`Invalid remote ID: ${input.key}. key must look like FOO-123; leave it out when the item has none.`);
+    const url = input.url?.trim() || null;
+    const ticketKey = input.ticketKey?.trim() || null;
+    if (ticketKey) {
+      // A draft isn't there for triage.
+      const existing = this.agentLookup(ticketKey)?.ticket ?? null;
+      if (!existing) {
+        const related = this.relatedTickets(ticketKey, null, { drafts: false });
+        throw new Error(
+          related.length
+            ? `${this.remoteOnlyMessage(ticketKey.toUpperCase(), related)} Pass one of those as ticket_key, or leave ticket_key out to create a new ticket.`
+            : `Unknown ticket: ${ticketKey}. ticket_key must be an existing local ticket's key; leave it out to create a new ticket.`,
+        );
+      }
+      const current = existing.externalRef?.key?.trim().toUpperCase() || null;
+      if (key && current && current !== key) {
+        throw new Error(`${existing.key} is already linked to ${current}, so it can't carry ${key} too. Leave ticket_key out to create a new ticket linked to ${key}.`);
+      }
+      const link = !!key && !current;
+      if (link) {
+        this.store.tickets.setExternalRef(existing.id, { source: meta.source, key: key!, url, raw: meta.text ?? null });
+        this.appendStatus(existing.sessionId, null, `Linked to ${key}`);
+        this.touchTicket(existing.id);
+      } else if (current && url && !existing.externalRef?.url) {
+        this.store.tickets.setExternalRef(existing.id, { ...existing.externalRef!, url });
+        this.touchTicket(existing.id);
+      }
       const body = input.description?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
-      const t = await this.sendMessage(existing.key, body);
-      this.finishTriage(session.id, "dispatched", `Sent update to existing ${existing.key}`, input.title);
-      return t;
+      await this.sendMessage(existing.key, body);
+      this.finishTriage(session.id, "dispatched", link ? `Linked ${existing.key} to ${key} and sent update` : `Sent update to existing ${existing.key}`, input.title);
+      return this.store.tickets.get(existing.id)!;
     }
-    if (key && !isTicketKey(key)) throw new Error(`Invalid ticket key: ${key}`);
     const t = await this.createTicket({
       projectId: project.id,
-      key: key ?? undefined,
       title: input.title,
       prompt: input.description || input.title,
       kind: input.conductor ? "conductor" : "task",
       start: input.start ?? false,
       driver: project.defaultDriver ?? session.driver,
-      // Only an external key makes the ticket a mirror; otherwise the description carries the context.
-      externalRef: key ? { source: meta.source, key, url: input.url?.trim() || null, raw: meta.text ?? null } : null,
+      // Only a remote ID links the ticket; otherwise the description carries the context.
+      externalRef: key ? { source: meta.source, key, url, raw: meta.text ?? null } : null,
     });
-    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key} in ${project.key}`, input.title);
+    // The local key comes first: the Inbox links the first key in the outcome (dispatchedKey).
+    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key}${key ? ` (${key})` : ""} in ${project.key}`, input.title);
     return t;
   }
 

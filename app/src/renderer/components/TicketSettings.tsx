@@ -1,11 +1,12 @@
-// A ticket's settings rows (Model, Permissions, Agent review, Branch, Base branch, Depends on),
+// A ticket's settings rows (Model, Permissions, Agent review, Branch, Base branch, Depends on,
+// Remote ID),
 // the same component in a ticket's Details tab and in a draft's Options (views/DraftEditor.tsx).
 // It only asks for changes (`onPatch`, an UpdateTicketBody): Details sends them to the service, a
 // draft editor applies them locally and saves them on its own schedule. Which rows show, and which
 // can change, is ticketSettingsRows's call (@harness/shared/state).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { BranchInfo, Project, Ticket, UpdateTicketBody } from "@harness/shared";
+import type { BranchInfo, ExternalRefInput, Project, Ticket, UpdateTicketBody } from "@harness/shared";
 import { isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import {
   checkoutBranch,
@@ -29,10 +30,11 @@ import { skipReviewHint } from "../state/newSession";
 import { DriverModelSelect } from "./ModelSelect";
 import { PermissionModeSelect } from "./PermissionModeSelect";
 import { BranchSelect } from "./BranchSelect";
-import { StatusDot, Switch } from "./bits";
+import { StatusDot, Switch, TicketKey } from "./bits";
 import { Icon } from "./Icon";
 import { useOpenTicket, usePaneScope } from "./paneContext";
 import { openTicket as openTicketPane, updatePanes } from "../state/panes";
+import { remoteIdCheck } from "../state/remoteIds";
 
 const BRANCH_LIMIT = 200;
 
@@ -80,11 +82,17 @@ export function TicketSettings({
   ticket,
   project,
   onPatch,
+  onRemoteId,
   children,
 }: {
   ticket: Ticket;
   project: Project | undefined;
   onPatch: (patch: UpdateTicketBody) => void;
+  /**
+   * Link the ticket to a remote ID (or unlink it with null), resolving once the service has it and
+   * rejecting with its error. Without it (a draft), there's no Remote ID row.
+   */
+  onRemoteId?: (ref: ExternalRefInput | null) => Promise<unknown>;
   /** More rows after these, in the same list (Details' read-only rows) */
   children?: ReactNode;
 }) {
@@ -185,6 +193,7 @@ export function TicketSettings({
         </dd>
       )}
       <DependsOn ticket={ticket} editable={editable} onPatch={onPatch} />
+      {onRemoteId && <RemoteId ticket={ticket} onSave={onRemoteId} />}
       {children}
     </dl>
   );
@@ -238,11 +247,98 @@ function DependsOn({ ticket, editable, onPatch }: { ticket: Ticket; editable: bo
               {depStates.map((d) => (
                 <button key={d.key} className={`chip link-chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)} onClick={() => d.ticket && openTicket(d.ticket.key)} disabled={!d.ticket}>
                   {d.ticket && <StatusDot status={d.ticket.status} />}
-                  {d.ticket?.key ?? d.key}
+                  {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
                 </button>
               ))}
             </div>
           )
+        )}
+      </dd>
+    </>
+  );
+}
+
+/**
+ * The Remote ID row: the identifier the ticket shows in place of its key (a Jira issue, say) and
+ * an optional link to it. Save sends both (the service records the link as "manual"); Unlink
+ * drops the link, and the ticket shows its own key again. The key must look like FOO-123.
+ */
+function RemoteId({ ticket, onSave }: { ticket: Ticket; onSave: (ref: ExternalRefInput | null) => Promise<unknown> }) {
+  const { toast } = useStore();
+  const ref = ticket.externalRef;
+  const [key, setKey] = useState(ref?.key ?? "");
+  const [url, setUrl] = useState(ref?.url ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Follow the link as it changes elsewhere (triage, another window).
+  useEffect(() => {
+    setKey(ref?.key ?? "");
+    setUrl(ref?.url ?? "");
+    setError(null);
+  }, [ref?.key, ref?.url]);
+  const check = remoteIdCheck(key, url, ref);
+  const run = async (next: ExternalRefInput | null, done: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(next);
+      toast(done, "info");
+    } catch (e) {
+      setError((e as Error).message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = () => check.input && check.dirty && void run(check.input, `Linked ${ticket.key} to ${check.input.key}`);
+  const unlink = () => ref && void run(null, `Unlinked ${ticket.key} from ${ref.key}`);
+  const enter = (e: React.KeyboardEvent) => e.key === "Enter" && (e.preventDefault(), save());
+  const shownError = check.error ?? error;
+  return (
+    <>
+      <dt>Remote ID</dt>
+      <dd className="remote-id-row" data-testid="remote-id">
+        <div className="row remote-id-inputs">
+          <input
+            className="input mono remote-id-key"
+            aria-label="Remote ID"
+            data-testid="remote-id-key"
+            placeholder="e.g. JIRA-62"
+            value={key}
+            disabled={busy}
+            onChange={(e) => setKey(e.target.value)}
+            onKeyDown={enter}
+          />
+          <input
+            className="input remote-id-url"
+            aria-label="Remote ID link"
+            data-testid="remote-id-url"
+            placeholder="Link (optional)"
+            value={url}
+            disabled={busy}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={enter}
+          />
+          {check.dirty && (
+            <button className="btn btn-sm btn-primary" data-testid="remote-id-save" disabled={busy || !check.input} onClick={save}>
+              {ref ? "Save" : "Link"}
+            </button>
+          )}
+          {ref && (
+            <button className="btn btn-sm btn-ghost" data-testid="remote-id-unlink" disabled={busy} onClick={unlink} title={`Show ${ticket.key} again instead of ${ref.key}`}>
+              <Icon name="x" size={11} /> Unlink
+            </button>
+          )}
+        </div>
+        {shownError ? (
+          <span className="field-hint" data-testid="remote-id-error" style={{ color: "var(--red)" }}>
+            {shownError}
+          </span>
+        ) : (
+          <span className="field-hint">
+            {ref
+              ? `Shown in place of ${ticket.key}${ref.source !== "manual" ? `. Linked by ${ref.source}` : ""}.`
+              : "An ID from another system (Jira, GitHub) to show in place of the key. Many tickets can share one."}
+          </span>
         )}
       </dd>
     </>

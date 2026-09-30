@@ -20,6 +20,8 @@ function setup(open: Ticket[], concurrency = 2) {
   let state: State = reducer(initialState, { type: "snapshot", snapshot: { projects: [], tickets: open, sessions: [], watchers: [], settings: null, drivers: [] } });
   const dispatch = (a: Action) => (state = reducer(state, a));
   const calls: { key: string; d: ReturnType<typeof deferred<TicketDetail>> }[] = [];
+  const related: Record<string, string[]> = {};
+  const remote: Record<string, string[]> = {};
   const f = new DetailFetcher({
     client: {
       getTicket: (key) => {
@@ -30,8 +32,10 @@ function setup(open: Ticket[], concurrency = 2) {
     },
     dispatch,
     concurrency,
+    onRelated: (id, list) => (related[id] = list.map((r) => r.key)),
+    onRemoteKey: (key, list) => (remote[key] = list.map((r) => r.key)),
   });
-  return { f, calls, get state() { return state; } };
+  return { f, calls, related, remote, get state() { return state; } };
 }
 
 test("an unloaded (older, done) dependency is fetched once and its chip settles from unknown to done", async () => {
@@ -88,4 +92,32 @@ test("load() for a screen shares the request already in flight for the same key"
   expect(h.calls.length).toBe(1);
   h.calls[0]!.d.resolve(detailOf(tk("A-1")));
   expect((await p).ticket.key).toBe("A-1");
+});
+
+const linked = (key: string) => ({ key, title: key, status: "planning" as const, projectId: "p", externalKey: "JIRA-9" });
+
+test("a detail's relatedTickets are handed over by ticket id; an older service's detail leaves them alone", async () => {
+  const h = setup([]);
+  const a = tk("MH-124");
+  const p = h.f.load("MH-124");
+  h.calls[0]!.d.resolve({ ...detailOf(a), relatedTickets: [linked("MH-130")] });
+  await p;
+  expect(h.related[a.id]).toEqual(["MH-130"]);
+  const q = h.f.load("MH-124");
+  h.calls[1]!.d.resolve(detailOf(a));
+  await q;
+  expect(h.related[a.id]).toEqual(["MH-130"]);
+});
+
+test("a remote-only key's 404 hands over the tickets it points to; a plain 404 hands over none", async () => {
+  const h = setup([]);
+  const p = h.f.load("jira-9").catch((e: unknown) => e);
+  h.calls[0]!.d.reject(new HarnessApiError(404, "Unknown ticket", { requested: "JIRA-9", relatedTickets: [linked("MH-124"), linked("MH-130")] }));
+  expect(await p).toBeInstanceOf(HarnessApiError);
+  expect(h.remote["JIRA-9"]).toEqual(["MH-124", "MH-130"]);
+  expect(h.state.missingKeys["JIRA-9"]).toBe(true);
+  const q = h.f.load("GONE-1").catch(() => {});
+  h.calls[1]!.d.reject(new HarnessApiError(404, "Unknown ticket"));
+  await q;
+  expect(h.remote["GONE-1"]).toEqual([]);
 });

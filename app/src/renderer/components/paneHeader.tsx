@@ -114,11 +114,11 @@ export function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () =
 }
 
 /** Drag a pane by this onto a half of another pane to move it there. `chip`/`title` label the drag image. */
-export function PaneGrip({ paneId, chip, title }: { paneId: string; chip: string; title: string }) {
+export function PaneGrip({ paneId, chip, title, label = chip }: { paneId: string; chip: string; title: string; /** The drag image's key text, when it isn't `chip` */ label?: string }) {
   // A pop-out window's pane has nowhere to be dragged to.
   if (usePopout()) return null;
   return (
-    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one (or use More → Move pane)" aria-hidden {...dragProps(chip, title, paneId)}>
+    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one (or use More → Move pane)" aria-hidden {...dragProps(chip, title, paneId, label)}>
       <Icon name="grip" size={13} />
     </span>
   );

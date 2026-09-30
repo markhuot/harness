@@ -79,14 +79,23 @@ describe("old ticket keys after a project rename", () => {
     expect(h.driver.calls.some((c) => c.prompt === "hello from the conductor")).toBe(true);
   });
 
-  test("triage for an item carrying an old key updates the renamed ticket instead of creating a duplicate", async () => {
+  test("triage sends an update to a renamed ticket by its old key only as ticket_key; the old key alone as key makes a new linked ticket", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "a", start: false });
     await h.orch.idle();
     h.orch.updateProject(h.project.id, { key: "NEW" });
-    const s = await h.orch.injectOutput("jira", { key: "OLD-1", summary: "follow-up", updated: "1" }, "Dispatch follow-ups. [dummy:project NEW]");
+    const routed = await h.orch.injectOutput("jira", { key: "OLD-1", summary: "follow-up", updated: "1" }, "Dispatch follow-ups. [dummy:project NEW] [dummy:ticket OLD-1]");
     await h.orch.idle();
-    expect(h.orch.getSession(s!.id).outcome).toBe("Sent update to existing NEW-1");
+    // ticket_key resolves through the alias, and the output's key links the unlinked ticket.
+    expect(h.orch.getSession(routed!.id).outcome).toBe("Linked NEW-1 to OLD-1 and sent update");
     expect(h.orch.listTickets().map((x) => x.id)).toEqual([t.id]);
+    expect(h.store.tickets.get(t.id)!.externalRef).toMatchObject({ source: "jira", key: "OLD-1" });
+
+    const fresh = await h.orch.injectOutput("jira", { key: "OLD-1", summary: "another", updated: "2" }, "Dispatch follow-ups. [dummy:project NEW]");
+    await h.orch.idle();
+    const created = h.orch.listTickets().find((x) => x.id !== t.id)!;
+    expect(h.orch.getSession(fresh!.id).outcome).toBe(`Dispatched to ${created.key} (OLD-1) in NEW`);
+    expect(created.key).toBe("NEW-2");
+    expect(created.externalRef?.key).toBe("OLD-1");
   });
 });

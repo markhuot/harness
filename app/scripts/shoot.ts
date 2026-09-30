@@ -36,6 +36,7 @@ for (let i = 0; i < 50; i++) {
 const projects = (await (await fetch(base + "/projects", { headers: { authorization: `Bearer ${token}` } })).json()).data as { id: string; key: string }[];
 const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
 const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
+const mh = projects.find((p) => p.key === "MH")?.id ?? projects[0]!.id;
 
 // Child tickets are hidden by default; this opens the search options and flips the switch.
 const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
@@ -137,6 +138,15 @@ const openPrompt = (id: string, then = "") => `(async () => {
   await wait(150);
   row?.scrollIntoView({ block: "start" });
 })()`;
+// Scrolls `sel` to the middle of its scroller once it renders.
+const scrollToEl = (sel: string) => `(async () => {
+  let el = null;
+  for (let i = 0; i < 40 && !el; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    el = document.querySelector(${JSON.stringify(sel)});
+  }
+  el?.scrollIntoView({ block: "center" });
+})()`;
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
@@ -204,6 +214,13 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "error", route: "#/board/all" },
   { name: "children", route: "#/board/all/ticket/HARNESS-1/children" },
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
+  // Remote IDs: the native MH-62 beside MH-124 and MH-130, both linked to Jira's MH-62.
+  { name: "remote-ids", route: `#/board/${mh}` },
+  { name: "remote-linked", route: `#/board/${mh}/ticket/MH-124/details`, setup: scrollToEl("[data-testid=external-row] .ticket-link") },
+  { name: "remote-id-field", route: `#/board/${mh}/ticket/MH-130/details`, setup: scrollToEl("[data-testid=remote-id]") },
+  { name: "remote-id-native", route: `#/board/${mh}/ticket/MH-62/details`, setup: scrollToEl("[data-testid=linked-row] .ticket-link") },
+  // OPS-41 is only a remote ID: the pane lists the two tickets linked to it.
+  { name: "remote-only", route: `#/board/${mh}/ticket/OPS-41` },
   { name: "board-conductor", route: `#/board/${harness}`, setup: showChildren },
   { name: "board-hidden", route: `#/board/${harness}` },
   { name: "board-options", route: `#/board/${harness}`, setup: `document.querySelector("[data-testid=search-options]")?.click()` },

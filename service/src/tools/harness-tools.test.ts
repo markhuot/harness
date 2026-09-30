@@ -5,6 +5,7 @@ import { tempDir } from "@harness/shared/testing";
 import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
 import { allTools } from "./index";
 import type { ToolResult } from "./types";
+import { RemoteIdError } from "./util";
 
 function tool(name: string) {
   const t = allTools.find((x) => x.name === name);
@@ -35,7 +36,7 @@ describe("tool catalogue", () => {
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
-    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "title", "url"]);
+    expect(props("dispatch_ticket")).toEqual(["conductor", "description", "key", "project_key", "start", "ticket_key", "title", "url"]);
     expect(props("decline_work")).toEqual(["reason", "title"]);
     expect(props("browser_content")).toEqual(["format", "max_chars", "selector"]);
     expect(props("browser_type")).toEqual(["selector", "submit", "text"]);
@@ -294,6 +295,7 @@ describe("board tools → HarnessOps", () => {
       getTicket: async () => ({
         ticket: { ...fakeTicket({ key: "NEW-1", branch: "medl-1223-ai-app", requestedBranch: "medl-1223-ai-app" }), projectKey: "NEW" },
         resolvedFrom: "OLD-1",
+        relatedTickets: [],
         parent: null,
         children: [],
         base: { branch: "develop", source: "project" },
@@ -304,6 +306,50 @@ describe("board tools → HarnessOps", () => {
     expect(r).toMatchObject({ key: "NEW-1", resolvedFrom: "OLD-1" });
     // The branches a client or agent needs: the worktree's, the chosen one, the override and what it merges into.
     expect(r).toMatchObject({ branch: "medl-1223-ai-app", requestedBranch: "medl-1223-ai-app", baseBranch: null, effectiveBaseBranch: "develop", baseBranchSource: "project" });
+  });
+
+  test("get_ticket lists related tickets and the ticket's remote ID", async () => {
+    const ops = fakeOps({
+      getTicket: async () => ({
+        ticket: { ...fakeTicket({ key: "MH-124", externalRef: { source: "jira", key: "MH-62", url: "https://jira/MH-62", raw: null } }), projectKey: "MH" },
+        resolvedFrom: null,
+        relatedTickets: [{ key: "MH-130", title: "Stage 2", status: "planning", projectId: "p_1", projectKey: "MH", externalKey: "MH-62" }],
+        parent: null,
+        children: [],
+        base: { branch: "main", source: "settings" },
+        summaries: [],
+      }),
+    });
+    const r = JSON.parse(text(await tool("get_ticket").execute({ key: "MH-124" }, fakeContext({ ops }))));
+    expect(r).toMatchObject({ key: "MH-124", externalKey: "MH-62", externalUrl: "https://jira/MH-62" });
+    expect(r.relatedTickets).toEqual([{ key: "MH-130", title: "Stage 2", status: "planning", project: "MH", externalKey: "MH-62" }]);
+  });
+
+  test("get_ticket for a remote-only key returns ticket null with the linked tickets, not an error", async () => {
+    const matches = {
+      ticket: null,
+      requested: "JIRA-9",
+      relatedTickets: [{ key: "MH-5", title: "One", status: "done" as const, projectId: "p_1", projectKey: "MH", externalKey: "JIRA-9" }],
+    };
+    const ops = fakeOps({
+      getTicket: async () => {
+        throw new RemoteIdError("JIRA-9 is a remote ID", matches);
+      },
+    });
+    const r = await tool("get_ticket").execute({ key: "JIRA-9" }, fakeContext({ ops }));
+    expect(r.isError).toBeFalsy();
+    expect(JSON.parse(text(r))).toEqual({
+      ticket: null,
+      requested: "JIRA-9",
+      relatedTickets: [{ key: "MH-5", title: "One", status: "done", project: "MH", externalKey: "JIRA-9" }],
+    });
+    // Any other failure is still an error.
+    const unknown = fakeOps({
+      getTicket: async () => {
+        throw new Error("Unknown ticket: NOPE-1");
+      },
+    });
+    await expect(tool("get_ticket").execute({ key: "NOPE-1" }, fakeContext({ ops: unknown }))).rejects.toThrow("Unknown ticket: NOPE-1");
   });
 
   test("search_tickets maps inputs and returns compact hits with nextCursor", async () => {
@@ -339,6 +385,19 @@ describe("triage tools → HarnessOps", () => {
     ]);
     expect(text(r)).toContain("Dispatched as FOO-9");
     expect(text(r)).toContain("Stop here");
+  });
+
+  test("dispatch_ticket passes ticket_key through and says the update went to that ticket", async () => {
+    const ops = fakeOps({
+      dispatchTicket: async () => fakeTicket({ key: "WEB-3", externalRef: { source: "jira", key: "FOO-9", url: null, raw: null } }),
+    });
+    const r = await tool("dispatch_ticket").execute(
+      { project_key: "WEB", key: "FOO-9", ticket_key: "WEB-3", title: "Fix nav", description: "update" },
+      fakeContext({ ops, runKind: "triage", ticket: null }),
+    );
+    expect(ops.calls[0]).toMatchObject({ method: "dispatchTicket", args: [{ projectKey: "WEB", key: "FOO-9", ticketKey: "WEB-3" }] });
+    expect(text(r)).toContain("Sent the update to WEB-3");
+    expect(text(r)).toContain("remote ID FOO-9");
   });
 
   test("dispatch_ticket requires project_key", async () => {

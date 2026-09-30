@@ -9,7 +9,33 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Tickets linked to a remote item, such as a Jira issue, now show its ID (MH-62) wherever the
+  ticket's key used to appear: cards, pane headers, links, the command palette, the Inbox and
+  toasts. The ticket's own key follows in muted text ("MH-62 · MH-124"), so several tickets for
+  the same Jira issue, or a local ticket that happens to share the number, stay easy to tell
+  apart. Searching for the remote ID finds every ticket linked to it.
+- You can link a ticket to a remote ID by hand, or unlink it, from its settings on the Mac,
+  iPhone and iPad (**Remote ID**, with an optional link).
+- A ticket's details list the other tickets that share its remote ID. Opening a remote ID that
+  isn't any ticket's own key, from a link for example, shows those tickets to choose from rather
+  than a "not found" pane.
+
+### Changed
+
+- Tickets that watchers create get the project's next number (MH-124) instead of taking the
+  remote ID as their key, and they're renamed along with the project like any other ticket.
+  Tickets created this way earlier keep their keys.
+- An update about a Jira issue no longer goes to an existing ticket just because it carries the
+  same ID. Triage now either picks the ticket to update or starts a new one, and it sees every
+  ticket already linked to that issue when it chooses. A review that goes through three rounds
+  can be three tickets.
+
 ### Fixed
+
+- A watcher update for a remote item (Jira MH-62) no longer lands on an unrelated local ticket
+  whose key happens to be the same.
 
 - On the Mac, the command palette now offers a ticket's actions (Approve and merge, Request
   changes…, Re-open…) after you click its card on the board, or click anywhere in its pane that

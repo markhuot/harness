@@ -1,7 +1,7 @@
 // Conductor presentation shared by the board and ticket detail: segmented progress bar, the
 // rollup on a conductor's card and the "Part of" breadcrumb on a child.
 import { Pressable, Text, View } from "react-native";
-import type { Ticket } from "@harness/shared";
+import { keyLabel, type Ticket } from "@harness/shared";
 import { progressLabel, progressSegments, type Progress } from "@harness/shared/state";
 import { useColors } from "../state/app";
 import { MONO } from "../theme/tokens";
@@ -42,10 +42,10 @@ export function ConductorRollup({ progress }: { progress: Progress }) {
 export function ParentCrumb({ parent, onOpen }: { parent: Ticket; onOpen: (key: string) => void }) {
   const c = useColors();
   return (
-    <Pressable onPress={() => onOpen(parent.key)} accessibilityRole="link" accessibilityLabel={`Part of ${parent.key}`} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.6 : 1, alignSelf: "flex-start", maxWidth: "100%" })}>
+    <Pressable onPress={() => onOpen(parent.key)} accessibilityRole="link" accessibilityLabel={`Part of ${keyLabel(parent)}`} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.6 : 1, alignSelf: "flex-start", maxWidth: "100%" })}>
       <Icon name="conductor" size={12} color={c.violet} />
       <Text style={{ color: c.text3, fontSize: 13 }}>Part of</Text>
-      <Text style={{ color: c.text2, fontSize: 13, fontFamily: MONO }}>{parent.key}</Text>
+      <Text style={{ color: c.text2, fontSize: 13, fontFamily: MONO }}>{keyLabel(parent)}</Text>
       <Text style={{ color: c.text2, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
         {parent.title || "Untitled"}
       </Text>

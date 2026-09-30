@@ -3,7 +3,7 @@
 import { reviewPassed, type BrowserState, type DriverInfo, type ModelInfo } from "@harness/shared";
 import { onTempCleanup, tempDir } from "@harness/shared/testing";
 import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
-import { outputKey, watcherProject } from "../drivers/dummy";
+import { outputKey, watcherProject, watcherTicket } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
 import { openDb } from "../db";
@@ -309,6 +309,7 @@ export class FakeDriver implements Driver {
         await ops.dispatchTicket(ctx, {
           projectKey: suggested,
           key,
+          ticketKey: watcherTicket(p) ?? undefined,
           url: /https?:\/\/[^\s"`]+/.exec(p)?.[0],
           title: `Work for ${key}`,
           description: `Handle ${key}`,

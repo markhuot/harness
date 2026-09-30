@@ -4,8 +4,9 @@
 // conductorsNeedingChildren); this fetches each once per snapshot, a few at a time, and records
 // 404s so they aren't asked for again. Pure (client + dispatch injected) for bun.
 
-import { HarnessApiError, type TicketDetail } from "@harness/shared";
+import { HarnessApiError, type RelatedTicket, type TicketDetail } from "@harness/shared";
 import { conductorsNeedingChildren, unresolvedKeys, type Action, type State } from "@harness/shared/state";
+import { remoteMatchesOf } from "./related";
 
 export interface DetailClient {
   getTicket(key: string): Promise<TicketDetail>;
@@ -21,7 +22,18 @@ export class DetailFetcher {
   private running = 0;
 
   constructor(
-    private deps: { client: DetailClient; dispatch: (a: Action) => void; concurrency?: number },
+    private deps: {
+      client: DetailClient;
+      dispatch: (a: Action) => void;
+      concurrency?: number;
+      /**
+       * Remote IDs (lib/related), which the shared state doesn't keep: a loaded ticket's
+       * relatedTickets (by ticket id), and the tickets a remote-only key points to (by the
+       * upper-cased key asked for; [] once it resolves to a ticket or 404s with no matches).
+       */
+      onRelated?: (ticketId: string, related: RelatedTicket[]) => void;
+      onRemoteKey?: (key: string, related: RelatedTicket[]) => void;
+    },
   ) {}
 
   /** A snapshot reset aliases, children and missing keys: everything may be asked for again. */
@@ -42,10 +54,16 @@ export class DetailFetcher {
       .getTicket(key)
       .then((detail) => {
         this.deps.dispatch({ type: "detail", detail, requestedKey: key });
+        // Older services don't send relatedTickets: leave what's known alone.
+        if (detail.relatedTickets) this.deps.onRelated?.(detail.ticket.id, detail.relatedTickets);
+        this.deps.onRemoteKey?.(k, []);
         return detail;
       })
       .catch((e: unknown) => {
-        if (e instanceof HarnessApiError && e.status === 404) this.deps.dispatch({ type: "missingKeys", keys: [key] });
+        if (e instanceof HarnessApiError && e.status === 404) {
+          this.deps.dispatch({ type: "missingKeys", keys: [key] });
+          this.deps.onRemoteKey?.(k, remoteMatchesOf(e)?.relatedTickets ?? []);
+        }
         throw e;
       })
       .finally(() => {

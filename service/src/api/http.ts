@@ -436,7 +436,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
           const data = await route.handler({ req, url, params, body });
           return json({ data: data ?? null });
         } catch (err) {
-          if (err instanceof HarnessError) return json({ error: err.message }, err.status);
+          if (err instanceof HarnessError) return json(err.data === undefined ? { error: err.message } : { error: err.message, data: err.data }, err.status);
           console.error(`[http] ${req.method} ${path} failed`, err);
           return json({ error: err instanceof Error ? err.message : String(err) }, 500);
         }

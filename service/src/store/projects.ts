@@ -192,13 +192,17 @@ export class ProjectRepo {
   }
 
   /**
-   * Native tickets of a project: key is `<project key>-<n>` and not mirrored from an external
-   * system. Those are the ones a key change renames.
+   * Native tickets of a project: key is `<project key>-<n>`. Those are the ones a key change
+   * renames. A ticket linked to a remote ID is native too; only a legacy mirror, whose key is its
+   * remote ID (created before remote IDs had their own field), keeps its key. Mirrors the
+   * client's `nativeTickets` (shared/src/state/projectKey.ts).
    */
   nativeTicketKeys(id: string): { ticketId: string; key: string; number: number; suffix: string }[] {
     const p = this.get(id);
     if (!p) return [];
-    const rows = this.db.query("SELECT id, key FROM tickets WHERE project_id = $id AND external_ref IS NULL").all({ id }) as { id: string; key: string }[];
+    const rows = this.db
+      .query("SELECT id, key FROM tickets WHERE project_id = $id AND (external_key IS NULL OR external_key <> key)")
+      .all({ id }) as { id: string; key: string }[];
     const out: { ticketId: string; key: string; number: number; suffix: string }[] = [];
     for (const r of rows) {
       if (!r.key.startsWith(`${p.key}-`)) continue;
@@ -279,7 +283,7 @@ export class ProjectRepo {
 
   /**
    * Hand out the next native ticket key (KEY-n) inside the caller's transaction, skipping
-   * numbers already taken (e.g. an external mirror that happens to share the prefix).
+   * numbers already taken (e.g. a legacy mirror whose remote ID happens to share the prefix).
    */
   takeNextKey(projectId: string, isTaken: (key: string) => boolean): string {
     const p = this.get(projectId);

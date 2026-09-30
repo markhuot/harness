@@ -191,7 +191,7 @@ describe("http api", () => {
     expect((await client.getTicket(t.key)).ticket.status).toBe("review");
   });
 
-  test("triage via /watchers/inject dispatches to the prompt's project with the external key", async () => {
+  test("triage via /watchers/inject dispatches to the prompt's project, linked to the external key", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
     const s = await client.injectOutput("jira", { key: "FOO-7", summary: "Fix search", url: "https://jira/FOO-7", updated: "t1" }, `Dispatch bugs to ${p.key}. [dummy:project ${p.key}]`);
@@ -199,9 +199,21 @@ describe("http api", () => {
     await h.orchestrator.idle();
     const triaged = await client.getSession(s!.id);
     expect(triaged.triageStatus).toBe("dispatched");
-    const ticket = (await client.getTicket("FOO-7")).ticket;
+    const ticket = (await client.getTicket(`${p.key}-1`)).ticket;
     expect(ticket.projectId).toBe(p.id);
-    expect(ticket.externalRef?.source).toBe("jira");
+    expect(ticket.externalRef).toMatchObject({ source: "jira", key: "FOO-7" });
+    // The remote ID doesn't open the ticket: the 404 points to the tickets linked to it.
+    const remote = await client.getTicket("foo-7").catch((e) => e);
+    expect(remote).toMatchObject({ status: 404 });
+    expect(remote.message).toContain("FOO-7 is a remote ID");
+    expect(remote.data).toEqual({
+      requested: "FOO-7",
+      relatedTickets: [{ key: ticket.key, title: ticket.title, status: ticket.status, projectId: p.id, externalKey: "FOO-7" }],
+    });
+    // A key nothing carries is a plain 404.
+    const unknown = await client.getTicket("NOPE-1").catch((e) => e);
+    expect(unknown).toMatchObject({ status: 404 });
+    expect(unknown.data).toBeUndefined();
     // The same text again is a duplicate, whether sent as an object or as its JSON text.
     expect(await client.injectOutput("jira", '{"key":"FOO-7","summary":"Fix search","url":"https://jira/FOO-7","updated":"t1"}')).toBeNull();
     expect((await client.listSessions("triage")).length).toBe(1);

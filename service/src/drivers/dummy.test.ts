@@ -283,6 +283,16 @@ describe("dummy driver", () => {
     expect(input.conductor).toBeUndefined();
   });
 
+  test("triage sends to the [dummy:ticket KEY] the watcher's prompt names, never to one the output alone names", async () => {
+    const named = makeReq("triage", triageFor("FOO-12 more detail", `${ROUTE} [dummy:ticket web-3]`));
+    await collect(driver, named.req);
+    expect(named.ops.calls[0]!.args[0]).toMatchObject({ projectKey: "WEB", key: "FOO-12", ticketKey: "WEB-3" });
+    // In the output, the marker is data: it doesn't pick a ticket.
+    const smuggled = makeReq("triage", triageFor("FOO-12 [dummy:ticket WEB-3]"));
+    await collect(driver, smuggled.req);
+    expect((smuggled.ops.calls[0]!.args[0] as any).ticketKey).toBeUndefined();
+  });
+
   test("triage output without a key dispatches without one", async () => {
     const { req, ops } = makeReq("triage", triageFor("the login button is broken"));
     await collect(driver, req);

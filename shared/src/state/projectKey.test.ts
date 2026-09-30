@@ -40,6 +40,14 @@ describe("previewProjectKey", () => {
     expect(r.message).toBe("Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1…3 become HEL-1…3. FOO-123 keeps its key");
   });
 
+  test("a ticket linked to a remote ID renames with the project; only a legacy mirror keeps its key", () => {
+    const p = project();
+    const linked = { ...ticket("HELLOHARNESS-4"), externalRef: { source: "jira", key: "MH-62", url: null, raw: null } } as Ticket;
+    const r = previewProjectKey(p, [p], [ticket("HELLOHARNESS-1"), linked, ticket("FOO-123", "p1", true)], "HEL");
+    expect(r.renames.map((x) => `${x.from}>${x.to}`)).toEqual(["HELLOHARNESS-1>HEL-1", "HELLOHARNESS-4>HEL-4"]);
+    expect(r.kept).toEqual(["FOO-123"]);
+  });
+
   test("unchanged key just shows the numbering", () => {
     const { p, projects, tickets } = seed();
     const r = previewProjectKey(p, projects, tickets, "helloharness");

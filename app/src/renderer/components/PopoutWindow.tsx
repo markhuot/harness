@@ -6,6 +6,7 @@
 // pane on the board it came from and brings the main window forward there.
 
 import { useEffect, useRef, useState } from "react";
+import { keyLabel } from "@harness/shared";
 import { ticketByKey } from "@harness/shared/state";
 import { getPopoutPanes, leaves, paneLabel, popoutScope, reloadPanes, usePopoutPanes } from "../state/panes";
 import { useStore } from "../state/store";
@@ -48,7 +49,7 @@ export function PopoutWindow({ id, fromScope }: PopoutInfo) {
   // The window's title (the Window menu, Mission Control): the ticket, or the terminal's title.
   const c = leaf?.content;
   const ticket = c?.kind === "ticket" ? ticketByKey(state, c.ticketKey) : undefined;
-  const title = !c ? "Harness" : c.kind === "ticket" ? (ticket?.title ? `${c.ticketKey} · ${ticket.title}` : c.ticketKey) : paneLabel(c);
+  const title = !c ? "Harness" : c.kind === "ticket" ? (ticket ? (ticket.title ? `${keyLabel(ticket)} · ${ticket.title}` : keyLabel(ticket)) : c.ticketKey) : paneLabel(c);
   useEffect(() => void (document.title = title), [title]);
 
   useKeyboardDispatcher();

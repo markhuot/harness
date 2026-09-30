@@ -2,13 +2,14 @@
 // search tickets in any project, read one ticket in full, list the projects and the Inbox.
 
 import { TICKET_STATUSES, type TicketStatus, type TriageStatus } from "@harness/shared";
-import type { BoardScope, BoardTicket } from "./types";
-import { defineTool, json, schema, ticketView } from "./util";
+import type { BoardRelatedTicket, BoardScope, BoardTicket, BoardTicketDetail } from "./types";
+import { defineTool, json, RemoteIdError, schema, ticketView } from "./util";
 
 /** list_tickets page size when no limit is given (the ops cap it at 200). */
 export const LIST_TICKETS_DEFAULT_LIMIT = 50;
 
 const boardView = (t: BoardTicket) => ({ ...ticketView(t), project: t.projectKey });
+const relatedView = (r: BoardRelatedTicket) => ({ key: r.key, title: r.title, status: r.status, project: r.projectKey, externalKey: r.externalKey });
 
 export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string; status?: TicketStatus[]; limit?: number }>({
   name: "list_tickets",
@@ -41,7 +42,7 @@ export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string
 export const getTicket = defineTool<{ key: string; include_transcript?: number }>({
   name: "get_ticket",
   description:
-    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
+    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Only local keys find a ticket: a remote ID (the external item's key a ticket is linked to, shown as externalKey) doesn't. relatedTickets lists the other tickets linked to the same remote ID, or to the key you asked for. When no local ticket has the key but tickets carry it as their remote ID, the result is { ticket: null, requested, relatedTickets }: call get_ticket again with one of those local keys. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
@@ -50,11 +51,19 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
     ["key"],
   ),
   async run({ key, include_transcript }, ctx) {
-    const d = await ctx.ops.getTicket(ctx, key, include_transcript ? { transcript: include_transcript } : undefined);
+    let d: BoardTicketDetail;
+    try {
+      d = await ctx.ops.getTicket(ctx, key, include_transcript ? { transcript: include_transcript } : undefined);
+    } catch (err) {
+      if (!(err instanceof RemoteIdError)) throw err;
+      const m = err.matches;
+      return json({ ticket: null, requested: m.requested, relatedTickets: m.relatedTickets.map(relatedView) });
+    }
     const t = d.ticket;
     return json({
       ...boardView(t),
       ...(d.resolvedFrom ? { resolvedFrom: d.resolvedFrom } : {}),
+      relatedTickets: d.relatedTickets.map(relatedView),
       description: t.description,
       parent: d.parent,
       children: d.children,
@@ -72,7 +81,7 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
 export const searchTickets = defineTool<{ query: string; project_key?: string; limit?: number; cursor?: string }>({
   name: "search_tickets",
   description:
-    "Full-text search over every ticket in every status: key (exact or prefix, including old keys), title, description and latest summary. Every word must match, as a prefix. Best matches come first (exact key, key prefix, title hits, then the rest; newest first within each). Returns key, title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
+    "Full-text search over every ticket in every status: key (exact or prefix, including old keys), remote ID (the external item's key a ticket is linked to), title, description and latest summary. Every word must match, as a prefix. Best matches come first (exact key, key prefix, exact remote ID, remote ID prefix, title hits, then the rest; newest first within each). Returns key, externalKey (its remote ID, when it has one), title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
   inputSchema: schema(
     {
       query: { type: "string", minLength: 1, description: "Words or a ticket key to search for." },
@@ -87,7 +96,14 @@ export const searchTickets = defineTool<{ query: string; project_key?: string; l
     if (page.hits.length === 0) return input.cursor ? "No more matches." : `No tickets match "${input.query}".`;
     return json({
       total: page.total,
-      hits: page.hits.map(({ ticket: t, snippet }) => ({ key: t.key, title: t.title, status: t.status, project: t.projectKey, snippet })),
+      hits: page.hits.map(({ ticket: t, snippet }) => ({
+        key: t.key,
+        ...(t.externalRef?.key ? { externalKey: t.externalRef.key } : {}),
+        title: t.title,
+        status: t.status,
+        project: t.projectKey,
+        snippet,
+      })),
       nextCursor: page.nextCursor,
     });
   },

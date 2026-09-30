@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { Session, Watcher } from "@harness/shared";
+import { keyLabel, type Session, type Watcher } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { dispatchedKey as outcomeKey, ticketByKey, TRIAGE_LABEL, triageSessions, watcherStatus } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -166,7 +166,7 @@ function TriageSession({ session }: { session: Session }) {
           </div>
           {dispatched && (
             <button className="btn btn-sm" onClick={() => navigate({ view: "board", projectId: null, ticketKey: dispatched.key, tab: "summaries" })}>
-              Open {dispatched.key} <Icon name="chevronRight" size={12} />
+              Open {keyLabel(dispatched)} <Icon name="chevronRight" size={12} />
             </button>
           )}
         </div>

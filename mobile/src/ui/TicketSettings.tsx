@@ -1,14 +1,14 @@
 // A ticket's settings rows, the same for a launched ticket (the Details tab) and a draft (New
 // session's Options): Model, Permissions, Skip agent review, Branch (with the hint under it), Base
-// branch and Depends on. Which rows show and which can change come from the shared
+// branch, Remote ID (launched tickets) and Depends on. Which rows show and which can change come from the shared
 // ticketSettingsRows; every change goes out as one UpdateTicketBody through `onPatch` (a PATCH for a
 // launched ticket, applyTicketPatch on a draft's local state). The rows render bare, so the caller
 // puts them in its own Card (Details follows them with its read-only rows).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode, type BranchInfo, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
+import { isTicketKey, keyLabel, plannedBranch, resolveBaseBranch, resolvePermissionMode, type BranchInfo, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
   checkoutBranch,
   dependencyStates,
@@ -31,7 +31,8 @@ import { MONO } from "../theme/tokens";
 import { skipReviewHint } from "../lib/newSession";
 import { BranchPicker } from "./BranchPicker";
 import { DriverModelPicker } from "./DriverModelPicker";
-import { Chip } from "./kit";
+import { Button, Chip } from "./kit";
+import { depOpens, remoteIdPatch } from "../lib/related";
 import { Prop } from "./Prop";
 import { PermissionPicker } from "./selects";
 
@@ -171,6 +172,7 @@ export function TicketSettings({ ticket, onPatch, branches: given, last }: { tic
           )}
         </Prop>
       )}
+      {!draft && <RemoteIdProp ticket={ticket} onPatch={onPatch} />}
       <DependsOnProp ticket={ticket} project={project} editable={rows.editable} onPatch={onPatch} last={last} />
     </>
   );
@@ -178,7 +180,7 @@ export function TicketSettings({ ticket, onPatch, branches: given, last }: { tic
 
 /** Depends on: ticket keys typed comma- or space-separated, saved on blur / return; chips open them. */
 function DependsOnProp({ ticket, project, editable, onPatch, last }: { ticket: Ticket; project: Project | undefined; editable: boolean; onPatch: (patch: UpdateTicketBody) => void; last?: boolean }) {
-  const { state } = useStore();
+  const { state, related } = useStore();
   const c = useColors();
   const router = useRouter();
   const [text, setText] = useState(ticket.dependsOn.join(", "));
@@ -200,7 +202,7 @@ function DependsOnProp({ ticket, project, editable, onPatch, last }: { ticket: T
     ) : deps.length > 0 ? (
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
         {deps.map((d) => (
-          <Chip key={d.key} label={d.key} done={d.done} unknown={d.state === "unknown"} onPress={d.missing ? undefined : () => router.push({ pathname: "/ticket/[key]", params: { key: d.ticket?.key ?? d.key } })} />
+          <Chip key={d.key} label={d.ticket ? keyLabel(d.ticket) : d.key} done={d.done} unknown={d.state === "unknown"} onPress={!depOpens(d, related.byRemoteKey) ? undefined : () => router.push({ pathname: "/ticket/[key]", params: { key: d.ticket?.key ?? d.key } })} />
         ))}
       </View>
     ) : undefined;
@@ -225,6 +227,84 @@ function DependsOnProp({ ticket, project, editable, onPatch, last }: { ticket: T
           {ticket.dependsOn.join(", ") || "None"}
         </Text>
       )}
+    </Prop>
+  );
+}
+
+/**
+ * Remote ID: the remote item (a Jira issue, a PR) the ticket is linked to, shown in place of its
+ * key (DESIGN.md "Remote IDs"). Key and optional link, saved together on blur / return as a
+ * manual link; clearing the key or Unlink removes it. Many tickets can share one remote ID.
+ */
+function RemoteIdProp({ ticket, onPatch }: { ticket: Ticket; onPatch: (patch: UpdateTicketBody) => void }) {
+  const c = useColors();
+  const ref = ticket.externalRef;
+  const [key, setKey] = useState(ref?.key ?? "");
+  const [url, setUrl] = useState(ref?.url ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const urlInput = useRef<TextInput>(null);
+  useEffect(() => {
+    setKey(ref?.key ?? "");
+    setUrl(ref?.url ?? "");
+    setError(null);
+  }, [ref?.key, ref?.url]);
+  const save = () => {
+    const res = remoteIdPatch(ref ? { key: ref.key, url: ref.url } : null, { key, url }, isTicketKey);
+    if (!res) return setError(null);
+    if ("error" in res) return setError(res.error);
+    setError(null);
+    onPatch({ externalRef: res.externalRef });
+  };
+  const field = { color: c.text, fontSize: 13.5, textAlign: "right", minWidth: 160, flexShrink: 1, paddingVertical: 4 } as const;
+  const source = ref && ref.source !== "manual" ? `From ${ref.source}` : undefined;
+  return (
+    <Prop
+      label="Remote ID"
+      hint={source ?? "Shown in place of the key"}
+      footer={
+        <View style={{ gap: 6 }}>
+          <TextInput
+            ref={urlInput}
+            value={url}
+            onChangeText={setUrl}
+            onBlur={save}
+            onSubmitEditing={save}
+            returnKeyType="done"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="Link (optional), e.g. https://…"
+            placeholderTextColor={c.text3}
+            accessibilityLabel="Remote ID link"
+            style={[field, { alignSelf: "stretch" }]}
+          />
+          {error && <Text style={{ color: c.red, fontSize: 13 }}>{error}</Text>}
+          {ref && (
+            <Button
+              small
+              variant="ghost"
+              icon="x"
+              title={`Unlink ${ref.key}`}
+              onPress={() => onPatch({ externalRef: null })}
+              style={{ alignSelf: "flex-end" }}
+            />
+          )}
+        </View>
+      }
+    >
+      <TextInput
+        value={key}
+        onChangeText={setKey}
+        onBlur={save}
+        onSubmitEditing={() => (url || !key ? save() : urlInput.current?.focus())}
+        returnKeyType={url || !key ? "done" : "next"}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        placeholder="e.g. JIRA-62"
+        placeholderTextColor={c.text3}
+        accessibilityLabel="Remote ID"
+        style={[field, { fontFamily: MONO }]}
+      />
     </Prop>
   );
 }
