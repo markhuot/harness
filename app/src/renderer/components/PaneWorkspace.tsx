@@ -34,6 +34,9 @@ import {
   type PaneState,
   type Rect,
 } from "../state/panes";
+import { ticketByKey } from "@harness/shared/state";
+import { useStore } from "../state/store";
+import { draftEditorKey } from "../state/draftSession";
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { TerminalPane } from "../views/TerminalPane";
@@ -162,6 +165,14 @@ function Pane({
   const scope = usePaneScope();
   const focus = () => updatePanes(scope, (s) => focusPane(s, leaf.id));
   const c = leaf.content;
+  // A draft's pane is its editor, rendered here (not inside TicketDetail) under the same key as the
+  // New session it started as: the first save swaps the content to the ticket without remounting
+  // the editor, so the prompt keeps the keyboard and what's typed after it.
+  const { state } = useStore();
+  const draft = c.kind === "ticket" ? ticketByKey(state, c.ticketKey) : undefined;
+  const shownDraft = useRef<string | null>(null);
+  const wasDraft = !!draft && shownDraft.current === draft.id;
+  shownDraft.current = draft?.draft ? draft.id : null;
   return (
     <section
       className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
@@ -182,10 +193,12 @@ function Pane({
       <PaneContext.Provider value={ctx}>
         {c.kind === "board" ? (
           <BoardPane />
+        ) : c.kind === "ticket" && draft?.draft ? (
+          <DraftEditor key={draftEditorKey(leaf.id, draft.id)} paneId={leaf.id} ticket={draft} zoomed={zoomed} />
         ) : c.kind === "ticket" ? (
-          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
+          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} tabChosen={wasDraft} />
         ) : c.kind === "compose" ? (
-          <DraftEditor key={c.id} paneId={leaf.id} compose={c} zoomed={zoomed} />
+          <DraftEditor key={`draft:${c.id}`} paneId={leaf.id} compose={c} zoomed={zoomed} />
         ) : (
           <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
         )}

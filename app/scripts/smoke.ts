@@ -521,8 +521,15 @@ try {
 
   // Typing makes it a draft ticket: planning, no run, and the pane shows its key in place.
   const printId = await newCompose();
+  await js(`document.querySelector('${inPane(printId, ".draft-prompt")}').dataset.smokeMark = "before-save"`);
   await typeIn(printId, "Add a print stylesheet for recipe cards");
   const printDraft = await savedDraft(printId, "print stylesheet");
+  // The first save swaps the pane to the draft's ticket without remounting the editor: the same
+  // prompt element, still focused, so typing carries on.
+  check(
+    "the first save keeps the prompt element and its focus",
+    await js<boolean>(`(() => { const el = document.querySelector('${inPane(printId, ".draft-prompt")}'); return el?.dataset.smokeMark === "before-save" && document.activeElement === el; })()`),
+  );
   const printDetail = await api<{ ticket: DT; runs: unknown[] }>("GET", `/tickets/${printDraft.key}`);
   check("typing creates a draft: planning, draft, no run", printDetail.ticket.draft === true && printDetail.ticket.status === "planning" && printDetail.runs.length === 0, `${printDraft.key} ${printDetail.ticket.status} runs=${printDetail.runs.length}`);
   check("the pane turns into the draft's pane in place and shows its key", (await paneKind(printId)) === "pane-ticket" && !(await exists("[data-testid=pane-compose]")));

@@ -298,6 +298,17 @@ export function paneDraftSession(leafId: string, matches: (s: DraftSession) => b
   return s;
 }
 
+/**
+ * The React key for the draft editor in pane `leafId` showing draft `ticketId`: the New session it
+ * started as while the pane's session is still that draft, else the draft itself. It stays the same
+ * when the first save turns a New session pane into the draft's pane, and when the draft moves to
+ * another project, so the editor (and the prompt the user is typing in) isn't remounted.
+ */
+export function draftEditorKey(leafId: string, ticketId: string): string {
+  const s = sessions.get(leafId);
+  return `draft:${s?.composeId && s.saved?.id === ticketId ? s.composeId : ticketId}`;
+}
+
 /** The pane no longer shows the session's draft (closed, or showing something else): save what's waiting, and forget it. */
 export function releaseDraftSession(leafId: string, s: DraftSession, stillShown: boolean) {
   if (stillShown || sessions.get(leafId) !== s) return;

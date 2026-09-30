@@ -84,7 +84,20 @@ function scrollerIn(root: HTMLElement | null): HTMLElement | null {
 const LINE = 48;
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
-export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { paneId: string; ticketKey: string; tab: TicketTab; zoomed: boolean }) {
+export function TicketDetail({
+  paneId,
+  ticketKey,
+  tab: paneTab,
+  zoomed,
+  tabChosen = false,
+}: {
+  paneId: string;
+  ticketKey: string;
+  tab: TicketTab;
+  zoomed: boolean;
+  /** The pane's tab was picked for it (a draft just submitted from this pane): keep it. */
+  tabChosen?: boolean;
+}) {
   const { state, client, dispatch, epoch } = useStore();
   const scope = usePaneScope();
   const [missing, setMissing] = useState(false);
@@ -126,7 +139,7 @@ export function TicketDetail({ paneId, ticketKey, tab: paneTab, zoomed }: { pane
   // A ticket opened on the default Summaries tab moves to the Transcript when it has no summaries.
   // Decided once per ticket the pane shows, when its summaries first load, so a later click on
   // Summaries stays there.
-  const openedOn = useRef<string | null>(paneTab !== "summaries" ? ticketKey : null);
+  const openedOn = useRef<string | null>(paneTab !== "summaries" || tabChosen ? ticketKey : null);
   const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
   const draft = !!ticket?.draft;
   useEffect(() => {
