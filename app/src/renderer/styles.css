@@ -252,6 +252,7 @@ kbd {
 
 /* Switch */
 .switch {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -259,8 +260,15 @@ kbd {
   font-size: 12.5px;
   color: var(--text-2);
 }
+/* Hidden but still focusable, so Tab reaches it and Space toggles it (display: none would drop it
+   from the tab order). The track shows its focus. */
 .switch input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .switch:has(input:disabled) {
   cursor: default;
@@ -292,6 +300,9 @@ kbd {
 }
 .switch input:checked + .switch-track::after {
   transform: translateX(12px);
+}
+.switch input:focus-visible + .switch-track {
+  box-shadow: 0 0 0 3px var(--focus);
 }
 
 /* Segmented control */

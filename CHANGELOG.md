@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the Mac, the project picker in a New session pane now shows a focus ring when you Tab to it.
+- On the Mac, switches can be reached with Tab and turned on or off with Space. This includes Skip
+  agent review in a New session's Options, the switches in Settings and project settings, and the
+  one in a ticket's chat bar. Each shows a focus ring while it has the keyboard.
+
 ## [app-20260930.1358](https://github.com/markhuot/harness/releases/tag/app-20260930.1358) - 2026-09-30
 
 ### Added
