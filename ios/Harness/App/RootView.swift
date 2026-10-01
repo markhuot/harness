@@ -12,7 +12,8 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     #if DEBUG
-    /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly.
+    /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
+    /// (`browser:<KEY>` and `plugin:<KEY>:<pluginId>:<tabId>`: BrowserPluginDebugScreen).
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
@@ -46,6 +47,8 @@ struct RootView: View {
             NavigationStack { HighlightPreviewView() }
         } else if debugScreen == "pickers" {
             NavigationStack { RequireStore { PickerGalleryView() } }
+        } else if app.active != nil, let screen = BrowserPluginDebugScreen(debugScreen) {
+            NavigationStack { screen }
         } else {
             shell
         }

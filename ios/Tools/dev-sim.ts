@@ -19,6 +19,8 @@ const REPO = resolve(IOS, "..");
 export const SCREENS = join(IOS, "build", "screens");
 const DEFAULT_APP = join(IOS, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const BUNDLE = "com.markhuot.harness";
+/** The Debug build ("Harness Dev"). It registers harness:// too, so one left on the shared simulator can catch the pair link. */
+const DEV_BUNDLE = "com.markhuot.harness.dev";
 
 export const USAGE = `Usage: bun ios/Tools/dev-sim.ts [options]
        bun ios/Tools/dev-sim.ts --seed-only [--keep]
@@ -228,6 +230,8 @@ async function openAndWait(udid: string, axe: Axe, url: string, what: string, ac
 async function installAndPair(udid: string, axe: Axe, app: string, pairUrl: string) {
   await sh(["xcrun", "simctl", "terminate", udid, BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
+  await sh(["xcrun", "simctl", "terminate", udid, DEV_BUNDLE], { allowFail: true });
+  await sh(["xcrun", "simctl", "uninstall", udid, DEV_BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, app);
   await simctl("ui", udid, "appearance", "light");
