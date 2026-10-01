@@ -311,7 +311,7 @@ struct NewSessionEditorTests {
         // Back to empty after it was saved: discarding deletes it.
         fresh.editor.edit(UpdateTicketBody(kind: .task))
         #expect(fresh.editor.cancelStep == .discardAndDismiss)
-        try await fresh.editor.discard()
+        try await fresh.editor.discard().value
         #expect(fresh.api.ops == ["create", "remove WEB-4"])
     }
 
@@ -330,10 +330,27 @@ struct NewSessionEditorTests {
         gone.store.state.tickets["d1"] = Self.draft()
         gone.editor.begin(projectId: nil, candidates: [])
         gone.editor.setPrompt("Edited")
-        try? await gone.editor.discard()
+        try? await gone.editor.discard().value
         gone.editor.screenGone()
         await Self.drain()
         #expect(gone.api.ops == ["remove WEB-2"])
+    }
+
+    /// Cancel → Discard dismisses the sheet right away, so its onDisappear (`screenGone`) runs
+    /// before the discard's task has: it must not save the draft first.
+    @Test func goingAwayBeforeTheDiscardRunsDoesntSaveTheDraft() async {
+        let r = Rig(reopen: "WEB-2")
+        r.store.state.tickets["d1"] = Self.draft()
+        r.api.server = Self.draft()
+        r.editor.begin(projectId: nil, candidates: [])
+        r.editor.setPrompt("Edited")
+        let discarding = r.editor.discard()
+        // Closed before the discard's task has run a step.
+        #expect(r.editor.sync?.isClosed == true)
+        r.editor.screenGone()
+        try? await discarding.value
+        await Self.drain()
+        #expect(r.api.ops == ["remove WEB-2"])
     }
 
     @Test func aFailedSaveIsReported() async {

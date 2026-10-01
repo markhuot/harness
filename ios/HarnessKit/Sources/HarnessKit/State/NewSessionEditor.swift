@@ -224,20 +224,30 @@ public final class NewSessionEditor {
         return sync.empty ? .discardAndDismiss : .ask
     }
 
-    /// Delete the saved draft (if any) and stop.
-    public func discard() async throws {
-        try await sync?.discard()
+    /// Delete the saved draft (if any) and stop. Settled at once, before the returned task runs, so
+    /// the sheet's `screenGone` (its dismissal follows right away) can't save the draft back.
+    @discardableResult
+    public func discard() -> Task<Void, any Error> {
+        settled = true
+        return sync?.beginDiscard() ?? Task {}
     }
 
-    /// Save what's unsent and stop (a saved draft that's empty again is deleted).
-    public func save() async throws {
-        try await sync?.close()
+    /// Save what's unsent and stop (a saved draft that's empty again is deleted). Settled at once,
+    /// like `discard`.
+    @discardableResult
+    public func save() -> Task<Void, any Error> {
+        settled = true
+        let sync = sync
+        return Task { try await sync?.close() }
     }
+
+    /// Cancel chose Save draft or Discard draft.
+    @ObservationIgnored private var settled = false
 
     /// The sheet went away (a swipe down, a link, a reconnect): save the draft unless Cancel,
     /// a submit or another device already settled it.
     public func screenGone() {
-        guard let sync, !sync.isClosed else { return }
+        guard !settled, let sync, !sync.isClosed else { return }
         Task { try? await sync.close() }
     }
 }
