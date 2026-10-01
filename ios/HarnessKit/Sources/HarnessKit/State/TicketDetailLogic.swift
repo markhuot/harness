@@ -5,6 +5,9 @@ import Foundation
 // the labels its rows show, and the runs list. The views in Harness/Features/Ticket read these.
 
 public enum TicketDetailLogic {
+    /// JS `text.trim()`, for the screen's "is there anything to send" checks.
+    public static func trim(_ s: String) -> String { JSCompat.trim(s) }
+
     // MARK: Header
 
     /// The More menu's "Mark done": not on a done ticket, and not in review, where the Approve menu's
