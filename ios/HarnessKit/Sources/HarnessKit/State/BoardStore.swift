@@ -23,6 +23,18 @@ public protocol EventSource: AnyObject, Sendable {
 
 extension HarnessSocket: EventSource {}
 
+/// The socket's outgoing side the Browser tab uses (HarnessSocket), as a seam for tests. An
+/// EventSource that doesn't conform simply drops browser messages.
+public protocol BrowserChannel: AnyObject, Sendable {
+    /// Sent when a connection is open, otherwise dropped.
+    func send(_ msg: ClientMessage) async
+    /// Stream a session's browser frames; re-sent on every reconnect of this socket.
+    func subscribeBrowser(_ sessionId: String) async
+    func unsubscribeBrowser(_ sessionId: String) async
+}
+
+extension HarnessSocket: BrowserChannel {}
+
 @MainActor
 @Observable
 public final class BoardStore {
@@ -49,6 +61,10 @@ public final class BoardStore {
     /// Last snapshot failure (host unreachable etc.), cleared by the next success.
     public private(set) var loadError: String?
     public private(set) var related = Related()
+    /// Bumped whenever the socket is rebuilt (foregrounding). A rebuilt socket has no browser
+    /// subscriptions and its first connect doesn't bump `epoch`, so the Browser tab resubscribes on
+    /// either (RN's effect depends on `socket` and `epoch`).
+    public private(set) var socketGeneration = 0
 
     public let baseUrl: String
     @ObservationIgnored public let client: any BoardClient
@@ -59,6 +75,8 @@ public final class BoardStore {
     @ObservationIgnored private let timers: any Timers
     @ObservationIgnored private var socket: (any EventSource)?
     @ObservationIgnored private var socketTasks: [Task<Void, Never>] = []
+    /// Browser messages for the current socket, sent one at a time so input keeps its order.
+    @ObservationIgnored private var outbox: AsyncStream<BrowserOp>.Continuation?
     @ObservationIgnored private var fallbackTimer: TimerHandle?
     @ObservationIgnored private var pollTimer: TimerHandle?
     @ObservationIgnored private var scope: String
@@ -151,10 +169,24 @@ public final class BoardStore {
     private func openSocket() {
         let socket = makeSocket()
         self.socket = socket
+        socketGeneration += 1
         // A rebuilt socket starts over: as in store.tsx (where `first` lives with the socket), its
         // first connect doesn't bump the epoch.
         var first = true
+        let (ops, opsIn) = AsyncStream<BrowserOp>.makeStream()
+        outbox = opsIn
+        let channel = socket as? any BrowserChannel
         socketTasks = [
+            Task {
+                for await op in ops {
+                    guard let channel else { continue }
+                    switch op {
+                    case let .send(msg): await channel.send(msg)
+                    case let .subscribe(id): await channel.subscribeBrowser(id)
+                    case let .unsubscribe(id): await channel.unsubscribeBrowser(id)
+                    }
+                }
+            },
             Task { @MainActor [weak self] in
                 for await event in socket.events {
                     guard let self, !Task.isCancelled else { return }
@@ -176,6 +208,8 @@ public final class BoardStore {
     }
 
     private func closeSocket() {
+        outbox?.finish()
+        outbox = nil
         for t in socketTasks { t.cancel() }
         socketTasks = []
         if let socket {
@@ -228,6 +262,30 @@ public final class BoardStore {
         let id = nextListener
         listeners[id] = fn
         return { [weak self] in self?.listeners[id] = nil }
+    }
+
+    // MARK: Browser
+
+    enum BrowserOp: Sendable {
+        case send(ClientMessage)
+        case subscribe(String)
+        case unsubscribe(String)
+    }
+
+    /// Stream a session's browser frames and state (browser.frame / browser.state reach `onEvent`
+    /// listeners) on the current socket. Resubscribe when `epoch` or `socketGeneration` changes.
+    public func subscribeBrowser(_ sessionId: String) {
+        outbox?.yield(.subscribe(sessionId))
+    }
+
+    public func unsubscribeBrowser(_ sessionId: String) {
+        outbox?.yield(.unsubscribe(sessionId))
+    }
+
+    /// Mouse, key, text, navigation and resize input for a session's browser, sent in call order.
+    /// Dropped while the socket is down, as in TS.
+    public func sendBrowserInput(_ sessionId: String, _ input: BrowserInput) {
+        outbox?.yield(.send(.browserInput(sessionId: sessionId, input: input)))
     }
 
     /// Whether an action can change what DetailFetcher wants (store.tsx re-syncs on ready,
