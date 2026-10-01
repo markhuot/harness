@@ -53,7 +53,7 @@ export function LandButton({
           <>
             {menu.items.map((c) => (
               <button key={c.label} role="menuitem" disabled={disabled} data-action={c.kind === "none" ? "none" : c.action} onClick={() => (close(), onChoose(c))}>
-                <Icon name={c.kind !== "none" && c.action === "pr" ? "branch" : c.kind === "sheet" ? "edit" : "check"} /> {c.label}
+                <Icon name={c.kind !== "none" && c.action === "pr" ? "branch" : c.kind !== "none" && c.action === "cleanup" ? "trash" : c.kind === "sheet" ? "edit" : "check"} /> {c.label}
               </button>
             ))}
             {menu.items.length > 0 && <hr />}
@@ -77,6 +77,7 @@ export interface LandSheetState {
 const SHEET_COPY: Record<CompletionAction, string> = {
   merge: "The agent merges the worktree branch, cleans up, and marks the ticket done.",
   pr: "The agent pushes the branch and opens a pull request (or updates the one it opened), then marks the ticket done.",
+  cleanup: "The agent checks the work is already pushed or merged, removes the worktree and the harness branch, and marks the ticket done. Anything that would be lost leaves the ticket blocked instead.",
   custom: "The agent lands the work the way you describe, then marks the ticket done.",
 };
 

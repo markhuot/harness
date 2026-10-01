@@ -312,7 +312,7 @@ try {
   })();
   check(
     "the Complete button offers the same choices as Approve",
-    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and…|Complete and take no action",
+    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and clean up|Complete and…|Complete and take no action",
     completeItems.join("|"),
   );
   await clickText(".actions button", "Complete");
@@ -332,7 +332,7 @@ try {
     const all = await api<{ id: string; key: string }[]>("GET", "/projects");
     const site = all.find((p) => p.key === "SITE")!;
     const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: "/tmp/smoke-plain-git", key: "PLAIN", name: "plain-git" });
-    check("a git project without a PR host offers merge and custom", plain.completionActions?.join(",") === "merge,custom", String(plain.completionActions));
+    check("a git project without a PR host offers merge, cleanup and custom", plain.completionActions?.join(",") === "merge,cleanup,custom", String(plain.completionActions));
     const [ghT, plainT, siteT] = await Promise.all(
       [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, prompt: "Land me" })),
     );
@@ -374,8 +374,8 @@ try {
     check("the More menu has no Mark done while the ticket is in review", !inReviewMore.includes("Mark done") && inReviewMore.includes("Copy key"), inReviewMore.join(","));
     const ghItems = await openMenu();
     check(
-      "gh project: the Approve menu offers merge, open PR, Approve and…, then take no action after a separator",
-      ghItems.join("|") === "Approve and merge|Approve and open PR|Approve and…|Approve and take no action" && (await exists(".land-menu-approve hr")),
+      "gh project: the Approve menu offers merge, open PR, clean up, Approve and…, then take no action after a separator",
+      ghItems.join("|") === "Approve and merge|Approve and open PR|Approve and clean up|Approve and…|Approve and take no action" && (await exists(".land-menu-approve hr")),
       ghItems.join("|"),
     );
     await screenshot("/tmp/harness-86-mac-approve-menu.png");
@@ -398,7 +398,7 @@ try {
     // Plain git: no PR choice; take no action approves and finishes without a run.
     await openApprove(plainT!.key);
     const plainItems = await openMenu();
-    check("plain git: the Approve menu has no open PR", plainItems.join("|") === "Approve and merge|Approve and…|Approve and take no action", plainItems.join("|"));
+    check("plain git: the Approve menu has no open PR", plainItems.join("|") === "Approve and merge|Approve and clean up|Approve and…|Approve and take no action", plainItems.join("|"));
     await clickText(".land-menu-approve button", "Approve and take no action");
     const noAction = await until("take no action done", async () => {
       const x = await getT(plainT!.key);

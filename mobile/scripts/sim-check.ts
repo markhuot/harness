@@ -1365,7 +1365,7 @@ function screens(s: Seeded): Screen[] {
     // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
     // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
     { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
-    // A git ticket in review: the Approve button's menu (merge, Approve and…, take no action), then
+    // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action), then
     // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
     {
       name: "approve-menu",
