@@ -1648,7 +1648,11 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         // Typing left the editor scrolled to the end of the long work prompt, above the button.
         await scrollTo(udid, (l) => l === "Reset to built-in");
         await tapWhere(udid, "Reset to built-in");
-        await tapWhere(udid, "Reset"); // the confirm alert
+        // The confirm alert: its buttons are in the AX tree before it takes taps (the native app's
+        // alert drops a tap that lands during its presentation), so let it settle first.
+        await until("confirm alert", () => findElement(udid, (l) => l === "Reset"), 5000);
+        await Bun.sleep(600);
+        await tapWhere(udid, "Reset");
         await until("override cleared", async () => (await override("system.work")) === null, 8000);
         await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
         moved(udid);
