@@ -393,6 +393,9 @@ async function shootBoth(udid: string, name: string, redrawn: () => Promise<unkn
 async function install(udid: string) {
   await simctl("terminate", udid, BUNDLE).catch(() => {});
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
+  // The native Debug build (Harness Dev) registers harness:// too, and iOS may hand it the pair link
+  // and every deep link after it. The shared simulator can have one left from a dev loop.
+  await sh(["xcrun", "simctl", "uninstall", udid, `${BUNDLE}.dev`], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, appPath);
   await appearance(udid, "light");
@@ -783,9 +786,13 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     return true;
   });
   await check("the Done column scrolls into older pages", async () => {
-    // Reading the tree (every loaded card) costs more than a swipe, so look after every few.
+    // Reading the tree (every loaded card) costs more than a swipe, so look after every few. A lazy
+    // list (the native app) only has the cards on screen in the tree, and a few flicks can carry it
+    // past `deep`, so any card at least as old (past the first page) counts.
+    const older = [...p.history.slice(0, -59), p.needle].map((t) => `${t.key} `);
     for (let i = 0; i < 45; i += 3) {
-      if (await has(`${deep.key} `)) return `${deep.key} after ${i} swipes`;
+      const seen = (await labels(udid)).find((l) => older.some((k) => l.startsWith(k)));
+      if (seen) return `${seen.split(" ")[0]} (≥ 60th newest) after ${i} swipes`;
       for (let j = 0; j < 3; j++) await swipeUp();
       await Bun.sleep(300);
     }
