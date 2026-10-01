@@ -107,13 +107,12 @@ private struct TicketDetailChildRow: View {
         Button { router.push(.ticket(key: child.key, tab: nil)) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 7) {
-                    TicketKeyLabel(ticket: child).layoutPriority(0)
+                    TicketKeyLabel(ticket: child).fixedSize()
                     Text(child.title.isEmpty ? "Untitled" : child.title)
                         .font(.system(size: 14.5, weight: .medium))
                         .foregroundStyle(c.text)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .layoutPriority(1)
                     if child.busy { Spinner() }
                     if child.status == .review {
                         HStack(spacing: 3) {
