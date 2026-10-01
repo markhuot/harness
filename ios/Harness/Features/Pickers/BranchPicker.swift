@@ -61,9 +61,11 @@ private struct BranchSheet: View {
     @State private var matches: [BranchInfo] = []
     @State private var loading = false
     @State private var error: String?
+    @State private var latest = PickerLatest<(BranchRow) -> Void>()
 
     var body: some View {
-        let rows = Branches.branchRows(matches, query: query, defaultLabel: defaultLabel, newLabel: newLabel)
+        let rows = currentRows()
+        let _ = latest.set(onPick)
         PickerSheet(
             title: title,
             query: $query,
@@ -73,7 +75,8 @@ private struct BranchSheet: View {
             autofocus: true,
             problem: error.map { "Couldn't list branches: \($0)" },
             submitLabel: .done,
-            onSubmit: { if let first = rows.first(where: { Branches.rowId($0) != nil }) { onPick(first) } }
+            // Read the rows and the pick handler when Return fires: the field keeps an earlier closure.
+            onSubmit: { if let first = currentRows().first(where: { Branches.rowId($0) != nil }) { latest.value?(first) } }
         ) {
             if loading { ProgressView() }
         } content: {
@@ -89,6 +92,10 @@ private struct BranchSheet: View {
             }
         }
         .task(id: "\(query)#\(store.epoch)") { await search() }
+    }
+
+    private func currentRows() -> [BranchRow] {
+        Branches.branchRows(matches, query: query, defaultLabel: defaultLabel, newLabel: newLabel)
     }
 
     @ViewBuilder private func rowView(_ row: BranchRow) -> some View {

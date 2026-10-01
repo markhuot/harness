@@ -209,6 +209,14 @@ private struct TicketSettingsRows: View {
     }
 }
 
+/// The latest render's values, for callbacks SwiftUI may keep from an earlier render: a TextField's
+/// `onSubmit` (and the focus-change handlers next to it) can fire with closures that captured an
+/// older ticket, so they read it from here. Set during body; not observed.
+final class PickerLatest<Value> {
+    private(set) var value: Value?
+    func set(_ v: Value) { value = v }
+}
+
 /// One settings row (RN `Prop`): the label with its hint under it, the control on the right, and
 /// an optional footer across the row.
 struct TicketSettingsRow<Control: View, Footer: View>: View {
@@ -253,9 +261,11 @@ private struct TicketDependsOnRow: View {
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
     @State private var text = ""
+    @State private var latest = PickerLatest<(Ticket, (UpdateTicketBody) -> Void)>()
     @FocusState private var focused: Bool
 
     var body: some View {
+        let _ = latest.set((ticket, onPatch))
         let bad = PickerLogic.parseDependsOn(text).bad
         let deps = store.state.dependencyStates(ticket)
         let example = project?.key ?? "WEB"
@@ -298,6 +308,7 @@ private struct TicketDependsOnRow: View {
     }
 
     private func save() {
+        guard let (ticket, onPatch) = latest.value else { return }
         if let keys = PickerLogic.dependsOnSave(text, current: ticket.dependsOn) { onPatch(UpdateTicketBody(dependsOn: keys)) }
     }
 }
@@ -313,11 +324,13 @@ private struct TicketRemoteIdRow: View {
     @State private var key = ""
     @State private var url = ""
     @State private var error: String?
+    @State private var latest = PickerLatest<(Ticket, (UpdateTicketBody) -> Void)>()
     @FocusState private var focus: Field?
 
     private enum Field { case key, url }
 
     var body: some View {
+        let _ = latest.set((ticket, onPatch))
         let ref = ticket.externalRef
         let source = ref.flatMap { $0.source != "manual" ? "From \($0.source)" : nil }
         TicketSettingsRow(label: "Remote ID", hint: source ?? "Shown in place of the key") {
@@ -365,6 +378,7 @@ private struct TicketRemoteIdRow: View {
     }
 
     private func save() {
+        guard let (ticket, onPatch) = latest.value else { return }
         let ref = ticket.externalRef
         guard let patch = Related.remoteIdPatch(current: ref.map { (key: $0.key, url: $0.url) }, key: key, url: url) else {
             error = nil

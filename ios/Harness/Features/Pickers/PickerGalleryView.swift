@@ -27,23 +27,23 @@ struct PickerGalleryView: View {
         ScrollViewReader { proxy in
             Form {
                 Section("Selects") {
-                    LabeledContent("Model") { ModelPicker(driver: "dummy", value: model, inherited: nil) { model = $0 } }
-                    LabeledContent("Permissions") { PermissionPicker(value: permission, inherited: .ask) { permission = $0 } }
-                    LabeledContent("Disabled") { PermissionPicker(value: .readOnly, inherited: .ask, disabled: true) { _ in } }
+                    TicketSettingsRow(label: "Model") { ModelPicker(driver: "dummy", value: model, inherited: nil) { model = $0 } }
+                    TicketSettingsRow(label: "Permissions") { PermissionPicker(value: permission, inherited: .ask) { permission = $0 } }
+                    TicketSettingsRow(label: "Disabled") { PermissionPicker(value: .readOnly, inherited: .ask, disabled: true) { _ in } }
                 }
                 .id("selects")
                 Section("Driver + model") {
-                    LabeledContent("Default model") {
+                    TicketSettingsRow(label: "Default model") {
                         DriverModelPicker(value: choice, resolved: .init(driver: "dummy", model: nil), title: "Default model") { choice = $0 }
                     }
-                    LabeledContent("Only dummy") {
+                    TicketSettingsRow(label: "Only dummy") {
                         DriverModelPicker(value: choice, resolved: .init(driver: "dummy", model: nil), onlyDriver: "dummy") { choice = $0 }
                     }
                 }
                 .id("model")
                 if let project {
                     Section("Branch · \(project.key)") {
-                        LabeledContent("Branch") {
+                        TicketSettingsRow(label: "Branch") {
                             BranchPicker(projectId: project.id, value: branch, defaultLabel: Branches.newTicketBranchLabel("\(project.key)-99"), newLabel: { "Create \($0) from main" }) { name, _ in branch = name }
                         }
                     }
@@ -51,7 +51,7 @@ struct PickerGalleryView: View {
                 }
                 Section("Project color") {
                     ProjectColorPicker(value: color) { color = $0 }
-                    LabeledContent("Stored", value: color ?? "nil")
+                    Text("Stored \(color ?? "nil")").foregroundStyle(c.text2)
                 }
                 .id("color")
                 if let project {

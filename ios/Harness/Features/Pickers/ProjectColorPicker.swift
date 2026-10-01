@@ -11,10 +11,12 @@ struct ProjectColorPicker: View {
     @Environment(\.palette) private var c
     @State private var open: Bool?
     @State private var hex = ""
+    @State private var latest = PickerLatest<(String?, (String?) -> Void)>()
     @FocusState private var hexFocused: Bool
 
     var body: some View {
         let current = ProjectColors.normalize(value).stored
+        let _ = latest.set((current, onChange))
         let custom = current?.hasPrefix("#") == true ? current : nil
         let showGrid = open ?? (custom != nil)
         VStack(alignment: .leading, spacing: 12) {
@@ -39,8 +41,6 @@ struct ProjectColorPicker: View {
                     }
                 }
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Project color")
             if showGrid {
                 grid(current: current)
                 HStack(spacing: 10) {
@@ -57,8 +57,8 @@ struct ProjectColorPicker: View {
                         .background(c.bgSunken, in: RoundedRectangle(cornerRadius: 8))
                         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border))
                         .onChange(of: hex) { _, v in if v.count > 7 { hex = String(v.prefix(7)) } }
-                        .onSubmit { commitHex(current: current) }
-                        .onChange(of: hexFocused) { _, now in if !now { commitHex(current: current) } }
+                        .onSubmit(commitHex)
+                        .onChange(of: hexFocused) { _, now in if !now { commitHex() } }
                         .accessibilityLabel("Custom color hex")
                 }
             }
@@ -89,11 +89,10 @@ struct ProjectColorPicker: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Custom colors")
     }
 
-    private func commitHex(current: String?) {
+    private func commitHex() {
+        guard let (current, onChange) = latest.value else { return }
         switch PickerLogic.commitHex(hex, current: current) {
         case let .pick(n): onChange(n)
         case .keep: break

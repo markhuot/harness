@@ -82,8 +82,6 @@ struct MentionTextEditor: View {
             .background(c.bgElev)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(shown.first.map { if case .command = $0 { "Commands" } else { "Files" } } ?? "Files")
         }
     }
 

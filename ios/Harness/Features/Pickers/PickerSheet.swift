@@ -23,25 +23,42 @@ struct PickerSheet<Content: View, Trailing: View>: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            header
+            searchBar
             content
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.immediately)
-                .background(c.bg)
-                .safeAreaInset(edge: .top, spacing: 0) { searchBar }
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", systemImage: "xmark") { dismiss() }
-                    }
-                    ToolbarItem(placement: .primaryAction) { trailing }
-                }
         }
+        .background(c.bg)
         .presentationDetents([.large])
         .toastOverlay()
         .onAppear { if autofocus { focused = true } }
+    }
+
+    /// Cancel, the title and the accessory in the sheet itself (RN's header): AXe doesn't see a
+    /// sheet's toolbar items, and sim-check taps "Cancel" by label.
+    private var header: some View {
+        HStack(spacing: 10) {
+            Button("Cancel") { dismiss() }
+                .font(.system(size: 16))
+                .foregroundStyle(c.accent)
+                .frame(width: 72, alignment: .leading)
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
+            trailing
+                .foregroundStyle(c.accent)
+                .labelStyle(.iconOnly)
+                .frame(width: 72, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
     }
 
     private var searchBar: some View {
