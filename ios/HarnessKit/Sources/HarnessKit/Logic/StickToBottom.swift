@@ -30,10 +30,12 @@ public struct ScrollMetrics: Codable, Equatable, Sendable {
     }
 
     /// From ScrollGeometry's fields. SwiftUI's contentOffset.y is `-top` at the top when the
-    /// content has insets, and the bottom inset extends the scrollable range, so both fold in here
-    /// to keep "distance from the bottom" zero exactly at the end.
+    /// content has insets, the bottom inset extends the scrollable range, and containerSize is the
+    /// frame less both insets, so they fold into the content and the viewport alike to keep
+    /// "distance from the bottom" zero exactly at the end.
     public init(contentOffsetY: Double, contentHeight: Double, containerHeight: Double, topInset: Double = 0, bottomInset: Double = 0) {
-        self.init(offset: contentOffsetY + topInset, contentHeight: contentHeight + topInset + bottomInset, viewportHeight: containerHeight)
+        self.init(offset: contentOffsetY + topInset, contentHeight: contentHeight + topInset + bottomInset,
+                  viewportHeight: containerHeight + topInset + bottomInset)
     }
 }
 
