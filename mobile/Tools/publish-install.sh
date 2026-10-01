@@ -198,6 +198,12 @@ if [[ $SKIP_MAC -eq 0 ]]; then
   rm -rf "$CHECK"; mkdir -p "$CHECK"
   ditto -x -k "$OUT/Harness-mac.zip" "$CHECK"
   check_no_token "$CHECK"
+  # The download has to carry its own service (no bun or checkout on the Mac that runs it).
+  MAC_CONTENTS="$CHECK/Harness.app/Contents"
+  [[ -x "$MAC_CONTENTS/MacOS/harness-service" && -f "$MAC_CONTENTS/Resources/plugins/git/plugin.json" ]] \
+    || { echo "error: the Mac app doesn't contain the compiled service and its plugins" >&2; exit 1; }
+  grep -q '"executable": "harness-service"' "$MAC_CONTENTS/Resources/app.asar" \
+    || { echo "error: the Mac app's harness.json doesn't point at the bundled service" >&2; exit 1; }
   rm -rf "$CHECK"
 fi
 

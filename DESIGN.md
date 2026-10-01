@@ -6,7 +6,7 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
 
 ```
 ┌──────────────┐  REST + WS (127.0.0.1:7717, bearer token)  ┌─────────────────────────────┐
-│ Electron app │ ─────────────────────────────────────────▶ │ harness service (Bun, launchd)│
+│ Electron app │ ─────────────────────────────────────────▶ │ harness service (bun binary) │
 │ (React UI)   │ ◀──── events: tickets, transcript, frames ─ │  SQLite · orchestrator · runs │
 └──────────────┘                                            │  drivers · tools · MCP · CDP  │
    iOS app ── Tailscale / LAN (settings.listen) ────────────▶ │  headless Chrome (one tab per │
@@ -14,7 +14,9 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
                                                              └─────────────────────────────┘
 ```
 
-Closing the app never stops agents: runs live in the service, which launchd keeps alive.
+Runs live in the service, never in the app. By default the service is the app's child process, so
+closing the app stops it; with Settings → Service → Start at login, launchd runs it instead and it
+outlives the app (see "Service supervision").
 
 ## Layout and ownership
 
@@ -132,7 +134,45 @@ place of the key.
   (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
-  runs `bun <repo>/service/src/daemon.ts`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+  runs the daemon command (below), `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+- The service runs from one of two places (`service/src/runtime.ts`):
+  - **A checkout**: `bun <repo>/service/src/daemon.ts`, builtin plugins from `<repo>/plugins`.
+    Dev builds of the app (`bun run build`, `bun run install-app`) record the checkout and bun in
+    `app/resources/harness.json` (`{ repoRoot, bunPath }`).
+  - **The compiled executable** in a packaged app: `service/scripts/compile.ts` runs
+    `bun build --compile` on `service/src/bin.ts` into `Harness.app/Contents/MacOS/harness-service`
+    (`harness-service daemon` is the daemon, any other arguments the CLI) and prebuilds each builtin
+    plugin into `Contents/Resources/plugins/<id>` (its server bundled with its dependencies as
+    `server.js`, its UI built, no `build` step left in `plugin.json`). `harness.json` is then
+    `{ executable: "harness-service" }`, resolved next to the app's own executable. Nothing on the
+    Mac needs bun or the source.
+
+## Service supervision
+
+Something has to start the daemon and start it again when it exits (a restart onto new code,
+`POST /service/restart`, a crash). That's the app by default, or launchd once it's a login item.
+The app decides at connect (`app/src/main/service.ts` `ServiceManager`) from
+`service status --json`: with the plist installed it runs `service ensure --json` as before;
+otherwise it starts the daemon as its child (`app/src/main/child.ts`), unless a service someone
+started by hand already answers on the port (`mode: "external"`, used as is). The connection
+carries the mode (`app`, `login`, `external`).
+
+- **App (default).** The child gets `HARNESS_SUPERVISOR_PID=<app pid>` and its output appended to
+  `service.log`. The app starts it again 1s after it exits and gives up after five exits within
+  10s of starting (the error screen then shows the log tail). Restart now restarts the child in
+  place. On quit the app asks first when agents are running (`GET /sessions`, any `busy`), then
+  SIGTERMs the child and waits for it to exit (SIGKILL after 30s). If the app dies without doing
+  that, the daemon notices within 2s that the supervisor pid is gone (`kill(pid, 0)`; Bun caches
+  `process.ppid`) and shuts down, so no service outlives the app unsupervised.
+- **Login (Settings → Service → Start at login).** Install stops the child and runs
+  `service ensure` (writes the plist, bootstraps it, waits for /health). If launchd refuses, the
+  app removes the plist and starts its child again, and reports the error. Remove runs
+  `service uninstall` (`launchctl bootout`, which waits for the job to exit), waits until the port
+  stops answering, then starts the child. Either switch restarts the service, so the section
+  confirms first when agents are running.
+- The daemon counts as supervised when its parent is the supervisor: launchd (pid 1, with
+  `XPC_SERVICE_NAME` set to the label) or the app (`HARNESS_SUPERVISOR_PID` is its ppid). Agents
+  inherit both variables but not the parent. Only a supervised daemon restarts itself.
 
 ## Ticket lifecycle
 
@@ -1048,7 +1088,7 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
 GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
-POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
+POST   /service/restart          → { ok }; exits so its supervisor restarts it (409 when unsupervised)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
 GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q=&limit=50   → CommandMatch[] (/command autocomplete; see "Slash commands")
@@ -1269,21 +1309,24 @@ same folder `/tickets/:key/files` searches (worktree, else session cwd, else pro
 
 ## Service updates
 
-launchd runs the daemon straight from the repo checkout, so a merge into that checkout (a
-ticket's complete run, a `git pull`) changes the code on disk under a service that keeps running
-the old code. Routes the new app calls then 404 until the service restarts.
+A service run from a checkout runs the code on disk, so a merge into that checkout (a ticket's
+complete run, a `git pull`) changes the code under a service that keeps running the old code.
+Routes the new app calls then 404 until the service restarts.
 
 - At boot the daemon hashes the files it loads (`sourceFingerprint` in `service/src/code-watch.ts`):
   `service/src`, `shared/src` and `plugins`, skipping tests, `node_modules`, `dist` and dotfiles,
   plus the package manifests and `bun.lock`. `build` is that hash.
+- The compiled executable has no source on disk, so it fingerprints its own file instead
+  (`executableFingerprint`: inode, size, mtime). Replacing Harness.app with a new build makes a
+  service launchd still runs from the old one stale. While the file is missing (mid-replace, or
+  the app moved) the last value stands.
 - Every 20s it hashes again. When the result differs from `build` the service is `stale`:
   `/health` says so and a `service.status { build, stale }` event goes out (again if the code
   changes back).
-- A stale service run by launchd (`XPC_SERVICE_NAME` is the label and its parent is launchd, pid 1;
-  agents inherit the variable) restarts by itself once the
+- A stale supervised service (launchd's, or the app's child; see "Service supervision") restarts by itself once the
   new code is settled (the same hash two checks in a row, so a checkout still writing files isn't
   loaded half-done) and nothing is queued, running or starting (`Orchestrator.isIdle`). It exits
-  through the normal shutdown and KeepAlive starts the new code. Run by hand, it only reports stale.
+  through the normal shutdown and its supervisor starts the new code. Run by hand, it only reports stale.
 - `POST /service/restart` restarts right away. Running agents are stopped: their runs end
   cancelled and their tickets stay in their columns.
 - Tests and embedded services don't track their source: `/health` reports `build: null`,
@@ -1292,9 +1335,9 @@ the old code. Routes the new app calls then 404 until the service restarts.
 The desktop app shows a banner under the main view while the service is stale, and it can't be
 dismissed. A service whose `/health` has no `build` at all predates build tracking. It never
 restarts by itself, and the app counts it as stale too. "Restart now" asks for confirmation when
-agents are running. For the service the app started, the main process runs
-`cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age. Other
-connections call `POST /service/restart`. The banner goes away when the reconnected service
+agents are running. The app restarts its own child in place. For a login item the main process
+runs `cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age.
+Other connections call `POST /service/restart`. The banner goes away when the reconnected service
 reports fresh code.
 
 ## Network

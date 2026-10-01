@@ -18,12 +18,14 @@ import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
 import { AppearanceSection } from "./settings/AppearanceSettings";
 import { PromptsSection } from "./settings/PromptSettings";
+import { ServiceSection } from "./settings/ServiceSettings";
 
 /** The settings page's sections, in order ([id, label]); the ⌘K palette lists them too. */
 export const SETTINGS_SECTIONS = [
   ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
+  ["service", "Service"],
   ["models", "Models"],
   ["permissions", "Permissions"],
   ["network", "Network"],
@@ -72,6 +74,7 @@ export function SettingsView() {
               </div>
             </Section>
           )}
+          <ServiceSection />
           {state.settings && <ModelsSection settings={state.settings} />}
           {state.settings && <PermissionsSection settings={state.settings} />}
           {state.settings && <NetworkSection settings={state.settings} />}

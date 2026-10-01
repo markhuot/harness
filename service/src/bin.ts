@@ -4,6 +4,8 @@
 //   harness-service daemon      run the service (what the app and the launchd plist start)
 //   harness-service <args…>     the CLI (cli.ts), e.g. `harness-service service status --json`
 
+export {};
+
 if (process.argv[2] === "daemon") {
   await import("./daemon");
 } else {
