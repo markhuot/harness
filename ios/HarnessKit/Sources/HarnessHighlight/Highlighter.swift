@@ -26,6 +26,7 @@ public actor Highlighter {
     private let queue = DispatchSerialQueue(label: "com.markhuot.harness.highlighter", qos: .userInitiated)
     private var engine: Engine?
     private var loadError: (any Error)?
+    private var languageSet: Set<String>?
     /// How long loading the script and the first job's JavaScript took, for diagnostics.
     public private(set) var timings = Timings()
     private static let log = Logger(subsystem: "com.markhuot.harness", category: "highlighter")
@@ -74,6 +75,13 @@ public actor Highlighter {
     /// The bundled Shiki language ids, in highlight.ts order.
     public func languages() throws -> [String] {
         try engineOrThrow().strings("languages")
+    }
+
+    /// Whether `id` is a bundled Shiki language (highlight.ts `hasLanguage`). False when the script
+    /// can't load, so callers leave the code plain.
+    public func hasLanguage(_ id: String) -> Bool {
+        if languageSet == nil { languageSet = (try? engineOrThrow().strings("languages")).map(Set.init) }
+        return languageSet?.contains(id) ?? false
     }
 
     /// The bundled Shiki theme names, in highlight.ts order.

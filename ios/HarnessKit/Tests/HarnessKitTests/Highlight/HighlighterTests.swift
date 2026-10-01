@@ -129,6 +129,18 @@ struct HighlighterBehaviorTests {
         await #expect(throws: HighlighterError.scriptMissing) { try await hl.languages() }
     }
 
+    @Test func hasLanguageKnowsOnlyBundledLanguages() async throws {
+        #expect(await shared.hasLanguage("typescript"))
+        // Ids come from langForPath, so an unknown extension's guess must read as unknown.
+        #expect(await !shared.hasLanguage("not-a-language"))
+        #expect(await !shared.hasLanguage(""))
+        let stand = Highlighter { "var HarnessHighlighter = { languages: [\"x\"], themes: [], highlight() {} }" }
+        #expect(await stand.hasLanguage("x"))
+        #expect(await !stand.hasLanguage("typescript"))
+        let missing = Highlighter { throw HighlighterError.scriptMissing }
+        #expect(await !missing.hasLanguage("typescript"))
+    }
+
     @Test func aScriptThatThrowsOrDefinesNoAPIFailsToLoad() async throws {
         let broken = Highlighter { "throw new Error('boom')" }
         await #expect(throws: HighlighterError.script("Error: boom")) { try await broken.warmUp() }

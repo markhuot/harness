@@ -355,6 +355,8 @@ private struct FileBody: View {
             guard let w = windows?.window, !w.isEmpty, let lang else { return }
             let code = text.lines[w].joined(separator: "\n")
             let hl = Highlighter.app
+            // RN's `lang && hasLanguage(lang)`: an unknown extension stays plain without a job.
+            guard await hl.hasLanguage(lang), !Task.isCancelled else { return }
             let result: Highlighted?
             if let hit = hl.cached(code, language: lang, theme: theme, diff: false) {
                 result = hit

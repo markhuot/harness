@@ -52,8 +52,7 @@ final class FileCodeText {
     func color(_ css: String) -> UIColor? {
         if let hit = colors[css] { return hit }
         guard let rgba = RGBA(css: css) else { return nil }
-        func unit(_ v: Double, _ scale: Double) -> CGFloat { v.isNaN ? 0 : CGFloat(min(1, max(0, v / scale))) }
-        let c = UIColor(red: unit(rgba.r, 255), green: unit(rgba.g, 255), blue: unit(rgba.b, 255), alpha: unit(rgba.a, 1))
+        let c = UIColor(rgba: rgba)
         colors[css] = c
         return c
     }
