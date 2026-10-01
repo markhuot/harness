@@ -51,20 +51,10 @@ struct TriageScreen: View {
 private struct TriageOutcomeCallout: View {
     let session: Session
     let outcome: String
-    @Environment(\.palette) private var c
-
     var body: some View {
         let style = InboxLogic.outcomeStyle(session)
-        let t = c.tone(Tone(rawValue: style.tone.rawValue) ?? .neutral)
-        HStack(alignment: .top, spacing: 10) {
-            Icon(style.icon, size: 16, weight: .semibold).foregroundStyle(t.fg).padding(.top, 1)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Outcome").font(.system(size: 14, weight: .semibold)).foregroundStyle(t.fg)
-                MarkdownView(text: outcome, size: 14)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Callout(tone: Tone(rawValue: style.tone.rawValue) ?? .neutral, icon: style.icon, title: "Outcome") {
+            MarkdownView(text: outcome, size: 14)
         }
-        .padding(12)
-        .background(t.bg, in: .rect(cornerRadius: 10))
     }
 }

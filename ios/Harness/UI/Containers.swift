@@ -14,12 +14,14 @@ struct Card<Content: View>: View {
 }
 
 /// A tinted message box with an icon, an optional bold title, and a body (kit Callout). A string
-/// body is selectable, so error text can be copied.
-struct Callout<Trailing: View>: View {
+/// body is selectable, so error text can be copied; `content` is a body of any other kind
+/// (markdown, say), under the message.
+struct Callout<Content: View, Trailing: View>: View {
     let tone: Tone
     let icon: String
     var title: String?
     var message: String?
+    @ViewBuilder var content: Content
     @ViewBuilder var trailing: Trailing
 
     @Environment(\.palette) private var c
@@ -33,6 +35,7 @@ struct Callout<Trailing: View>: View {
                 if let message {
                     Text(message).font(.system(size: 14)).foregroundStyle(c.text).lineSpacing(3).textSelection(.enabled)
                 }
+                content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             trailing
@@ -43,9 +46,21 @@ struct Callout<Trailing: View>: View {
     }
 }
 
-extension Callout where Trailing == EmptyView {
+extension Callout where Content == EmptyView {
+    init(tone: Tone, icon: String, title: String? = nil, message: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.init(tone: tone, icon: icon, title: title, message: message, content: { EmptyView() }, trailing: trailing)
+    }
+}
+
+extension Callout where Content == EmptyView, Trailing == EmptyView {
     init(tone: Tone, icon: String, title: String? = nil, message: String? = nil) {
-        self.init(tone: tone, icon: icon, title: title, message: message) { EmptyView() }
+        self.init(tone: tone, icon: icon, title: title, message: message, content: { EmptyView() }, trailing: { EmptyView() })
+    }
+}
+
+extension Callout where Trailing == EmptyView {
+    init(tone: Tone, icon: String, title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.init(tone: tone, icon: icon, title: title, message: nil, content: content, trailing: { EmptyView() })
     }
 }
 
