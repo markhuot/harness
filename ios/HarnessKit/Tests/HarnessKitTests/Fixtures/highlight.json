@@ -376,16 +376,8 @@
                 "color": "#0A0A0A"
               },
               {
-                "text": "//",
-                "color": "#08C0EF"
-              },
-              {
-                "text": " ",
-                "color": "#0A0A0A"
-              },
-              {
-                "text": "trailing",
-                "color": "#D47628"
+                "text": "// trailing",
+                "color": "#737373"
               }
             ]
           }
@@ -616,16 +608,8 @@
                 "color": "#FAFAFA"
               },
               {
-                "text": "//",
-                "color": "#08C0EF"
-              },
-              {
-                "text": " ",
-                "color": "#FAFAFA"
-              },
-              {
-                "text": "trailing",
-                "color": "#FFA359"
+                "text": "// trailing",
+                "color": "#737373"
               }
             ]
           }
@@ -2490,12 +2474,9 @@
                 "color": "#383A42"
               },
               {
-                "text": "//",
-                "color": "#0184BC"
-              },
-              {
-                "text": " ünïcödé",
-                "color": "#383A42"
+                "text": "// ünïcödé",
+                "color": "#A0A1A7",
+                "fontStyle": 1
               }
             ]
           },
