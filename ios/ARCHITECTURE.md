@@ -383,7 +383,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
 | BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
 | ProjectColorPicker | Pickers/ProjectColorPicker.swift | Projects | `ProjectColorPicker(value: String?, onChange:)` |
-| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:)` (all after `text` optional) |
+| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:, fieldLabel:, placeholderColor:, onFocusChange:, fieldBox:)` (all after `text` optional) |
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
@@ -393,11 +393,32 @@ environment (store, router, palette), not from extra initializer arguments.
 
 The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
 (Ticket/PluginTabsLoader.swift, RN `usePluginTabs`: nil until loaded, [] on failure, refetched on
-workdir/branch/epoch) and hosts each in `PluginTabView`. Until it does, DEBUG builds open either
-tab on its own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<pluginId>:<tabId>`
+workdir/branch/epoch) and hosts each in `PluginTabView`. DEBUG builds also open either tab on its
+own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<pluginId>:<tabId>`
 (BrowserPluginDebugScreen; the plugin one adds a probe of the bridge messages the page receives).
 dev-sim installs a Release build, so build with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` to
 get them there.
+
+## Ticket detail (Features/Ticket/TicketDetail*)
+
+TicketDetailScreen (HARNESS-139) hosts the other Ticket slots as tab bodies. What a tab body gets
+from it (Ticket/TicketDetailSupport.swift):
+
+- **`.ticketHeroScroll()`** on a tab body's ScrollView or List: its drags and flings hide the hero
+  and bring it back (HarnessKit `HeroCollapse`, a fixture-checked port of lib/heroCollapse).
+  TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
+  the Transcript. Outside a ticket screen it does nothing.
+- **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Summaries, and the
+  Transcript): it opens at the bottom, follows new content while pinned, stays put once the user
+  scrolls up and re-pins at the bottom (StickToBottom.stickStep, fed by scroll phases).
+- **`@Environment(\.ticketDetailOpenTab)`** opens a tab on the hosting screen, which is how the
+  Agents list and the Transcript's sub-agent rows open `Tabs.subagentTabRoute(id)`, and how a
+  sub-agent's Back returns to `.agents`. A tab change also brings the hero back.
+- The composer sits in the screen's bottom `safeAreaInset`, so tab bodies shouldn't add their own.
+  Its field's AX label is always "Message the agent" (MentionTextEditor `fieldLabel`).
+- Testable branches (menus, the Complete sheet's rules, run rows, labels) are in HarnessKit's
+  `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; sim-check closes one with
+  "Dismiss context menu", where RN's action sheet has "Cancel".
 
 ## Content components (Features/Content)
 
@@ -485,7 +506,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   `.onChange` and acts on what it returns.
 - **Its own Cancel.** SheetHost leaves the shell's ✕ off this sheet; the screen's asks Save draft /
   Discard draft / Keep editing for a non-empty draft. A swipe down (any `onDisappear`) saves.
-- MentionTextEditor takes `accessibilityName` ("Prompt", as sim-check looks for it) and `autofocus`.
+- The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (sim-check looks for it) and `autofocus`.
 
 ## Disk budget (parallel agents)
 
@@ -560,12 +581,12 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Board: columns, cards, child dimming/rollups, moves (context menu, VoiceOver actions, drag and drop), paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
 - [x] Search tab (app/(tabs)/search)
 - [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
-- [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
+- [x] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
 - [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
   viewer (ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments)
-- [ ] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
-- [ ] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
+- [x] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
+- [x] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
 - [x] Browser tab (screens/BrowserTab, lib/browserInput)
 - [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
@@ -591,5 +612,10 @@ Things AXe and sim-check can't drive, to try by hand on a device:
   after a refresh.
 - An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
   scrolls through on the way. A swipe from one column to the next plays exactly one.
+- sim-check's "tapping a board card pushes its ticket and Back returns" timed out in HARNESS-139's
+  full interaction run, though a card push worked by hand with one card in the column. Rerun it with
+  the real Board and ticket detail both merged. If it still fails, find out whether the tap lands
+  on the wrong card (a lazy column, the hero, a stale frame) or Back doesn't settle, and fix the app
+  or make the step label-based.
 - `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
   turn it off for its run (or HARNESS-145 asks the human).

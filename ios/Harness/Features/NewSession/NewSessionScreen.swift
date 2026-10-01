@@ -156,7 +156,7 @@ private struct NewSessionEditorView: View {
                     minHeight: 150,
                     commandDriver: editor.commandDriver(state),
                     boxed: false,
-                    accessibilityName: "Prompt",
+                    fieldLabel: "Prompt",
                     autofocus: reopen == nil
                 )
                 .listRowBackground(c.bgElev)
@@ -276,7 +276,8 @@ private struct NewSessionEditorView: View {
         case .dismiss:
             dismiss()
         case .discardAndDismiss:
-            actions.perform { try await editor.discard() }
+            let discarding = editor.discard()
+            actions.perform { try await discarding.value }
             dismiss()
         case .ask:
             askingCancel = true
@@ -285,13 +286,15 @@ private struct NewSessionEditorView: View {
 
     private func saveAndClose() {
         guard let editor else { return dismiss() }
-        actions.perform { try await editor.save() }
+        let saving = editor.save()
+        actions.perform { try await saving.value }
         dismiss()
     }
 
     private func discardAndClose() {
         guard let editor else { return dismiss() }
-        actions.perform { try await editor.discard() }
+        let discarding = editor.discard()
+        actions.perform { try await discarding.value }
         dismiss()
     }
 
