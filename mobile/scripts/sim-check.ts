@@ -47,9 +47,17 @@
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
 //      checks and the modes above tap at iPhone coordinates, so they don't run here.
 //
-//   Every run prints its slowest steps and writes them all to mobile/build/screens/timings.json.
+//   --native: drives the native SwiftUI app (ios/) instead of the React Native one. It builds with
+//      `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build into ios/build/dd; no
+//      expo prebuild or pods), installs ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app
+//      (--app= still overrides) and saves to mobile/build/screens-native/ (screens-ipad-native/ with
+//      --ipad), so the RN app's shots stay put. Same bundle id, links and checks. A ticket working on
+//      the native app runs it on its own simulator rather than the shared "sim-check N" ones:
+//      `--native --udid=harness-<KEY> --only=connect` (--udid takes a simulator's name or UDID).
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
+//   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad] [--native]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -65,8 +73,10 @@ const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.spli
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
-const shots = join(here, "build", ipad ? "screens-ipad" : "screens");
-const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
+/** --native: the SwiftUI app in ios/ instead of the React Native one here. */
+const native = flag("native");
+const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}${native ? "-native" : ""}`);
+const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? (native ? join(repoRoot, "ios", "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app") : join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app"));
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
@@ -1690,6 +1700,12 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
 // ---------------------------------------------------------------- build
 async function buildApp() {
   if (flag("no-build") && existsSync(appPath)) return;
+  if (native) {
+    // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
+    console.log("building the native app, Release (simulator)…");
+    await sh(["bun", join(repoRoot, "ios", "Tools", "build.ts"), "sim"], { cwd: repoRoot });
+    return;
+  }
   // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
   // module, so regenerate it whenever it doesn't link every native dependency.
   if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {
