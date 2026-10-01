@@ -4,8 +4,10 @@
 //      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes and
 //      a draft (a New session saved before launch),
 //      while it builds the Release app for the simulator (skip with --no-build)
-//   3. on --shards simulators at once (default 3, named "sim-check 1", "sim-check 2", … and created
-//      on first use), installs the app and pairs it via `simctl openurl harness://pair?…`
+//   3. on the shared simulator ("harness-shared", see Tools/sim.ts and CLAUDE.md → Simulators),
+//      held under its lock for the whole run so other agents wait rather than install over it,
+//      installs the app and pairs it via `simctl openurl harness://pair?…`. --shards=N adds
+//      "sim-check 2" … "sim-check N" (created on iOS 27.0 on first use, each under its own lock)
 //   4. splits the screens between the simulators: each deep-links the running app to its screens
 //      and saves each one in light and in dark (flipping `simctl ui appearance` in place) to
 //      mobile/build/screens/, then the real-tap checks, also split between them
@@ -43,12 +45,14 @@
 //      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
 //      pages, Close and swipe-down close it; attachments-*.png
 //
-//   --ipad: the walk-through's screens on iPad simulators instead ("sim-check iPad 1", …, an
-//      iPad Pro 11-inch), saved to mobile/build/screens-ipad/ in whatever orientation each
+//   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
+//      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to mobile/build/screens-ipad/ in whatever orientation each
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
 //      checks and the modes above tap at iPhone coordinates, so they don't run here.
 //
 //   Every run prints its slowest steps and writes them all to mobile/build/screens/timings.json.
+//   It stops before starting when the disk has less than 5 GiB free, and removes its temp dirs
+//   ($TMPDIR/harness-sim-home-*, harness-sim-projects-*) however it ends, unless --keep.
 //
 //   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -58,6 +62,7 @@ import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket
 import { findTheme } from "@harness/shared/themes";
 import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
+import { acquire, checkDisk, ensureDevice, SHARED_DEVICE } from "../Tools/sim";
 
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
@@ -78,8 +83,9 @@ const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly);
 if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions or --attachments");
-const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 3) || 1) : 1;
+const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
+checkDisk();
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean; env?: Record<string, string> } = {}) {
   const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env: { ...env, ...opts.env }, stdout: "pipe", stderr: "pipe" });
@@ -253,43 +259,30 @@ async function running(udid: string): Promise<boolean> {
 }
 
 /**
- * The simulators to drive: --udid=a,b, or "sim-check 1" … "sim-check N" ("sim-check iPad 1" … with
- * --ipad), created (iPhone 18 Pro or iPad Pro 11-inch on the newest iOS runtime) and booted as
- * needed. They're sim-check's own, so a run never takes over a simulator someone (or another agent)
- * is using.
+ * The simulators to drive, each held under its lock (Tools/sim.ts) until this run exits, so two
+ * runs or agents never install over each other: --udid=a,b, or the shared "harness-shared" iPhone
+ * ("sim-check iPad 1" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
+ * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted.
  */
 async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
-  const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
-  const all = Object.values(list.devices).flat();
-  const wanted = given ?? Array.from({ length: n }, (_, i) => `sim-check ${ipad ? "iPad " : ""}${i + 1}`);
+  const all = Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
+  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? `sim-check iPad ${i + 1}` : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
   return Promise.all(
     wanted.map(async (id) => {
-      let d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
+      const d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
       if (!d && given) throw new Error(`--udid: no simulator ${id}`);
-      if (!d) d = { udid: await createDevice(id), name: id, state: "Shutdown", isAvailable: true };
-      if (d.state !== "Booted") {
-        await simctl("boot", d.udid);
-        await sh(["xcrun", "simctl", "bootstatus", d.udid, "-b"]);
+      const name = d?.name ?? id;
+      await acquire(name, { onWait: (h) => console.log(`waiting for simulator "${name}"${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      if (!given) return ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
+      if (d!.state !== "Booted") {
+        await simctl("boot", d!.udid);
+        await sh(["xcrun", "simctl", "bootstatus", d!.udid, "-b"]);
       }
-      return d.udid;
+      return d!.udid;
     }),
   );
-}
-async function createDevice(name: string): Promise<string> {
-  type Runtime = { identifier: string; version: string; platform?: string; isAvailable: boolean; supportedDeviceTypes?: { identifier: string; name: string }[] };
-  const runtimes = (JSON.parse(await simctl("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes
-    .filter((r) => r.isAvailable && (r.platform ?? r.identifier).includes("iOS"))
-    .sort((a, b) => Bun.semver.order(b.version, a.version));
-  // The newest runtime that runs an iPhone 18 Pro (the taps' coordinates are its), else any iPhone.
-  const pick = (want: (n: string) => boolean) => runtimes.map((r) => ({ r, type: r.supportedDeviceTypes?.find((t) => want(t.name)) })).find((x) => x.type);
-  const found = ipad
-    ? pick((n) => /^iPad Pro 11-inch \(M\d+\)$/.test(n)) ?? pick((n) => /^iPad/.test(n))
-    : pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
-  if (!found) throw new Error(`no iOS runtime with an ${ipad ? "iPad" : "iPhone"} simulator available`);
-  console.log(`creating simulator "${name}" (${found.type!.name}, iOS ${found.r.version})`);
-  return simctl("create", name, found.type!.identifier, found.r.identifier);
 }
 
 // ------------------------------------------------------------ navigating the running app
@@ -428,6 +421,24 @@ const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });
+// The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
+// error, Ctrl-C), except with --keep, which leaves the daemon running in them.
+const removeTemp = () => {
+  if (flag("keep")) return;
+  rmSync(home, { recursive: true, force: true });
+  rmSync(scratch, { recursive: true, force: true });
+};
+process.on("exit", removeTemp);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(sig, () => {
+    console.error(`sim-check: ${sig}, stopping the daemon and removing ${home}`);
+    if (!flag("keep")) {
+      daemon.kill("SIGKILL");
+      Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
+    }
+    process.exit(130); // runs removeTemp and lets go of the simulator locks
+  });
+}
 
 let token = "";
 async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -1826,8 +1837,7 @@ try {
         Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
       }
     });
-    rmSync(home, { recursive: true, force: true });
-    rmSync(scratch, { recursive: true, force: true });
+    removeTemp();
   }
   reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
