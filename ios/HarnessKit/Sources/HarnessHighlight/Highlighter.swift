@@ -26,6 +26,8 @@ public actor Highlighter {
     private let queue = DispatchSerialQueue(label: "com.markhuot.harness.highlighter", qos: .userInitiated)
     private var engine: Engine?
     private var loadError: (any Error)?
+    /// How long loading the script and the first job's JavaScript took, for diagnostics.
+    public private(set) var timings = Timings()
     private static let log = Logger(subsystem: "com.markhuot.harness", category: "highlighter")
 
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
@@ -88,6 +90,18 @@ public actor Highlighter {
         return clock.now - start
     }
 
+    public struct Timings: Sendable, Equatable {
+        /// Evaluating the script into a fresh JSContext
+        public var scriptLoad: Duration?
+        /// The first job's highlight call (its language and theme load on first use), load excluded
+        public var firstHighlight: Duration?
+
+        public init(scriptLoad: Duration? = nil, firstHighlight: Duration? = nil) {
+            self.scriptLoad = scriptLoad
+            self.firstHighlight = firstHighlight
+        }
+    }
+
     // MARK: - Jobs
 
     private func run(_ code: String, language: String?, theme: String, diff: Bool, appearance: ThemeAppearance) throws -> Highlighted? {
@@ -100,7 +114,10 @@ public actor Highlighter {
             result = nil
         } else {
             do {
-                result = try engineOrThrow().highlight(code, language, theme, diff, appearance)
+                let engine = try engineOrThrow()
+                let start = ContinuousClock.now
+                result = try engine.highlight(code, language, theme, diff, appearance)
+                if timings.firstHighlight == nil { timings.firstHighlight = ContinuousClock.now - start }
             } catch {
                 Self.log.error("highlight failed (\(language ?? "-", privacy: .public), \(theme, privacy: .public)): \(String(describing: error), privacy: .public)")
                 result = nil
@@ -114,7 +131,9 @@ public actor Highlighter {
         if let engine { return engine }
         if let loadError { throw loadError }
         do {
+            let start = ContinuousClock.now
             let e = try Engine(source: loadScript())
+            timings.scriptLoad = ContinuousClock.now - start
             engine = e
             return e
         } catch {

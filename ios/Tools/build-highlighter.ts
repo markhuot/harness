@@ -10,7 +10,7 @@
 // grammar and theme as a lazily evaluated module inside the one file, so loading the script only
 // parses it; a language costs its evaluation the first time a block uses it.
 
-import { mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -29,7 +29,9 @@ export async function buildHighlighter(out = DEFAULT_OUT): Promise<{ out: string
   const [artifact] = result.outputs;
   if (!artifact || result.outputs.length !== 1) throw new Error(`build-highlighter: expected one output, got ${result.outputs.length}`);
   mkdirSync(dirname(out), { recursive: true });
-  await Bun.write(out, artifact);
+  // Rewrite only on a change, so an Xcode build that runs this every time doesn't re-copy the app.
+  const text = await artifact.text();
+  if (!existsSync(out) || readFileSync(out, "utf8") !== text) await Bun.write(out, text);
   return { out, bytes: statSync(out).size, ms: Math.round(performance.now() - started) };
 }
 

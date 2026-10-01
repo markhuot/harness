@@ -155,18 +155,18 @@ struct HighlighterBehaviorTests {
         #expect(r?.lines == [HighlightedLine(spans: [HighlightSpan(text: "hi")])])
     }
 
-    @Test func reportsColdStartAndFirstHighlightLatency() async throws {
+    @Test func recordsScriptLoadAndFirstHighlightTimes() async throws {
         let hl = Highlighter(scriptURL: try HighlighterScript.url.get())
-        let clock = ContinuousClock()
-        let load = try await hl.warmUp()
-        let start = clock.now
+        #expect(await hl.timings == Highlighter.Timings())
+        // A cache-free size-limit miss runs no JavaScript and loads nothing.
+        _ = try await hl.highlight(String(repeating: "a", count: Highlighter.maxChars + 1), language: "swift", theme: "pierre-light", appearance: .light)
+        #expect(await hl.timings.scriptLoad == nil)
         let r = try await hl.highlight("struct A { let b = \"c\" }", language: "swift", theme: "github-dark-default", appearance: .dark)
-        let first = clock.now - start
-        let again = clock.now
+        let first = await hl.timings
         _ = try await hl.highlight("struct B { let c = 1 }", language: "swift", theme: "github-dark-default", appearance: .dark)
-        let second = clock.now - again
-        print("highlighter: script load \(load), first swift highlight \(first), next \(second)")
-        #expect(r != nil)
+        #expect(await hl.timings == first) // only the first job is recorded
+        #expect(r != nil && first.scriptLoad != nil && first.firstHighlight != nil)
+        print("highlighter: script load \(first.scriptLoad!), first swift highlight \(first.firstHighlight!)")
     }
 }
 
