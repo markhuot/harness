@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261001.1617](https://github.com/markhuot/harness/releases/tag/app-20261001.1617) - 2026-10-01
+
 ### Added
 
 - The Mac app now includes the service that runs your agents, so you can download it and open it
@@ -30,7 +32,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   on the pull request's own branch instead of a separate harness branch. Their Approve button reads
   **Approve and clean up**, and the merge and open-PR choices are gone from the menu, since there's
   nothing to merge. The same goes for any ticket whose branch is also its base branch.
-
 - On the Mac, the service now runs inside the app by default, so quitting Harness stops it. If
   agents are running, Harness asks before quitting. If you'd already set up the service to run in
   the background, nothing changes: Settings → Service shows Start at login as on.
