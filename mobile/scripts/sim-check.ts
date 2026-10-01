@@ -4,8 +4,10 @@
 //      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes and
 //      a draft (a New session saved before launch),
 //      while it builds the Release app for the simulator (skip with --no-build)
-//   3. on --shards simulators at once (default 3, named "sim-check 1", "sim-check 2", … and created
-//      on first use), installs the app and pairs it via `simctl openurl harness://pair?…`
+//   3. on the shared simulator ("harness-shared", see Tools/sim.ts and CLAUDE.md → Simulators),
+//      held under its lock for the whole run so other agents wait rather than install over it,
+//      installs the app and pairs it via `simctl openurl harness://pair?…`. --shards=N adds
+//      "sim-check 2" … "sim-check N" (created on iOS 27.0 on first use, each under its own lock)
 //   4. splits the screens between the simulators: each deep-links the running app to its screens
 //      and saves each one in light and in dark (flipping `simctl ui appearance` in place) to
 //      mobile/build/screens/, then the real-tap checks, also split between them
@@ -26,7 +28,8 @@
 //
 //   --stick: a ticket with a long brief and a long transcript; swipes the Transcript tab and checks it
 //      follows new content at the bottom, stays put once scrolled up, and follows again after
-//      scrolling back down; the Summaries tab opens at the bottom and follows
+//      scrolling back down; the Summaries tab opens at the bottom and follows; the ticket's hero
+//      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
@@ -42,8 +45,8 @@
 //      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
 //      pages, Close and swipe-down close it; attachments-*.png
 //
-//   --ipad: the walk-through's screens on iPad simulators instead ("sim-check iPad 1", …, an
-//      iPad Pro 11-inch), saved to mobile/build/screens-ipad/ in whatever orientation each
+//   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
+//      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to mobile/build/screens-ipad/ in whatever orientation each
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
 //      checks and the modes above tap at iPhone coordinates, so they don't run here.
 //
@@ -51,9 +54,12 @@
 //      `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build into ios/build/dd; no
 //      expo prebuild or pods), installs ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app
 //      (--app= still overrides) and saves to mobile/build/screens-native/ (screens-ipad-native/ with
-//      --ipad), so the RN app's shots stay put. Same bundle id, links and checks. A ticket working on
-//      the native app runs it on its own simulator rather than the shared "sim-check N" ones:
-//      `--native --udid=harness-<KEY> --only=connect` (--udid takes a simulator's name or UDID).
+//      --ipad), so the RN app's shots stay put. Same bundle id, links and checks. It runs on the shared
+//      harness-shared simulator under its lock like any other run, e.g. `--native --only=connect`;
+//      --udid still names a specific existing device.
+//
+//   It stops before starting when the disk has less than 5 GiB free, and removes its temp dirs
+//   ($TMPDIR/harness-sim-home-*, harness-sim-projects-*) however it ends, unless --keep.
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
@@ -63,7 +69,9 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
+import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
+import { acquire, checkDisk, ensureDevice, SHARED_DEVICE } from "../Tools/sim";
 
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
@@ -86,8 +94,9 @@ const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly);
 if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions or --attachments");
-const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 3) || 1) : 1;
+const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
+checkDisk();
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean; env?: Record<string, string> } = {}) {
   const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env: { ...env, ...opts.env }, stdout: "pipe", stderr: "pipe" });
@@ -261,43 +270,30 @@ async function running(udid: string): Promise<boolean> {
 }
 
 /**
- * The simulators to drive: --udid=a,b, or "sim-check 1" … "sim-check N" ("sim-check iPad 1" … with
- * --ipad), created (iPhone 18 Pro or iPad Pro 11-inch on the newest iOS runtime) and booted as
- * needed. They're sim-check's own, so a run never takes over a simulator someone (or another agent)
- * is using.
+ * The simulators to drive, each held under its lock (Tools/sim.ts) until this run exits, so two
+ * runs or agents never install over each other: --udid=a,b, or the shared "harness-shared" iPhone
+ * ("sim-check iPad 1" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
+ * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted.
  */
 async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
-  const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
-  const all = Object.values(list.devices).flat();
-  const wanted = given ?? Array.from({ length: n }, (_, i) => `sim-check ${ipad ? "iPad " : ""}${i + 1}`);
+  const all = Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
+  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? `sim-check iPad ${i + 1}` : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
   return Promise.all(
     wanted.map(async (id) => {
-      let d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
+      const d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
       if (!d && given) throw new Error(`--udid: no simulator ${id}`);
-      if (!d) d = { udid: await createDevice(id), name: id, state: "Shutdown", isAvailable: true };
-      if (d.state !== "Booted") {
-        await simctl("boot", d.udid);
-        await sh(["xcrun", "simctl", "bootstatus", d.udid, "-b"]);
+      const name = d?.name ?? id;
+      await acquire(name, { onWait: (h) => console.log(`waiting for simulator "${name}"${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      if (!given) return ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
+      if (d!.state !== "Booted") {
+        await simctl("boot", d!.udid);
+        await sh(["xcrun", "simctl", "bootstatus", d!.udid, "-b"]);
       }
-      return d.udid;
+      return d!.udid;
     }),
   );
-}
-async function createDevice(name: string): Promise<string> {
-  type Runtime = { identifier: string; version: string; platform?: string; isAvailable: boolean; supportedDeviceTypes?: { identifier: string; name: string }[] };
-  const runtimes = (JSON.parse(await simctl("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes
-    .filter((r) => r.isAvailable && (r.platform ?? r.identifier).includes("iOS"))
-    .sort((a, b) => Bun.semver.order(b.version, a.version));
-  // The newest runtime that runs an iPhone 18 Pro (the taps' coordinates are its), else any iPhone.
-  const pick = (want: (n: string) => boolean) => runtimes.map((r) => ({ r, type: r.supportedDeviceTypes?.find((t) => want(t.name)) })).find((x) => x.type);
-  const found = ipad
-    ? pick((n) => /^iPad Pro 11-inch \(M\d+\)$/.test(n)) ?? pick((n) => /^iPad/.test(n))
-    : pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
-  if (!found) throw new Error(`no iOS runtime with an ${ipad ? "iPad" : "iPhone"} simulator available`);
-  console.log(`creating simulator "${name}" (${found.type!.name}, iOS ${found.r.version})`);
-  return simctl("create", name, found.type!.identifier, found.r.identifier);
 }
 
 // ------------------------------------------------------------ navigating the running app
@@ -436,6 +432,24 @@ const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });
+// The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
+// error, Ctrl-C), except with --keep, which leaves the daemon running in them.
+const removeTemp = () => {
+  if (flag("keep")) return;
+  rmSync(home, { recursive: true, force: true });
+  rmSync(scratch, { recursive: true, force: true });
+};
+process.on("exit", removeTemp);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(sig, () => {
+    console.error(`sim-check: ${sig}, stopping the daemon and removing ${home}`);
+    if (!flag("keep")) {
+      daemon.kill("SIGKILL");
+      Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
+    }
+    process.exit(130); // runs removeTemp and lets go of the simulator locks
+  });
+}
 
 let token = "";
 async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -481,7 +495,7 @@ const TABLE_BRIEF = [
   "|---|---|---|",
   "| 21 screens, light and dark | about 300 s | Every shot is a `coldOpen`: terminate, cold launch (about 4 s), then wait for the accessibility tree to stay unchanged for 800 ms (each `describe-ui` takes about 0.4 s). Then a fixed 1 s sleep (3.5 s for browser, 2.5 s for changes), then `running()`. That's 42 cold launches. |",
   "| Seeding | tens of seconds | The dummy driver streams at 40 ms per word, about 3× its default. `settle(browse)` allows up to 90 s. `Bun.sleep(1500)` at the end. |",
-  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for a full dummy run and a reviewer run at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
+  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
   "",
   "Measure with:",
   "```",
@@ -797,9 +811,14 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
 /** --stick: one ticket whose brief and transcript are both taller than the screen. */
 const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
+/** The line over the composer ("Stays in review unless…"), which isn't one of the list's rows. */
+const COMPOSER_HINTS = new Set((["planning", "in_progress", "blocked", "review", "done"] as const).flatMap((status) => [false, true].map((busy) => composerHint({ status, busy }))));
 async function sayStick(key: string, n: number) {
   await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
-  return settle(key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
+  // The ticket stays in review, so it looks settled before the run starts: wait for the reply.
+  const reply = `You said: "Stick ${n}:`;
+  await until(`${key} replies to message ${n}`, async () => (await api<{ body: string }[]>("GET", `/tickets/${encodeURIComponent(key)}/summaries`)).some((s) => s.body.includes(reply)), 60000, 100);
+  return settle(key, (t) => !t.busy);
 }
 /** A project with a few files and one ticket in review (brief `prompt`), for --stick, --keyboard and --mentions. */
 async function seedTicket(key: string, prompt: string, files: Record<string, string> = {}) {
@@ -835,7 +854,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
     // viewport). Starting below it leaves out the app window and the header.
-    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && n.frame.y >= top);
+    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && !COMPOSER_HINTS.has(n.AXLabel) && n.frame.y >= top);
     return { rows, top, bottom };
   }
   /** At the bottom: the lowest rendered row is the list's last row and ends just above the composer. */
@@ -844,6 +863,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const lowest = rows.reduce<AXNode | null>((a, n) => (!a || n.frame.y + n.frame.height > a.frame.y + a.frame.height ? n : a), null);
     const end = lowest ? lowest.frame.y + lowest.frame.height : 0;
     const ok = !!lowest && last(lowest.AXLabel!) && end <= bottom + 2 && end >= bottom - 70;
+    if (!ok && process.env.SIM_CHECK_DEBUG) console.error(`not at the bottom: lowest "${lowest?.AXLabel?.slice(0, 60)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}`);
     return ok ? `last row "${lowest!.AXLabel!.slice(0, 32)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}` : null;
   };
   /** A uniquely labelled row inside the viewport, to check that the view doesn't move. */
@@ -875,12 +895,13 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   };
 
   let n = 3;
-  // Every message ends with the reviewer's run: its last transcript row and its last summary.
+  // Every message ends with its chat run (a message leaves the ticket in review, so no reviewer
+  // run follows): its last transcript row and the agent's reply as the last summary.
   // Transcript (a FlatList with estimated rows, where UIKit moves the offset by itself) gets every
   // check; Summaries uses the same hook, whose gating is unit-tested, so it gets the first two.
   const tabs: [string, (l: string) => boolean, boolean][] = [
-    ["transcript", (l) => l.startsWith("Run finished (review)"), true],
-    ["summaries", (l) => l.startsWith("Review approved"), false],
+    ["transcript", (l) => l.startsWith("Run finished (chat)"), true],
+    ["summaries", (l) => l.startsWith("(dummy chat) You said"), false],
   ];
   for (const [tab, last, all] of tabs) {
     await check(`${tab} opens at the bottom`, async () => {
@@ -911,6 +932,39 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
   }
   await shot(udid, "stick-summaries");
+
+  // The hero (title, badges, the review buttons) scrolls out of the way with the tab body, and
+  // the tab strip moves up into its place (lib/heroCollapse has the rules, unit-tested).
+  const heroShown = async () => (await labels(udid)).includes("Request changes");
+  const stripY = async () => (await nodes(udid)).find((n) => n.AXLabel === "Transcript")?.frame.y ?? null;
+  await check("the hero scrolls away with the transcript and comes back", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
+    await until("the hero", async () => (await heroShown()) || null, 8000);
+    const before = await stripY();
+    await swipe("down", 2); // away from the bottom, toward older messages: nothing to hide yet
+    if (!(await heroShown())) throw new Error("hid while scrolling back");
+    await swipe("up", 1);
+    if (await heroShown()) throw new Error("still shown after scrolling forward");
+    const after = await stripY();
+    if (before === null || after === null || after >= before - 40) throw new Error(`tab strip ${before}→${after}`);
+    await shot(udid, "hero-hidden");
+    await swipe("down", 1);
+    if (!(await heroShown())) throw new Error("didn't come back after scrolling back");
+    await swipe("up", 1);
+    if (await heroShown()) throw new Error("didn't hide a second time");
+    await tapLabel(udid, "Transcript");
+    await until("the hero after tapping the tab", async () => (await heroShown()) || null, 3000);
+    return `tab strip ${Math.round(before)}→${Math.round(after)}; back on scrolling back and on a tap on the tab`;
+  });
+
+  // The blur half (the keyboard going down) is in --keyboard, which has the software keyboard.
+  await check("the composer's switch waits for the field to be focused", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    if ((await labels(udid)).includes("Move to in progress")) throw new Error("shown before the field was focused");
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await until("the switch after focusing", async () => (await labels(udid)).includes("Move to in progress") || null, 3000);
+    return "hidden, then shown on focus";
+  });
 }
 
 /** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
@@ -921,6 +975,31 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
+
+  // The composer's "Move to in progress" switch and hint show only while writing: once the field
+  // is focused, and after a blur only while it holds a message. Dragging the list down dismisses
+  // the keyboard, which blurs the field.
+  const switchShown = async () => (await labels(udid)).includes("Move to in progress");
+  const dismiss = async (top: number) => {
+    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
+    await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
+  };
+  await check("the composer's switch shows while writing", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    if (await switchShown()) throw new Error("shown before the field was focused");
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    const top = await until("keyboard up", keyboardTop, 8000);
+    if (!(await switchShown())) throw new Error("no switch once focused");
+    await dismiss(top);
+    await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await until("keyboard up", keyboardTop, 8000);
+    await axe("type", "Draft", "--udid", udid);
+    await dismiss(top);
+    await Bun.sleep(400);
+    if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
+    return "hidden until focused, gone after an empty blur, kept with a draft";
+  });
 
   await check("ticket composer sits on top of the keyboard", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
@@ -1775,8 +1854,7 @@ try {
         Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
       }
     });
-    rmSync(home, { recursive: true, force: true });
-    rmSync(scratch, { recursive: true, force: true });
+    removeTemp();
   }
   reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");

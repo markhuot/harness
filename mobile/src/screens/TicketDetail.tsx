@@ -64,6 +64,7 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ALL_ORIENTATIONS } from "../ui/orientations";
 import { TicketKey } from "../ui/TicketKey";
 import { RelatedTicketRows } from "../ui/RelatedTickets";
+import { HeroScrollProvider, useHeroCollapse } from "../ui/heroCollapse";
 
 export function TicketDetailScreen() {
   const params = useLocalSearchParams<{ key: string; tab?: string }>();
@@ -89,6 +90,18 @@ export function TicketDetailScreen() {
   useEffect(() => {
     if (isTicketTab(params.tab)) setTab(params.tab);
   }, [params.tab, setTab]);
+  // The hero scrolls out of the way with the tab body. Another tab, a tap on the current one or
+  // news that needs a look (a new status or approval) brings it back.
+  const hero = useHeroCollapse();
+  const { show: showHero } = hero;
+  useEffect(showHero, [showHero, tab, ticket?.status, ticket?.pendingApproval?.id]);
+  const pickTab = useCallback(
+    (t: TicketTab) => {
+      showHero();
+      setTab(t);
+    },
+    [showHero, setTab],
+  );
   const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
   useEffect(() => {
     if (opened.current) return;
@@ -138,7 +151,7 @@ export function TicketDetailScreen() {
 
   const shown = effectiveTab(tab, { conductor: isConductor(ticket), pluginTabs, subagents: subagentsOf(state, ticket.sessionId) });
   const openAgent = parseSubagentTab(shown);
-  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
+  const openSubagent = (id: string) => pickTab(subagentTabRoute(id));
   const activePlugin = (() => {
     const p = parsePluginTab(shown);
     return p ? pluginTabs?.find((t) => t.pluginId === p.pluginId && t.id === p.tabId) : undefined;
@@ -147,23 +160,32 @@ export function TicketDetailScreen() {
   return (
     <KeyboardAvoider style={{ flex: 1, backgroundColor: c.bg }}>
       <Header ticket={ticket} />
-      <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown) || !!openAgent} />
-      <TabStrip ticket={ticket} tab={shown} onTab={setTab} pluginTabs={pluginTabs} />
-      <View style={{ flex: 1 }}>
-        {shown === "summaries" && <SummariesTab ticket={ticket} />}
-        {shown === "children" && <ChildrenTab ticket={ticket} />}
-        {shown === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
-        {shown === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
-        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
-        {shown === "browser" && <BrowserTab sessionId={ticket.sessionId} />}
-        {shown === "details" && <DetailsTab ticket={ticket} />}
-        {activePlugin && <PluginFrame key={`${ticket.key}/${shown}`} ticket={ticket} tab={activePlugin} />}
-        {parsePluginTab(shown) && !pluginTabs && (
-          <View style={{ padding: 30 }}>
-            <Spinner />
-          </View>
-        )}
+      <View
+        style={hero.hidden ? { height: 0, overflow: "hidden" } : undefined}
+        onLayout={(e) => hero.onHeroLayout(e.nativeEvent.layout.height)}
+        accessibilityElementsHidden={hero.hidden}
+        importantForAccessibility={hero.hidden ? "no-hide-descendants" : "auto"}
+      >
+        <Hero ticket={ticket} compact={shown === "browser" || !!parsePluginTab(shown) || !!openAgent} />
       </View>
+      <TabStrip ticket={ticket} tab={shown} onTab={pickTab} pluginTabs={pluginTabs} />
+      <HeroScrollProvider value={hero.handlers}>
+        <View style={{ flex: 1 }}>
+          {shown === "summaries" && <SummariesTab ticket={ticket} />}
+          {shown === "children" && <ChildrenTab ticket={ticket} />}
+          {shown === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+          {shown === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+          {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => pickTab("agents")} onOpen={openSubagent} />}
+          {shown === "browser" && <BrowserTab sessionId={ticket.sessionId} />}
+          {shown === "details" && <DetailsTab ticket={ticket} />}
+          {activePlugin && <PluginFrame key={`${ticket.key}/${shown}`} ticket={ticket} tab={activePlugin} />}
+          {parsePluginTab(shown) && !pluginTabs && (
+            <View style={{ padding: 30 }}>
+              <Spinner />
+            </View>
+          )}
+        </View>
+      </HeroScrollProvider>
       <Composer ticket={ticket} key={ticket.id} />
     </KeyboardAvoider>
   );
@@ -394,6 +416,10 @@ function Composer({ ticket }: { ticket: Ticket }) {
     setMoveFirst(on);
   };
   const hint = composerHint(ticket, move);
+  // The switch and hint only matter while writing: shown once the input is focused, and kept after
+  // a blur only while there's a message to send.
+  const [focused, setFocused] = useState(false);
+  const writing = focused || !!text.trim();
   const send = async () => {
     const body = text.trim();
     if (!body || sending) return;
@@ -410,7 +436,7 @@ function Composer({ ticket }: { ticket: Ticket }) {
   return (
     <View style={{ paddingHorizontal: 10, paddingTop: 8, paddingBottom: keyboardShown ? 8 : Math.max(insets.bottom, 8), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.bgElev, gap: 4 }}>
       <MentionList mentions={mentions} maxHeight={200} />
-      {(!!switchLabel || !!hint) && (
+      {writing && (!!switchLabel || !!hint) && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 6 }}>
           {switchLabel && (
             <>
@@ -437,6 +463,8 @@ function Composer({ ticket }: { ticket: Ticket }) {
           multiline
           value={text}
           onChangeText={setText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
           placeholderTextColor={attention ? c.red : c.text3}
           style={{ flex: 1, maxHeight: 140, minHeight: 40, borderRadius: 20, borderWidth: 1, borderColor: attention ? c.red : c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontSize: 16 }}
