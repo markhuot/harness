@@ -546,3 +546,13 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
 - [ ] sim-check passes against the native build
 - [ ] Release pipeline switched to ios/ (publish-install.sh, testflight.ts), mobile/ deleted
+
+## Manual checks for HARNESS-145
+
+Things AXe and sim-check can't drive, to try by hand on a device:
+
+- Board drag and drop on a real touch: a card dragged onto another card in the same column sits
+  above it, one dropped on a status chip or into another column moves there, and the move sticks
+  after a refresh.
+- An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
+  scrolls through on the way. A swipe from one column to the next plays exactly one.
