@@ -1,0 +1,3783 @@
+{
+  "inlineTokensCases": [
+    {
+      "name": "ticket keys between text",
+      "input": "Merged HARNESS-101, then FOO2-7.",
+      "output": [
+        {
+          "t": "text",
+          "text": "Merged "
+        },
+        {
+          "t": "ticket",
+          "key": "HARNESS-101"
+        },
+        {
+          "t": "text",
+          "text": ", then "
+        },
+        {
+          "t": "ticket",
+          "key": "FOO2-7"
+        },
+        {
+          "t": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "lower-case path",
+      "input": "harness/harness-112",
+      "output": [
+        {
+          "t": "text",
+          "text": "harness/harness-112"
+        }
+      ]
+    },
+    {
+      "name": "mixed case key",
+      "input": "Harness-12",
+      "output": [
+        {
+          "t": "text",
+          "text": "Harness-12"
+        }
+      ]
+    },
+    {
+      "name": "glued-on prefix",
+      "input": "xHARNESS-12",
+      "output": [
+        {
+          "t": "text",
+          "text": "xHARNESS-12"
+        }
+      ]
+    },
+    {
+      "name": "glued-on suffix",
+      "input": "HARNESS-12a",
+      "output": [
+        {
+          "t": "text",
+          "text": "HARNESS-12a"
+        }
+      ]
+    },
+    {
+      "name": "non-numeric",
+      "input": "HARNESS-x",
+      "output": [
+        {
+          "t": "text",
+          "text": "HARNESS-x"
+        }
+      ]
+    },
+    {
+      "name": "digit-led",
+      "input": "2FA-3",
+      "output": [
+        {
+          "t": "text",
+          "text": "2FA-3"
+        }
+      ]
+    },
+    {
+      "name": "key in code span",
+      "input": "`HARNESS-1`",
+      "output": [
+        {
+          "t": "code",
+          "text": "HARNESS-1"
+        }
+      ]
+    },
+    {
+      "name": "key in URL",
+      "input": "https://happycog.atlassian.net/browse/PLAYR-123",
+      "output": [
+        {
+          "t": "link",
+          "text": "https://happycog.atlassian.net/browse/PLAYR-123",
+          "url": "https://happycog.atlassian.net/browse/PLAYR-123"
+        }
+      ]
+    },
+    {
+      "name": "key as link label",
+      "input": "[PLAYR-9](https://x.test/PLAYR-9)",
+      "output": [
+        {
+          "t": "link",
+          "text": "PLAYR-9",
+          "url": "https://x.test/PLAYR-9"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": []
+    },
+    {
+      "name": "plain",
+      "input": "just text",
+      "output": [
+        {
+          "t": "text",
+          "text": "just text"
+        }
+      ]
+    },
+    {
+      "name": "code",
+      "input": "use `bun test` now",
+      "output": [
+        {
+          "t": "text",
+          "text": "use "
+        },
+        {
+          "t": "code",
+          "text": "bun test"
+        },
+        {
+          "t": "text",
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "empty code span",
+      "input": "a `` b",
+      "output": [
+        {
+          "t": "text",
+          "text": "a `` b"
+        }
+      ]
+    },
+    {
+      "name": "unclosed code",
+      "input": "a `b c",
+      "output": [
+        {
+          "t": "text",
+          "text": "a `b c"
+        }
+      ]
+    },
+    {
+      "name": "strong",
+      "input": "**bold** text",
+      "output": [
+        {
+          "t": "strong",
+          "text": "bold"
+        },
+        {
+          "t": "text",
+          "text": " text"
+        }
+      ]
+    },
+    {
+      "name": "strong with star inside fails",
+      "input": "**a*b**",
+      "output": [
+        {
+          "t": "text",
+          "text": "*"
+        },
+        {
+          "t": "em",
+          "text": "a"
+        },
+        {
+          "t": "text",
+          "text": "b**"
+        }
+      ]
+    },
+    {
+      "name": "unclosed strong",
+      "input": "**bold",
+      "output": [
+        {
+          "t": "text",
+          "text": "**bold"
+        }
+      ]
+    },
+    {
+      "name": "em",
+      "input": "*it* and _also_",
+      "output": [
+        {
+          "t": "em",
+          "text": "it"
+        },
+        {
+          "t": "text",
+          "text": " and "
+        },
+        {
+          "t": "em",
+          "text": "also"
+        }
+      ]
+    },
+    {
+      "name": "em starting with space",
+      "input": "* not em*",
+      "output": [
+        {
+          "t": "text",
+          "text": "* not em*"
+        }
+      ]
+    },
+    {
+      "name": "underscore em starting with space",
+      "input": "_ no_",
+      "output": [
+        {
+          "t": "text",
+          "text": "_ no_"
+        }
+      ]
+    },
+    {
+      "name": "em with trailing space",
+      "input": "*a *",
+      "output": [
+        {
+          "t": "em",
+          "text": "a "
+        }
+      ]
+    },
+    {
+      "name": "nested emphasis",
+      "input": "***both***",
+      "output": [
+        {
+          "t": "text",
+          "text": "*"
+        },
+        {
+          "t": "strong",
+          "text": "both"
+        },
+        {
+          "t": "text",
+          "text": "*"
+        }
+      ]
+    },
+    {
+      "name": "strong inside em",
+      "input": "*a **b** c*",
+      "output": [
+        {
+          "t": "em",
+          "text": "a "
+        },
+        {
+          "t": "em",
+          "text": "b"
+        },
+        {
+          "t": "text",
+          "text": "* c*"
+        }
+      ]
+    },
+    {
+      "name": "em inside strong",
+      "input": "**a *b* c**",
+      "output": [
+        {
+          "t": "text",
+          "text": "*"
+        },
+        {
+          "t": "em",
+          "text": "a "
+        },
+        {
+          "t": "text",
+          "text": "b* c**"
+        }
+      ]
+    },
+    {
+      "name": "snake_case words",
+      "input": "snake_case_name and more_words",
+      "output": [
+        {
+          "t": "text",
+          "text": "snake"
+        },
+        {
+          "t": "em",
+          "text": "case"
+        },
+        {
+          "t": "text",
+          "text": "name and more_words"
+        }
+      ]
+    },
+    {
+      "name": "lone star",
+      "input": "2 * 3 = 6",
+      "output": [
+        {
+          "t": "text",
+          "text": "2 * 3 = 6"
+        }
+      ]
+    },
+    {
+      "name": "multiplication",
+      "input": "a*b*c",
+      "output": [
+        {
+          "t": "text",
+          "text": "a"
+        },
+        {
+          "t": "em",
+          "text": "b"
+        },
+        {
+          "t": "text",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "name": "em across newline",
+      "input": "*a\nb*",
+      "output": [
+        {
+          "t": "em",
+          "text": "a\nb"
+        }
+      ]
+    },
+    {
+      "name": "code wins over em",
+      "input": "`*x*`",
+      "output": [
+        {
+          "t": "code",
+          "text": "*x*"
+        }
+      ]
+    },
+    {
+      "name": "em then code",
+      "input": "*a `b` c*",
+      "output": [
+        {
+          "t": "em",
+          "text": "a `b` c"
+        }
+      ]
+    },
+    {
+      "name": "http link",
+      "input": "[docs](https://example.com/a)",
+      "output": [
+        {
+          "t": "link",
+          "text": "docs",
+          "url": "https://example.com/a"
+        }
+      ]
+    },
+    {
+      "name": "http link uppercase scheme stays text",
+      "input": "[docs](HTTPS://example.com)",
+      "output": [
+        {
+          "t": "text",
+          "text": "docs"
+        }
+      ]
+    },
+    {
+      "name": "link with parens in url",
+      "input": "[wiki](https://en.wikipedia.org/wiki/Foo_(bar))",
+      "output": [
+        {
+          "t": "link",
+          "text": "wiki",
+          "url": "https://en.wikipedia.org/wiki/Foo_(bar"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "link with space in url",
+      "input": "[x](https://a.b/c d)",
+      "output": [
+        {
+          "t": "text",
+          "text": "[x]("
+        },
+        {
+          "t": "link",
+          "text": "https://a.b/c",
+          "url": "https://a.b/c"
+        },
+        {
+          "t": "text",
+          "text": " d)"
+        }
+      ]
+    },
+    {
+      "name": "empty label",
+      "input": "[](https://a.b)",
+      "output": [
+        {
+          "t": "text",
+          "text": "[]("
+        },
+        {
+          "t": "link",
+          "text": "https://a.b",
+          "url": "https://a.b"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "nested brackets",
+      "input": "[[x]](https://a.b)",
+      "output": [
+        {
+          "t": "text",
+          "text": "[[x]]("
+        },
+        {
+          "t": "link",
+          "text": "https://a.b",
+          "url": "https://a.b"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "harness file link",
+      "input": "[app.ts](harness://file/src/app.ts#L3)",
+      "output": [
+        {
+          "t": "link",
+          "text": "app.ts",
+          "url": "harness://file/src/app.ts#L3"
+        }
+      ]
+    },
+    {
+      "name": "relative file link",
+      "input": "[a](src/a.ts#L10-L20)",
+      "output": [
+        {
+          "t": "link",
+          "text": "a",
+          "url": "src/a.ts#L10-L20"
+        }
+      ]
+    },
+    {
+      "name": "absolute file link",
+      "input": "[a](/Users/me/a.ts)",
+      "output": [
+        {
+          "t": "link",
+          "text": "a",
+          "url": "/Users/me/a.ts"
+        }
+      ]
+    },
+    {
+      "name": "climbing file link stays text",
+      "input": "[a](../../etc/passwd)",
+      "output": [
+        {
+          "t": "text",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "name": "javascript link stays text",
+      "input": "[click](javascript:alert(1))",
+      "output": [
+        {
+          "t": "text",
+          "text": "click"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "data link stays text",
+      "input": "[x](data:text/html,hi)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "mailto stays text",
+      "input": "[mail](mailto:a@b.c)",
+      "output": [
+        {
+          "t": "text",
+          "text": "mail"
+        }
+      ]
+    },
+    {
+      "name": "anchor stays text",
+      "input": "[top](#top)",
+      "output": [
+        {
+          "t": "text",
+          "text": "top"
+        }
+      ]
+    },
+    {
+      "name": "ftp stays text",
+      "input": "[f](ftp://x.y)",
+      "output": [
+        {
+          "t": "text",
+          "text": "f"
+        }
+      ]
+    },
+    {
+      "name": "file scheme stays text",
+      "input": "[f](file:///etc/passwd)",
+      "output": [
+        {
+          "t": "text",
+          "text": "f"
+        }
+      ]
+    },
+    {
+      "name": "bare http",
+      "input": "see http://x.y/z.",
+      "output": [
+        {
+          "t": "text",
+          "text": "see "
+        },
+        {
+          "t": "link",
+          "text": "http://x.y/z.",
+          "url": "http://x.y/z."
+        }
+      ]
+    },
+    {
+      "name": "bare https in parens",
+      "input": "(https://x.y/a)",
+      "output": [
+        {
+          "t": "text",
+          "text": "("
+        },
+        {
+          "t": "link",
+          "text": "https://x.y/a",
+          "url": "https://x.y/a"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "bare url stops at angle",
+      "input": "<https://x.y/a>",
+      "output": [
+        {
+          "t": "text",
+          "text": "<"
+        },
+        {
+          "t": "link",
+          "text": "https://x.y/a",
+          "url": "https://x.y/a"
+        },
+        {
+          "t": "text",
+          "text": ">"
+        }
+      ]
+    },
+    {
+      "name": "bare url with trailing punctuation",
+      "input": "https://x.y/a, then",
+      "output": [
+        {
+          "t": "link",
+          "text": "https://x.y/a,",
+          "url": "https://x.y/a,"
+        },
+        {
+          "t": "text",
+          "text": " then"
+        }
+      ]
+    },
+    {
+      "name": "bare ftp stays text",
+      "input": "ftp://x.y",
+      "output": [
+        {
+          "t": "text",
+          "text": "ftp://x.y"
+        }
+      ]
+    },
+    {
+      "name": "url with emoji",
+      "input": "https://x.y/🎉 ok",
+      "output": [
+        {
+          "t": "link",
+          "text": "https://x.y/🎉",
+          "url": "https://x.y/🎉"
+        },
+        {
+          "t": "text",
+          "text": " ok"
+        }
+      ]
+    },
+    {
+      "name": "key after punctuation",
+      "input": "(ABC-1) [DEF-2] ABC-3: GHI-4!",
+      "output": [
+        {
+          "t": "text",
+          "text": "("
+        },
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        },
+        {
+          "t": "text",
+          "text": ") ["
+        },
+        {
+          "t": "ticket",
+          "key": "DEF-2"
+        },
+        {
+          "t": "text",
+          "text": "] "
+        },
+        {
+          "t": "ticket",
+          "key": "ABC-3"
+        },
+        {
+          "t": "text",
+          "text": ": "
+        },
+        {
+          "t": "ticket",
+          "key": "GHI-4"
+        },
+        {
+          "t": "text",
+          "text": "!"
+        }
+      ]
+    },
+    {
+      "name": "key with underscore after",
+      "input": "ABC-1_x",
+      "output": [
+        {
+          "t": "text",
+          "text": "ABC-1_x"
+        }
+      ]
+    },
+    {
+      "name": "key with lowercase after",
+      "input": "ABC-1x",
+      "output": [
+        {
+          "t": "text",
+          "text": "ABC-1x"
+        }
+      ]
+    },
+    {
+      "name": "key after underscore",
+      "input": "_ABC-1",
+      "output": [
+        {
+          "t": "text",
+          "text": "_ABC-1"
+        }
+      ]
+    },
+    {
+      "name": "key after digit",
+      "input": "1ABC-1",
+      "output": [
+        {
+          "t": "text",
+          "text": "1ABC-1"
+        }
+      ]
+    },
+    {
+      "name": "key after accented letter",
+      "input": "éABC-1",
+      "output": [
+        {
+          "t": "text",
+          "text": "é"
+        },
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        }
+      ]
+    },
+    {
+      "name": "key before accented letter",
+      "input": "ABC-1é",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        },
+        {
+          "t": "text",
+          "text": "é"
+        }
+      ]
+    },
+    {
+      "name": "key with combining mark after",
+      "input": "ABC-1́",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        },
+        {
+          "t": "text",
+          "text": "́"
+        }
+      ]
+    },
+    {
+      "name": "two-part key",
+      "input": "A-B-1",
+      "output": [
+        {
+          "t": "text",
+          "text": "A-"
+        },
+        {
+          "t": "ticket",
+          "key": "B-1"
+        }
+      ]
+    },
+    {
+      "name": "single letter key",
+      "input": "A-1",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "A-1"
+        }
+      ]
+    },
+    {
+      "name": "key with leading zeros",
+      "input": "UTF-8 SHA-256 X-007",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "UTF-8"
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "ticket",
+          "key": "SHA-256"
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "ticket",
+          "key": "X-007"
+        }
+      ]
+    },
+    {
+      "name": "key at start and end",
+      "input": "ABC-1 and DEF-22",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        },
+        {
+          "t": "text",
+          "text": " and "
+        },
+        {
+          "t": "ticket",
+          "key": "DEF-22"
+        }
+      ]
+    },
+    {
+      "name": "key next to emoji",
+      "input": "🎉ABC-1🎉",
+      "output": [
+        {
+          "t": "text",
+          "text": "🎉"
+        },
+        {
+          "t": "ticket",
+          "key": "ABC-1"
+        },
+        {
+          "t": "text",
+          "text": "🎉"
+        }
+      ]
+    },
+    {
+      "name": "full-width digits",
+      "input": "ABC-１２",
+      "output": [
+        {
+          "t": "text",
+          "text": "ABC-１２"
+        }
+      ]
+    },
+    {
+      "name": "everything",
+      "input": "**Done**: merged `main` into [PR](https://gh.test/1) for HARNESS-5 — see https://x.y and *notes*.",
+      "output": [
+        {
+          "t": "strong",
+          "text": "Done"
+        },
+        {
+          "t": "text",
+          "text": ": merged "
+        },
+        {
+          "t": "code",
+          "text": "main"
+        },
+        {
+          "t": "text",
+          "text": " into "
+        },
+        {
+          "t": "link",
+          "text": "PR",
+          "url": "https://gh.test/1"
+        },
+        {
+          "t": "text",
+          "text": " for "
+        },
+        {
+          "t": "ticket",
+          "key": "HARNESS-5"
+        },
+        {
+          "t": "text",
+          "text": " — see "
+        },
+        {
+          "t": "link",
+          "text": "https://x.y",
+          "url": "https://x.y"
+        },
+        {
+          "t": "text",
+          "text": " and "
+        },
+        {
+          "t": "em",
+          "text": "notes"
+        },
+        {
+          "t": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "tabs and NBSP",
+      "input": "a\t**b** *c*",
+      "output": [
+        {
+          "t": "text",
+          "text": "a\t"
+        },
+        {
+          "t": "strong",
+          "text": "b"
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "em",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "name": "em with NBSP start",
+      "input": "* x*",
+      "output": [
+        {
+          "t": "text",
+          "text": "* x*"
+        }
+      ]
+    },
+    {
+      "name": "em with NEL start",
+      "input": "*x*",
+      "output": [
+        {
+          "t": "em",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "only newlines",
+      "input": "\n\n\n",
+      "output": [
+        {
+          "t": "text",
+          "text": "\n\n\n"
+        }
+      ]
+    },
+    {
+      "name": "only whitespace",
+      "input": "  \t \n ",
+      "output": [
+        {
+          "t": "text",
+          "text": "  \t \n "
+        }
+      ]
+    },
+    {
+      "name": "paragraph",
+      "input": "Hello world",
+      "output": [
+        {
+          "t": "text",
+          "text": "Hello world"
+        }
+      ]
+    },
+    {
+      "name": "two paragraphs",
+      "input": "one\ntwo\n\nthree",
+      "output": [
+        {
+          "t": "text",
+          "text": "one\ntwo\n\nthree"
+        }
+      ]
+    },
+    {
+      "name": "CRLF line endings",
+      "input": "# Title\r\n\r\npara one\r\npara two\r\n- a\r\n- b\r\n",
+      "output": [
+        {
+          "t": "text",
+          "text": "# Title\r\n\r\npara one\r\npara two\r\n- a\r\n- b\r\n"
+        }
+      ]
+    },
+    {
+      "name": "lone CR stays in the line",
+      "input": "a\rb\n# h\rx",
+      "output": [
+        {
+          "t": "text",
+          "text": "a\rb\n# h\rx"
+        }
+      ]
+    },
+    {
+      "name": "headings 1-4",
+      "input": "# one\n## two\n### three\n#### four",
+      "output": [
+        {
+          "t": "text",
+          "text": "# one\n## two\n### three\n#### four"
+        }
+      ]
+    },
+    {
+      "name": "five hashes is a paragraph",
+      "input": "##### five",
+      "output": [
+        {
+          "t": "text",
+          "text": "##### five"
+        }
+      ]
+    },
+    {
+      "name": "hash without space",
+      "input": "#nospace",
+      "output": [
+        {
+          "t": "text",
+          "text": "#nospace"
+        }
+      ]
+    },
+    {
+      "name": "heading with tab",
+      "input": "#\tTabbed",
+      "output": [
+        {
+          "t": "text",
+          "text": "#\tTabbed"
+        }
+      ]
+    },
+    {
+      "name": "heading with trailing spaces",
+      "input": "## Spaced   ",
+      "output": [
+        {
+          "t": "text",
+          "text": "## Spaced   "
+        }
+      ]
+    },
+    {
+      "name": "empty heading text",
+      "input": "#  ",
+      "output": [
+        {
+          "t": "text",
+          "text": "#  "
+        }
+      ]
+    },
+    {
+      "name": "indented heading is a paragraph",
+      "input": " # indented",
+      "output": [
+        {
+          "t": "text",
+          "text": " # indented"
+        }
+      ]
+    },
+    {
+      "name": "bullet list",
+      "input": "- a\n- b\n* c\n+ d",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n- b\n* c\n+ d"
+        }
+      ]
+    },
+    {
+      "name": "ordered list",
+      "input": "1. one\n2) two\n10. ten",
+      "output": [
+        {
+          "t": "text",
+          "text": "1. one\n2) two\n10. ten"
+        }
+      ]
+    },
+    {
+      "name": "ordered then bullet splits",
+      "input": "1. one\n- two\n2. three",
+      "output": [
+        {
+          "t": "text",
+          "text": "1. one\n- two\n2. three"
+        }
+      ]
+    },
+    {
+      "name": "bullet then ordered splits",
+      "input": "- a\n1. b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n1. b"
+        }
+      ]
+    },
+    {
+      "name": "list continuation",
+      "input": "- first\n  continued here\n- second\n    deeper",
+      "output": [
+        {
+          "t": "text",
+          "text": "- first\n  continued here\n- second\n    deeper"
+        }
+      ]
+    },
+    {
+      "name": "one-space indent is a new paragraph",
+      "input": "- first\n continued?",
+      "output": [
+        {
+          "t": "text",
+          "text": "- first\n continued?"
+        }
+      ]
+    },
+    {
+      "name": "list item needs space",
+      "input": "-nospace\n1.nospace",
+      "output": [
+        {
+          "t": "text",
+          "text": "-nospace\n1.nospace"
+        }
+      ]
+    },
+    {
+      "name": "indented list items",
+      "input": "  - nested\n    - deeper\n- top",
+      "output": [
+        {
+          "t": "text",
+          "text": "  - nested\n    - deeper\n- top"
+        }
+      ]
+    },
+    {
+      "name": "list item with tab",
+      "input": "-\ttab item",
+      "output": [
+        {
+          "t": "text",
+          "text": "-\ttab item"
+        }
+      ]
+    },
+    {
+      "name": "empty list item text",
+      "input": "- \n-  x",
+      "output": [
+        {
+          "t": "text",
+          "text": "- \n-  x"
+        }
+      ]
+    },
+    {
+      "name": "list then paragraph",
+      "input": "- a\nafter",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\nafter"
+        }
+      ]
+    },
+    {
+      "name": "hr dashes",
+      "input": "---",
+      "output": [
+        {
+          "t": "text",
+          "text": "---"
+        }
+      ]
+    },
+    {
+      "name": "hr stars",
+      "input": "***",
+      "output": [
+        {
+          "t": "text",
+          "text": "***"
+        }
+      ]
+    },
+    {
+      "name": "hr with spaces",
+      "input": "  -----  ",
+      "output": [
+        {
+          "t": "text",
+          "text": "  -----  "
+        }
+      ]
+    },
+    {
+      "name": "hr mixed is a list",
+      "input": "- - -",
+      "output": [
+        {
+          "t": "text",
+          "text": "- - -"
+        }
+      ]
+    },
+    {
+      "name": "two dashes is a paragraph",
+      "input": "--",
+      "output": [
+        {
+          "t": "text",
+          "text": "--"
+        }
+      ]
+    },
+    {
+      "name": "underscores are a paragraph",
+      "input": "___",
+      "output": [
+        {
+          "t": "text",
+          "text": "___"
+        }
+      ]
+    },
+    {
+      "name": "paragraph then hr",
+      "input": "text\n---\nmore",
+      "output": [
+        {
+          "t": "text",
+          "text": "text\n---\nmore"
+        }
+      ]
+    },
+    {
+      "name": "fenced code",
+      "input": "```ts\nconst x = 1;\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "ts\nconst x = 1;\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "tilde fence",
+      "input": "~~~\nplain\n~~~",
+      "output": [
+        {
+          "t": "text",
+          "text": "~~~\nplain\n~~~"
+        }
+      ]
+    },
+    {
+      "name": "fence lang with plus and dash",
+      "input": "``` c++-x \nbody\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": " c++-x \nbody\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "fence with dotted lang is text",
+      "input": "```foo.bar\nbody\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "foo.bar\nbody\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "fence closes on mismatched backticks",
+      "input": "```\na\n````\nafter",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "\na\n"
+        },
+        {
+          "t": "text",
+          "text": "```\nafter"
+        }
+      ]
+    },
+    {
+      "name": "fence closed by tilde only for tilde",
+      "input": "```\na\n~~~\nb\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "\na\n~~~\nb\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "unterminated fence",
+      "input": "```js\nconst a = 1;\nstill code",
+      "output": [
+        {
+          "t": "text",
+          "text": "```js\nconst a = 1;\nstill code"
+        }
+      ]
+    },
+    {
+      "name": "indented fence",
+      "input": "   ```\n  code\n   ```",
+      "output": [
+        {
+          "t": "text",
+          "text": "   ``"
+        },
+        {
+          "t": "code",
+          "text": "\n  code\n   "
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "fence inside a list",
+      "input": "- item\n```\ncode\n```\n- next",
+      "output": [
+        {
+          "t": "text",
+          "text": "- item\n``"
+        },
+        {
+          "t": "code",
+          "text": "\ncode\n"
+        },
+        {
+          "t": "text",
+          "text": "``\n- next"
+        }
+      ]
+    },
+    {
+      "name": "fence closing line with text",
+      "input": "```\nx\n``` trailing\ny",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "\nx\n"
+        },
+        {
+          "t": "text",
+          "text": "`` trailing\ny"
+        }
+      ]
+    },
+    {
+      "name": "empty fence",
+      "input": "```\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "``"
+        },
+        {
+          "t": "code",
+          "text": "\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "fence at end",
+      "input": "para\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "para\n```"
+        }
+      ]
+    },
+    {
+      "name": "quote",
+      "input": "> quoted\n> more\n>tight",
+      "output": [
+        {
+          "t": "text",
+          "text": "> quoted\n> more\n>tight"
+        }
+      ]
+    },
+    {
+      "name": "quote then paragraph",
+      "input": "> q\nnot quoted",
+      "output": [
+        {
+          "t": "text",
+          "text": "> q\nnot quoted"
+        }
+      ]
+    },
+    {
+      "name": "indented quote is a paragraph",
+      "input": " > nope",
+      "output": [
+        {
+          "t": "text",
+          "text": " > nope"
+        }
+      ]
+    },
+    {
+      "name": "quote with tab",
+      "input": ">\tTab",
+      "output": [
+        {
+          "t": "text",
+          "text": ">\tTab"
+        }
+      ]
+    },
+    {
+      "name": "table",
+      "input": "| a | b |\n| --- | --- |\n| 1 | 2 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n| --- | --- |\n| 1 | 2 |"
+        }
+      ]
+    },
+    {
+      "name": "table alignments",
+      "input": "| l | c | r | n |\n| :-- | :-: | --: | --- |\n| 1 | 2 | 3 | 4 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| l | c | r | n |\n| :-- | :-: | --: | --- |\n| 1 | 2 | 3 | 4 |"
+        }
+      ]
+    },
+    {
+      "name": "table without outer pipes",
+      "input": "a | b\n--|--\n1 | 2",
+      "output": [
+        {
+          "t": "text",
+          "text": "a | b\n--|--\n1 | 2"
+        }
+      ]
+    },
+    {
+      "name": "table ragged rows",
+      "input": "| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |"
+        }
+      ]
+    },
+    {
+      "name": "table escaped pipe",
+      "input": "| a | b |\n|---|---|\n| x \\| y | z |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n|---|---|\n| x \\| y | z |"
+        }
+      ]
+    },
+    {
+      "name": "table pipe in code span",
+      "input": "| a | b |\n|---|---|\n| `x|y` | z |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n|---|---|\n| "
+        },
+        {
+          "t": "code",
+          "text": "x|y"
+        },
+        {
+          "t": "text",
+          "text": " | z |"
+        }
+      ]
+    },
+    {
+      "name": "table trailing escaped pipe",
+      "input": "| a | b\\|\n|---|---|\n| 1 | 2 \\|",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b\\|\n|---|---|\n| 1 | 2 \\|"
+        }
+      ]
+    },
+    {
+      "name": "table header count mismatch",
+      "input": "| a | b |\n|---|\n| 1 | 2 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n|---|\n| 1 | 2 |"
+        }
+      ]
+    },
+    {
+      "name": "table delimiter needs dashes",
+      "input": "| a | b |\n| : | : |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n| : | : |"
+        }
+      ]
+    },
+    {
+      "name": "table ends at blank line",
+      "input": "| a |\n|---|\n| 1 |\n\n| 2 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a |\n|---|\n| 1 |\n\n| 2 |"
+        }
+      ]
+    },
+    {
+      "name": "table ends at a line without pipe",
+      "input": "| a |\n|---|\n| 1 |\nplain",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a |\n|---|\n| 1 |\nplain"
+        }
+      ]
+    },
+    {
+      "name": "table header only",
+      "input": "| a | b |\n|---|---|",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n|---|---|"
+        }
+      ]
+    },
+    {
+      "name": "table delimiter with spaces in cells",
+      "input": "| a | b |\n| - - | --- |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |\n| - - | --- |"
+        }
+      ]
+    },
+    {
+      "name": "table at end without delimiter",
+      "input": "| a | b |",
+      "output": [
+        {
+          "t": "text",
+          "text": "| a | b |"
+        }
+      ]
+    },
+    {
+      "name": "table after paragraph",
+      "input": "intro\n| a |\n|---|\n| 1 |",
+      "output": [
+        {
+          "t": "text",
+          "text": "intro\n| a |\n|---|\n| 1 |"
+        }
+      ]
+    },
+    {
+      "name": "table with tabs",
+      "input": "|\ta\t|\tb\t|\n|\t---\t|\t:-:\t|\n|\t1\t|\t2\t|",
+      "output": [
+        {
+          "t": "text",
+          "text": "|\ta\t|\tb\t|\n|\t---\t|\t:-:\t|\n|\t1\t|\t2\t|"
+        }
+      ]
+    },
+    {
+      "name": "table empty cells",
+      "input": "||\n|-|\n||",
+      "output": [
+        {
+          "t": "text",
+          "text": "||\n|-|\n||"
+        }
+      ]
+    },
+    {
+      "name": "pipe line with dash row",
+      "input": "a|b\n-",
+      "output": [
+        {
+          "t": "text",
+          "text": "a|b\n-"
+        }
+      ]
+    },
+    {
+      "name": "mixed document",
+      "input": "# Summary\n\nDid **things** and `code`.\n\n- one\n- two\n\n```sh\nbun test\n```\n\n> note\n\n| k | v |\n|:-|-:|\n| x | 1 |\n\n---\nBye",
+      "output": [
+        {
+          "t": "text",
+          "text": "# Summary\n\nDid "
+        },
+        {
+          "t": "strong",
+          "text": "things"
+        },
+        {
+          "t": "text",
+          "text": " and "
+        },
+        {
+          "t": "code",
+          "text": "code"
+        },
+        {
+          "t": "text",
+          "text": ".\n\n- one\n- two\n\n``"
+        },
+        {
+          "t": "code",
+          "text": "sh\nbun test\n"
+        },
+        {
+          "t": "text",
+          "text": "``\n\n> note\n\n| k | v |\n|:-|-:|\n| x | 1 |\n\n---\nBye"
+        }
+      ]
+    },
+    {
+      "name": "emoji",
+      "input": "# 🎉 Party\n- 👍🏽 ok\n| 🅰️ | b |\n|---|---|\n| 👨‍👩‍👧 | é |",
+      "output": [
+        {
+          "t": "text",
+          "text": "# 🎉 Party\n- 👍🏽 ok\n| 🅰️ | b |\n|---|---|\n| 👨‍👩‍👧 | é |"
+        }
+      ]
+    },
+    {
+      "name": "combining marks",
+      "input": "#́ not a heading\n-́ not a list\n> é",
+      "output": [
+        {
+          "t": "text",
+          "text": "#́ not a heading\n-́ not a list\n> é"
+        }
+      ]
+    },
+    {
+      "name": "NBSP as whitespace",
+      "input": "# nbsp heading\n- nbsp item\n \n``` js \ncode\n```",
+      "output": [
+        {
+          "t": "text",
+          "text": "# nbsp heading\n- nbsp item\n \n``"
+        },
+        {
+          "t": "code",
+          "text": " js \ncode\n"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "NEL is not whitespace",
+      "input": "#nel\n\n- a",
+      "output": [
+        {
+          "t": "text",
+          "text": "#nel\n\n- a"
+        }
+      ]
+    },
+    {
+      "name": "line separator U+2028",
+      "input": "a b\n# h x",
+      "output": [
+        {
+          "t": "text",
+          "text": "a b\n# h x"
+        }
+      ]
+    },
+    {
+      "name": "BOM is whitespace",
+      "input": "﻿# bom\n﻿",
+      "output": [
+        {
+          "t": "text",
+          "text": "﻿# bom\n﻿"
+        }
+      ]
+    },
+    {
+      "name": "vertical tab and form feed",
+      "input": "#\u000bvt\n-\fff",
+      "output": [
+        {
+          "t": "text",
+          "text": "#\u000bvt\n-\fff"
+        }
+      ]
+    }
+  ],
+  "parseBlocksCases": [
+    {
+      "name": "empty",
+      "input": "",
+      "output": []
+    },
+    {
+      "name": "only newlines",
+      "input": "\n\n\n",
+      "output": []
+    },
+    {
+      "name": "only whitespace",
+      "input": "  \t \n ",
+      "output": []
+    },
+    {
+      "name": "paragraph",
+      "input": "Hello world",
+      "output": [
+        {
+          "t": "p",
+          "text": "Hello world"
+        }
+      ]
+    },
+    {
+      "name": "two paragraphs",
+      "input": "one\ntwo\n\nthree",
+      "output": [
+        {
+          "t": "p",
+          "text": "one\ntwo"
+        },
+        {
+          "t": "p",
+          "text": "three"
+        }
+      ]
+    },
+    {
+      "name": "CRLF line endings",
+      "input": "# Title\r\n\r\npara one\r\npara two\r\n- a\r\n- b\r\n",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "Title"
+        },
+        {
+          "t": "p",
+          "text": "para one\npara two"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "a",
+            "b"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lone CR stays in the line",
+      "input": "a\rb\n# h\rx",
+      "output": [
+        {
+          "t": "p",
+          "text": "a\rb\n# h\rx"
+        }
+      ]
+    },
+    {
+      "name": "headings 1-4",
+      "input": "# one\n## two\n### three\n#### four",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "one"
+        },
+        {
+          "t": "h",
+          "level": 2,
+          "text": "two"
+        },
+        {
+          "t": "h",
+          "level": 3,
+          "text": "three"
+        },
+        {
+          "t": "h",
+          "level": 4,
+          "text": "four"
+        }
+      ]
+    },
+    {
+      "name": "five hashes is a paragraph",
+      "input": "##### five",
+      "output": [
+        {
+          "t": "p",
+          "text": "##### five"
+        }
+      ]
+    },
+    {
+      "name": "hash without space",
+      "input": "#nospace",
+      "output": [
+        {
+          "t": "p",
+          "text": "#nospace"
+        }
+      ]
+    },
+    {
+      "name": "heading with tab",
+      "input": "#\tTabbed",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "Tabbed"
+        }
+      ]
+    },
+    {
+      "name": "heading with trailing spaces",
+      "input": "## Spaced   ",
+      "output": [
+        {
+          "t": "h",
+          "level": 2,
+          "text": "Spaced   "
+        }
+      ]
+    },
+    {
+      "name": "empty heading text",
+      "input": "#  ",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "indented heading is a paragraph",
+      "input": " # indented",
+      "output": [
+        {
+          "t": "p",
+          "text": " # indented"
+        }
+      ]
+    },
+    {
+      "name": "bullet list",
+      "input": "- a\n- b\n* c\n+ d",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordered list",
+      "input": "1. one\n2) two\n10. ten",
+      "output": [
+        {
+          "t": "ol",
+          "items": [
+            "one",
+            "two",
+            "ten"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordered then bullet splits",
+      "input": "1. one\n- two\n2. three",
+      "output": [
+        {
+          "t": "ol",
+          "items": [
+            "one"
+          ]
+        },
+        {
+          "t": "ul",
+          "items": [
+            "two"
+          ]
+        },
+        {
+          "t": "ol",
+          "items": [
+            "three"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bullet then ordered splits",
+      "input": "- a\n1. b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "a"
+          ]
+        },
+        {
+          "t": "ol",
+          "items": [
+            "b"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "list continuation",
+      "input": "- first\n  continued here\n- second\n    deeper",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "first continued here",
+            "second deeper"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one-space indent is a new paragraph",
+      "input": "- first\n continued?",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "first"
+          ]
+        },
+        {
+          "t": "p",
+          "text": " continued?"
+        }
+      ]
+    },
+    {
+      "name": "list item needs space",
+      "input": "-nospace\n1.nospace",
+      "output": [
+        {
+          "t": "p",
+          "text": "-nospace\n1.nospace"
+        }
+      ]
+    },
+    {
+      "name": "indented list items",
+      "input": "  - nested\n    - deeper\n- top",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "nested",
+            "deeper",
+            "top"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "list item with tab",
+      "input": "-\ttab item",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "tab item"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty list item text",
+      "input": "- \n-  x",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "",
+            "x"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "list then paragraph",
+      "input": "- a\nafter",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "a"
+          ]
+        },
+        {
+          "t": "p",
+          "text": "after"
+        }
+      ]
+    },
+    {
+      "name": "hr dashes",
+      "input": "---",
+      "output": [
+        {
+          "t": "hr"
+        }
+      ]
+    },
+    {
+      "name": "hr stars",
+      "input": "***",
+      "output": [
+        {
+          "t": "hr"
+        }
+      ]
+    },
+    {
+      "name": "hr with spaces",
+      "input": "  -----  ",
+      "output": [
+        {
+          "t": "hr"
+        }
+      ]
+    },
+    {
+      "name": "hr mixed is a list",
+      "input": "- - -",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "- -"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two dashes is a paragraph",
+      "input": "--",
+      "output": [
+        {
+          "t": "p",
+          "text": "--"
+        }
+      ]
+    },
+    {
+      "name": "underscores are a paragraph",
+      "input": "___",
+      "output": [
+        {
+          "t": "p",
+          "text": "___"
+        }
+      ]
+    },
+    {
+      "name": "paragraph then hr",
+      "input": "text\n---\nmore",
+      "output": [
+        {
+          "t": "p",
+          "text": "text"
+        },
+        {
+          "t": "hr"
+        },
+        {
+          "t": "p",
+          "text": "more"
+        }
+      ]
+    },
+    {
+      "name": "fenced code",
+      "input": "```ts\nconst x = 1;\n```",
+      "output": [
+        {
+          "t": "code",
+          "lang": "ts",
+          "text": "const x = 1;"
+        }
+      ]
+    },
+    {
+      "name": "tilde fence",
+      "input": "~~~\nplain\n~~~",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": "plain"
+        }
+      ]
+    },
+    {
+      "name": "fence lang with plus and dash",
+      "input": "``` c++-x \nbody\n```",
+      "output": [
+        {
+          "t": "code",
+          "lang": "c++-x",
+          "text": "body"
+        }
+      ]
+    },
+    {
+      "name": "fence with dotted lang is text",
+      "input": "```foo.bar\nbody\n```",
+      "output": [
+        {
+          "t": "p",
+          "text": "```foo.bar\nbody"
+        },
+        {
+          "t": "code",
+          "lang": "",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "fence closes on mismatched backticks",
+      "input": "```\na\n````\nafter",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": "a"
+        },
+        {
+          "t": "p",
+          "text": "after"
+        }
+      ]
+    },
+    {
+      "name": "fence closed by tilde only for tilde",
+      "input": "```\na\n~~~\nb\n```",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": "a\n~~~\nb"
+        }
+      ]
+    },
+    {
+      "name": "unterminated fence",
+      "input": "```js\nconst a = 1;\nstill code",
+      "output": [
+        {
+          "t": "code",
+          "lang": "js",
+          "text": "const a = 1;\nstill code"
+        }
+      ]
+    },
+    {
+      "name": "indented fence",
+      "input": "   ```\n  code\n   ```",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": "  code"
+        }
+      ]
+    },
+    {
+      "name": "fence inside a list",
+      "input": "- item\n```\ncode\n```\n- next",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            "item"
+          ]
+        },
+        {
+          "t": "code",
+          "lang": "",
+          "text": "code"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "next"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fence closing line with text",
+      "input": "```\nx\n``` trailing\ny",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": "x"
+        },
+        {
+          "t": "p",
+          "text": "y"
+        }
+      ]
+    },
+    {
+      "name": "empty fence",
+      "input": "```\n```",
+      "output": [
+        {
+          "t": "code",
+          "lang": "",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "fence at end",
+      "input": "para\n```",
+      "output": [
+        {
+          "t": "p",
+          "text": "para"
+        },
+        {
+          "t": "code",
+          "lang": "",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "quote",
+      "input": "> quoted\n> more\n>tight",
+      "output": [
+        {
+          "t": "quote",
+          "text": "quoted\nmore\ntight"
+        }
+      ]
+    },
+    {
+      "name": "quote then paragraph",
+      "input": "> q\nnot quoted",
+      "output": [
+        {
+          "t": "quote",
+          "text": "q"
+        },
+        {
+          "t": "p",
+          "text": "not quoted"
+        }
+      ]
+    },
+    {
+      "name": "indented quote is a paragraph",
+      "input": " > nope",
+      "output": [
+        {
+          "t": "p",
+          "text": " > nope"
+        }
+      ]
+    },
+    {
+      "name": "quote with tab",
+      "input": ">\tTab",
+      "output": [
+        {
+          "t": "quote",
+          "text": "Tab"
+        }
+      ]
+    },
+    {
+      "name": "table",
+      "input": "| a | b |\n| --- | --- |\n| 1 | 2 |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table alignments",
+      "input": "| l | c | r | n |\n| :-- | :-: | --: | --- |\n| 1 | 2 | 3 | 4 |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            "left",
+            "center",
+            "right",
+            null
+          ],
+          "header": [
+            "l",
+            "c",
+            "r",
+            "n"
+          ],
+          "rows": [
+            [
+              "1",
+              "2",
+              "3",
+              "4"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table without outer pipes",
+      "input": "a | b\n--|--\n1 | 2",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table ragged rows",
+      "input": "| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b",
+            "c"
+          ],
+          "rows": [
+            [
+              "1",
+              "",
+              ""
+            ],
+            [
+              "1",
+              "2",
+              "3"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table escaped pipe",
+      "input": "| a | b |\n|---|---|\n| x \\| y | z |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "x | y",
+              "z"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table pipe in code span",
+      "input": "| a | b |\n|---|---|\n| `x|y` | z |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "`x|y`",
+              "z"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table trailing escaped pipe",
+      "input": "| a | b\\|\n|---|---|\n| 1 | 2 \\|",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b|"
+          ],
+          "rows": [
+            [
+              "1",
+              "2 |"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table header count mismatch",
+      "input": "| a | b |\n|---|\n| 1 | 2 |",
+      "output": [
+        {
+          "t": "p",
+          "text": "| a | b |\n|---|\n| 1 | 2 |"
+        }
+      ]
+    },
+    {
+      "name": "table delimiter needs dashes",
+      "input": "| a | b |\n| : | : |",
+      "output": [
+        {
+          "t": "p",
+          "text": "| a | b |\n| : | : |"
+        }
+      ]
+    },
+    {
+      "name": "table ends at blank line",
+      "input": "| a |\n|---|\n| 1 |\n\n| 2 |",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null
+          ],
+          "header": [
+            "a"
+          ],
+          "rows": [
+            [
+              "1"
+            ]
+          ]
+        },
+        {
+          "t": "p",
+          "text": "| 2 |"
+        }
+      ]
+    },
+    {
+      "name": "table ends at a line without pipe",
+      "input": "| a |\n|---|\n| 1 |\nplain",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null
+          ],
+          "header": [
+            "a"
+          ],
+          "rows": [
+            [
+              "1"
+            ]
+          ]
+        },
+        {
+          "t": "p",
+          "text": "plain"
+        }
+      ]
+    },
+    {
+      "name": "table header only",
+      "input": "| a | b |\n|---|---|",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": []
+        }
+      ]
+    },
+    {
+      "name": "table delimiter with spaces in cells",
+      "input": "| a | b |\n| - - | --- |",
+      "output": [
+        {
+          "t": "p",
+          "text": "| a | b |\n| - - | --- |"
+        }
+      ]
+    },
+    {
+      "name": "table at end without delimiter",
+      "input": "| a | b |",
+      "output": [
+        {
+          "t": "p",
+          "text": "| a | b |"
+        }
+      ]
+    },
+    {
+      "name": "table after paragraph",
+      "input": "intro\n| a |\n|---|\n| 1 |",
+      "output": [
+        {
+          "t": "p",
+          "text": "intro"
+        },
+        {
+          "t": "table",
+          "align": [
+            null
+          ],
+          "header": [
+            "a"
+          ],
+          "rows": [
+            [
+              "1"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table with tabs",
+      "input": "|\ta\t|\tb\t|\n|\t---\t|\t:-:\t|\n|\t1\t|\t2\t|",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null,
+            "center"
+          ],
+          "header": [
+            "a",
+            "b"
+          ],
+          "rows": [
+            [
+              "1",
+              "2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table empty cells",
+      "input": "||\n|-|\n||",
+      "output": [
+        {
+          "t": "table",
+          "align": [
+            null
+          ],
+          "header": [
+            ""
+          ],
+          "rows": [
+            [
+              ""
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pipe line with dash row",
+      "input": "a|b\n-",
+      "output": [
+        {
+          "t": "p",
+          "text": "a|b\n-"
+        }
+      ]
+    },
+    {
+      "name": "mixed document",
+      "input": "# Summary\n\nDid **things** and `code`.\n\n- one\n- two\n\n```sh\nbun test\n```\n\n> note\n\n| k | v |\n|:-|-:|\n| x | 1 |\n\n---\nBye",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "Summary"
+        },
+        {
+          "t": "p",
+          "text": "Did **things** and `code`."
+        },
+        {
+          "t": "ul",
+          "items": [
+            "one",
+            "two"
+          ]
+        },
+        {
+          "t": "code",
+          "lang": "sh",
+          "text": "bun test"
+        },
+        {
+          "t": "quote",
+          "text": "note"
+        },
+        {
+          "t": "table",
+          "align": [
+            "left",
+            "right"
+          ],
+          "header": [
+            "k",
+            "v"
+          ],
+          "rows": [
+            [
+              "x",
+              "1"
+            ]
+          ]
+        },
+        {
+          "t": "hr"
+        },
+        {
+          "t": "p",
+          "text": "Bye"
+        }
+      ]
+    },
+    {
+      "name": "emoji",
+      "input": "# 🎉 Party\n- 👍🏽 ok\n| 🅰️ | b |\n|---|---|\n| 👨‍👩‍👧 | é |",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "🎉 Party"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "👍🏽 ok"
+          ]
+        },
+        {
+          "t": "table",
+          "align": [
+            null,
+            null
+          ],
+          "header": [
+            "🅰️",
+            "b"
+          ],
+          "rows": [
+            [
+              "👨‍👩‍👧",
+              "é"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combining marks",
+      "input": "#́ not a heading\n-́ not a list\n> é",
+      "output": [
+        {
+          "t": "p",
+          "text": "#́ not a heading\n-́ not a list"
+        },
+        {
+          "t": "quote",
+          "text": "é"
+        }
+      ]
+    },
+    {
+      "name": "NBSP as whitespace",
+      "input": "# nbsp heading\n- nbsp item\n \n``` js \ncode\n```",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "nbsp heading"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "nbsp item"
+          ]
+        },
+        {
+          "t": "code",
+          "lang": "js",
+          "text": "code"
+        }
+      ]
+    },
+    {
+      "name": "NEL is not whitespace",
+      "input": "#nel\n\n- a",
+      "output": [
+        {
+          "t": "p",
+          "text": "#nel\n"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "a"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "line separator U+2028",
+      "input": "a b\n# h x",
+      "output": [
+        {
+          "t": "p",
+          "text": "a b\n# h x"
+        }
+      ]
+    },
+    {
+      "name": "BOM is whitespace",
+      "input": "﻿# bom\n﻿",
+      "output": [
+        {
+          "t": "p",
+          "text": "﻿# bom"
+        }
+      ]
+    },
+    {
+      "name": "vertical tab and form feed",
+      "input": "#\u000bvt\n-\fff",
+      "output": [
+        {
+          "t": "h",
+          "level": 1,
+          "text": "vt"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "ff"
+          ]
+        }
+      ]
+    }
+  ],
+  "plainTextCases": [
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "only newlines",
+      "input": "\n\n\n",
+      "output": ""
+    },
+    {
+      "name": "only whitespace",
+      "input": "  \t \n ",
+      "output": ""
+    },
+    {
+      "name": "paragraph",
+      "input": "Hello world",
+      "output": "Hello world"
+    },
+    {
+      "name": "two paragraphs",
+      "input": "one\ntwo\n\nthree",
+      "output": "one two three"
+    },
+    {
+      "name": "CRLF line endings",
+      "input": "# Title\r\n\r\npara one\r\npara two\r\n- a\r\n- b\r\n",
+      "output": "Title para one para two • a • b"
+    },
+    {
+      "name": "lone CR stays in the line",
+      "input": "a\rb\n# h\rx",
+      "output": "a b h x"
+    },
+    {
+      "name": "headings 1-4",
+      "input": "# one\n## two\n### three\n#### four",
+      "output": "one two three four"
+    },
+    {
+      "name": "five hashes is a paragraph",
+      "input": "##### five",
+      "output": "five"
+    },
+    {
+      "name": "hash without space",
+      "input": "#nospace",
+      "output": "#nospace"
+    },
+    {
+      "name": "heading with tab",
+      "input": "#\tTabbed",
+      "output": "Tabbed"
+    },
+    {
+      "name": "heading with trailing spaces",
+      "input": "## Spaced   ",
+      "output": "Spaced"
+    },
+    {
+      "name": "empty heading text",
+      "input": "#  ",
+      "output": ""
+    },
+    {
+      "name": "indented heading is a paragraph",
+      "input": " # indented",
+      "output": "# indented"
+    },
+    {
+      "name": "bullet list",
+      "input": "- a\n- b\n* c\n+ d",
+      "output": "• a • b • c • d"
+    },
+    {
+      "name": "ordered list",
+      "input": "1. one\n2) two\n10. ten",
+      "output": "1. one 2) two 10. ten"
+    },
+    {
+      "name": "ordered then bullet splits",
+      "input": "1. one\n- two\n2. three",
+      "output": "1. one • two 2. three"
+    },
+    {
+      "name": "bullet then ordered splits",
+      "input": "- a\n1. b",
+      "output": "• a 1. b"
+    },
+    {
+      "name": "list continuation",
+      "input": "- first\n  continued here\n- second\n    deeper",
+      "output": "• first continued here • second deeper"
+    },
+    {
+      "name": "one-space indent is a new paragraph",
+      "input": "- first\n continued?",
+      "output": "• first continued?"
+    },
+    {
+      "name": "list item needs space",
+      "input": "-nospace\n1.nospace",
+      "output": "-nospace 1.nospace"
+    },
+    {
+      "name": "indented list items",
+      "input": "  - nested\n    - deeper\n- top",
+      "output": "• nested • deeper • top"
+    },
+    {
+      "name": "list item with tab",
+      "input": "-\ttab item",
+      "output": "• tab item"
+    },
+    {
+      "name": "empty list item text",
+      "input": "- \n-  x",
+      "output": "• • x"
+    },
+    {
+      "name": "list then paragraph",
+      "input": "- a\nafter",
+      "output": "• a after"
+    },
+    {
+      "name": "hr dashes",
+      "input": "---",
+      "output": "---"
+    },
+    {
+      "name": "hr stars",
+      "input": "***",
+      "output": "***"
+    },
+    {
+      "name": "hr with spaces",
+      "input": "  -----  ",
+      "output": "-----"
+    },
+    {
+      "name": "hr mixed is a list",
+      "input": "- - -",
+      "output": "• - -"
+    },
+    {
+      "name": "two dashes is a paragraph",
+      "input": "--",
+      "output": "--"
+    },
+    {
+      "name": "underscores are a paragraph",
+      "input": "___",
+      "output": "___"
+    },
+    {
+      "name": "paragraph then hr",
+      "input": "text\n---\nmore",
+      "output": "text --- more"
+    },
+    {
+      "name": "fenced code",
+      "input": "```ts\nconst x = 1;\n```",
+      "output": ""
+    },
+    {
+      "name": "tilde fence",
+      "input": "~~~\nplain\n~~~",
+      "output": "~~~ plain ~~~"
+    },
+    {
+      "name": "fence lang with plus and dash",
+      "input": "``` c++-x \nbody\n```",
+      "output": ""
+    },
+    {
+      "name": "fence with dotted lang is text",
+      "input": "```foo.bar\nbody\n```",
+      "output": ""
+    },
+    {
+      "name": "fence closes on mismatched backticks",
+      "input": "```\na\n````\nafter",
+      "output": "` after"
+    },
+    {
+      "name": "fence closed by tilde only for tilde",
+      "input": "```\na\n~~~\nb\n```",
+      "output": ""
+    },
+    {
+      "name": "unterminated fence",
+      "input": "```js\nconst a = 1;\nstill code",
+      "output": "```js const a = 1; still code"
+    },
+    {
+      "name": "indented fence",
+      "input": "   ```\n  code\n   ```",
+      "output": ""
+    },
+    {
+      "name": "fence inside a list",
+      "input": "- item\n```\ncode\n```\n- next",
+      "output": "• item • next"
+    },
+    {
+      "name": "fence closing line with text",
+      "input": "```\nx\n``` trailing\ny",
+      "output": "trailing y"
+    },
+    {
+      "name": "empty fence",
+      "input": "```\n```",
+      "output": ""
+    },
+    {
+      "name": "fence at end",
+      "input": "para\n```",
+      "output": "para ```"
+    },
+    {
+      "name": "quote",
+      "input": "> quoted\n> more\n>tight",
+      "output": "> quoted > more >tight"
+    },
+    {
+      "name": "quote then paragraph",
+      "input": "> q\nnot quoted",
+      "output": "> q not quoted"
+    },
+    {
+      "name": "indented quote is a paragraph",
+      "input": " > nope",
+      "output": "> nope"
+    },
+    {
+      "name": "quote with tab",
+      "input": ">\tTab",
+      "output": "> Tab"
+    },
+    {
+      "name": "table",
+      "input": "| a | b |\n| --- | --- |\n| 1 | 2 |",
+      "output": "a · b 1 · 2"
+    },
+    {
+      "name": "table alignments",
+      "input": "| l | c | r | n |\n| :-- | :-: | --: | --- |\n| 1 | 2 | 3 | 4 |",
+      "output": "l · c · r · n 1 · 2 · 3 · 4"
+    },
+    {
+      "name": "table without outer pipes",
+      "input": "a | b\n--|--\n1 | 2",
+      "output": "a | b 1 | 2"
+    },
+    {
+      "name": "table ragged rows",
+      "input": "| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |",
+      "output": "a · b · c 1 1 · 2 · 3 · 4"
+    },
+    {
+      "name": "table escaped pipe",
+      "input": "| a | b |\n|---|---|\n| x \\| y | z |",
+      "output": "a · b x | y · z"
+    },
+    {
+      "name": "table pipe in code span",
+      "input": "| a | b |\n|---|---|\n| `x|y` | z |",
+      "output": "a · b x|y · z"
+    },
+    {
+      "name": "table trailing escaped pipe",
+      "input": "| a | b\\|\n|---|---|\n| 1 | 2 \\|",
+      "output": "a · b| 1 · 2 |"
+    },
+    {
+      "name": "table header count mismatch",
+      "input": "| a | b |\n|---|\n| 1 | 2 |",
+      "output": "a · b 1 · 2"
+    },
+    {
+      "name": "table delimiter needs dashes",
+      "input": "| a | b |\n| : | : |",
+      "output": "a · b : · :"
+    },
+    {
+      "name": "table ends at blank line",
+      "input": "| a |\n|---|\n| 1 |\n\n| 2 |",
+      "output": "a 1 2"
+    },
+    {
+      "name": "table ends at a line without pipe",
+      "input": "| a |\n|---|\n| 1 |\nplain",
+      "output": "a 1 plain"
+    },
+    {
+      "name": "table header only",
+      "input": "| a | b |\n|---|---|",
+      "output": "a · b"
+    },
+    {
+      "name": "table delimiter with spaces in cells",
+      "input": "| a | b |\n| - - | --- |",
+      "output": "a · b • - · ---"
+    },
+    {
+      "name": "table at end without delimiter",
+      "input": "| a | b |",
+      "output": "a · b"
+    },
+    {
+      "name": "table after paragraph",
+      "input": "intro\n| a |\n|---|\n| 1 |",
+      "output": "intro a 1"
+    },
+    {
+      "name": "table with tabs",
+      "input": "|\ta\t|\tb\t|\n|\t---\t|\t:-:\t|\n|\t1\t|\t2\t|",
+      "output": "a · b 1 · 2"
+    },
+    {
+      "name": "table empty cells",
+      "input": "||\n|-|\n||",
+      "output": ""
+    },
+    {
+      "name": "pipe line with dash row",
+      "input": "a|b\n-",
+      "output": "a|b -"
+    },
+    {
+      "name": "mixed document",
+      "input": "# Summary\n\nDid **things** and `code`.\n\n- one\n- two\n\n```sh\nbun test\n```\n\n> note\n\n| k | v |\n|:-|-:|\n| x | 1 |\n\n---\nBye",
+      "output": "Summary Did things and code. • one • two > note k · v x · 1 --- Bye"
+    },
+    {
+      "name": "emoji",
+      "input": "# 🎉 Party\n- 👍🏽 ok\n| 🅰️ | b |\n|---|---|\n| 👨‍👩‍👧 | é |",
+      "output": "🎉 Party • 👍🏽 ok 🅰️ · b 👨‍👩‍👧 · é"
+    },
+    {
+      "name": "combining marks",
+      "input": "#́ not a heading\n-́ not a list\n> é",
+      "output": "#́ not a heading -́ not a list > é"
+    },
+    {
+      "name": "NBSP as whitespace",
+      "input": "# nbsp heading\n- nbsp item\n \n``` js \ncode\n```",
+      "output": "nbsp heading • nbsp item"
+    },
+    {
+      "name": "NEL is not whitespace",
+      "input": "#nel\n\n- a",
+      "output": "#nel  • a"
+    },
+    {
+      "name": "line separator U+2028",
+      "input": "a b\n# h x",
+      "output": "a b h x"
+    },
+    {
+      "name": "BOM is whitespace",
+      "input": "﻿# bom\n﻿",
+      "output": "# bom"
+    },
+    {
+      "name": "vertical tab and form feed",
+      "input": "#\u000bvt\n-\fff",
+      "output": "vt • ff"
+    },
+    {
+      "name": "ticket keys between text",
+      "input": "Merged HARNESS-101, then FOO2-7.",
+      "output": "Merged HARNESS-101, then FOO2-7."
+    },
+    {
+      "name": "lower-case path",
+      "input": "harness/harness-112",
+      "output": "harness/harness-112"
+    },
+    {
+      "name": "mixed case key",
+      "input": "Harness-12",
+      "output": "Harness-12"
+    },
+    {
+      "name": "glued-on prefix",
+      "input": "xHARNESS-12",
+      "output": "xHARNESS-12"
+    },
+    {
+      "name": "glued-on suffix",
+      "input": "HARNESS-12a",
+      "output": "HARNESS-12a"
+    },
+    {
+      "name": "non-numeric",
+      "input": "HARNESS-x",
+      "output": "HARNESS-x"
+    },
+    {
+      "name": "digit-led",
+      "input": "2FA-3",
+      "output": "2FA-3"
+    },
+    {
+      "name": "key in code span",
+      "input": "`HARNESS-1`",
+      "output": "HARNESS-1"
+    },
+    {
+      "name": "key in URL",
+      "input": "https://happycog.atlassian.net/browse/PLAYR-123",
+      "output": "https://happycog.atlassian.net/browse/PLAYR-123"
+    },
+    {
+      "name": "key as link label",
+      "input": "[PLAYR-9](https://x.test/PLAYR-9)",
+      "output": "PLAYR-9"
+    },
+    {
+      "name": "plain",
+      "input": "just text",
+      "output": "just text"
+    },
+    {
+      "name": "code",
+      "input": "use `bun test` now",
+      "output": "use bun test now"
+    },
+    {
+      "name": "empty code span",
+      "input": "a `` b",
+      "output": "a `` b"
+    },
+    {
+      "name": "unclosed code",
+      "input": "a `b c",
+      "output": "a `b c"
+    },
+    {
+      "name": "strong",
+      "input": "**bold** text",
+      "output": "bold text"
+    },
+    {
+      "name": "strong with star inside fails",
+      "input": "**a*b**",
+      "output": "**a*b**"
+    },
+    {
+      "name": "unclosed strong",
+      "input": "**bold",
+      "output": "**bold"
+    },
+    {
+      "name": "em",
+      "input": "*it* and _also_",
+      "output": "*it* and _also_"
+    },
+    {
+      "name": "em starting with space",
+      "input": "* not em*",
+      "output": "• not em*"
+    },
+    {
+      "name": "underscore em starting with space",
+      "input": "_ no_",
+      "output": "_ no_"
+    },
+    {
+      "name": "em with trailing space",
+      "input": "*a *",
+      "output": "*a *"
+    },
+    {
+      "name": "nested emphasis",
+      "input": "***both***",
+      "output": "*both*"
+    },
+    {
+      "name": "strong inside em",
+      "input": "*a **b** c*",
+      "output": "*a b c*"
+    },
+    {
+      "name": "em inside strong",
+      "input": "**a *b* c**",
+      "output": "**a *b* c**"
+    },
+    {
+      "name": "snake_case words",
+      "input": "snake_case_name and more_words",
+      "output": "snake_case_name and more_words"
+    },
+    {
+      "name": "lone star",
+      "input": "2 * 3 = 6",
+      "output": "2 * 3 = 6"
+    },
+    {
+      "name": "multiplication",
+      "input": "a*b*c",
+      "output": "a*b*c"
+    },
+    {
+      "name": "em across newline",
+      "input": "*a\nb*",
+      "output": "*a b*"
+    },
+    {
+      "name": "code wins over em",
+      "input": "`*x*`",
+      "output": "*x*"
+    },
+    {
+      "name": "em then code",
+      "input": "*a `b` c*",
+      "output": "*a b c*"
+    },
+    {
+      "name": "http link",
+      "input": "[docs](https://example.com/a)",
+      "output": "docs"
+    },
+    {
+      "name": "http link uppercase scheme stays text",
+      "input": "[docs](HTTPS://example.com)",
+      "output": "docs"
+    },
+    {
+      "name": "link with parens in url",
+      "input": "[x](https://a.b/(c)) tail",
+      "output": "x) tail"
+    },
+    {
+      "name": "link with space in url",
+      "input": "[x](https://a.b/c d)",
+      "output": "x"
+    },
+    {
+      "name": "empty label",
+      "input": "[](https://a.b)",
+      "output": "[](https://a.b)"
+    },
+    {
+      "name": "nested brackets",
+      "input": "[[x]](https://a.b)",
+      "output": "[[x]](https://a.b)"
+    },
+    {
+      "name": "harness file link",
+      "input": "[app.ts](harness://file/src/app.ts#L3)",
+      "output": "app.ts"
+    },
+    {
+      "name": "relative file link",
+      "input": "[a](src/a.ts#L10-L20)",
+      "output": "a"
+    },
+    {
+      "name": "absolute file link",
+      "input": "[a](/Users/me/a.ts)",
+      "output": "a"
+    },
+    {
+      "name": "climbing file link stays text",
+      "input": "[a](../../etc/passwd)",
+      "output": "a"
+    },
+    {
+      "name": "javascript link stays text",
+      "input": "[click](javascript:alert(1))",
+      "output": "click)"
+    },
+    {
+      "name": "data link stays text",
+      "input": "[x](data:text/html,hi)",
+      "output": "x"
+    },
+    {
+      "name": "mailto stays text",
+      "input": "[mail](mailto:a@b.c)",
+      "output": "mail"
+    },
+    {
+      "name": "anchor stays text",
+      "input": "[top](#top)",
+      "output": "top"
+    },
+    {
+      "name": "ftp stays text",
+      "input": "[f](ftp://x.y)",
+      "output": "f"
+    },
+    {
+      "name": "file scheme stays text",
+      "input": "[f](file:///etc/passwd)",
+      "output": "f"
+    },
+    {
+      "name": "bare http",
+      "input": "see http://x.y/z.",
+      "output": "see http://x.y/z."
+    },
+    {
+      "name": "bare https in parens",
+      "input": "(https://x.y/a)",
+      "output": "(https://x.y/a)"
+    },
+    {
+      "name": "bare url stops at angle",
+      "input": "<https://x.y/a>",
+      "output": "<https://x.y/a>"
+    },
+    {
+      "name": "bare url with trailing punctuation",
+      "input": "https://x.y/a, then",
+      "output": "https://x.y/a, then"
+    },
+    {
+      "name": "bare ftp stays text",
+      "input": "ftp://x.y",
+      "output": "ftp://x.y"
+    },
+    {
+      "name": "url with emoji",
+      "input": "https://x.y/🎉 ok",
+      "output": "https://x.y/🎉 ok"
+    },
+    {
+      "name": "key after punctuation",
+      "input": "(ABC-1) [DEF-2] ABC-3: GHI-4!",
+      "output": "(ABC-1) [DEF-2] ABC-3: GHI-4!"
+    },
+    {
+      "name": "key with underscore after",
+      "input": "ABC-1_x",
+      "output": "ABC-1_x"
+    },
+    {
+      "name": "key with lowercase after",
+      "input": "ABC-1x",
+      "output": "ABC-1x"
+    },
+    {
+      "name": "key after underscore",
+      "input": "_ABC-1",
+      "output": "_ABC-1"
+    },
+    {
+      "name": "key after digit",
+      "input": "1ABC-1",
+      "output": "1ABC-1"
+    },
+    {
+      "name": "key after accented letter",
+      "input": "éABC-1",
+      "output": "éABC-1"
+    },
+    {
+      "name": "key before accented letter",
+      "input": "ABC-1é",
+      "output": "ABC-1é"
+    },
+    {
+      "name": "key with combining mark after",
+      "input": "ABC-1́",
+      "output": "ABC-1́"
+    },
+    {
+      "name": "two-part key",
+      "input": "A-B-1",
+      "output": "A-B-1"
+    },
+    {
+      "name": "single letter key",
+      "input": "A-1",
+      "output": "A-1"
+    },
+    {
+      "name": "key with leading zeros",
+      "input": "UTF-8 SHA-256 X-007",
+      "output": "UTF-8 SHA-256 X-007"
+    },
+    {
+      "name": "key at start and end",
+      "input": "ABC-1 and DEF-22",
+      "output": "ABC-1 and DEF-22"
+    },
+    {
+      "name": "key next to emoji",
+      "input": "🎉ABC-1🎉",
+      "output": "🎉ABC-1🎉"
+    },
+    {
+      "name": "full-width digits",
+      "input": "ABC-１２",
+      "output": "ABC-１２"
+    },
+    {
+      "name": "everything",
+      "input": "**Done**: merged `main` into [PR](https://gh.test/1) for HARNESS-5 — see https://x.y and *notes*.",
+      "output": "Done: merged main into PR for HARNESS-5 — see https://x.y and *notes*."
+    },
+    {
+      "name": "tabs and NBSP",
+      "input": "a\t**b** *c*",
+      "output": "a b *c*"
+    },
+    {
+      "name": "em with NBSP start",
+      "input": "* x*",
+      "output": "• x*"
+    },
+    {
+      "name": "em with NEL start",
+      "input": "*x*",
+      "output": "*x*"
+    },
+    {
+      "name": "fence spanning lines",
+      "input": "before ```a\nb``` after",
+      "output": "before after"
+    },
+    {
+      "name": "unclosed fence",
+      "input": "```\ncode",
+      "output": "``` code"
+    },
+    {
+      "name": "two fences",
+      "input": "```a``` mid ```b```",
+      "output": "mid"
+    },
+    {
+      "name": "heading after blank lines",
+      "input": "x\n\n## y",
+      "output": "x y"
+    },
+    {
+      "name": "heading hashes cross newlines",
+      "input": "#\n\nfoo",
+      "output": "foo"
+    },
+    {
+      "name": "bullet markers",
+      "input": "- a\n* b\n+ c\n  - d",
+      "output": "• a • b • c • d"
+    },
+    {
+      "name": "ordered list untouched",
+      "input": "1. a\n2. b",
+      "output": "1. a 2. b"
+    },
+    {
+      "name": "table row with whitespace around",
+      "input": "  | a | b |  \n|---|---|\n | 1 | 2 |",
+      "output": "a · b 1 · 2"
+    },
+    {
+      "name": "pipe row only one pipe",
+      "input": "| a",
+      "output": "| a"
+    },
+    {
+      "name": "CR-separated lines",
+      "input": "| a | b |\r|---|\r| 1 | 2 |",
+      "output": "a · b 1 · 2"
+    },
+    {
+      "name": "U+2028-separated lines",
+      "input": "# a - b | x | y |",
+      "output": "a • b x · y"
+    },
+    {
+      "name": "NEL inside a line",
+      "input": "| a | b |",
+      "output": "a · b"
+    },
+    {
+      "name": "strong with newline inside",
+      "input": "**a\nb**",
+      "output": "a b"
+    },
+    {
+      "name": "code with newline inside",
+      "input": "`a\nb`",
+      "output": "a b"
+    }
+  ]
+}
