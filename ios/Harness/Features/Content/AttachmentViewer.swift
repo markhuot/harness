@@ -32,19 +32,16 @@ struct AttachmentViewer: View {
             let header = safe.top + 56
             ZStack(alignment: .top) {
                 AttachmentViewerBackdrop(pull: pull, height: geo.size.height)
-                ScrollView(.horizontal) {
-                    LazyHStack(spacing: 0) {
-                        ForEach(attachments.indices, id: \.self) { i in
-                            page(attachments[i], current: i == index, insets: UIEdgeInsets(top: header, left: 0, bottom: safe.bottom, right: 0), height: geo.size.height + safe.top + safe.bottom)
-                                .frame(width: geo.size.width + safe.leading + safe.trailing, height: geo.size.height + safe.top + safe.bottom)
-                                .id(i)
-                        }
+                // A page-style TabView keeps its selection in step with the page that shows (a
+                // paging ScrollView's scrollPosition fell a page behind once a page's content swapped).
+                TabView(selection: $position) {
+                    ForEach(attachments.indices, id: \.self) { i in
+                        page(attachments[i], current: i == index, insets: UIEdgeInsets(top: header, left: 0, bottom: safe.bottom, right: 0), height: geo.size.height + safe.top + safe.bottom)
+                            .ignoresSafeArea()
+                            .tag(Optional(i))
                     }
-                    .scrollTargetLayout()
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $position)
-                .scrollIndicators(.hidden)
+                .tabViewStyle(.page(indexDisplayMode: .never))
                 .scrollDisabled(zoomed || closing)
                 .ignoresSafeArea()
                 .offset(y: slide)
@@ -204,57 +201,69 @@ private struct AttachmentVideoPage: View {
     let events: AttachmentPageEvents
 
     @Environment(BoardStore.self) private var store: BoardStore?
+    @State private var holder = AttachmentPlayerHolder()
     @State private var failed = false
 
     var body: some View {
-        if failed {
-            AttachmentHostedPage(insets: insets, events: events) { AttachmentFailed(name: attachment.name, dark: true) }
-        } else if current, let url = AttachmentMedia.url(store, attachment.id).flatMap(URL.init(string:)) {
-            AttachmentPlayerPage(url: url, insets: insets, events: events) { failed = true }
-                .accessibilityLabel(attachment.accessibilityName)
-        } else {
-            AttachmentHostedPage(insets: insets, events: events) {
-                Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.6))
+        // One view for the page's whole life: swapping a pager page's view as it comes and goes
+        // made the TabView jump back a page. The placeholder and the failure draw on top.
+        AttachmentPage(content: .controller(holder.controller), insets: insets, events: events)
+            .accessibilityLabel(attachment.accessibilityName)
+            .overlay {
+                Group {
+                    if failed {
+                        AttachmentFailed(name: attachment.name, dark: true)
+                    } else if !current {
+                        Image(systemName: "play.fill").font(.system(size: 30)).foregroundStyle(.white.opacity(0.6))
+                    }
+                }
+                .allowsHitTesting(false)
             }
-        }
+            .task(id: current) {
+                guard current, !failed, let url = AttachmentMedia.url(store, attachment.id).flatMap(URL.init(string:)) else {
+                    holder.stop()
+                    return
+                }
+                guard let item = holder.play(url) else { return }
+                for await status in item.publisher(for: \.status).values where status == .failed {
+                    failed = true
+                    holder.stop()
+                    return
+                }
+            }
+            .onDisappear { holder.stop() }
     }
 }
 
-/// An AVPlayerViewController in a pull-to-close page; it plays as soon as it's shown and reports
-/// a player that fails to load.
-private struct AttachmentPlayerPage: View {
-    let url: URL
-    let insets: UIEdgeInsets
-    let events: AttachmentPageEvents
-    let onFail: () -> Void
+/// A video page's AVPlayerViewController (system controls, no picture in picture). It holds a
+/// player only while its page shows, so paging away stops the video.
+@MainActor
+final class AttachmentPlayerHolder {
+    private var made: AVPlayerViewController?
 
-    @State private var player: AVPlayer?
-    @State private var controller: AVPlayerViewController?
+    var controller: AVPlayerViewController {
+        if let made { return made }
+        let vc = AVPlayerViewController()
+        vc.allowsPictureInPicturePlayback = false
+        vc.canStartPictureInPictureAutomaticallyFromInline = false
+        vc.showsPlaybackControls = true
+        vc.videoGravity = .resizeAspect
+        vc.view.backgroundColor = .clear
+        made = vc
+        return vc
+    }
 
-    var body: some View {
-        Group {
-            if let controller {
-                AttachmentPage(content: .controller(controller), insets: insets, events: events)
-            }
-        }
-        .task {
-            let player = AVPlayer(url: url)
-            let vc = AVPlayerViewController()
-            vc.player = player
-            vc.allowsPictureInPicturePlayback = false
-            vc.canStartPictureInPictureAutomaticallyFromInline = false
-            vc.showsPlaybackControls = true
-            vc.view.backgroundColor = .clear
-            self.player = player
-            controller = vc
-            player.play()
-            guard let item = player.currentItem else { return }
-            for await status in item.publisher(for: \.status).values where status == .failed {
-                onFail()
-                return
-            }
-        }
-        .onDisappear { player?.pause() }
+    /// Starts `url` from the top and returns its item.
+    func play(_ url: URL) -> AVPlayerItem? {
+        let player = AVPlayer(url: url)
+        controller.player = player
+        player.play()
+        return player.currentItem
+    }
+
+    func stop() {
+        made?.player?.pause()
+        made?.player = nil
     }
 }
 

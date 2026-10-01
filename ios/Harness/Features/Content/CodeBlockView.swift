@@ -37,7 +37,10 @@ struct CodeBlockView: View {
     var body: some View {
         let fence = language ?? ""
         let diff = Code.codeKind(fence: fence, text: code) == .diff
-        let key = HighlightCache.Key(code: code, language: Code.codeLanguage(fence), theme: CodeSyntaxTheme.shared.name(for: c), diff: diff)
+        // The app theme's Shiki theme, Pierre's when it names none (RN useSyntaxTheme). Every
+        // registry theme's syntaxTheme is bundled (HighlighterTests.everyAppThemesSyntaxThemeIsBundled).
+        let theme = SyntaxTheme.name(c.appearance, c.theme.syntaxTheme)
+        let key = HighlightCache.Key(code: code, language: Code.codeLanguage(fence), theme: theme, diff: diff)
         let hl = highlighted(key)
         let lines = hl?.lines ?? PlainLines.reuse(PlainLines.lines(code, diff: diff), last?.key.theme == key.theme ? last?.result?.lines : nil)
         let style = HighlightedText.style(hl, tokens: c.tokens, appearance: c.appearance)
@@ -137,33 +140,6 @@ struct CodeBlockView: View {
         case .add: return tints.flatMap { Color(css: $0.add) } ?? .clear
         case .del: return tints.flatMap { Color(css: $0.del) } ?? .clear
         default: return .clear
-        }
-    }
-}
-
-/// The app theme's Shiki theme, as on the desktop and in the Git tab; Pierre's when it isn't
-/// bundled (RN `useSyntaxTheme`). The bundled list loads once, with the highlighter.
-@MainActor
-final class CodeSyntaxTheme {
-    static let shared = CodeSyntaxTheme()
-
-    private var bundled: Set<String>?
-    private var loading = false
-
-    func name(for palette: Palette) -> String {
-        let named = SyntaxTheme.name(palette.appearance, palette.theme.syntaxTheme)
-        load()
-        // Until the list is in, trust the name: the theme registry and the bundle come from the
-        // same source, so a miss is rare, and the highlighter colors nothing for an unknown theme.
-        guard let bundled, !bundled.contains(named) else { return named }
-        return SyntaxTheme.pierreDefault[palette.appearance]
-    }
-
-    private func load() {
-        guard bundled == nil, !loading else { return }
-        loading = true
-        Task {
-            bundled = (try? await Highlighter.app.themes()).map(Set.init)
         }
     }
 }
