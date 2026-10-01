@@ -25,7 +25,8 @@ import { cases } from "../case";
 import { Project as projectSamples, PublicSettings as publicSettingsSamples, Settings as settingsSamples } from "./protocol";
 
 type Models = Record<string, string | null>;
-type ProjectIn = { defaultDriver: string | null; defaultModels: Models } | null;
+type ProjectModels = Record<string, string>;
+type ProjectIn = { defaultDriver: string | null; defaultModels: ProjectModels } | null;
 type SettingsIn = { defaultDriver: string; defaultModels: Models } | null;
 
 const MODELS: P.ModelInfo[] = [
@@ -255,7 +256,7 @@ export const filterChoiceGroupsCases = cases(({ groups, query, driverNames }: Fi
 // ---------------------------------------------------------------------------
 
 const settings = { defaultDriver: "claude-code", defaultModels: { "claude-code": "sonnet" } as Models };
-const project = { defaultDriver: "codex", defaultModels: { codex: "luna", "claude-code": "opus" } as Models };
+const project = { defaultDriver: "codex", defaultModels: { codex: "luna", "claude-code": "opus" } as ProjectModels };
 const plain = { defaultDriver: null, defaultModels: {} };
 
 type PS = { project: ProjectIn; settings: SettingsIn };
@@ -300,7 +301,7 @@ export const ticketChoicePatchCases = cases(({ choice, project, settings }: Patc
   "empty driver isn't nullish: model cleared": { choice: { driver: "", model: "x" }, project, settings },
 });
 
-type ProjectChoiceIn = { project: { defaultDriver: string | null; defaultModels: Models }; settings: SettingsIn };
+type ProjectChoiceIn = { project: { defaultDriver: string | null; defaultModels: ProjectModels }; settings: SettingsIn };
 
 export const projectChoiceCases = cases(({ project, settings }: ProjectChoiceIn) => projectChoice(project, settings), {
   "pinned driver with its model": { project, settings },
@@ -314,7 +315,7 @@ export const projectChoiceCases = cases(({ project, settings }: ProjectChoiceIn)
 });
 
 export const projectChoicePatchCases = cases(
-  ({ choice, project }: { choice: TriageChoice; project: { defaultDriver: string | null; defaultModels: Models } }) => projectChoicePatch(choice, project),
+  ({ choice, project }: { choice: TriageChoice; project: { defaultDriver: string | null; defaultModels: ProjectModels } }) => projectChoicePatch(choice, project),
   {
     "keeps only that driver's model": { choice: { driver: "claude-code", model: "haiku" }, project },
     "Default clears everything": { choice: none, project },
