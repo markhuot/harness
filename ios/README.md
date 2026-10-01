@@ -63,8 +63,9 @@ The path of what it built is the only line on stdout.
 
 ## Tests
 
-- **HarnessKit** (protocol, client, logic) runs on the Mac host, with no simulator:
-  `cd ios/HarnessKit && swift test`
+- **HarnessKit** (protocol, client, logic) and **HarnessHighlight** run on the Mac host, with no simulator:
+  `cd ios/HarnessKit && swift test`. The highlighter tests bundle Shiki with bun first, so run
+  `bun install` at the repo root once. App builds need bun too, for the "Bundle highlighter" phase.
 - **Service integration** starts a real daemon on a temp `HARNESS_HOME` and drives it with
   `HarnessClient`: `HARNESS_INTEGRATION=1 swift test --filter Integration` (from `ios/HarnessKit`;
   needs `bun` on `PATH`).

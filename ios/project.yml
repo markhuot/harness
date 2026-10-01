@@ -29,6 +29,27 @@ targets:
       - path: Harness
     dependencies:
       - package: HarnessKit
+        product: HarnessKit
+      - package: HarnessKit
+        product: HarnessHighlight
+    # The syntax highlighter's JavaScriptCore bundle (Shiki, from mobile/src/lib/highlight.ts) is
+    # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
+    # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
+    # tree; build-highlighter.ts leaves the file alone when nothing changed.
+    preBuildScripts:
+      - name: Bundle highlighter
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: |
+          BUN="$(command -v bun || true)"
+          for c in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+            if [ -z "$BUN" ] && [ -x "$c" ]; then BUN="$c"; fi
+          done
+          if [ -z "$BUN" ]; then
+            echo "error: bun (https://bun.sh) is needed to bundle the syntax highlighter. Install it, then run bun install at the repo root."
+            exit 1
+          fi
+          "$BUN" "$SRCROOT/Tools/build-highlighter.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/highlighter.js"
     info:
       path: Harness/Info.plist
       properties:
@@ -68,6 +89,9 @@ targets:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
+        # "Bundle highlighter" reads node_modules and the TS sources, which a sandboxed script
+        # phase may only do for declared inputs.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
       configs:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.dev
