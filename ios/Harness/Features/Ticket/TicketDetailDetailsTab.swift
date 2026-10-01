@@ -24,6 +24,7 @@ struct TicketDetailDetailsTab: View {
                     .disabled(!editable)
                     .accessibilityLabel("Title")
             }
+            .listRowBackground(c.bgElev)
             Section(ticket.status == .planning ? "Plan / brief" : "Brief") {
                 TextField("", text: $description, prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)
                     .font(.system(size: 14.5))
@@ -41,6 +42,7 @@ struct TicketDetailDetailsTab: View {
                     }
                 }
             }
+            .listRowBackground(c.bgElev)
             Section {
                 TicketSettingsForm(ticket: ticket) { patch($0) }
                 readOnlyRows(state)

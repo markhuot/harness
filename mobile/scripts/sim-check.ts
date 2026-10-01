@@ -228,17 +228,20 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
  * the tree, so it swipes a fixed distance until one shows up, then just far enough. One above the
  * screen (or under the header) is scrolled back down to.
  */
+// A ticket's hero hides while its tab scrolls forward and comes back on scrolling back, which moves
+// the tab body another ~240pt. The swipes aim at 420 (forward) and 220 (back), so the element lands
+// inside the 140–520 band whether or not the hero toggles.
 async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
   for (let i = 0; i < tries; i++) {
     const el = await findElement(udid, match);
     if (el && el.frame.y >= 140 && el.frame.y <= 520) return;
     if (el && el.frame.y < 140) {
-      const by = Math.min(420, Math.round(300 - el.frame.y));
+      const by = Math.min(420, Math.round(220 - el.frame.y));
       await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(300 + by), "--duration", "0.8", "--udid", udid);
       await Bun.sleep(400);
       continue;
     }
-    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 300)) : 380;
+    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 420)) : 380;
     await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
     await Bun.sleep(400);
   }
@@ -1384,7 +1387,8 @@ function screens(s: Seeded): Screen[] {
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
-      after: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(400)),
+      // RN's action sheet has Cancel; the native app's menu closes with a tap outside it.
+      after: (udid) => tapWhere(udid, (l) => l === "Cancel" || l === "Dismiss context menu").then(() => Bun.sleep(400)),
     },
     {
       name: "approve-custom",

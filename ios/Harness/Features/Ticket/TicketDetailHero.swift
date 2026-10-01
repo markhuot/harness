@@ -76,7 +76,7 @@ struct TicketDetailHero: View {
         if let approval = ticket.pendingApproval {
             TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
         }
-        if !compact {
+        if !compact && (ticket.busy || [.planning, .review, .done].contains(ticket.status)) {
             TicketDetailFlow(spacing: 8) { buttons(project: project, parent: parent) }
         }
     }
