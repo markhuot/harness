@@ -1,0 +1,1200 @@
+{
+  "attachmentsLabelCases": [
+    {
+      "name": "one image",
+      "input": [
+        "image"
+      ],
+      "output": "1 image"
+    },
+    {
+      "name": "two videos",
+      "input": [
+        "video",
+        "video"
+      ],
+      "output": "2 videos"
+    },
+    {
+      "name": "mixed",
+      "input": [
+        "video",
+        "image",
+        "image"
+      ],
+      "output": "2 images, 1 video"
+    },
+    {
+      "name": "none",
+      "input": [],
+      "output": ""
+    },
+    {
+      "name": "one of each",
+      "input": [
+        "image",
+        "video"
+      ],
+      "output": "1 image, 1 video"
+    },
+    {
+      "name": "unknown kinds count as videos",
+      "input": [
+        "image",
+        "audio"
+      ],
+      "output": "1 image, 1 video"
+    },
+    {
+      "name": "many images",
+      "input": [
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image",
+        "image"
+      ],
+      "output": "11 images"
+    }
+  ],
+  "clampPageCases": [
+    {
+      "name": "below",
+      "input": {
+        "index": -1,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "above",
+      "input": {
+        "index": 5,
+        "count": 3
+      },
+      "output": 2
+    },
+    {
+      "name": "inside",
+      "input": {
+        "index": 1,
+        "count": 3
+      },
+      "output": 1
+    },
+    {
+      "name": "empty",
+      "input": {
+        "index": 2,
+        "count": 0
+      },
+      "output": 0
+    },
+    {
+      "name": "rounds half up",
+      "input": {
+        "index": 1.5,
+        "count": 3
+      },
+      "output": 2
+    },
+    {
+      "name": "rounds down",
+      "input": {
+        "index": 1.49,
+        "count": 3
+      },
+      "output": 1
+    },
+    {
+      "name": "negative half",
+      "input": {
+        "index": -0.5,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "negative count",
+      "input": {
+        "index": 1,
+        "count": -2
+      },
+      "output": 0
+    },
+    {
+      "name": "one page",
+      "input": {
+        "index": 7,
+        "count": 1
+      },
+      "output": 0
+    }
+  ],
+  "constants": {
+    "THUMB": {
+      "height": 120,
+      "minWidth": 72,
+      "maxWidth": 240
+    },
+    "DISMISS": {
+      "distance": 120,
+      "flickDistance": 40,
+      "flickVelocity": 0.8
+    }
+  },
+  "dismissOnReleaseCases": [
+    {
+      "name": "long pull",
+      "input": {
+        "offsetY": -150,
+        "velocityY": 0
+      },
+      "output": true
+    },
+    {
+      "name": "short flick down",
+      "input": {
+        "offsetY": -60,
+        "velocityY": -1.2
+      },
+      "output": true
+    },
+    {
+      "name": "flicked back up",
+      "input": {
+        "offsetY": -60,
+        "velocityY": 1.2
+      },
+      "output": false
+    },
+    {
+      "name": "short slow",
+      "input": {
+        "offsetY": -60,
+        "velocityY": -0.2
+      },
+      "output": false
+    },
+    {
+      "name": "zoomed",
+      "input": {
+        "offsetY": -300,
+        "velocityY": -3,
+        "zoomScale": 2
+      },
+      "output": false
+    },
+    {
+      "name": "scrolled down, fast",
+      "input": {
+        "offsetY": 200,
+        "velocityY": -3
+      },
+      "output": false
+    },
+    {
+      "name": "exactly the distance",
+      "input": {
+        "offsetY": -120,
+        "velocityY": 0
+      },
+      "output": true
+    },
+    {
+      "name": "exact flick",
+      "input": {
+        "offsetY": -40,
+        "velocityY": -0.8
+      },
+      "output": true
+    }
+  ],
+  "fitSizeCases": [
+    {
+      "name": "wide",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 2000,
+          "height": 1000
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 390,
+        "height": 195
+      }
+    },
+    {
+      "name": "tall",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 1000,
+          "height": 4000
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 175,
+        "height": 700
+      }
+    },
+    {
+      "name": "no upscale",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 200,
+          "height": 100
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 200,
+        "height": 100
+      }
+    },
+    {
+      "name": "unknown",
+      "input": {
+        "a": {
+          "kind": "image"
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 390,
+        "height": 293
+      }
+    },
+    {
+      "name": "empty box",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 200,
+          "height": 100
+        },
+        "box": {
+          "width": 0,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "zero-height box",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 200,
+          "height": 100
+        },
+        "box": {
+          "width": 390,
+          "height": 0
+        }
+      },
+      "output": {
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "negative box",
+      "input": {
+        "a": {
+          "kind": "image"
+        },
+        "box": {
+          "width": -1,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "unknown video",
+      "input": {
+        "a": {
+          "kind": "video"
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 390,
+        "height": 219
+      }
+    },
+    {
+      "name": "exact fit",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 390,
+          "height": 700
+        },
+        "box": {
+          "width": 390,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 390,
+        "height": 700
+      }
+    },
+    {
+      "name": "rounding height from unrounded width",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 3000,
+          "height": 2000
+        },
+        "box": {
+          "width": 100.5,
+          "height": 700
+        }
+      },
+      "output": {
+        "width": 101,
+        "height": 67
+      }
+    },
+    {
+      "name": "fractional box",
+      "input": {
+        "a": {
+          "kind": "image"
+        },
+        "box": {
+          "width": 333.3,
+          "height": 99.9
+        }
+      },
+      "output": {
+        "width": 133,
+        "height": 100
+      }
+    }
+  ],
+  "formatSizeCases": [
+    {
+      "name": "bytes",
+      "input": 512,
+      "output": "512 B"
+    },
+    {
+      "name": "1.5 KB",
+      "input": 1536,
+      "output": "1.5 KB"
+    },
+    {
+      "name": "25 MB",
+      "input": 26214400,
+      "output": "25 MB"
+    },
+    {
+      "name": "promotes on rounding",
+      "input": 1048556,
+      "output": "1 MB"
+    },
+    {
+      "name": "zero",
+      "input": 0,
+      "output": "0 B"
+    },
+    {
+      "name": "negative",
+      "input": -1,
+      "output": ""
+    },
+    {
+      "name": "1023 B",
+      "input": 1023,
+      "output": "1023 B"
+    },
+    {
+      "name": "1 KB",
+      "input": 1024,
+      "output": "1 KB"
+    },
+    {
+      "name": "under 10 keeps a decimal",
+      "input": 10178.56,
+      "output": "9.9 KB"
+    },
+    {
+      "name": "rounds to 10",
+      "input": 10199.04,
+      "output": "10 KB"
+    },
+    {
+      "name": "whole when the decimal is zero",
+      "input": 3145728,
+      "output": "3 MB"
+    },
+    {
+      "name": "1023.4 KB stays KB",
+      "input": 1047961.6,
+      "output": "1023 KB"
+    },
+    {
+      "name": "1023.5 KB promotes",
+      "input": 1048064,
+      "output": "1 MB"
+    },
+    {
+      "name": "half rounds up",
+      "input": 10752,
+      "output": "11 KB"
+    },
+    {
+      "name": "1.05 KB",
+      "input": 1075.2,
+      "output": "1.1 KB"
+    },
+    {
+      "name": "1.25 KB",
+      "input": 1280,
+      "output": "1.3 KB"
+    },
+    {
+      "name": "GB tops out",
+      "input": 5497558138880,
+      "output": "5120 GB"
+    },
+    {
+      "name": "fractional bytes",
+      "input": 0.5,
+      "output": "0.5 B"
+    }
+  ],
+  "pageAtCases": [
+    {
+      "name": "start",
+      "input": {
+        "offsetX": 0,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "just under halfway",
+      "input": {
+        "offsetX": 581.1,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 1
+    },
+    {
+      "name": "just over halfway",
+      "input": {
+        "offsetX": 588.9,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 2
+    },
+    {
+      "name": "bounce past the end",
+      "input": {
+        "offsetX": 860,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 2
+    },
+    {
+      "name": "bounce before the start",
+      "input": {
+        "offsetX": -60,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "before layout",
+      "input": {
+        "offsetX": 500,
+        "pageWidth": 0,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "exactly halfway",
+      "input": {
+        "offsetX": 195,
+        "pageWidth": 390,
+        "count": 3
+      },
+      "output": 1
+    },
+    {
+      "name": "negative width",
+      "input": {
+        "offsetX": 500,
+        "pageWidth": -390,
+        "count": 3
+      },
+      "output": 0
+    },
+    {
+      "name": "no pages",
+      "input": {
+        "offsetX": 500,
+        "pageWidth": 390,
+        "count": 0
+      },
+      "output": 0
+    }
+  ],
+  "pullOfCases": [
+    {
+      "name": "pulled",
+      "input": {
+        "offsetY": -80
+      },
+      "output": 80
+    },
+    {
+      "name": "scrolled up",
+      "input": {
+        "offsetY": 40
+      },
+      "output": 0
+    },
+    {
+      "name": "zoomed",
+      "input": {
+        "offsetY": -80,
+        "zoomScale": 2
+      },
+      "output": 0
+    },
+    {
+      "name": "zoom at threshold isn't zoomed",
+      "input": {
+        "offsetY": -80,
+        "zoomScale": 1.01
+      },
+      "output": 80
+    },
+    {
+      "name": "zoom just over threshold",
+      "input": {
+        "offsetY": -80,
+        "zoomScale": 1.0101
+      },
+      "output": 0
+    },
+    {
+      "name": "zoomed out",
+      "input": {
+        "offsetY": -80,
+        "zoomScale": 0.5
+      },
+      "output": 80
+    },
+    {
+      "name": "at rest",
+      "input": {
+        "offsetY": 0
+      },
+      "output": 0
+    }
+  ],
+  "shouldDismissCases": [
+    {
+      "name": "long drag",
+      "input": {
+        "dy": 130,
+        "vy": 0
+      },
+      "output": true
+    },
+    {
+      "name": "short slow",
+      "input": {
+        "dy": 60,
+        "vy": 0.2
+      },
+      "output": false
+    },
+    {
+      "name": "short flick",
+      "input": {
+        "dy": 60,
+        "vy": 1.2
+      },
+      "output": true
+    },
+    {
+      "name": "jitter",
+      "input": {
+        "dy": 20,
+        "vy": 3
+      },
+      "output": false
+    },
+    {
+      "name": "upward",
+      "input": {
+        "dy": -200,
+        "vy": -3
+      },
+      "output": false
+    },
+    {
+      "name": "exactly the distance",
+      "input": {
+        "dy": 120,
+        "vy": 0
+      },
+      "output": true
+    },
+    {
+      "name": "just under the distance",
+      "input": {
+        "dy": 119.9,
+        "vy": 0
+      },
+      "output": false
+    },
+    {
+      "name": "exactly the flick",
+      "input": {
+        "dy": 40,
+        "vy": 0.8
+      },
+      "output": true
+    },
+    {
+      "name": "flick distance short",
+      "input": {
+        "dy": 39.9,
+        "vy": 0.8
+      },
+      "output": false
+    },
+    {
+      "name": "flick velocity short",
+      "input": {
+        "dy": 40,
+        "vy": 0.79
+      },
+      "output": false
+    }
+  ],
+  "stepAttachmentCases": [
+    {
+      "name": "forward",
+      "input": {
+        "index": 1,
+        "delta": 1,
+        "count": 4
+      },
+      "output": 2
+    },
+    {
+      "name": "back",
+      "input": {
+        "index": 2,
+        "delta": -1,
+        "count": 4
+      },
+      "output": 1
+    },
+    {
+      "name": "wraps forward",
+      "input": {
+        "index": 3,
+        "delta": 1,
+        "count": 4
+      },
+      "output": 0
+    },
+    {
+      "name": "wraps back",
+      "input": {
+        "index": 0,
+        "delta": -1,
+        "count": 4
+      },
+      "output": 3
+    },
+    {
+      "name": "single forward",
+      "input": {
+        "index": 0,
+        "delta": 1,
+        "count": 1
+      },
+      "output": 0
+    },
+    {
+      "name": "single back",
+      "input": {
+        "index": 0,
+        "delta": -1,
+        "count": 1
+      },
+      "output": 0
+    },
+    {
+      "name": "none",
+      "input": {
+        "index": 0,
+        "delta": 1,
+        "count": 0
+      },
+      "output": 0
+    },
+    {
+      "name": "negative count",
+      "input": {
+        "index": 2,
+        "delta": 1,
+        "count": -3
+      },
+      "output": 0
+    },
+    {
+      "name": "big jump back",
+      "input": {
+        "index": 1,
+        "delta": -10,
+        "count": 4
+      },
+      "output": 3
+    },
+    {
+      "name": "big jump forward",
+      "input": {
+        "index": 1,
+        "delta": 10,
+        "count": 4
+      },
+      "output": 3
+    },
+    {
+      "name": "index out of range",
+      "input": {
+        "index": 9,
+        "delta": 0,
+        "count": 4
+      },
+      "output": 1
+    }
+  ],
+  "thumbSizeCases": [
+    {
+      "name": "4:3",
+      "input": {
+        "kind": "image",
+        "width": 1600,
+        "height": 1200
+      },
+      "output": {
+        "width": 160,
+        "height": 120
+      }
+    },
+    {
+      "name": "square",
+      "input": {
+        "kind": "image",
+        "width": 1000,
+        "height": 1000
+      },
+      "output": {
+        "width": 120,
+        "height": 120
+      }
+    },
+    {
+      "name": "panorama",
+      "input": {
+        "kind": "image",
+        "width": 4000,
+        "height": 500
+      },
+      "output": {
+        "width": 240,
+        "height": 120
+      }
+    },
+    {
+      "name": "tall phone shot",
+      "input": {
+        "kind": "image",
+        "width": 1179,
+        "height": 2556
+      },
+      "output": {
+        "width": 72,
+        "height": 120
+      }
+    },
+    {
+      "name": "unknown",
+      "input": {
+        "kind": "image"
+      },
+      "output": {
+        "width": 160,
+        "height": 120
+      }
+    },
+    {
+      "name": "zero",
+      "input": {
+        "kind": "image",
+        "width": 0,
+        "height": 0
+      },
+      "output": {
+        "width": 160,
+        "height": 120
+      }
+    },
+    {
+      "name": "width only",
+      "input": {
+        "kind": "image",
+        "width": 800
+      },
+      "output": {
+        "width": 160,
+        "height": 120
+      }
+    },
+    {
+      "name": "video",
+      "input": {
+        "kind": "video"
+      },
+      "output": {
+        "width": 213,
+        "height": 120
+      }
+    },
+    {
+      "name": "video with dimensions",
+      "input": {
+        "kind": "video",
+        "width": 1000,
+        "height": 1000
+      },
+      "output": {
+        "width": 120,
+        "height": 120
+      }
+    },
+    {
+      "name": "unknown kind defaults to 4:3",
+      "input": {
+        "kind": "other"
+      },
+      "output": {
+        "width": 160,
+        "height": 120
+      }
+    },
+    {
+      "name": "negative height",
+      "input": {
+        "kind": "video",
+        "width": 100,
+        "height": -100
+      },
+      "output": {
+        "width": 213,
+        "height": 120
+      }
+    },
+    {
+      "name": "at max",
+      "input": {
+        "kind": "image",
+        "width": 2000,
+        "height": 1000
+      },
+      "output": {
+        "width": 240,
+        "height": 120
+      }
+    },
+    {
+      "name": "at min",
+      "input": {
+        "kind": "image",
+        "width": 600,
+        "height": 1000
+      },
+      "output": {
+        "width": 72,
+        "height": 120
+      }
+    }
+  ],
+  "thumbSizeCustomCases": [
+    {
+      "name": "custom row",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 300,
+          "height": 100
+        },
+        "t": {
+          "height": 50,
+          "minWidth": 10,
+          "maxWidth": 1000
+        }
+      },
+      "output": {
+        "width": 150,
+        "height": 50
+      }
+    },
+    {
+      "name": "custom clamp",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 300,
+          "height": 100
+        },
+        "t": {
+          "height": 50,
+          "minWidth": 10,
+          "maxWidth": 100
+        }
+      },
+      "output": {
+        "width": 100,
+        "height": 50
+      }
+    },
+    {
+      "name": "rounds half up",
+      "input": {
+        "a": {
+          "kind": "image",
+          "width": 3,
+          "height": 2
+        },
+        "t": {
+          "height": 5,
+          "minWidth": 0,
+          "maxWidth": 100
+        }
+      },
+      "output": {
+        "width": 8,
+        "height": 5
+      }
+    }
+  ],
+  "thumbnailBoxCases": [
+    {
+      "name": "keeps aspect",
+      "input": {
+        "a": {
+          "width": 1600,
+          "height": 900
+        },
+        "height": 90
+      },
+      "output": {
+        "width": 160,
+        "height": 90
+      }
+    },
+    {
+      "name": "clamps wide",
+      "input": {
+        "a": {
+          "width": 4000,
+          "height": 400
+        },
+        "height": 100
+      },
+      "output": {
+        "width": 250,
+        "height": 100
+      }
+    },
+    {
+      "name": "clamps tall",
+      "input": {
+        "a": {
+          "width": 390,
+          "height": 2400
+        },
+        "height": 100
+      },
+      "output": {
+        "width": 50,
+        "height": 100
+      }
+    },
+    {
+      "name": "unknown",
+      "input": {
+        "a": {},
+        "height": 90
+      },
+      "output": {
+        "width": 120,
+        "height": 90
+      }
+    },
+    {
+      "name": "width only",
+      "input": {
+        "a": {
+          "width": 800
+        },
+        "height": 90
+      },
+      "output": {
+        "width": 120,
+        "height": 90
+      }
+    },
+    {
+      "name": "zero height",
+      "input": {
+        "a": {
+          "width": 800,
+          "height": 0
+        },
+        "height": 90
+      },
+      "output": {
+        "width": 120,
+        "height": 90
+      }
+    },
+    {
+      "name": "negative width",
+      "input": {
+        "a": {
+          "width": -800,
+          "height": 600
+        },
+        "height": 90
+      },
+      "output": {
+        "width": 120,
+        "height": 90
+      }
+    },
+    {
+      "name": "exactly 5:2",
+      "input": {
+        "a": {
+          "width": 500,
+          "height": 200
+        },
+        "height": 100
+      },
+      "output": {
+        "width": 250,
+        "height": 100
+      }
+    },
+    {
+      "name": "exactly 1:2",
+      "input": {
+        "a": {
+          "width": 100,
+          "height": 200
+        },
+        "height": 100
+      },
+      "output": {
+        "width": 50,
+        "height": 100
+      }
+    },
+    {
+      "name": "rounds half up",
+      "input": {
+        "a": {
+          "width": 3,
+          "height": 2
+        },
+        "height": 5
+      },
+      "output": {
+        "width": 8,
+        "height": 5
+      }
+    },
+    {
+      "name": "fractional height",
+      "input": {
+        "a": {
+          "width": 1,
+          "height": 1
+        },
+        "height": 33.3
+      },
+      "output": {
+        "width": 33,
+        "height": 33.3
+      }
+    },
+    {
+      "name": "zero box height",
+      "input": {
+        "a": {
+          "width": 4,
+          "height": 3
+        },
+        "height": 0
+      },
+      "output": {
+        "width": 0,
+        "height": 0
+      }
+    }
+  ]
+}
