@@ -4,6 +4,8 @@ A SwiftUI re-implementation of the React Native app in `mobile/`. The two live s
 until the native app reaches parity (see [ARCHITECTURE.md](ARCHITECTURE.md) § Parity checklist).
 The RN app and `shared/` are the spec.
 
+Disk is tight and several tickets build at once. Follow [ARCHITECTURE.md § Disk budget](ARCHITECTURE.md#disk-budget-parallel-agents) (one simulator, `-derivedDataPath ios/build/dd`, clean up when done).
+
 Every command below needs Xcode 27. When `xcode-select` points at the Command Line Tools, set:
 
 ```sh
@@ -24,13 +26,13 @@ cd ios && xcodegen
 ```sh
 cd ios
 xcodebuild -project Harness.xcodeproj -scheme Harness -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData build
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd build
 
 # once: a simulator of your own (never reuse the "sim-check …" ones)
-xcrun simctl create harness-dev com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro com.apple.CoreSimulator.SimRuntime.iOS-27-0
-xcrun simctl boot harness-dev
-xcrun simctl install harness-dev build/DerivedData/Build/Products/Debug-iphonesimulator/Harness.app
-xcrun simctl launch harness-dev com.markhuot.harness.dev
+xcrun simctl create harness-<KEY> com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro com.apple.CoreSimulator.SimRuntime.iOS-27-0
+xcrun simctl boot harness-<KEY>
+xcrun simctl install harness-<KEY> build/dd/Build/Products/Debug-iphonesimulator/Harness.app
+xcrun simctl launch harness-<KEY> com.markhuot.harness.dev
 ```
 
 Or open `Harness.xcodeproj` in Xcode and press Run.
@@ -60,8 +62,8 @@ press Run, or:
 
 ```sh
 xcodebuild -project Harness.xcodeproj -scheme Harness -destination 'platform=iOS,name=<device name>' \
-  -allowProvisioningUpdates -derivedDataPath build/DerivedData build
-xcrun devicectl device install app --device <device name> build/DerivedData/Build/Products/Debug-iphoneos/Harness.app
+  -allowProvisioningUpdates -derivedDataPath build/dd build
+xcrun devicectl device install app --device <device name> build/dd/Build/Products/Debug-iphoneos/Harness.app
 ```
 
 The native app isn't part of `release:publish` yet. The RN app still ships.

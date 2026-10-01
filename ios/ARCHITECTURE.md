@@ -101,7 +101,10 @@ fixtures whose expected outputs come from the real TS functions:
    registry edit, and parallel tickets don't conflict.
 2. **Resources:** `shared/fixtures/resources/<name>.ts` → `HarnessKit/Sources/HarnessKit/Resources/<name>.json`,
    bundled data the app uses at runtime (the themes registry, project colors, icon paths). Load it
-   with `Bundle.module`.
+   with `Bundle.module`. The exporter treats every `.json` file in
+   `HarnessKit/Sources/HarnessKit/Resources/` as generated and deletes any that no resource file
+   produces. Hand-written JSON resources have to live somewhere else, in a different folder with
+   its own `resources:` entry.
 3. **Export:** `bun shared/scripts/export-fixtures.ts` writes
    `ios/HarnessKit/Tests/HarnessKitTests/Fixtures/<module>.json` (and the resources) as
    `{ "<export>": value }`, and deletes orphaned JSON. The JSON is committed.
@@ -122,6 +125,21 @@ Swift side has to follow.
 When porting a module: write the case file from the TS source and its `*.test.ts` (plus extra edge
 cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
 fixtures can't express (request sequences, timing).
+
+## Disk budget (parallel agents)
+
+This Mac has only about 13 GiB free, and up to 5 tickets build at the same time. HARNESS-130
+already crashed once when the disk filled up. Every ticket must follow these rules:
+
+- Use exactly one simulator, named `harness-<KEY>` (e.g. `harness-HARNESS-131`), and delete it
+  with `xcrun simctl delete harness-<KEY>` when the work is done. Never touch the `sim-check …`
+  simulators.
+- Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else. Never
+  create a second DerivedData folder.
+- When you finish, delete `ios/build` and `ios/HarnessKit/.build`.
+- Run `df -h ~` before any `xcodebuild`. If less than 5 GiB is free, stop and post a summary
+  instead of building.
+- Don't download simulator runtimes. Use the iOS 27.0/27.1 runtimes that are already installed.
 
 ## Accessibility labels and sim-check
 
