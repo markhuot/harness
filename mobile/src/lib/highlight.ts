@@ -79,6 +79,10 @@ const THEMES: Record<string, ThemeInput> = {
   "rose-pine-dawn": () => import("@shikijs/themes/rose-pine-dawn"),
 };
 
+/** Every bundled language and theme id, for the native app's JavaScriptCore bundle (ios/Tools/build-highlighter.ts). */
+export const LANGUAGE_IDS = Object.keys(LANGS);
+export const SYNTAX_THEME_IDS = Object.keys(THEMES);
+
 export const hasLanguage = (lang: string) => lang in LANGS;
 export const hasSyntaxTheme = (name: string) => name in THEMES;
 
