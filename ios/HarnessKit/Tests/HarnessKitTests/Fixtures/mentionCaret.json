@@ -1,0 +1,838 @@
+{
+  "replayCases": [
+    {
+      "name": "collapsed caret is a mention, a range isn't",
+      "input": {
+        "value": "Summarize @READ",
+        "steps": [
+          {
+            "select": [
+              15,
+              15
+            ]
+          },
+          {
+            "select": [
+              10,
+              15
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 15,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 10,
+            "end": 15,
+            "query": "READ",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": null,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "no caret yet",
+      "input": {
+        "value": "@src",
+        "steps": []
+      },
+      "output": []
+    },
+    {
+      "name": "caret past the end",
+      "input": {
+        "value": "@a",
+        "steps": [
+          {
+            "select": [
+              9,
+              9
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 9,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "pick held through the stale report, released when the input lands",
+      "input": {
+        "value": "see @src/app.ts ",
+        "steps": [
+          {
+            "pick": 16,
+            "before": 10
+          },
+          {
+            "select": [
+              10,
+              10
+            ]
+          },
+          {
+            "select": [
+              16,
+              16
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 16,
+            "forced": 16,
+            "stale": 10
+          },
+          "selection": {
+            "start": 16,
+            "end": 16
+          },
+          "mention": null,
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 16,
+            "forced": 16,
+            "stale": 10
+          },
+          "selection": {
+            "start": 16,
+            "end": 16
+          },
+          "mention": null,
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 16,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "typing after a pick releases without the forced report",
+      "input": {
+        "value": "/code-walk ",
+        "steps": [
+          {
+            "pick": 11,
+            "before": 3
+          },
+          {
+            "select": [
+              12,
+              12
+            ]
+          },
+          {
+            "select": [
+              13,
+              13
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 11,
+            "forced": 11,
+            "stale": 3
+          },
+          "selection": {
+            "start": 11,
+            "end": 11
+          },
+          "mention": null,
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 12,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 13,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "range after a pick releases",
+      "input": {
+        "value": "hello",
+        "steps": [
+          {
+            "pick": 5,
+            "before": 2
+          },
+          {
+            "select": [
+              0,
+              5
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 5,
+            "forced": 5,
+            "stale": 2
+          },
+          "selection": {
+            "start": 5,
+            "end": 5
+          },
+          "mention": null,
+          "command": null
+        },
+        {
+          "caret": {
+            "at": null,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "folder pick keeps the list open",
+      "input": {
+        "value": "@src/",
+        "steps": [
+          {
+            "pick": 5
+          },
+          {
+            "select": [
+              5,
+              5
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 5,
+            "forced": 5,
+            "stale": null
+          },
+          "selection": {
+            "start": 5,
+            "end": 5
+          },
+          "mention": {
+            "start": 0,
+            "end": 5,
+            "query": "src/",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 5,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 0,
+            "end": 5,
+            "query": "src/",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "pick without a before: any collapsed report releases",
+      "input": {
+        "value": "@a b",
+        "steps": [
+          {
+            "pick": 2
+          },
+          {
+            "select": [
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 2,
+            "forced": 2,
+            "stale": null
+          },
+          "selection": {
+            "start": 2,
+            "end": 2
+          },
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 1,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "explicit null before",
+      "input": {
+        "value": "@a b",
+        "steps": [
+          {
+            "pick": 2,
+            "before": null
+          },
+          {
+            "select": [
+              2,
+              2
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 2,
+            "forced": 2,
+            "stale": null
+          },
+          "selection": {
+            "start": 2,
+            "end": 2
+          },
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 2,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "stale report twice: held both times",
+      "input": {
+        "value": "@abc x",
+        "steps": [
+          {
+            "pick": 4,
+            "before": 1
+          },
+          {
+            "select": [
+              1,
+              1
+            ]
+          },
+          {
+            "select": [
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 4,
+            "forced": 4,
+            "stale": 1
+          },
+          "selection": {
+            "start": 4,
+            "end": 4
+          },
+          "mention": {
+            "start": 0,
+            "end": 4,
+            "query": "abc",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 4,
+            "forced": 4,
+            "stale": 1
+          },
+          "selection": {
+            "start": 4,
+            "end": 4
+          },
+          "mention": {
+            "start": 0,
+            "end": 4,
+            "query": "abc",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 4,
+            "forced": 4,
+            "stale": 1
+          },
+          "selection": {
+            "start": 4,
+            "end": 4
+          },
+          "mention": {
+            "start": 0,
+            "end": 4,
+            "query": "abc",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "stale equal to forced is not held as stale",
+      "input": {
+        "value": "@ab",
+        "steps": [
+          {
+            "pick": 2,
+            "before": 2
+          },
+          {
+            "select": [
+              2,
+              2
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 2,
+            "forced": 2,
+            "stale": 2
+          },
+          "selection": {
+            "start": 2,
+            "end": 2
+          },
+          "mention": {
+            "start": 0,
+            "end": 3,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 2,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 0,
+            "end": 3,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "stale as a range releases",
+      "input": {
+        "value": "@ab",
+        "steps": [
+          {
+            "pick": 3,
+            "before": 1
+          },
+          {
+            "select": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 3,
+            "forced": 3,
+            "stale": 1
+          },
+          "selection": {
+            "start": 3,
+            "end": 3
+          },
+          "mention": {
+            "start": 0,
+            "end": 3,
+            "query": "ab",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": null,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "a second pick replaces the first",
+      "input": {
+        "value": "@a @b",
+        "steps": [
+          {
+            "pick": 2,
+            "before": 1
+          },
+          {
+            "pick": 5,
+            "before": 4
+          },
+          {
+            "select": [
+              1,
+              1
+            ]
+          },
+          {
+            "select": [
+              4,
+              4
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 2,
+            "forced": 2,
+            "stale": 1
+          },
+          "selection": {
+            "start": 2,
+            "end": 2
+          },
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "a",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 5,
+            "forced": 5,
+            "stale": 4
+          },
+          "selection": {
+            "start": 5,
+            "end": 5
+          },
+          "mention": {
+            "start": 3,
+            "end": 5,
+            "query": "b",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 1,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 0,
+            "end": 2,
+            "query": "",
+            "quoted": false
+          },
+          "command": null
+        },
+        {
+          "caret": {
+            "at": 4,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 3,
+            "end": 5,
+            "query": "",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "caret at 0",
+      "input": {
+        "value": "@a",
+        "steps": [
+          {
+            "select": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 0,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "reversed range",
+      "input": {
+        "value": "@abc",
+        "steps": [
+          {
+            "select": [
+              4,
+              1
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": null,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "command caret",
+      "input": {
+        "value": "/co",
+        "steps": [
+          {
+            "select": [
+              3,
+              3
+            ]
+          },
+          {
+            "select": [
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 3,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": {
+            "start": 0,
+            "end": 3,
+            "query": "co"
+          }
+        },
+        {
+          "caret": {
+            "at": 0,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "caret after an emoji in UTF-16",
+      "input": {
+        "value": "😀 @sr",
+        "steps": [
+          {
+            "select": [
+              6,
+              6
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": 6,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": {
+            "start": 3,
+            "end": 6,
+            "query": "sr",
+            "quoted": false
+          },
+          "command": null
+        }
+      ]
+    },
+    {
+      "name": "negative caret",
+      "input": {
+        "value": "@a",
+        "steps": [
+          {
+            "select": [
+              -1,
+              -1
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "caret": {
+            "at": -1,
+            "forced": null,
+            "stale": null
+          },
+          "selection": null,
+          "mention": null,
+          "command": null
+        }
+      ]
+    }
+  ]
+}

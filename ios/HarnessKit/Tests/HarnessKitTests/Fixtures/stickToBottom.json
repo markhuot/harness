@@ -1,0 +1,1123 @@
+{
+  "constants": {
+    "STICK_THRESHOLD": 48,
+    "STUCK": {
+      "pinned": true,
+      "dragging": false,
+      "gesture": false,
+      "lastOffset": 0
+    }
+  },
+  "distanceFromBottomCases": [
+    {
+      "name": "at the bottom",
+      "input": {
+        "offset": 1500,
+        "contentHeight": 2000,
+        "viewportHeight": 500
+      },
+      "output": 0
+    },
+    {
+      "name": "above the bottom",
+      "input": {
+        "offset": 1000,
+        "contentHeight": 2000,
+        "viewportHeight": 500
+      },
+      "output": 500
+    },
+    {
+      "name": "bounced past the bottom",
+      "input": {
+        "offset": 1600,
+        "contentHeight": 2000,
+        "viewportHeight": 500
+      },
+      "output": -100
+    },
+    {
+      "name": "content shorter than the viewport",
+      "input": {
+        "offset": 0,
+        "contentHeight": 300,
+        "viewportHeight": 500
+      },
+      "output": -200
+    }
+  ],
+  "nextPinnedCases": [
+    {
+      "name": "scrolling up unpins",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1500,
+        "m": {
+          "offset": 1480,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "content growing keeps pinned",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1500,
+        "m": {
+          "offset": 1500,
+          "contentHeight": 3000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "undershooting jump stays pinned",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1000,
+        "m": {
+          "offset": 1200,
+          "contentHeight": 3000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "clamp after shrink stays pinned",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1500,
+        "m": {
+          "offset": 1300,
+          "contentHeight": 1800,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "viewport shrinking keeps pinned",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1500,
+        "m": {
+          "offset": 1500,
+          "contentHeight": 2000,
+          "viewportHeight": 200
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "viewport shrinking keeps unpinned",
+      "input": {
+        "pinned": false,
+        "prevOffset": 800,
+        "m": {
+          "offset": 800,
+          "contentHeight": 2000,
+          "viewportHeight": 200
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "content growing stays unpinned",
+      "input": {
+        "pinned": false,
+        "prevOffset": 800,
+        "m": {
+          "offset": 800,
+          "contentHeight": 3000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "scrolling down short stays unpinned",
+      "input": {
+        "pinned": false,
+        "prevOffset": 800,
+        "m": {
+          "offset": 1200,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "back within threshold re-pins",
+      "input": {
+        "pinned": false,
+        "prevOffset": 1400,
+        "m": {
+          "offset": 1460,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "just outside threshold",
+      "input": {
+        "pinned": false,
+        "prevOffset": 1400,
+        "m": {
+          "offset": 1451,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "exactly at threshold",
+      "input": {
+        "pinned": false,
+        "prevOffset": 1400,
+        "m": {
+          "offset": 1452,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "up by exactly 1 is not a scroll up",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1001,
+        "m": {
+          "offset": 1000,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "up by just over 1",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1001.5,
+        "m": {
+          "offset": 1000,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "up landing 2 from the bottom stays pinned",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1600,
+        "m": {
+          "offset": 1498,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "up landing just over 2 from the bottom unpins",
+      "input": {
+        "pinned": true,
+        "prevOffset": 1600,
+        "m": {
+          "offset": 1497.5,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "custom threshold re-pins",
+      "input": {
+        "pinned": false,
+        "prevOffset": 1000,
+        "m": {
+          "offset": 1300,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        },
+        "threshold": 200
+      },
+      "output": true
+    },
+    {
+      "name": "custom zero threshold",
+      "input": {
+        "pinned": false,
+        "prevOffset": 1000,
+        "m": {
+          "offset": 1499,
+          "contentHeight": 2000,
+          "viewportHeight": 500
+        },
+        "threshold": 0
+      },
+      "output": false
+    },
+    {
+      "name": "short content is at the bottom",
+      "input": {
+        "pinned": false,
+        "prevOffset": 0,
+        "m": {
+          "offset": 0,
+          "contentHeight": 300,
+          "viewportHeight": 500
+        }
+      },
+      "output": true
+    }
+  ],
+  "stickStepCases": [
+    {
+      "name": "new content follows while pinned",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "nudge without a finger doesn't unpin",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 1100,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1100
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1100
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "dragging up unpins",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1100,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1100
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1000
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "no follow while dragging",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "fling back re-pins at momentum end",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1100,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "beginDrag",
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 2,
+            "offset": 1200,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "momentumBegin"
+          },
+          {
+            "type": "scroll",
+            "offset": 1390,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "momentumEnd",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1100
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1200
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1200
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1390
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "momentum end without a gesture",
+      "input": {
+        "from": {
+          "pinned": false,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1000
+        },
+        "events": [
+          {
+            "type": "momentumEnd",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "status-bar tap unpins",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "scrollToTop"
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "drag released at the bottom re-pins and follows",
+      "input": {
+        "from": {
+          "pinned": false,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1000
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1380,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1390,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1380
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1390
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "drag released short stays unpinned",
+      "input": {
+        "from": {
+          "pinned": false,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1000
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1200,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1200
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1200
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "negative velocity also waits for momentum",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": -1.5,
+            "offset": 1300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          },
+          {
+            "type": "momentumBegin"
+          },
+          {
+            "type": "momentumEnd",
+            "offset": 900,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1300
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1300
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1300
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 900
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 900
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "momentum begin without a drag makes scrolls count",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "momentumBegin"
+          },
+          {
+            "type": "scroll",
+            "offset": 1000,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "momentumEnd",
+            "offset": 900,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": true,
+            "lastOffset": 1000
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 900
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "scroll while unpinned tracks the offset only",
+      "input": {
+        "from": {
+          "pinned": false,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1000
+        },
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "resize"
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": false
+        }
+      ]
+    },
+    {
+      "name": "status-bar tap during a drag",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scrollToTop"
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": false,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1400
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "content shrink clamp during a drag stays pinned",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 1400
+        },
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1200,
+            "contentHeight": 1800,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0,
+            "offset": 1200,
+            "contentHeight": 1800,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1400
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": true,
+            "gesture": true,
+            "lastOffset": 1200
+          },
+          "follow": false
+        },
+        {
+          "stick": {
+            "pinned": true,
+            "dragging": false,
+            "gesture": false,
+            "lastOffset": 1200
+          },
+          "follow": true
+        }
+      ]
+    },
+    {
+      "name": "no events",
+      "input": {
+        "from": {
+          "pinned": true,
+          "dragging": false,
+          "gesture": false,
+          "lastOffset": 0
+        },
+        "events": []
+      },
+      "output": []
+    }
+  ]
+}

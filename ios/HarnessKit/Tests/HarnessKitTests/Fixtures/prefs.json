@@ -1,0 +1,432 @@
+{
+  "defaults": {
+    "DEFAULT_PREFS": {
+      "theme": "system",
+      "lightTheme": "harness-light",
+      "darkTheme": "harness-dark",
+      "hideChildren": true,
+      "lastProject": null,
+      "boardProject": null,
+      "activeServer": null,
+      "version": 2
+    },
+    "HIDE_CHILDREN_DEFAULT": true
+  },
+  "normalizePrefsCases": [
+    {
+      "name": "null",
+      "input": null,
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "empty object",
+      "input": {},
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "a string",
+      "input": "x",
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "a number",
+      "input": 3,
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "true",
+      "input": true,
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "an array (spread as indexes, no version)",
+      "input": [
+        "dark"
+      ],
+      "output": {
+        "0": "dark",
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "v2 keeps hideChildren false",
+      "input": {
+        "hideChildren": false,
+        "version": 2
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": false,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "v2 keeps hideChildren true",
+      "input": {
+        "hideChildren": true,
+        "version": 2
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "v2 junk hideChildren falls back to hidden",
+      "input": {
+        "hideChildren": "no",
+        "version": 2
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "v2 null hideChildren falls back to hidden",
+      "input": {
+        "hideChildren": null,
+        "version": 2
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "pre-v2 blob resets hideChildren once, keeps the rest",
+      "input": {
+        "hideChildren": false,
+        "theme": "dark"
+      },
+      "output": {
+        "theme": "dark",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "version 1 resets",
+      "input": {
+        "hideChildren": false,
+        "version": 1
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "fractional version under 2 resets",
+      "input": {
+        "hideChildren": false,
+        "version": 1.5
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "a newer version keeps the choice and is written as 2",
+      "input": {
+        "hideChildren": false,
+        "version": 3
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": false,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "string version counts as 0",
+      "input": {
+        "hideChildren": false,
+        "version": "2"
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "a blob from before themes",
+      "input": {
+        "theme": "dark",
+        "hideChildren": true
+      },
+      "output": {
+        "theme": "dark",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "unknown ids, wrong-appearance ids and bad appearance fall back",
+      "input": {
+        "theme": "sepia",
+        "lightTheme": "catppuccin-mocha",
+        "darkTheme": "not-a-theme"
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "valid picks survive, other prefs pass through",
+      "input": {
+        "theme": "light",
+        "lightTheme": "rose-pine-dawn",
+        "darkTheme": "dracula",
+        "activeServer": "srv-1",
+        "boardProject": "p",
+        "lastProject": "q",
+        "version": 2
+      },
+      "output": {
+        "theme": "light",
+        "lightTheme": "rose-pine-dawn",
+        "darkTheme": "dracula",
+        "hideChildren": true,
+        "lastProject": "q",
+        "boardProject": "p",
+        "activeServer": "srv-1",
+        "version": 2
+      }
+    },
+    {
+      "name": "non-string theme fields fall back",
+      "input": {
+        "theme": 1,
+        "lightTheme": [
+          "github-light"
+        ],
+        "darkTheme": {
+          "id": "dracula"
+        }
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "null theme fields fall back",
+      "input": {
+        "theme": null,
+        "lightTheme": null,
+        "darkTheme": null
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "upper-case appearance isn't one",
+      "input": {
+        "theme": "Dark"
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "explicit nulls stay null",
+      "input": {
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2,
+        "hideChildren": false
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": false,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2
+      }
+    },
+    {
+      "name": "unknown keys are ignored",
+      "input": {
+        "hideChildren": false,
+        "version": 2,
+        "legacyFlag": true
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": false,
+        "lastProject": null,
+        "boardProject": null,
+        "activeServer": null,
+        "version": 2,
+        "legacyFlag": true
+      }
+    },
+    {
+      "name": "non-string ids pass through in TS",
+      "input": {
+        "lastProject": 5,
+        "boardProject": {
+          "id": "p"
+        },
+        "activeServer": false,
+        "version": 2
+      },
+      "output": {
+        "theme": "system",
+        "lightTheme": "harness-light",
+        "darkTheme": "harness-dark",
+        "hideChildren": true,
+        "lastProject": 5,
+        "boardProject": {
+          "id": "p"
+        },
+        "activeServer": false,
+        "version": 2
+      }
+    }
+  ]
+}

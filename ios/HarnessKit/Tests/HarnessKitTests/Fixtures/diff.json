@@ -1,0 +1,1749 @@
+{
+  "langForPathCases": [
+    {
+      "name": "ts extension",
+      "input": "src/app.ts",
+      "output": "typescript"
+    },
+    {
+      "name": "yml alias",
+      "input": "config/ci.yml",
+      "output": "yaml"
+    },
+    {
+      "name": "backslash separators",
+      "input": "a\\b\\c.rb",
+      "output": "ruby"
+    },
+    {
+      "name": "blade compound extension",
+      "input": "resources/views/home.blade.php",
+      "output": "blade"
+    },
+    {
+      "name": "php",
+      "input": "app/Http/Kernel.php",
+      "output": "php"
+    },
+    {
+      "name": "Dockerfile",
+      "input": "Dockerfile",
+      "output": "docker"
+    },
+    {
+      "name": ".env.local",
+      "input": ".env.local",
+      "output": "dotenv"
+    },
+    {
+      "name": "LICENSE",
+      "input": "LICENSE",
+      "output": null
+    },
+    {
+      "name": ".gitignore",
+      "input": ".gitignore",
+      "output": null
+    },
+    {
+      "name": ".envrc",
+      "input": ".envrc",
+      "output": null
+    },
+    {
+      "name": ".env",
+      "input": ".env",
+      "output": "dotenv"
+    },
+    {
+      "name": "nested .env",
+      "input": "config/.env",
+      "output": "dotenv"
+    },
+    {
+      "name": "upper-case extension",
+      "input": "README.MD",
+      "output": "markdown"
+    },
+    {
+      "name": "Makefile",
+      "input": "src/Makefile",
+      "output": "makefile"
+    },
+    {
+      "name": "Gemfile",
+      "input": "Gemfile",
+      "output": "ruby"
+    },
+    {
+      "name": "Rakefile",
+      "input": "Rakefile",
+      "output": "ruby"
+    },
+    {
+      "name": "Containerfile",
+      "input": "build/Containerfile",
+      "output": "docker"
+    },
+    {
+      "name": "Dockerfile with extension",
+      "input": "Dockerfile.dev",
+      "output": "dev"
+    },
+    {
+      "name": "unknown extension passes through",
+      "input": "main.zig",
+      "output": "zig"
+    },
+    {
+      "name": "trailing dot",
+      "input": "file.",
+      "output": "text"
+    },
+    {
+      "name": "trailing slash",
+      "input": "src/dir/",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "double extension",
+      "input": "archive.tar.gz",
+      "output": "gz"
+    },
+    {
+      "name": "dot directory",
+      "input": ".github/workflows/ci.yml",
+      "output": "yaml"
+    },
+    {
+      "name": "dotfile with extension",
+      "input": ".eslintrc.json",
+      "output": "json"
+    },
+    {
+      "name": "upper-case blade",
+      "input": "Home.BLADE.PHP",
+      "output": "blade"
+    },
+    {
+      "name": "only blade",
+      "input": ".blade.php",
+      "output": "blade"
+    },
+    {
+      "name": "mixed separators",
+      "input": "a/b\\c.py",
+      "output": "python"
+    },
+    {
+      "name": "unicode",
+      "input": "dossiers/Über.Swift",
+      "output": "swift"
+    }
+  ],
+  "parseDiffCases": [
+    {
+      "name": "git diff",
+      "input": "diff --git a/src/app.ts b/src/app.ts\nindex 1..2 100644\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n keep\n-old\n+new",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/src/app.ts b/src/app.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "index 1..2 100644",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/src/app.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/src/app.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1,2 +1,2 @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " keep",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-old",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+new",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "src/app.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dashes inside a hunk",
+      "input": "--- a/doc.md\n+++ b/doc.md\n@@ -1,2 +1,2 @@\n title\n----\n++++ added\n@@ -9 +9 @@\n-x\n+y",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/doc.md",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/doc.md",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1,2 +1,2 @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " title",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "----",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "++++ added",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -9 +9 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-x",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+y",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "doc.md"
+          }
+        ]
+      }
+    },
+    {
+      "name": "counts run out, next file",
+      "input": "--- a/one.ts\n+++ b/one.ts\n@@ -1 +1 @@\n-a\n+b\n--- a/two.rb\n+++ b/two.rb\n@@ -1 +1 @@\n-c\n+d",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/one.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/one.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/two.rb",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/two.rb",
+            "file": 1
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 1
+          },
+          {
+            "kind": "del",
+            "text": "-c",
+            "file": 1
+          },
+          {
+            "kind": "add",
+            "text": "+d",
+            "file": 1
+          }
+        ],
+        "files": [
+          {
+            "path": "one.ts"
+          },
+          {
+            "path": "two.rb"
+          }
+        ]
+      }
+    },
+    {
+      "name": "second git file",
+      "input": "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/b.py b/b.py\n--- a/b.py\n+++ b/b.py\n@@ -1 +1 @@\n-c\n+d",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/a.ts b/a.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/a.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/a.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "diff --git a/b.py b/b.py",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/b.py",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/b.py",
+            "file": 1
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 1
+          },
+          {
+            "kind": "del",
+            "text": "-c",
+            "file": 1
+          },
+          {
+            "kind": "add",
+            "text": "+d",
+            "file": 1
+          }
+        ],
+        "files": [
+          {
+            "path": "a.ts"
+          },
+          {
+            "path": "b.py"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleted file with no-newline marker",
+      "input": "--- a/gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n\\ No newline at end of file",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/gone.py",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ /dev/null",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +0,0 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-x",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "\\ No newline at end of file",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "gone.py"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bare @@",
+      "input": "@@ @@\n a\n-b\n+c",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " a",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-b",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+c",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "no headers",
+      "input": "-old\n+new\n same",
+      "output": {
+        "lines": [
+          {
+            "kind": "del",
+            "text": "-old",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+new",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " same",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "no headers two lines",
+      "input": "-old\n+new",
+      "output": {
+        "lines": [
+          {
+            "kind": "del",
+            "text": "-old",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+new",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "lines": [
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing newline",
+      "input": "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/x",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/x",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CRLF",
+      "input": "--- a/x\r\n+++ b/x\r\n@@ -1 +1 @@\r\n-a\r\n+b\r\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/x",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/x",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lone CR kept in the line",
+      "input": "@@ -1 +1 @@\n-a\r+b",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a\r+b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "new file",
+      "input": "diff --git a/n.ts b/n.ts\nnew file mode 100644\n--- /dev/null\n+++ b/n.ts\n@@ -0,0 +1,2 @@\n+one\n+two\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/n.ts b/n.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "new file mode 100644",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- /dev/null",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/n.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -0,0 +1,2 @@",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+one",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+two",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "n.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deleted file in git",
+      "input": "diff --git a/g.ts b/g.ts\ndeleted file mode 100644\nindex 1..0\n--- a/g.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/g.ts b/g.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "deleted file mode 100644",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "index 1..0",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/g.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ /dev/null",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +0,0 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-x",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "g.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "rename",
+      "input": "diff --git a/old.ts b/new.ts\nsimilarity index 90%\nrename from old.ts\nrename to new.ts\n--- a/old.ts\n+++ b/new.ts\n@@ -1 +1 @@\n-a\n+b\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/old.ts b/new.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "similarity index 90%",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "rename from old.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "rename to new.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/old.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/new.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "new.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pure rename",
+      "input": "diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/old.ts b/new.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "similarity index 100%",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "rename from old.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "rename to new.ts",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "new.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mode change",
+      "input": "diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/run.sh b/run.sh",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "old mode 100644",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "new mode 100755",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "run.sh"
+          }
+        ]
+      }
+    },
+    {
+      "name": "binary",
+      "input": "diff --git a/i.png b/i.png\nindex 1..2 100644\nBinary files a/i.png and b/i.png differ\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/i.png b/i.png",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "index 1..2 100644",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "Binary files a/i.png and b/i.png differ",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "i.png"
+          }
+        ]
+      }
+    },
+    {
+      "name": "copy and dissimilarity",
+      "input": "diff --git a/a b/c\ndissimilarity index 80%\ncopy from a\ncopy to c\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/a b/c",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "dissimilarity index 80%",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "copy from a",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "copy to c",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "c"
+          }
+        ]
+      }
+    },
+    {
+      "name": "path with spaces",
+      "input": "diff --git a/my dir/a b.ts b/my dir/a b.ts\n--- a/my dir/a b.ts\n+++ b/my dir/a b.ts\n@@ -1 +1 @@\n-a\n+b",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/my dir/a b.ts b/my dir/a b.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/my dir/a b.ts",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/my dir/a b.ts",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "my dir/a b.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "git path containing b/",
+      "input": "diff --git a/x b/y b/x b/y\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/x b/y b/x b/y",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "y"
+          }
+        ]
+      }
+    },
+    {
+      "name": "git header with CR in it",
+      "input": "diff --git a/x b/y\rz\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/x b/y\rz",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "headers with timestamps",
+      "input": "--- a/x.ts\t2024-01-01 10:00:00\n+++ b/x.ts\t2024-01-02 10:00:00\n@@ -1 +1 @@\n-a\n+b",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/x.ts\t2024-01-01 10:00:00",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/x.ts\t2024-01-02 10:00:00",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "x.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "header path with tab then CR",
+      "input": "--- a/x\n+++ b/x\tstamp\rmore\tlast\n@@ -1 +1 @@\n-a",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/x",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/x\tstamp\rmore\tlast",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "x\tstamp\rmore"
+          }
+        ]
+      }
+    },
+    {
+      "name": "header paths without prefix",
+      "input": "--- old.txt\n+++ new.txt\n@@ -1 +1 @@\n-a\n+b",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- old.txt",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ new.txt",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "new.txt"
+          }
+        ]
+      }
+    },
+    {
+      "name": "both /dev/null",
+      "input": "--- /dev/null\n+++ /dev/null\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- /dev/null",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ /dev/null",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty header paths",
+      "input": "--- \n+++ \n@@ -1 +1 @@\n-a",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- ",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ ",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "--- without +++ is a removed line",
+      "input": "@@ -1,2 +1 @@\n--- x\n-y",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1,2 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "--- x",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-y",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "--- without +++ outside a hunk",
+      "input": "--- x\nnot plus",
+      "output": {
+        "lines": [
+          {
+            "kind": "del",
+            "text": "--- x",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "not plus",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "hunk with zero counts",
+      "input": "@@ -0,0 +0,0 @@\n-a\n+b",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -0,0 +0,0 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "miscounted hunk then header pair",
+      "input": "--- a/x\n+++ b/x\n@@ -1,5 +1,5 @@\n-a\n--- a/y\n+++ b/y\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "--- a/x",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/x",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1,5 +1,5 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "--- a/y",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+++ b/y",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "hunk header inside a hunk",
+      "input": "@@ -1,3 +1,3 @@\n a\n@@ -9 +9 @@\n-b\n+c",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1,3 +1,3 @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " a",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -9 +9 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-b",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+c",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "loose @@ inside a hunk is context",
+      "input": "@@ -1,2 +1,2 @@\n a\n@@ loose\n b",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1,2 +1,2 @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " a",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "@@ loose",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " b",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "loose @@ outside a hunk",
+      "input": "@@ loose\n a",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ loose",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " a",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "meta lines before any file",
+      "input": "index 1..2\nsimilarity index 1%\n-a",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "index 1..2",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "similarity index 1%",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "no-newline marker inside a hunk",
+      "input": "@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "\\ No newline at end of file",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "\\ No newline at end of file",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "index inside a hunk is context",
+      "input": "@@ -1,2 +1,2 @@\nindex x\n a",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1,2 +1,2 @@",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "index x",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": " a",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "multi-file with commit message",
+      "input": "commit abc\n\n    fix\n\ndiff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/b.ts b/b.ts\nnew file mode 100644\n--- /dev/null\n+++ b/b.ts\n@@ -0,0 +1 @@\n+c\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "ctx",
+            "text": "commit abc",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "    fix",
+            "file": 0
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "diff --git a/a.ts b/a.ts",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "--- a/a.ts",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/a.ts",
+            "file": 1
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 1
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 1
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 1
+          },
+          {
+            "kind": "meta",
+            "text": "diff --git a/b.ts b/b.ts",
+            "file": 2
+          },
+          {
+            "kind": "meta",
+            "text": "new file mode 100644",
+            "file": 2
+          },
+          {
+            "kind": "meta",
+            "text": "--- /dev/null",
+            "file": 2
+          },
+          {
+            "kind": "meta",
+            "text": "+++ b/b.ts",
+            "file": 2
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -0,0 +1 @@",
+            "file": 2
+          },
+          {
+            "kind": "add",
+            "text": "+c",
+            "file": 2
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 2
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          },
+          {
+            "path": "a.ts"
+          },
+          {
+            "path": "b.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "git diff without header pair then hunk",
+      "input": "diff --git a/a b/a\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/c b/c\n",
+      "output": {
+        "lines": [
+          {
+            "kind": "meta",
+            "text": "diff --git a/a b/a",
+            "file": 0
+          },
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+b",
+            "file": 0
+          },
+          {
+            "kind": "meta",
+            "text": "diff --git a/c b/c",
+            "file": 1
+          },
+          {
+            "kind": "ctx",
+            "text": "",
+            "file": 1
+          }
+        ],
+        "files": [
+          {
+            "path": "a"
+          },
+          {
+            "path": "c"
+          }
+        ]
+      }
+    },
+    {
+      "name": "emoji and combining marks",
+      "input": "@@ -1 +1 @@\n-café\n+café 😀",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-café",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+café 😀",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "huge counts",
+      "input": "@@ -1,99999999999999999999 +1 @@\n-a\n--- a/x\n+++ b/x",
+      "output": {
+        "lines": [
+          {
+            "kind": "hunk",
+            "text": "@@ -1,99999999999999999999 +1 @@",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "-a",
+            "file": 0
+          },
+          {
+            "kind": "del",
+            "text": "--- a/x",
+            "file": 0
+          },
+          {
+            "kind": "add",
+            "text": "+++ b/x",
+            "file": 0
+          }
+        ],
+        "files": [
+          {
+            "path": null
+          }
+        ]
+      }
+    }
+  ]
+}

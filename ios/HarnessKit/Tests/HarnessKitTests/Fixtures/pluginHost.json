@@ -1,0 +1,311 @@
+{
+  "bridgeInjectionCases": [
+    {
+      "name": "appearance only",
+      "input": {
+        "theme": "dark",
+        "token": "secret"
+      },
+      "output": [
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"baseUrl\":\"http://100.64.1.2:7717\",\"tabId\":\"changes\",\"theme\":\"dark\",\"ticketKey\":\"NYTIMES-31\",\"token\":\"secret\",\"type\":\"harness:init\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"theme\":\"light\",\"type\":\"harness:theme\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"ticket\":{\"agentReview\":\"approved\",\"allowedTools\":[\"Bash\",\"WebFetch\"],\"autoStart\":true,\"baseBranch\":\"develop\",\"blockedReason\":\"Should HarnessEvent decode unknown kinds or drop them?\",\"branch\":\"harness/nytimes-31\",\"busy\":true,\"childCount\":3,\"completedAt\":1759197600000,\"completionAction\":\"pr\",\"completionInstructions\":\"Squash before opening the PR\",\"createdAt\":1759190400000,\"dependsOn\":[\"NYTIMES-29\",\"NYTIMES-30\"],\"description\":\"Port shared/src/protocol.ts to Codable Swift types.\\n\\n- Patch<T>\\n- OpenEnum\",\"draft\":false,\"driver\":\"claude-code\",\"externalRef\":{\"key\":\"PLAYR-123\",\"raw\":{\"fields\":{\"flagged\":false,\"labels\":[\"bug\",\"p1\"],\"points\":3,\"summary\":\"Video player stalls on seek\"},\"id\":\"10423\"},\"source\":\"jira\",\"url\":\"https://happycog.atlassian.net/browse/PLAYR-123\"},\"humanReview\":\"changes_requested\",\"id\":\"tkt_31\",\"key\":\"NYTIMES-31\",\"kind\":\"conductor\",\"model\":\"opus\",\"parentId\":\"tkt_30\",\"pendingApproval\":{\"id\":\"apr_1\",\"input\":{\"command\":\"npm install left-pad\",\"description\":\"Install deps\",\"timeout\":120000},\"onceOnly\":false,\"reason\":\"Installs a package from the network\",\"requestedAt\":1759190405000,\"runId\":\"run_7\",\"source\":\"classifier\",\"summary\":\"npm install left-pad\",\"toolName\":\"Bash\"},\"permissionMode\":\"read_only\",\"position\":2.5,\"projectId\":\"prj_8f2c1a\",\"pullRequestUrl\":\"https://github.com/nytimes/app/pull/812\",\"requestedBranch\":\"feature/swift-protocol\",\"sessionId\":\"ses_31\",\"skipAgentReview\":true,\"status\":\"blocked\",\"title\":\"Port the wire protocol to Swift\",\"updatedAt\":1759194000000,\"useWorktree\":true,\"workdir\":\"/Users/mark/.harness/worktrees/NYTIMES-31\"},\"type\":\"harness:ticket\"}, \"http://100.64.1.2:7717\"); })(); true;"
+      ]
+    },
+    {
+      "name": "full theme and a hostile token",
+      "input": {
+        "theme": "catppuccin-mocha",
+        "token": "a\"b'c\\d\ne\r f g</script><script>globalThis.pwned=1</script>`${x}`"
+      },
+      "output": [
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"appearance\":\"dark\",\"baseUrl\":\"http://100.64.1.2:7717\",\"syntaxTheme\":\"catppuccin-mocha\",\"tabId\":\"changes\",\"theme\":\"dark\",\"themeId\":\"catppuccin-mocha\",\"themeName\":\"Catppuccin Mocha\",\"ticketKey\":\"NYTIMES-31\",\"token\":\"a\\\"b'c\\\\d\\ne\\r\\u2028f\\u2029g</script><script>globalThis.pwned=1</script>`${x}`\",\"tokens\":{\"accent\":\"#cba6f7\",\"accentHover\":\"#d0aff8\",\"accentSoft\":\"rgba(203, 166, 247, 0.18)\",\"accentText\":\"#cfadf8\",\"amber\":\"#fab387\",\"amberSoft\":\"rgba(250, 179, 135, 0.15)\",\"bg\":\"#181825\",\"bgActive\":\"rgba(205, 214, 244, 0.1)\",\"bgColumn\":\"#1e1e2e\",\"bgElev\":\"#313244\",\"bgHover\":\"rgba(205, 214, 244, 0.06)\",\"bgSidebar\":\"#11111b\",\"bgSunken\":\"#11111b\",\"blocked\":\"#f38ba8\",\"border\":\"#45475a\",\"borderStrong\":\"#585b70\",\"diffAdd\":\"#a6e3a1\",\"diffAddSoft\":\"rgba(166, 227, 161, 0.15)\",\"diffDel\":\"#f497b1\",\"diffDelSoft\":\"rgba(243, 139, 168, 0.15)\",\"done\":\"#94e2d5\",\"focus\":\"rgba(203, 166, 247, 0.45)\",\"green\":\"#a6e3a1\",\"greenSoft\":\"rgba(166, 227, 161, 0.15)\",\"in_progress\":\"#f9e2af\",\"onAccent\":\"#181825\",\"onAmber\":\"#181825\",\"onDanger\":\"#181825\",\"overlay\":\"rgba(0, 0, 0, 0.5)\",\"planning\":\"#7f849c\",\"red\":\"#f497b1\",\"redSoft\":\"rgba(243, 139, 168, 0.15)\",\"redSolid\":\"#f38ba8\",\"review\":\"#f5c2e7\",\"selection\":\"rgba(203, 166, 247, 0.3)\",\"shadow\":\"0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25)\",\"shadowLg\":\"0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)\",\"shadowSm\":\"0 1px 2px rgba(0, 0, 0, 0.3)\",\"text\":\"#cdd6f4\",\"text2\":\"#afb7d3\",\"text3\":\"#959bb5\",\"violet\":\"#cba6f7\",\"violetSoft\":\"rgba(203, 166, 247, 0.15)\"},\"type\":\"harness:init\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"theme\":\"light\",\"type\":\"harness:theme\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"ticket\":{\"agentReview\":\"approved\",\"allowedTools\":[\"Bash\",\"WebFetch\"],\"autoStart\":true,\"baseBranch\":\"develop\",\"blockedReason\":\"Should HarnessEvent decode unknown kinds or drop them?\",\"branch\":\"harness/nytimes-31\",\"busy\":true,\"childCount\":3,\"completedAt\":1759197600000,\"completionAction\":\"pr\",\"completionInstructions\":\"Squash before opening the PR\",\"createdAt\":1759190400000,\"dependsOn\":[\"NYTIMES-29\",\"NYTIMES-30\"],\"description\":\"Port shared/src/protocol.ts to Codable Swift types.\\n\\n- Patch<T>\\n- OpenEnum\",\"draft\":false,\"driver\":\"claude-code\",\"externalRef\":{\"key\":\"PLAYR-123\",\"raw\":{\"fields\":{\"flagged\":false,\"labels\":[\"bug\",\"p1\"],\"points\":3,\"summary\":\"Video player stalls on seek\"},\"id\":\"10423\"},\"source\":\"jira\",\"url\":\"https://happycog.atlassian.net/browse/PLAYR-123\"},\"humanReview\":\"changes_requested\",\"id\":\"tkt_31\",\"key\":\"NYTIMES-31\",\"kind\":\"conductor\",\"model\":\"opus\",\"parentId\":\"tkt_30\",\"pendingApproval\":{\"id\":\"apr_1\",\"input\":{\"command\":\"npm install left-pad\",\"description\":\"Install deps\",\"timeout\":120000},\"onceOnly\":false,\"reason\":\"Installs a package from the network\",\"requestedAt\":1759190405000,\"runId\":\"run_7\",\"source\":\"classifier\",\"summary\":\"npm install left-pad\",\"toolName\":\"Bash\"},\"permissionMode\":\"read_only\",\"position\":2.5,\"projectId\":\"prj_8f2c1a\",\"pullRequestUrl\":\"https://github.com/nytimes/app/pull/812\",\"requestedBranch\":\"feature/swift-protocol\",\"sessionId\":\"ses_31\",\"skipAgentReview\":true,\"status\":\"blocked\",\"title\":\"Port the wire protocol to Swift\",\"updatedAt\":1759194000000,\"useWorktree\":true,\"workdir\":\"/Users/mark/.harness/worktrees/NYTIMES-31\"},\"type\":\"harness:ticket\"}, \"http://100.64.1.2:7717\"); })(); true;"
+      ]
+    },
+    {
+      "name": "theme without a syntax theme",
+      "input": {
+        "theme": "tokyo-night-day",
+        "token": "t"
+      },
+      "output": [
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"appearance\":\"light\",\"baseUrl\":\"http://100.64.1.2:7717\",\"syntaxTheme\":null,\"tabId\":\"changes\",\"theme\":\"light\",\"themeId\":\"tokyo-night-day\",\"themeName\":\"Tokyo Night Day\",\"ticketKey\":\"NYTIMES-31\",\"token\":\"t\",\"tokens\":{\"accent\":\"#2a73d6\",\"accentHover\":\"#2668c1\",\"accentSoft\":\"rgba(46, 125, 233, 0.12)\",\"accentText\":\"#215aa8\",\"amber\":\"#705632\",\"amberSoft\":\"rgba(140, 108, 62, 0.12)\",\"bg\":\"#e1e2e7\",\"bgActive\":\"rgba(55, 96, 191, 0.085)\",\"bgColumn\":\"#d9dce5\",\"bgElev\":\"#f3f3f5\",\"bgHover\":\"rgba(55, 96, 191, 0.05)\",\"bgSidebar\":\"#d0d5e3\",\"bgSunken\":\"#d0d5e3\",\"blocked\":\"#eb2861\",\"border\":\"#c4c8da\",\"borderStrong\":\"#a8aecb\",\"diffAdd\":\"#4a6230\",\"diffAddSoft\":\"rgba(88, 117, 57, 0.12)\",\"diffDel\":\"#ac1d47\",\"diffDelSoft\":\"rgba(245, 42, 101, 0.12)\",\"done\":\"#587539\",\"focus\":\"rgba(46, 125, 233, 0.35)\",\"green\":\"#4a6230\",\"greenSoft\":\"rgba(88, 117, 57, 0.12)\",\"in_progress\":\"#b15c00\",\"onAccent\":\"#ffffff\",\"onAmber\":\"#ffffff\",\"onDanger\":\"#ffffff\",\"overlay\":\"rgba(20, 21, 26, 0.28)\",\"planning\":\"#747b9f\",\"red\":\"#ac1d47\",\"redSoft\":\"rgba(245, 42, 101, 0.12)\",\"redSolid\":\"#e1275d\",\"review\":\"#9854f1\",\"selection\":\"rgba(46, 125, 233, 0.2)\",\"shadow\":\"0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05)\",\"shadowLg\":\"0 8px 30px rgba(15, 17, 22, 0.14), 0 2px 6px rgba(15, 17, 22, 0.06)\",\"shadowSm\":\"0 1px 2px rgba(15, 17, 22, 0.06)\",\"text\":\"#1f366b\",\"text2\":\"#31477e\",\"text3\":\"#4c5a88\",\"violet\":\"#703eb2\",\"violetSoft\":\"rgba(152, 84, 241, 0.12)\"},\"type\":\"harness:init\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"theme\":\"light\",\"type\":\"harness:theme\"}, \"http://100.64.1.2:7717\"); })(); true;",
+        "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"ticket\":{\"agentReview\":\"approved\",\"allowedTools\":[\"Bash\",\"WebFetch\"],\"autoStart\":true,\"baseBranch\":\"develop\",\"blockedReason\":\"Should HarnessEvent decode unknown kinds or drop them?\",\"branch\":\"harness/nytimes-31\",\"busy\":true,\"childCount\":3,\"completedAt\":1759197600000,\"completionAction\":\"pr\",\"completionInstructions\":\"Squash before opening the PR\",\"createdAt\":1759190400000,\"dependsOn\":[\"NYTIMES-29\",\"NYTIMES-30\"],\"description\":\"Port shared/src/protocol.ts to Codable Swift types.\\n\\n- Patch<T>\\n- OpenEnum\",\"draft\":false,\"driver\":\"claude-code\",\"externalRef\":{\"key\":\"PLAYR-123\",\"raw\":{\"fields\":{\"flagged\":false,\"labels\":[\"bug\",\"p1\"],\"points\":3,\"summary\":\"Video player stalls on seek\"},\"id\":\"10423\"},\"source\":\"jira\",\"url\":\"https://happycog.atlassian.net/browse/PLAYR-123\"},\"humanReview\":\"changes_requested\",\"id\":\"tkt_31\",\"key\":\"NYTIMES-31\",\"kind\":\"conductor\",\"model\":\"opus\",\"parentId\":\"tkt_30\",\"pendingApproval\":{\"id\":\"apr_1\",\"input\":{\"command\":\"npm install left-pad\",\"description\":\"Install deps\",\"timeout\":120000},\"onceOnly\":false,\"reason\":\"Installs a package from the network\",\"requestedAt\":1759190405000,\"runId\":\"run_7\",\"source\":\"classifier\",\"summary\":\"npm install left-pad\",\"toolName\":\"Bash\"},\"permissionMode\":\"read_only\",\"position\":2.5,\"projectId\":\"prj_8f2c1a\",\"pullRequestUrl\":\"https://github.com/nytimes/app/pull/812\",\"requestedBranch\":\"feature/swift-protocol\",\"sessionId\":\"ses_31\",\"skipAgentReview\":true,\"status\":\"blocked\",\"title\":\"Port the wire protocol to Swift\",\"updatedAt\":1759194000000,\"useWorktree\":true,\"workdir\":\"/Users/mark/.harness/worktrees/NYTIMES-31\"},\"type\":\"harness:ticket\"}, \"http://100.64.1.2:7717\"); })(); true;"
+      ]
+    }
+  ],
+  "injectionCases": [
+    {
+      "name": "init message",
+      "input": {
+        "msg": {
+          "type": "harness:init",
+          "baseUrl": "http://100.64.1.2:7717",
+          "token": "secret",
+          "ticketKey": "HELLO-1",
+          "tabId": "changes",
+          "theme": "dark"
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"baseUrl\":\"http://100.64.1.2:7717\",\"tabId\":\"changes\",\"theme\":\"dark\",\"ticketKey\":\"HELLO-1\",\"token\":\"secret\",\"type\":\"harness:init\"}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "the TS test's hostile token",
+      "input": {
+        "msg": {
+          "type": "harness:init",
+          "token": "a\"b'c\\d\ne\r f g</script><script>globalThis.pwned=1</script>`${x}`",
+          "nested": {
+            "list": [
+              1,
+              null,
+              "\u0000"
+            ]
+          }
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"nested\":{\"list\":[1,null,\"\\u0000\"]},\"token\":\"a\\\"b'c\\\\d\\ne\\r\\u2028f\\u2029g</script><script>globalThis.pwned=1</script>`${x}`\",\"type\":\"harness:init\"}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "every control character",
+      "input": {
+        "msg": {
+          "s": "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f"
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"s\":\"\\u0000\\u0001\\u0002\\u0003\\u0004\\u0005\\u0006\\u0007\\b\\t\\n\\u000b\\f\\r\\u000e\\u000f\\u0010\\u0011\\u0012\\u0013\\u0014\\u0015\\u0016\\u0017\\u0018\\u0019\\u001a\\u001b\\u001c\\u001d\\u001e\\u001f\"}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "slash, non-ASCII and emoji stay raw",
+      "input": {
+        "msg": {
+          "s": "a/b é ü 😀   ﻿ "
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"s\":\"a/b é ü 😀   ﻿ \"}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "numbers",
+      "input": {
+        "msg": {
+          "list": [
+            0,
+            0,
+            1,
+            -1,
+            0.1,
+            0.30000000000000004,
+            2.5,
+            1e+21,
+            1e-7,
+            123456789012345680000,
+            1759190400000,
+            -1.5e-10,
+            5e-324,
+            1.7976931348623157e+308
+          ]
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"list\":[0,0,1,-1,0.1,0.30000000000000004,2.5,1e+21,1e-7,123456789012345680000,1759190400000,-1.5e-10,5e-324,1.7976931348623157e+308]}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "booleans, null and empty containers",
+      "input": {
+        "msg": {
+          "t": true,
+          "f": false,
+          "n": null,
+          "a": [],
+          "o": {}
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"a\":[],\"f\":false,\"n\":null,\"o\":{},\"t\":true}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "index keys come first, numerically",
+      "input": {
+        "msg": {
+          "0": 10,
+          "2": 3,
+          "10": 2,
+          "4294967294": 9,
+          "b": 1,
+          "a": 4,
+          "01": 5,
+          "-1": 6,
+          "1.5": 7,
+          "4294967295": 8
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"0\":10,\"2\":3,\"10\":2,\"4294967294\":9,\"-1\":6,\"01\":5,\"1.5\":7,\"4294967295\":8,\"a\":4,\"b\":1}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "keys sort by UTF-16 code units",
+      "input": {
+        "msg": {
+          "￿": 1,
+          "😀": 2,
+          "é": 3,
+          "Z": 4,
+          "a": 5,
+          "": 6
+        },
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage({\"\":6,\"Z\":4,\"a\":5,\"é\":3,\"😀\":2,\"￿\":1}, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "top-level string",
+      "input": {
+        "msg": "hello",
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage(\"hello\", \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "top-level null",
+      "input": {
+        "msg": null,
+        "origin": "http://100.64.1.2:7717"
+      },
+      "output": "(function(){ if (location.origin !== \"http://100.64.1.2:7717\") return; window.postMessage(null, \"http://100.64.1.2:7717\"); })(); true;"
+    },
+    {
+      "name": "origin that tries to break out",
+      "input": {
+        "msg": {
+          "token": "secret"
+        },
+        "origin": "x\" || true || \""
+      },
+      "output": "(function(){ if (location.origin !== \"x\\\" || true || \\\"\") return; window.postMessage({\"token\":\"secret\"}, \"x\\\" || true || \\\"\"); })(); true;"
+    },
+    {
+      "name": "origin with backslash and line separator",
+      "input": {
+        "msg": {},
+        "origin": "a\\b c"
+      },
+      "output": "(function(){ if (location.origin !== \"a\\\\b\\u2028c\") return; window.postMessage({}, \"a\\\\b\\u2028c\"); })(); true;"
+    }
+  ],
+  "messageEventCases": [
+    {
+      "name": "ready from the plugin page",
+      "input": {
+        "data": "{\"type\":\"harness:ready\"}",
+        "url": "http://100.64.1.2:7717/plugins/git/ui/index.html?tab=changes"
+      },
+      "output": {
+        "data": {
+          "type": "harness:ready"
+        },
+        "origin": "http://100.64.1.2:7717"
+      }
+    },
+    {
+      "name": "bad JSON",
+      "input": {
+        "data": "{nope",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": null
+    },
+    {
+      "name": "bad URL",
+      "input": {
+        "data": "{}",
+        "url": "not a url"
+      },
+      "output": null
+    },
+    {
+      "name": "empty data",
+      "input": {
+        "data": "",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": null
+    },
+    {
+      "name": "top-level number",
+      "input": {
+        "data": "3",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": {
+        "data": 3,
+        "origin": "http://100.64.1.2:7717"
+      }
+    },
+    {
+      "name": "top-level null",
+      "input": {
+        "data": "null",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": {
+        "data": null,
+        "origin": "http://100.64.1.2:7717"
+      }
+    },
+    {
+      "name": "surrounding whitespace",
+      "input": {
+        "data": " \n{\"a\":1}\t",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": {
+        "data": {
+          "a": 1
+        },
+        "origin": "http://100.64.1.2:7717"
+      }
+    },
+    {
+      "name": "about:blank has an opaque origin",
+      "input": {
+        "data": "{}",
+        "url": "about:blank"
+      },
+      "output": {
+        "data": {},
+        "origin": "null"
+      }
+    },
+    {
+      "name": "default port dropped",
+      "input": {
+        "data": "{}",
+        "url": "https://h:443/x"
+      },
+      "output": {
+        "data": {},
+        "origin": "https://h"
+      }
+    },
+    {
+      "name": "escapes decoded",
+      "input": {
+        "data": "{\"s\":\"\\u00e9\\n\\ud83d\\ude00\"}",
+        "url": "http://100.64.1.2:7717"
+      },
+      "output": {
+        "data": {
+          "s": "é\n😀"
+        },
+        "origin": "http://100.64.1.2:7717"
+      }
+    }
+  ]
+}
