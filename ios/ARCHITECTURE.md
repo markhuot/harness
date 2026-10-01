@@ -27,7 +27,8 @@ ios/
     Tests/HarnessKitTests/
       Fixtures/          generated JSON from shared/fixtures (committed)
       Support/           Fixture loader, jsonEqual
-  Tools/                 bun tests for the ios/ config (config.test.ts)
+    Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
+  Tools/                 bun tests for the ios/ config (config.test.ts), build-highlighter.ts
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both
@@ -126,6 +127,50 @@ When porting a module: write the case file from the TS source and its `*.test.ts
 cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
 fixtures can't express (request sequences, timing).
 
+## Syntax highlighting (HarnessHighlight)
+
+Code is colored by the RN app's own `mobile/src/lib/highlight.ts` (Shiki core, its JavaScript regex
+engine, the same 34 languages and 19 themes) running in JavaScriptCore, so colors match the desktop
+and the Git tab exactly. The pieces:
+
+- **Bundle:** `bun ios/Tools/build-highlighter.ts` bundles `ios/Tools/highlighter/entry.ts`, which
+  imports highlight.ts, into one classic script (about 3.1 MB minified, 0.43 MB gzipped) that defines
+  the `HarnessHighlighter` global. Without code splitting, Bun keeps every grammar and theme as a
+  lazily evaluated module, so loading the script only parses it. The language and theme lists come
+  from highlight.ts (`LANGUAGE_IDS`, `SYNTAX_THEME_IDS`), so the two apps can't drift.
+- **Generated, not committed.** The app target's "Bundle highlighter" pre-build phase (project.yml)
+  runs the script on every build and writes `highlighter.js` into Harness.app. It needs `bun` and a
+  `bun install` at the repo root, and it rewrites the file only when its content changes. The phase
+  can't declare its real inputs (the whole Shiki tree), so `ENABLE_USER_SCRIPT_SANDBOXING` is off for
+  the app target. The tests build their own copy into `ios/build/highlighter/`
+  (Tests/.../Support/HighlighterScript.swift), or use `HARNESS_HIGHLIGHTER_JS`.
+- **`HarnessHighlight`** is a separate library in the HarnessKit package, so only code that
+  highlights links JavaScriptCore. `actor Highlighter` owns one `JSContext` on its own serial queue
+  (a custom executor) and loads the script on its first job. It provides `highlight`/`highlightDiff`
+  (nil means plain), a 200-entry LRU `HighlightCache` that `cached(…)` reads synchronously, the
+  60 000 UTF-16-unit limit, skipping of jobs whose task was cancelled before their turn, and
+  `timings`. `PlainLines` (plainLines/reuseLines) and `HighlightColors` (gitColors/diffTints) are
+  Swift ports. They're synchronous, so a view draws plain text in its first frame.
+  `PlainLines.diffKinds` is a kinds-only port of `parseDiff` that should be deduped with HarnessKit's
+  full port once HARNESS-132 lands. Language ids are Shiki ids, so callers map fences and paths
+  (codeLanguage, langForPath) first.
+- **App bridge:** `Harness/Highlight/HighlightedText.swift` turns lines into `AttributedString`
+  (SF Mono 12.5, Shiki fontStyle bits, diff sign and header colors). `Highlighter.app` is the shared
+  instance. The debug screen `HighlightPreviewView` opens with `-debugScreen highlight`
+  (`-debugAppearance dark|light` shows one theme).
+- **Regex JIT.** JavaScriptCore's regex JIT mis-matches some patterns that Shiki's JS engine
+  generates: a trailing `// comment` in Swift or TypeScript comes out as an operator plus
+  identifiers. The regex interpreter matches Oniguruma. Apps on a device get no JIT. Before its first
+  JSContext, `Highlighter` sets `JSC_useRegExpJIT=false` so the simulator and the Mac behave the same
+  way, and the parity fixtures are generated in a child bun with `BUN_JSC_useRegExpJIT=false`
+  (ios/Tools/highlighter/runCorpus.ts). Bun itself has the bug, so `bun test` results for
+  highlight.ts aren't what a phone shows for those patterns.
+- **Parity:** `shared/fixtures/cases/highlight.ts` runs the corpus in `ios/Tools/highlighter/corpus.ts`
+  (11 languages, light and dark themes, diffs, CRLF, emoji, unknown language and theme, the size
+  boundary) through the real highlight.ts. `HighlighterTests` checks that the bundle returns the
+  same tokens and colors. `wellFormed()` moves a lone high surrogate left by diffLines'
+  `slice(0, 1)` sign split into the next span, since Swift strings can't hold it.
+
 ## Disk budget (parallel agents)
 
 This Mac has only about 13 GiB free, and up to 5 tickets build at the same time. HARNESS-130
@@ -176,7 +221,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
 - [ ] Browser tab (screens/BrowserTab, lib/browserInput)
 - [ ] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
-- [ ] File viewer + diffs + syntax highlighting (screens/FileViewer, lib/fileViewer, highlight)
+- [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
+- [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [ ] Watchers form (screens/WatcherForm, lib/watcherDraft)

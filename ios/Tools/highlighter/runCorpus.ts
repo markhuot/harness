@@ -2,8 +2,8 @@
 // shared/fixtures/cases/highlight.ts runs this in a child bun with BUN_JSC_useRegExpJIT=false:
 // JavaScriptCore's regex JIT mis-matches some of Shiki's JS-engine patterns (a trailing `// comment`
 // in TypeScript comes out as an operator and an identifier), while its regex interpreter, which is
-// what an iOS app's JSContext runs (apps get no JIT), matches Oniguruma. The fixtures describe the
-// interpreter, i.e. what the phone shows.
+// what an iOS app's JSContext runs (apps get no JIT; Highlighter.swift turns the regex JIT off for the
+// simulator and the Mac too), matches Oniguruma. The fixtures describe the interpreter.
 
 import { highlight } from "../../../mobile/src/lib/highlight";
 import { asyncCases } from "../../../shared/fixtures/case";

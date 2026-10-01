@@ -164,7 +164,19 @@ private final class Engine {
     let api: JSValue
     private var exception: String?
 
+    /// JavaScriptCore's regex JIT mis-matches some of the patterns Shiki's JS engine generates (a
+    /// trailing `// comment` in Swift or TypeScript comes out as an operator and identifiers); its
+    /// regex interpreter matches Oniguruma. Apps on a device get no JIT, but the simulator and the
+    /// Mac do, so the interpreter is asked for everywhere. JSC reads its options from the
+    /// environment once, when the process's first VM starts, so this runs before the first
+    /// JSContext; an explicit JSC_useRegExpJIT in the environment wins. It's faster here too: the
+    /// grammars' regexes run a few times each, which never pays back JIT compilation.
+    static let regExpInterpreter: Void = {
+        setenv("JSC_useRegExpJIT", "false", 0)
+    }()
+
     init(source: String) throws {
+        _ = Self.regExpInterpreter
         guard let context = JSContext() else { throw HighlighterError.script("no JSContext") }
         context.name = "Harness highlighter"
         self.context = context

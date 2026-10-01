@@ -7,6 +7,8 @@ import SwiftUI
 /// screen in debug builds, or launch with `-debugScreen highlight`.
 struct HighlightPreviewView: View {
     @State private var timing: String?
+    /// `-debugAppearance dark` (or light) shows one theme only, for screenshots.
+    @AppStorage("debugAppearance") private var only = ""
 
     var body: some View {
         ScrollView {
@@ -14,7 +16,7 @@ struct HighlightPreviewView: View {
                 Text(timing ?? "Loading highlighter…")
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
-                ForEach(ThemeAppearance.allCases, id: \.self) { appearance in
+                ForEach(ThemeAppearance.allCases.filter { only.isEmpty || $0.rawValue == only }, id: \.self) { appearance in
                     if let theme = Themes.find(Themes.defaultThemeId(for: appearance)) {
                         PreviewThemeSection(theme: theme)
                     }

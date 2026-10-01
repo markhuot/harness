@@ -39,7 +39,7 @@ targets:
     preBuildScripts:
       - name: Bundle highlighter
         basedOnDependencyAnalysis: false
-        showEnvVarsInLog: false
+        showEnvVars: false
         script: |
           BUN="$(command -v bun || true)"
           for c in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do

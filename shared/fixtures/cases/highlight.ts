@@ -22,7 +22,7 @@ function runCorpus(): unknown {
     env: { ...process.env, BUN_JSC_useRegExpJIT: "false" },
     stderr: "pipe",
   });
-  if (child.exitCode !== 0) throw new Error(`runCorpus failed: ${child.stderr.toString()}`);
+  if (child.exitCode !== 0) throw new Error(`runCorpus failed (exit ${child.exitCode}, signal ${child.signalCode}): ${child.stderr.toString()} ${child.stdout.toString().slice(0, 300)}`);
   return JSON.parse(child.stdout.toString());
 }
 
