@@ -214,13 +214,16 @@ and the Git tab exactly. The pieces:
   60 000 UTF-16-unit limit, skipping of jobs whose task was cancelled before their turn, and
   `timings`. `PlainLines` (plainLines/reuseLines) and `HighlightColors` (gitColors/diffTints) are
   Swift ports. They're synchronous, so a view draws plain text in its first frame.
-  `PlainLines.diffKinds` is a kinds-only port of `parseDiff` that should be deduped with HarnessKit's
-  full port once HARNESS-132 lands. Language ids are Shiki ids, so callers map fences and paths
-  (codeLanguage, langForPath) first.
+  Plain diff lines come from HarnessKit's `Diff.parseDiff`, and `HighlightLineKind` is
+  `DiffLineKind`. Language ids are Shiki ids, so callers map fences and paths
+  (`Code.codeLanguage`, `Diff.langForPath`) first.
 - **App bridge:** `Harness/Highlight/HighlightedText.swift` turns lines into `AttributedString`
   (SF Mono 12.5, Shiki fontStyle bits, diff sign and header colors). `Highlighter.app` is the shared
   instance. The debug screen `HighlightPreviewView` opens with `-debugScreen highlight`
   (`-debugAppearance dark|light` shows one theme).
+- **Diff tints are row backgrounds.** UI must draw diff add/del tints (`HighlightColors.diffTints`)
+  as full-width row backgrounds that span the code block's width, not text-width. The debug
+  screen's text-width tints are a shortcut and not the pattern to copy.
 - **Regex JIT.** JavaScriptCore's regex JIT mis-matches some patterns that Shiki's JS engine
   generates: a trailing `// comment` in Swift or TypeScript comes out as an operator plus
   identifiers. The regex interpreter matches Oniguruma. Apps on a device get no JIT. Before its first

@@ -1,7 +1,7 @@
 import Foundation
+import HarnessKit
 
 // The result types of mobile/src/lib/highlight.ts, as the JavaScriptCore bundle returns them.
-// Names carry a Highlight prefix so they don't collide with HarnessKit's diff port (DiffLineKind).
 
 /// One colored run of text. `fontStyle` is Shiki's bit set: 1 italic, 2 bold, 4 underline.
 public struct HighlightSpan: Codable, Sendable, Hashable {
@@ -21,10 +21,8 @@ public struct HighlightSpan: Codable, Sendable, Hashable {
     public var isUnderline: Bool { (fontStyle ?? 0) & 4 != 0 }
 }
 
-/// `DiffLineKind` (shared/src/diff.ts): what a diff line is, for its background and sign color.
-public enum HighlightLineKind: String, Codable, Sendable, Hashable, CaseIterable {
-    case add, del, ctx, hunk, meta
-}
+/// What a diff line is, for its background and sign color: HarnessKit's `DiffLineKind` (diff.ts).
+public typealias HighlightLineKind = DiffLineKind
 
 public struct HighlightedLine: Codable, Sendable, Hashable {
     public var spans: [HighlightSpan]
