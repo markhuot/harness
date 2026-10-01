@@ -11,6 +11,31 @@ entries as Added, Changed, Fixed, or Removed, and write them for the person usin
 they'll see), not as commit messages. Internal-only changes (tests, sim-check, refactors) don't
 need an entry.
 
+## Simulators
+
+Several agents build and test the iPhone app at once on a Mac with little free disk, so they share
+one simulator and one runtime.
+
+- Test only on the iOS 27.0 runtime, with
+  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer`. Never download or install
+  another runtime (`xcodebuild -downloadPlatform`, `xcrun simctl runtime add`, Xcode's Components
+  settings, and so on). Each one takes about 8 GB. If 27.0 is missing, block and ask.
+- Never create a simulator of your own. Use the shared one, `harness-shared` (an iPhone 18 Pro on
+  iOS 27.0), through `bun run sim` (`mobile/Tools/sim.ts`). `bun run sim ensure` creates it the
+  first time, boots it and prints its UDID. Don't use, shut down, or delete simulators that
+  someone else owns (`harness-HARNESS-*`, `sim-check *`).
+- Run everything that touches the simulator (install, launch, screenshots, AXe taps, sim-check,
+  dev-sim) under its lock, so two agents never install different builds over each other:
+  `bun run sim with-lock -- <command>`. It waits for the lock (30 minutes, `--timeout=minutes`),
+  boots the device, runs the command with `SIM_UDID` set, and lets go when the command ends or
+  dies. Hold it for one install-to-screenshot pass, not for a whole ticket. sim-check takes the
+  lock itself.
+- Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
+  1 when less than 5 GiB is free. Then block and ask rather than build.
+- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`, `mobile/build/dd`)
+  and leave the shared simulator alone. `bun run sim shutdown` shuts it down once nobody holds the
+  lock, if it needs to stop.
+
 ## Releases
 
 A git tag controls every release of the Mac and iPhone/iPad apps. Nothing gets published unless its
