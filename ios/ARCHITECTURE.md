@@ -298,6 +298,13 @@ feature needs something new here, add to it without changing what's there.
   `await actions.run { … }` returns the value (nil after a failure).
 - **Toasts.** `ToastCenter.show(message, kind: .error | .info)`: at most 3 at the top, errors 6 s,
   info 2.6 s, tap to dismiss, selectable text. Sheets draw their own overlay too.
+- **Browser channel.** `store.subscribeBrowser(id)` / `unsubscribeBrowser(id)` /
+  `sendBrowserInput(id, input)` go out on the current socket in call order (one outbox per socket,
+  so a mouse down never overtakes its move). browser.frame/browser.state reach `store.onEvent`
+  listeners. A socket rebuilt on foregrounding has no subscriptions and its first connect doesn't
+  bump `epoch`, so it bumps `socketGeneration`: resubscribe on either (BrowserTabView keys its
+  `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
+  (browserState, browserNavigate, ticketTabs) use `store.client as? HarnessClient`.
 - **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab`, a path per tab, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
@@ -376,13 +383,74 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
 | BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
 | ProjectColorPicker | Pickers/ProjectColorPicker.swift | Projects | `ProjectColorPicker(value: String?, onChange:)` |
-| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:)` |
-| TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, onPatch: (UpdateTicketBody) -> Void)` |
+| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:)` (all after `text` optional) |
+| TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
 board's decisions that don't draw (landing column, card menu and AX label, drop positions) are in
 HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from the
 environment (store, router, palette), not from extra initializer arguments.
+
+The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
+(Ticket/PluginTabsLoader.swift, RN `usePluginTabs`: nil until loaded, [] on failure, refetched on
+workdir/branch/epoch) and hosts each in `PluginTabView`. Until it does, DEBUG builds open either
+tab on its own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<pluginId>:<tabId>`
+(BrowserPluginDebugScreen; the plugin one adds a probe of the bridge messages the page receives).
+dev-sim installs a Release build, so build with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` to
+get them there.
+
+## Content components (Features/Content)
+
+What screens that show agent text use (HARNESS-136):
+
+- **MarkdownView** parses through `MarkdownCache` (bounded, by source text), so re-rendering a long
+  transcript doesn't re-parse every message. Ticket keys link only when `ticketLinkable` (it reads
+  the store when one is in the environment). `MarkdownView.scrollsSideways(text)` (RN
+  `scrollsSideways`) says whether a bubble needs a definite width: tables and code scroll sideways.
+  Tables lay out with `MarkdownTableLayout` on HarnessKit's `MarkdownTable` (columns capped at
+  240 pt).
+- **Links.** Screens set where relative file links open with `.fileLinkScope(ticketKey:)`,
+  `.fileLinkScope(projectId:)` or `.fileLinkScope(FileViewer.triageLinkContext(…))` (RN
+  `FileLinkScope`); MarkdownView's `linkContext` argument wins when it names a root. Where a link
+  goes is `LinkRouting.target` (HarnessKit, tested): other schemes open in the system, harness://
+  links that aren't files go through the Router, file links push `.file`, and a file link with no
+  root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
+- **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
+- **AttachmentRow** presents `AttachmentViewer` itself (a clear fullScreenCover that fades in).
+  `AttachmentMedia` caches images and video posters for the row and the viewer. Pager pages are a
+  page-style TabView; a page must keep one view for its whole life (swapping a page's view as it
+  comes and goes made the pager jump back a page), so video pages keep one AVPlayerViewController
+  and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
+  "Video x.mp4" thumbnails, "Close", "2 of 4 · 1.2 MB".
+- **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
+  shows sample markdown and that ticket's summaries with their attachments.
+
+## Pickers and form controls (Features/Pickers)
+
+What the hosting screens (Ticket detail, New session, Settings, Project settings, Watchers) get:
+
+- **Selects.** `SelectMenu` is ui/selects.tsx's `Select`: a `Menu` of checkmark Toggles (subtitles,
+  disabled rows, an actions section headed by the problem line) whose trigger, `SelectTrigger`,
+  shows the value in the accent color with a spinner, a warning or the ⌃⌄ glyph. ModelPicker and
+  PermissionPicker are built on it. DriverModelPicker and BranchPicker use the same trigger, but
+  open a `PickerSheet`. That sheet draws its own header (Cancel, the title and an accessory) instead
+  of toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" by label.
+- **Model lists** come from `store.sharedModelCache`, one `ModelListCache` per store
+  (PickerClient.swift). `store.pickerClient` is the store's client as a `PickerClient`
+  (model lists, branches, files and commands; HarnessClient conforms).
+- **Rows.** Put a picker in `TicketSettingsRow(label:hint:) { control } footer: { … }`, not
+  `LabeledContent`. LabeledContent merges the label and the control into one AX element ("Model,
+  Model, Default (…)"), and a tap aimed at that element's center misses the trigger.
+- **TicketSettingsForm** renders bare rows for a `Form` `Section`. New session, which also needs
+  the branch hint (to open Options), passes its own `TicketBranches` and attaches
+  `.trackingBranches(branches, for: draft)` to its screen.
+- **Stale closures.** A TextField's `onSubmit` (and focus-change handlers) can fire with a closure
+  from an earlier render, which captured that render's ticket, value and callbacks. Read
+  `@State`, or a `PickerLatest` box set in `body`, at fire time. Never read a captured `let`.
+- **The debug gallery.** `-debugScreen pickers [-debugSection selects|model|branch|color|mentions|settings|draft]`
+  opens PickerGalleryView in a build with the DEBUG condition. It needs a paired service; dev-sim's
+  GREET project works. `bun ios/Tools/build.ts sim` builds Release, which leaves it out, so build
+  with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` added to that xcodebuild line.
 
 ## Disk budget (parallel agents)
 
@@ -456,13 +524,16 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Connection banner + reconnect (screens/ConnectionBanner)
 - [x] Board: columns, cards, child dimming/rollups, moves (context menu, VoiceOver actions, drag and drop), paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
 - [x] Search tab (app/(tabs)/search)
+- [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
 - [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
-- [ ] Summaries + attachments viewer (ui/Attachments, lib/attachments)
+- [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
+  viewer (ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments)
+- [ ] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
 - [ ] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
-- [ ] Browser tab (screens/BrowserTab, lib/browserInput)
-- [ ] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
+- [x] Browser tab (screens/BrowserTab, lib/browserInput)
+- [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
 - [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
