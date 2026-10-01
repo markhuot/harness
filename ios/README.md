@@ -130,7 +130,9 @@ review, GREET-2 in planning, GREET-3 blocked and GREET-4 done. It builds with
 `bun ios/Tools/build.ts sim` (skip that with `--no-build`, or install another build with
 `--app <path>`), refusing to build with less than 5 GiB free. Then it takes the simulator's lock
 (printing "waiting for the harness-shared simulator…" while another agent holds it), installs the
-app fresh (uninstalled first, keychain reset) and pairs it with the `harness://pair?…` link. Each
+app fresh (uninstalled first, keychain reset) and pairs it with the `harness://pair?…` link. It
+also uninstalls any "Harness Dev" Debug build (`com.markhuot.harness.dev`) left on the shared
+simulator, since that registers `harness://` too and could catch the pair link. Each
 `--link` opens in order after that, and `--shot NAME` saves `ios/build/screens/NAME-light.png` and
 `NAME-dark.png`. The lock is held from the install to the last screenshot. Under
 `bun run sim with-lock -- bun ios/Tools/dev-sim.ts …` it's already held. The run ends by stopping
