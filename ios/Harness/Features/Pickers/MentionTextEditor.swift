@@ -39,6 +39,8 @@ struct MentionTextEditor: View {
     var onFocusChange: ((Bool) -> Void)?
     /// A box of the caller's own (the ticket composer's pill) instead of the default one; wins over `boxed`
     var fieldBox: MentionFieldBox?
+    /// Focus the field when it appears (New session's prompt)
+    var autofocus = false
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -81,6 +83,12 @@ struct MentionTextEditor: View {
             .focused($focused)
             .onChange(of: focused) { _, now in onFocusChange?(now) }
             .accessibilityLabel(fieldLabel ?? placeholder)
+            .task {
+                guard autofocus else { return }
+                // A sheet's field takes focus once the sheet has finished sliding up.
+                try? await Task.sleep(for: .milliseconds(350))
+                focused = true
+            }
     }
 
     @ViewBuilder private func suggestions(_ shown: [MentionItem], target: MentionTarget?) -> some View {

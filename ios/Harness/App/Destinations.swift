@@ -26,7 +26,8 @@ struct RouteScreen: View {
 }
 
 /// A sheet's content in its own NavigationStack. Every sheet but Projects gets a Cancel (✕)
-/// button, which sim-check's tapHeaderCancel looks for; Projects closes by its grabber.
+/// button, which sim-check's tapHeaderCancel looks for; Projects closes by its grabber, and New
+/// session draws its own (it asks before dropping a draft).
 struct SheetHost: View {
     let sheet: SheetRoute
     @Environment(Router.self) private var router
@@ -38,7 +39,7 @@ struct SheetHost: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(c.bg)
                 .toolbar {
-                    if !isProjects {
+                    if !isProjects && !ownsCancel {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Cancel", systemImage: "xmark") { router.sheet = nil }
                         }
@@ -52,6 +53,12 @@ struct SheetHost: View {
 
     private var isProjects: Bool {
         if case .projects = sheet { return true }
+        return false
+    }
+
+    /// New session draws its own Cancel (✕), which asks before dropping a draft.
+    private var ownsCancel: Bool {
+        if case .newSession = sheet { return true }
         return false
     }
 
