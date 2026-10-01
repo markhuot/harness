@@ -3,7 +3,7 @@
 import { ALL_SCOPE, matchesQuery, searchStatusText, type SearchState } from "../../src/state";
 import type { Ticket } from "../../src/protocol";
 import { cases } from "../case";
-import { detail, done, ev, page, scenario, snapshot, tk, upsert } from "../board";
+import { detail, done, ev, page, scenario, snapshot, tk, upsert, type Probe } from "../board";
 
 // paging.test.ts scaled down to keep the JSON small: 12 done tickets in p1 (TS: 120), completed
 // at 1000 (oldest) … 1011 (newest); pages of 5 newest-first (TS: 50).
@@ -15,7 +15,7 @@ const p3 = page(newestFirst.slice(10), null, 12);
 const live = tk("w1", { status: "in_progress", createdAt: 20 });
 const boot = snapshot([live], { scope: "p1", page: p1 });
 
-const paging = (scope = "p1") => [["doneCount", scope, 0], ["canLoadMoreDone", scope], ["needsFirstDonePage", scope]] as const;
+const paging = (scope = "p1"): Probe[] => [["doneCount", scope, 0], ["canLoadMoreDone", scope], ["needsFirstDonePage", scope]];
 
 export const doneScenarios = [
   scenario("the snapshot's first page fills Done; the header count is the server total", [
@@ -110,7 +110,7 @@ export const doneScenarios = [
 const child = tk("c1", { title: "Child about widgets", parentId: "cond", status: "in_progress", createdAt: 21 });
 const searchBase = snapshot([live, child, tk("w2", { title: "Widgets", status: "review", createdAt: 20 })], { scope: "p1", page: p1 });
 const w2 = tk("w2", { title: "Widgets", status: "review", createdAt: 20 });
-const searchProbes = [["searchColumns", "p1"], ["searchStatusText"], ["canLoadMoreSearch"]] as const;
+const searchProbes: Probe[] = [["searchColumns", "p1"], ["searchStatusText"], ["canLoadMoreSearch"]];
 
 export const searchScenarios = [
   scenario("typing shows local matches at once; the server's results replace them", [
