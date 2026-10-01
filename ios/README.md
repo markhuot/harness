@@ -23,14 +23,15 @@ cd ios && xcodegen
 
 ## Build and run in the simulator
 
+From the repo root (`bun run sim` is a root script, so it isn't found from `ios/`):
+
 ```sh
 bun run sim disk   # exits 1 under 5 GiB free: block and ask instead of building
-cd ios
-xcodebuild -project Harness.xcodeproj -scheme Harness -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd build
+(cd ios && xcodegen && xcodebuild -project Harness.xcodeproj -scheme Harness -sdk iphonesimulator \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd build)
 
 # on the shared simulator, under its lock (CLAUDE.md → Simulators)
-bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" build/dd/Build/Products/Debug-iphonesimulator/Harness.app && xcrun simctl launch "$SIM_UDID" com.markhuot.harness.dev'
+bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" ios/build/dd/Build/Products/Debug-iphonesimulator/Harness.app && xcrun simctl launch "$SIM_UDID" com.markhuot.harness.dev'
 ```
 
 Or open `Harness.xcodeproj` in Xcode and press Run.
