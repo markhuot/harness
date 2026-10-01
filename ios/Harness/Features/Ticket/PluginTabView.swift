@@ -39,7 +39,10 @@ struct PluginTabView: View {
         ZStack {
             c.bg
             if let host {
+                // A new host (another tab or ticket in this slot, a re-pair) is a new web view:
+                // without the identity SwiftUI would keep the old, torn-down one on screen.
                 PluginWebViewRepresentable(host: host)
+                    .id(ObjectIdentifier(host))
                     .opacity(host.ready ? 1 : 0)
                     .accessibilityHidden(!host.ready)
                 if !host.ready {

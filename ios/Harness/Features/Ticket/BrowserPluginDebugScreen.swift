@@ -44,11 +44,24 @@ struct BrowserPluginDebugScreen: View {
         @Environment(BoardStore.self) private var store
         @State private var tabs: [PluginTab]?
         @State private var probe = PluginTabProbe()
+        /// "Next ticket": another ticket in the same PluginTabView, as a tab strip switching
+        /// between plugin tabs does (the host is rebuilt in place).
+        @State private var switched: String?
 
         private var key: String {
+            if let switched { return switched }
             switch target {
-            case let .browser(key), let .plugin(key, _, _): key
+            case let .browser(key), let .plugin(key, _, _): return key
             }
+        }
+
+        /// The next ticket (by key) in this ticket's project that has a worktree.
+        private func nextTicket(after ticket: Ticket) -> String? {
+            let keys = store.state.tickets.values
+                .filter { $0.projectId == ticket.projectId && $0.workdir != nil }
+                .map(\.key).sorted()
+            guard let i = keys.firstIndex(of: ticket.key), keys.count > 1 else { return nil }
+            return keys[(i + 1) % keys.count]
         }
 
         var body: some View {
@@ -62,7 +75,7 @@ struct BrowserPluginDebugScreen: View {
                         if let tab = tabs?.first(where: { $0.pluginId == pluginId && $0.id == tabId }) {
                             VStack(spacing: 0) {
                                 PluginTabView(ticket: ticket, tab: tab).environment(\.pluginTabProbe, probe)
-                                PluginProbePanel(probe: probe)
+                                PluginProbePanel(probe: probe, nextTicket: nextTicket(after: ticket).map { next in { switched = next } })
                             }
                         } else if tabs != nil {
                             EmptyState(icon: "globe", title: "No \(pluginId):\(tabId) tab on \(key)")
@@ -111,6 +124,7 @@ final class PluginTabProbe {
 
 private struct PluginProbePanel: View {
     let probe: PluginTabProbe
+    var nextTicket: (() -> Void)?
     @Environment(AppModel.self) private var app
     @Environment(\.palette) private var c
     @State private var readout = "…"
@@ -123,6 +137,7 @@ private struct PluginProbePanel: View {
                 }
                 Button("Navigate away") { run(#"location.href = "https://example.com/"; true"#) }
                 Button("Next theme") { nextTheme() }
+                if let nextTicket { Button("Next ticket", action: nextTicket) }
             }
             .buttonStyle(.bordered)
             .font(.system(size: 12))
