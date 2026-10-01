@@ -188,7 +188,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
     /// The service has no ticket with these keys (404)
     case missingKeys([String])
     /// A transcript backfill: the session agent's, or with `subagentId` one sub-agent's
-    case transcript(sessionId: String, subagentId: String? = nil, entries: [TranscriptEntry])
+    case transcript(sessionId: String, subagentId: Patch<String> = .absent, entries: [TranscriptEntry])
     case subagents(sessionId: String, subagents: [Subagent])
     case summaries(sessionId: String, summaries: [Summary])
     case drivers([DriverInfo])
@@ -249,7 +249,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
         case "transcript":
             self = .transcript(
                 sessionId: try c.decode(String.self, forKey: .sessionId),
-                subagentId: try c.decodeIfPresent(String.self, forKey: .subagentId),
+                subagentId: try c.decode(Patch<String>.self, forKey: .subagentId),
                 entries: try c.decode([TranscriptEntry].self, forKey: .entries))
         case "subagents":
             self = .subagents(sessionId: try c.decode(String.self, forKey: .sessionId), subagents: try c.decode([Subagent].self, forKey: .subagents))
@@ -290,7 +290,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
         case let .missingKeys(k): try c.encode(k, forKey: .keys)
         case let .transcript(sessionId, subagentId, entries):
             try c.encode(sessionId, forKey: .sessionId)
-            try c.encodeIfPresent(subagentId, forKey: .subagentId)
+            try c.encode(subagentId, forKey: .subagentId)
             try c.encode(entries, forKey: .entries)
         case let .subagents(sessionId, subagents):
             try c.encode(sessionId, forKey: .sessionId)

@@ -180,7 +180,7 @@ extension BoardState {
             if let subs = d.subagents { mergeSubagents(d.session.id, subs) }
             mergeSummaries(d.session.id, d.summaries)
         case let .transcript(sessionId, subagentId, entries):
-            mergeTranscript(Self.transcriptKey(sessionId, subagentId), entries, loaded: true)
+            mergeTranscript(Self.transcriptKey(sessionId, subagentId.optional), entries, loaded: true)
         case let .subagents(sessionId, list):
             mergeSubagents(sessionId, list)
         case let .summaries(sessionId, list):
