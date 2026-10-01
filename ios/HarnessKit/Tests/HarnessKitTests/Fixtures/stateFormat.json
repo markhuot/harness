@@ -1,0 +1,3671 @@
+{
+  "approvalToastCases": [
+    {
+      "name": "deny",
+      "input": {
+        "decision": "deny",
+        "tool": "Bash",
+        "ticketKey": "A-1"
+      },
+      "output": "Denied Bash"
+    },
+    {
+      "name": "allow tool",
+      "input": {
+        "decision": "allow_tool",
+        "tool": "Bash",
+        "ticketKey": "A-1"
+      },
+      "output": "Bash allowed on A-1"
+    },
+    {
+      "name": "allow once",
+      "input": {
+        "decision": "allow_once",
+        "tool": "WebFetch",
+        "ticketKey": "A-1"
+      },
+      "output": "Allowed WebFetch once"
+    },
+    {
+      "name": "unknown decision reads as once",
+      "input": {
+        "decision": "allow_forever",
+        "tool": "Bash",
+        "ticketKey": "A-1"
+      },
+      "output": "Allowed Bash once"
+    }
+  ],
+  "classifierLabels": {
+    "claude-cli": "Claude CLI (your Claude plan)",
+    "anthropic-api": "Anthropic API (API key)",
+    "off": "Off (ask me instead)"
+  },
+  "columnEmptyText": {
+    "planning": "Sessions you want to plan first",
+    "in_progress": "Agents at work show up here",
+    "blocked": "Nothing waiting on you",
+    "review": "Nothing to review",
+    "done": "Finished work"
+  },
+  "composerHintCases": [
+    {
+      "name": "planning busy=false move=default",
+      "input": {
+        "busy": false,
+        "status": "planning"
+      },
+      "output": "The planning agent will revise"
+    },
+    {
+      "name": "planning busy=false move=false",
+      "input": {
+        "busy": false,
+        "status": "planning",
+        "move": false
+      },
+      "output": "The planning agent will revise"
+    },
+    {
+      "name": "planning busy=false move=true",
+      "input": {
+        "busy": false,
+        "status": "planning",
+        "move": true
+      },
+      "output": ""
+    },
+    {
+      "name": "planning busy=true move=default",
+      "input": {
+        "busy": true,
+        "status": "planning"
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "planning busy=true move=false",
+      "input": {
+        "busy": true,
+        "status": "planning",
+        "move": false
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "planning busy=true move=true",
+      "input": {
+        "busy": true,
+        "status": "planning",
+        "move": true
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "in_progress busy=false move=default",
+      "input": {
+        "busy": false,
+        "status": "in_progress"
+      },
+      "output": ""
+    },
+    {
+      "name": "in_progress busy=false move=false",
+      "input": {
+        "busy": false,
+        "status": "in_progress",
+        "move": false
+      },
+      "output": ""
+    },
+    {
+      "name": "in_progress busy=false move=true",
+      "input": {
+        "busy": false,
+        "status": "in_progress",
+        "move": true
+      },
+      "output": ""
+    },
+    {
+      "name": "in_progress busy=true move=default",
+      "input": {
+        "busy": true,
+        "status": "in_progress"
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "in_progress busy=true move=false",
+      "input": {
+        "busy": true,
+        "status": "in_progress",
+        "move": false
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "in_progress busy=true move=true",
+      "input": {
+        "busy": true,
+        "status": "in_progress",
+        "move": true
+      },
+      "output": "Sent to the running agent"
+    },
+    {
+      "name": "blocked busy=false move=default",
+      "input": {
+        "busy": false,
+        "status": "blocked"
+      },
+      "output": "The agent picks the work back up once this answers it"
+    },
+    {
+      "name": "blocked busy=false move=false",
+      "input": {
+        "busy": false,
+        "status": "blocked",
+        "move": false
+      },
+      "output": "The agent picks the work back up once this answers it"
+    },
+    {
+      "name": "blocked busy=false move=true",
+      "input": {
+        "busy": false,
+        "status": "blocked",
+        "move": true
+      },
+      "output": ""
+    },
+    {
+      "name": "blocked busy=true move=default",
+      "input": {
+        "busy": true,
+        "status": "blocked"
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "blocked busy=true move=false",
+      "input": {
+        "busy": true,
+        "status": "blocked",
+        "move": false
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "blocked busy=true move=true",
+      "input": {
+        "busy": true,
+        "status": "blocked",
+        "move": true
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "review busy=false move=default",
+      "input": {
+        "busy": false,
+        "status": "review"
+      },
+      "output": "Stays in review unless the agent submits it again"
+    },
+    {
+      "name": "review busy=false move=false",
+      "input": {
+        "busy": false,
+        "status": "review",
+        "move": false
+      },
+      "output": "Stays in review unless the agent submits it again"
+    },
+    {
+      "name": "review busy=false move=true",
+      "input": {
+        "busy": false,
+        "status": "review",
+        "move": true
+      },
+      "output": ""
+    },
+    {
+      "name": "review busy=true move=default",
+      "input": {
+        "busy": true,
+        "status": "review"
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "review busy=true move=false",
+      "input": {
+        "busy": true,
+        "status": "review",
+        "move": false
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "review busy=true move=true",
+      "input": {
+        "busy": true,
+        "status": "review",
+        "move": true
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "done busy=false move=default",
+      "input": {
+        "busy": false,
+        "status": "done"
+      },
+      "output": "Stays done: the agent only answers"
+    },
+    {
+      "name": "done busy=false move=false",
+      "input": {
+        "busy": false,
+        "status": "done",
+        "move": false
+      },
+      "output": "Stays done: the agent only answers"
+    },
+    {
+      "name": "done busy=false move=true",
+      "input": {
+        "busy": false,
+        "status": "done",
+        "move": true
+      },
+      "output": ""
+    },
+    {
+      "name": "done busy=true move=default",
+      "input": {
+        "busy": true,
+        "status": "done"
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "done busy=true move=false",
+      "input": {
+        "busy": true,
+        "status": "done",
+        "move": false
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "done busy=true move=true",
+      "input": {
+        "busy": true,
+        "status": "done",
+        "move": true
+      },
+      "output": "Queued behind the current run"
+    },
+    {
+      "name": "unknown status idle",
+      "input": {
+        "busy": false,
+        "status": "archived"
+      },
+      "output": ""
+    },
+    {
+      "name": "unknown status busy",
+      "input": {
+        "busy": true,
+        "status": "archived"
+      },
+      "output": "Queued behind the current run"
+    }
+  ],
+  "composerPlaceholder": {
+    "planning": "Refine the plan…",
+    "in_progress": "Send a follow-up…",
+    "blocked": "Answer the agent…",
+    "review": "Ask about the work, or ask for a change…",
+    "done": "Ask about the finished work…"
+  },
+  "decisionSourceCases": [
+    {
+      "name": "policy",
+      "input": {
+        "source": "policy"
+      },
+      "output": "policy"
+    },
+    {
+      "name": "classifier with backend and latency",
+      "input": {
+        "source": "classifier",
+        "backend": "claude-cli",
+        "latencyMs": 2400
+      },
+      "output": "classifier · claude-cli · 2.4s"
+    },
+    {
+      "name": "empty backend skipped",
+      "input": {
+        "source": "classifier",
+        "backend": "",
+        "latencyMs": 412.5
+      },
+      "output": "classifier · 0.4s"
+    },
+    {
+      "name": "latency without backend",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 0
+      },
+      "output": "classifier · 0.0s"
+    },
+    {
+      "name": "0.25s: exact tie rounds up",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 250
+      },
+      "output": "classifier · 0.3s"
+    },
+    {
+      "name": "0.75s: exact tie rounds up",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 750
+      },
+      "output": "classifier · 0.8s"
+    },
+    {
+      "name": "0.05s: just above a tie",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 50
+      },
+      "output": "classifier · 0.1s"
+    },
+    {
+      "name": "1.05s: just above a tie",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 1050
+      },
+      "output": "classifier · 1.1s"
+    },
+    {
+      "name": "1.45s: just below a tie",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 1450
+      },
+      "output": "classifier · 1.4s"
+    },
+    {
+      "name": "0.04s",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 40
+      },
+      "output": "classifier · 0.0s"
+    },
+    {
+      "name": "large latency",
+      "input": {
+        "source": "classifier",
+        "latencyMs": 12345678
+      },
+      "output": "classifier · 12345.7s"
+    },
+    {
+      "name": "negative latency",
+      "input": {
+        "source": "classifier",
+        "latencyMs": -50
+      },
+      "output": "classifier · -0.1s"
+    },
+    {
+      "name": "negative rounds to -0.0",
+      "input": {
+        "source": "classifier",
+        "latencyMs": -40
+      },
+      "output": "classifier · -0.0s"
+    },
+    {
+      "name": "unknown source passes through",
+      "input": {
+        "source": "oracle",
+        "backend": "x"
+      },
+      "output": "oracle · x"
+    }
+  ],
+  "describeApprovalInputCases": [
+    {
+      "name": "Bash command, description and rest",
+      "input": {
+        "toolName": "Bash",
+        "input": {
+          "command": "npm i",
+          "description": "Install deps",
+          "timeout": 5
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "npm i",
+          "code": true
+        },
+        "description": "Install deps",
+        "rest": {
+          "timeout": 5
+        }
+      }
+    },
+    {
+      "name": "bash is case-insensitive",
+      "input": {
+        "toolName": "BASH",
+        "input": {
+          "command": "ls"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "ls",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "Bash with a non-string command",
+      "input": {
+        "toolName": "Bash",
+        "input": {
+          "command": 5,
+          "cwd": "/x"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "command": 5,
+          "cwd": "/x"
+        }
+      }
+    },
+    {
+      "name": "Edit shows file_path",
+      "input": {
+        "toolName": "Edit",
+        "input": {
+          "file_path": "/a.ts",
+          "old_string": "x",
+          "new_string": "y"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/a.ts",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "old_string": "x",
+          "new_string": "y"
+        }
+      }
+    },
+    {
+      "name": "Read shows file_path",
+      "input": {
+        "toolName": "Read",
+        "input": {
+          "file_path": "/a.ts"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/a.ts",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "NotebookEdit shows notebook_path",
+      "input": {
+        "toolName": "NotebookEdit",
+        "input": {
+          "notebook_path": "/n.ipynb",
+          "new_source": "x"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/n.ipynb",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "new_source": "x"
+        }
+      }
+    },
+    {
+      "name": "NOTEBOOKEDIT is case-insensitive",
+      "input": {
+        "toolName": "NOTEBOOKEDIT",
+        "input": {
+          "notebook_path": "/n.ipynb"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/n.ipynb",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "dotless i is not i (non-unicode regex)",
+      "input": {
+        "toolName": "notebookedıt",
+        "input": {
+          "notebook_path": "/n.ipynb"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "notebook_path": "/n.ipynb"
+        }
+      }
+    },
+    {
+      "name": "Write prefers file_path over notebook_path",
+      "input": {
+        "toolName": "Write",
+        "input": {
+          "notebook_path": "/n",
+          "file_path": "/f"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/f",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "notebook_path": "/n"
+        }
+      }
+    },
+    {
+      "name": "WebFetch shows the url as text",
+      "input": {
+        "toolName": "WebFetch",
+        "input": {
+          "url": "https://x.y",
+          "prompt": "p"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "URL",
+          "value": "https://x.y",
+          "code": false
+        },
+        "description": null,
+        "rest": {
+          "prompt": "p"
+        }
+      }
+    },
+    {
+      "name": "WebSearch shows the query",
+      "input": {
+        "toolName": "WebSearch",
+        "input": {
+          "query": "swift testing"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Query",
+          "value": "swift testing",
+          "code": false
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "webfetch with only a query",
+      "input": {
+        "toolName": "webfetch",
+        "input": {
+          "query": "q"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Query",
+          "value": "q",
+          "code": false
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "create_watcher shell line",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "name": "status",
+          "command": "while true; do curl -s https://x.test; sleep 60; done",
+          "prompt": "Dispatch outages."
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "while true; do curl -s https://x.test; sleep 60; done",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "name": "status",
+          "prompt": "Dispatch outages."
+        }
+      }
+    },
+    {
+      "name": "create_watcher login shell shows the line",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "command": "/bin/zsh",
+          "args": [
+            "-lc",
+            "while true; do curl -s 'https://x.test'; sleep 60; done"
+          ]
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "while true; do curl -s 'https://x.test'; sleep 60; done",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "create_watcher argv quoted",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "name": "jira",
+          "command": "/usr/local/bin/watch-jira",
+          "args": [
+            "--project=FOO",
+            "--jql=status = Done"
+          ],
+          "mode": "loop"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "/usr/local/bin/watch-jira --project=FOO '--jql=status = Done'",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "name": "jira",
+          "mode": "loop"
+        }
+      }
+    },
+    {
+      "name": "update_watcher args only",
+      "input": {
+        "toolName": "mcp__harness__update_watcher",
+        "input": {
+          "watcher": "jira",
+          "args": [
+            "it's"
+          ]
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "'(unchanged command)' 'it'\\''s'",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "watcher": "jira"
+        }
+      }
+    },
+    {
+      "name": "update_watcher without command shows the watcher",
+      "input": {
+        "toolName": "update_watcher",
+        "input": {
+          "watcher": "jira",
+          "enabled": false
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Watcher",
+          "value": "jira",
+          "code": false
+        },
+        "description": null,
+        "rest": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "name": "create_watcher args are String()ed",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "command": "poll",
+          "args": [
+            1,
+            true,
+            null,
+            {
+              "a": 1
+            },
+            [
+              1,
+              [
+                2,
+                null
+              ]
+            ],
+            2.5
+          ]
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "poll 1 true null '[object Object]' 1,2, 2.5",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "create_watcher non-array args and non-string command",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "command": 5,
+          "args": "x"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "command": 5,
+          "args": "x"
+        }
+      }
+    },
+    {
+      "name": "Create_watcher is case-sensitive",
+      "input": {
+        "toolName": "Create_watcher",
+        "input": {
+          "command": "x",
+          "args": [
+            "y z"
+          ]
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "x",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "args": [
+            "y z"
+          ]
+        }
+      }
+    },
+    {
+      "name": "delete_watcher shows the watcher",
+      "input": {
+        "toolName": "delete_watcher",
+        "input": {
+          "watcher": "jira"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Watcher",
+          "value": "jira",
+          "code": false
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "run_watcher shows the watcher",
+      "input": {
+        "toolName": "mcp__harness__run_watcher",
+        "input": {
+          "watcher": "jira"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Watcher",
+          "value": "jira",
+          "code": false
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "create_watcher doesn't pick watcher",
+      "input": {
+        "toolName": "create_watcher",
+        "input": {
+          "watcher": "jira"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "watcher": "jira"
+        }
+      }
+    },
+    {
+      "name": "delete_ticket shows the key",
+      "input": {
+        "toolName": "delete_ticket",
+        "input": {
+          "key": "ACME-3"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Ticket",
+          "value": "ACME-3",
+          "code": false
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "other tools don't pick key",
+      "input": {
+        "toolName": "get_ticket",
+        "input": {
+          "key": "ACME-3"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "key": "ACME-3"
+        }
+      }
+    },
+    {
+      "name": "update_project shows the project",
+      "input": {
+        "toolName": "update_project",
+        "input": {
+          "project_key": "ACME",
+          "auto_complete": true
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Project",
+          "value": "ACME",
+          "code": false
+        },
+        "description": null,
+        "rest": {
+          "auto_complete": true
+        }
+      }
+    },
+    {
+      "name": "create_project prefers the directory",
+      "input": {
+        "toolName": "create_project",
+        "input": {
+          "path": "~/Sites/x",
+          "project_key": "X"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Directory",
+          "value": "~/Sites/x",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "project_key": "X"
+        }
+      }
+    },
+    {
+      "name": "generic command fallback",
+      "input": {
+        "toolName": "mcp__x__run",
+        "input": {
+          "command": "make",
+          "url": "https://x"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "make",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "url": "https://x"
+        }
+      }
+    },
+    {
+      "name": "generic url fallback",
+      "input": {
+        "toolName": "mcp__x__open",
+        "input": {
+          "url": "https://x",
+          "path": "/p"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "URL",
+          "value": "https://x",
+          "code": false
+        },
+        "description": null,
+        "rest": {
+          "path": "/p"
+        }
+      }
+    },
+    {
+      "name": "generic file_path before path",
+      "input": {
+        "toolName": "custom",
+        "input": {
+          "path": "/p",
+          "file_path": "/f"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "File",
+          "value": "/f",
+          "code": true
+        },
+        "description": null,
+        "rest": {
+          "path": "/p"
+        }
+      }
+    },
+    {
+      "name": "generic path",
+      "input": {
+        "toolName": "custom",
+        "input": {
+          "path": "/p"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Path",
+          "value": "/p",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "unknown tool falls back to rest",
+      "input": {
+        "toolName": "mcp__x__thing",
+        "input": {
+          "a": 1
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": {
+          "a": 1
+        }
+      }
+    },
+    {
+      "name": "description only",
+      "input": {
+        "toolName": "Bash",
+        "input": {
+          "description": "nothing else"
+        }
+      },
+      "output": {
+        "primary": null,
+        "description": "nothing else",
+        "rest": null
+      }
+    },
+    {
+      "name": "non-string description is dropped",
+      "input": {
+        "toolName": "Bash",
+        "input": {
+          "description": 5,
+          "command": "ls"
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "ls",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "empty object",
+      "input": {
+        "toolName": "Bash",
+        "input": {}
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "empty command string is still picked",
+      "input": {
+        "toolName": "Bash",
+        "input": {
+          "command": ""
+        }
+      },
+      "output": {
+        "primary": {
+          "label": "Command",
+          "value": "",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw string",
+      "input": {
+        "toolName": "Odd",
+        "input": "raw"
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "\"raw\"",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw string with escapes",
+      "input": {
+        "toolName": "Odd",
+        "input": "say \"hi\"\n\t\\ \u0001"
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "\"say \\\"hi\\\"\\n\\t\\\\ \\u0001\"",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw number",
+      "input": {
+        "toolName": "Odd",
+        "input": 1.5
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "1.5",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw big number",
+      "input": {
+        "toolName": "Odd",
+        "input": 1e+21
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "1e+21",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw false",
+      "input": {
+        "toolName": "Odd",
+        "input": false
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "false",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw zero",
+      "input": {
+        "toolName": "Odd",
+        "input": 0
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "0",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "raw array is pretty-printed",
+      "input": {
+        "toolName": "Odd",
+        "input": [
+          1,
+          "two",
+          [
+            3,
+            []
+          ],
+          {}
+        ]
+      },
+      "output": {
+        "primary": {
+          "label": "Input",
+          "value": "[\n  1,\n  \"two\",\n  [\n    3,\n    []\n  ],\n  {}\n]",
+          "code": true
+        },
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "null",
+      "input": {
+        "toolName": "Odd",
+        "input": null
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": null
+      }
+    },
+    {
+      "name": "undefined (missing)",
+      "input": {
+        "toolName": "Odd"
+      },
+      "output": {
+        "primary": null,
+        "description": null,
+        "rest": null
+      }
+    }
+  ],
+  "dispatchedKeyCases": [
+    {
+      "name": "dispatched to",
+      "input": "Dispatched to FOO-123",
+      "output": "FOO-123"
+    },
+    {
+      "name": "first of two",
+      "input": "Dispatched to NYTIMES-31 and BAR-2",
+      "output": "NYTIMES-31"
+    },
+    {
+      "name": "lower-case doesn't count",
+      "input": "Dispatched to foo-123",
+      "output": null
+    },
+    {
+      "name": "word prefix breaks the boundary",
+      "input": "aFOO-123",
+      "output": null
+    },
+    {
+      "name": "digit prefix breaks the boundary",
+      "input": "1FOO-2",
+      "output": null
+    },
+    {
+      "name": "word suffix breaks the boundary",
+      "input": "FOO-123a",
+      "output": null
+    },
+    {
+      "name": "underscore suffix breaks the boundary",
+      "input": "FOO-123_",
+      "output": null
+    },
+    {
+      "name": "underscore and digits in the project",
+      "input": "see FOO_BAR2-1.",
+      "output": "FOO_BAR2-1"
+    },
+    {
+      "name": "stops at a dot",
+      "input": "FOO-12.5",
+      "output": "FOO-12"
+    },
+    {
+      "name": "in parentheses",
+      "input": "(FOO-1)",
+      "output": "FOO-1"
+    },
+    {
+      "name": "single letter",
+      "input": "A-1",
+      "output": "A-1"
+    },
+    {
+      "name": "later start after a failed one",
+      "input": "FOO-BAR-1",
+      "output": "BAR-1"
+    },
+    {
+      "name": "a hyphenated number",
+      "input": "FOO-1-2",
+      "output": "FOO-1"
+    },
+    {
+      "name": "no number",
+      "input": "FOO-",
+      "output": null
+    },
+    {
+      "name": "non-ASCII digits aren't \\d",
+      "input": "FOO-١٢",
+      "output": null
+    },
+    {
+      "name": "non-ASCII letter before is a boundary",
+      "input": "éFOO-1",
+      "output": "FOO-1"
+    },
+    {
+      "name": "non-ASCII letter after is a boundary",
+      "input": "FOO-1é",
+      "output": "FOO-1"
+    },
+    {
+      "name": "combining mark after is a boundary",
+      "input": "FOO-1́",
+      "output": "FOO-1"
+    },
+    {
+      "name": "emoji before",
+      "input": "🚀FOO-7",
+      "output": "FOO-7"
+    },
+    {
+      "name": "declined",
+      "input": "Declined: not assigned to me",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": null
+    }
+  ],
+  "driverIconCases": [
+    {
+      "name": "dummy",
+      "input": "dummy",
+      "output": "bot"
+    },
+    {
+      "name": "api",
+      "input": "anthropic-api",
+      "output": "key"
+    },
+    {
+      "name": "claude",
+      "input": "claude-code",
+      "output": "sparkle"
+    },
+    {
+      "name": "other",
+      "input": "codex",
+      "output": "sparkle"
+    },
+    {
+      "name": "case-sensitive",
+      "input": "Dummy",
+      "output": "sparkle"
+    }
+  ],
+  "driverLabelCases": [
+    {
+      "name": "short name wins over the list",
+      "input": {
+        "id": "claude-code",
+        "drivers": [
+          {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "blank",
+            "name": "",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "codex",
+            "name": "Second Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "claude-code",
+            "name": "Claude Code (long name)",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": true
+          }
+        ]
+      },
+      "output": "Claude Code"
+    },
+    {
+      "name": "short name without a list",
+      "input": {
+        "id": "anthropic-api"
+      },
+      "output": "API"
+    },
+    {
+      "name": "dummy",
+      "input": {
+        "id": "dummy"
+      },
+      "output": "Dummy"
+    },
+    {
+      "name": "first matching driver's name",
+      "input": {
+        "id": "codex",
+        "drivers": [
+          {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "blank",
+            "name": "",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "codex",
+            "name": "Second Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "claude-code",
+            "name": "Claude Code (long name)",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": true
+          }
+        ]
+      },
+      "output": "OpenAI Codex"
+    },
+    {
+      "name": "empty name is kept (?? not ||)",
+      "input": {
+        "id": "blank",
+        "drivers": [
+          {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "blank",
+            "name": "",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "codex",
+            "name": "Second Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "claude-code",
+            "name": "Claude Code (long name)",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": true
+          }
+        ]
+      },
+      "output": ""
+    },
+    {
+      "name": "unknown id without a list",
+      "input": {
+        "id": "codex"
+      },
+      "output": "codex"
+    },
+    {
+      "name": "unknown id not in the list",
+      "input": {
+        "id": "mystery",
+        "drivers": [
+          {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "blank",
+            "name": "",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "codex",
+            "name": "Second Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "claude-code",
+            "name": "Claude Code (long name)",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": true
+          }
+        ]
+      },
+      "output": "mystery"
+    },
+    {
+      "name": "case-sensitive",
+      "input": {
+        "id": "Claude-Code",
+        "drivers": [
+          {
+            "id": "codex",
+            "name": "OpenAI Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "blank",
+            "name": "",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "codex",
+            "name": "Second Codex",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": false
+          },
+          {
+            "id": "claude-code",
+            "name": "Claude Code (long name)",
+            "description": "",
+            "available": true,
+            "authenticated": true,
+            "detail": "",
+            "supportsLogin": true
+          }
+        ]
+      },
+      "output": "Claude-Code"
+    }
+  ],
+  "fitRectCases": [
+    {
+      "name": "wide image in a square",
+      "input": {
+        "boxW": 400,
+        "boxH": 400,
+        "w": 1280,
+        "h": 800
+      },
+      "output": {
+        "x": 0,
+        "y": 75,
+        "w": 400,
+        "h": 250
+      }
+    },
+    {
+      "name": "tall image in a square",
+      "input": {
+        "boxW": 400,
+        "boxH": 400,
+        "w": 800,
+        "h": 1280
+      },
+      "output": {
+        "x": 75,
+        "y": 0,
+        "w": 250,
+        "h": 400
+      }
+    },
+    {
+      "name": "same aspect",
+      "input": {
+        "boxW": 200,
+        "boxH": 100,
+        "w": 400,
+        "h": 200
+      },
+      "output": {
+        "x": 0,
+        "y": 0,
+        "w": 200,
+        "h": 100
+      }
+    },
+    {
+      "name": "upscaled",
+      "input": {
+        "boxW": 1000,
+        "boxH": 1000,
+        "w": 10,
+        "h": 20
+      },
+      "output": {
+        "x": 250,
+        "y": 0,
+        "w": 500,
+        "h": 1000
+      }
+    },
+    {
+      "name": "fractional",
+      "input": {
+        "boxW": 100,
+        "boxH": 100,
+        "w": 3,
+        "h": 7
+      },
+      "output": {
+        "x": 28.57142857142857,
+        "y": 0,
+        "w": 42.85714285714286,
+        "h": 100
+      }
+    },
+    {
+      "name": "zero box",
+      "input": {
+        "boxW": 0,
+        "boxH": 0,
+        "w": 1,
+        "h": 1
+      },
+      "output": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "name": "zero image width",
+      "input": {
+        "boxW": 100,
+        "boxH": 100,
+        "w": 0,
+        "h": 10
+      },
+      "output": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "name": "zero box height",
+      "input": {
+        "boxW": 100,
+        "boxH": 0,
+        "w": 10,
+        "h": 10
+      },
+      "output": {
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0
+      }
+    },
+    {
+      "name": "negative image width",
+      "input": {
+        "boxW": 100,
+        "boxH": 100,
+        "w": -10,
+        "h": 10
+      },
+      "output": {
+        "x": 0,
+        "y": 100,
+        "w": 100,
+        "h": -100
+      }
+    }
+  ],
+  "formatMaybeJsonCases": [
+    {
+      "name": "object pretty-printed",
+      "input": {
+        "text": "{\"a\":1,\"b\":[true,false,null],\"c\":{\"d\":\"e\"}}"
+      },
+      "output": "{\n  \"a\": 1,\n  \"b\": [\n    true,\n    false,\n    null\n  ],\n  \"c\": {\n    \"d\": \"e\"\n  }\n}"
+    },
+    {
+      "name": "array pretty-printed",
+      "input": {
+        "text": "[1,{\"a\":[]},{},[[]]]"
+      },
+      "output": "[\n  1,\n  {\n    \"a\": []\n  },\n  {},\n  [\n    []\n  ]\n]"
+    },
+    {
+      "name": "keeps insertion order",
+      "input": {
+        "text": "{\"z\":1,\"a\":2,\"m\":3}"
+      },
+      "output": "{\n  \"z\": 1,\n  \"a\": 2,\n  \"m\": 3\n}"
+    },
+    {
+      "name": "integer-like keys come first, ascending",
+      "input": {
+        "text": "{\"b\":1,\"10\":2,\"2\":3,\"01\":4,\"-1\":5,\"4294967294\":6,\"4294967295\":7,\"1.5\":8}"
+      },
+      "output": "{\n  \"2\": 3,\n  \"10\": 2,\n  \"4294967294\": 6,\n  \"b\": 1,\n  \"01\": 4,\n  \"-1\": 5,\n  \"4294967295\": 7,\n  \"1.5\": 8\n}"
+    },
+    {
+      "name": "duplicate key: last value, first position",
+      "input": {
+        "text": "{\"a\":1,\"b\":2,\"a\":3}"
+      },
+      "output": "{\n  \"a\": 3,\n  \"b\": 2\n}"
+    },
+    {
+      "name": "empty object",
+      "input": {
+        "text": "{}"
+      },
+      "output": "{}"
+    },
+    {
+      "name": "empty array",
+      "input": {
+        "text": "[]"
+      },
+      "output": "[]"
+    },
+    {
+      "name": "whitespace inside",
+      "input": {
+        "text": "{ \"a\" :\t[ 1 ,\r\n 2 ] }"
+      },
+      "output": "{\n  \"a\": [\n    1,\n    2\n  ]\n}"
+    },
+    {
+      "name": "surrounding whitespace trimmed",
+      "input": {
+        "text": "  \n{\"a\":1}\n  "
+      },
+      "output": "{\n  \"a\": 1\n}"
+    },
+    {
+      "name": "BOM and NBSP trimmed by trim()",
+      "input": {
+        "text": "﻿ {\"a\":1} "
+      },
+      "output": "{\n  \"a\": 1\n}"
+    },
+    {
+      "name": "NBSP inside is not JSON whitespace",
+      "input": {
+        "text": "{ \"a\":1}"
+      },
+      "output": "{ \"a\":1}"
+    },
+    {
+      "name": "numbers",
+      "input": {
+        "text": "[1.0,1e2,1.5E+3,1E-7,5e-7,0.1,-0,-0.0,1e21,123456789012345678901234,0.000001,1e400,-1e400,12345678901234567890]"
+      },
+      "output": "[\n  1,\n  100,\n  1500,\n  1e-7,\n  5e-7,\n  0.1,\n  0,\n  0,\n  1e+21,\n  1.2345678901234569e+23,\n  0.000001,\n  null,\n  null,\n  12345678901234567000\n]"
+    },
+    {
+      "name": "leading zero is invalid",
+      "input": {
+        "text": "[01]"
+      },
+      "output": "[01]"
+    },
+    {
+      "name": "trailing dot is invalid",
+      "input": {
+        "text": "[1.]"
+      },
+      "output": "[1.]"
+    },
+    {
+      "name": "leading dot is invalid",
+      "input": {
+        "text": "[.5]"
+      },
+      "output": "[.5]"
+    },
+    {
+      "name": "plus sign is invalid",
+      "input": {
+        "text": "[+1]"
+      },
+      "output": "[+1]"
+    },
+    {
+      "name": "bare minus is invalid",
+      "input": {
+        "text": "[-]"
+      },
+      "output": "[-]"
+    },
+    {
+      "name": "empty exponent is invalid",
+      "input": {
+        "text": "[1e]"
+      },
+      "output": "[1e]"
+    },
+    {
+      "name": "string escapes round trip",
+      "input": {
+        "text": "[\"\\\"\\\\\\b\\f\\n\\r\\t\\/\"]"
+      },
+      "output": "[\n  \"\\\"\\\\\\b\\f\\n\\r\\t/\"\n]"
+    },
+    {
+      "name": "unicode escapes decode; only controls re-escape",
+      "input": {
+        "text": "[\"\\u00e9\\u2028\\u007f\\u0001\\u001f\\u0000 é 🚀 \\ud83d\\ude80\"]"
+      },
+      "output": "[\n  \"é \\u0001\\u001f\\u0000 é 🚀 🚀\"\n]"
+    },
+    {
+      "name": "lone surrogates are escaped",
+      "input": {
+        "text": "[\"\\ud800\",\"x\\udfffy\",\"\\ude80\\ud83d\"]"
+      },
+      "output": "[\n  \"\\ud800\",\n  \"x\\udfffy\",\n  \"\\ude80\\ud83d\"\n]"
+    },
+    {
+      "name": "uppercase hex escapes",
+      "input": {
+        "text": "[\"\\u00E9\\u00C9\"]"
+      },
+      "output": "[\n  \"éÉ\"\n]"
+    },
+    {
+      "name": "invalid escape",
+      "input": {
+        "text": "[\"\\x\"]"
+      },
+      "output": "[\"\\x\"]"
+    },
+    {
+      "name": "short unicode escape",
+      "input": {
+        "text": "[\"\\u12\"]"
+      },
+      "output": "[\"\\u12\"]"
+    },
+    {
+      "name": "raw control character is invalid",
+      "input": {
+        "text": "[\"a\tb\"]"
+      },
+      "output": "[\"a\tb\"]"
+    },
+    {
+      "name": "raw newline is invalid",
+      "input": {
+        "text": "[\"a\nb\"]"
+      },
+      "output": "[\"a\nb\"]"
+    },
+    {
+      "name": "trailing comma",
+      "input": {
+        "text": "[1,2,]"
+      },
+      "output": "[1,2,]"
+    },
+    {
+      "name": "missing value",
+      "input": {
+        "text": "{\"a\":}"
+      },
+      "output": "{\"a\":}"
+    },
+    {
+      "name": "unquoted key",
+      "input": {
+        "text": "{a:1}"
+      },
+      "output": "{a:1}"
+    },
+    {
+      "name": "single quotes",
+      "input": {
+        "text": "{'a':1}"
+      },
+      "output": "{'a':1}"
+    },
+    {
+      "name": "trailing content",
+      "input": {
+        "text": "{\"a\":1} {\"b\":2}"
+      },
+      "output": "{\"a\":1} {\"b\":2}"
+    },
+    {
+      "name": "literals",
+      "input": {
+        "text": "[true,false,null]"
+      },
+      "output": "[\n  true,\n  false,\n  null\n]"
+    },
+    {
+      "name": "bad literal",
+      "input": {
+        "text": "[tru]"
+      },
+      "output": "[tru]"
+    },
+    {
+      "name": "nested deeply",
+      "input": {
+        "text": "{\"a\":{\"b\":{\"c\":[{\"d\":[1]}]}}}"
+      },
+      "output": "{\n  \"a\": {\n    \"b\": {\n      \"c\": [\n        {\n          \"d\": [\n            1\n          ]\n        }\n      ]\n    }\n  }\n}"
+    },
+    {
+      "name": "keys need escaping too",
+      "input": {
+        "text": "{\"a\\\"b\":1,\"\\u0001\":2}"
+      },
+      "output": "{\n  \"a\\\"b\": 1,\n  \"\\u0001\": 2\n}"
+    },
+    {
+      "name": "only starts with a brace",
+      "input": {
+        "text": "{\"a\":1} trailing"
+      },
+      "output": "{\"a\":1} trailing"
+    },
+    {
+      "name": "mismatched brackets",
+      "input": {
+        "text": "[1}"
+      },
+      "output": "[1}"
+    },
+    {
+      "name": "plain text",
+      "input": {
+        "text": "hello"
+      },
+      "output": "hello"
+    },
+    {
+      "name": "plain text under max",
+      "input": {
+        "text": "abcdefghij",
+        "max": 10
+      },
+      "output": "abcdefghij"
+    },
+    {
+      "name": "plain text over max",
+      "input": {
+        "text": "abcdefghijk",
+        "max": 10
+      },
+      "output": "abcdefghij\n… (1 more characters)"
+    },
+    {
+      "name": "max counts UTF-16 units",
+      "input": {
+        "text": "🚀🚀🚀",
+        "max": 4
+      },
+      "output": "🚀🚀\n… (2 more characters)"
+    },
+    {
+      "name": "truncation keeps surrounding whitespace",
+      "input": {
+        "text": "  abcdef  ",
+        "max": 4
+      },
+      "output": "  ab\n… (6 more characters)"
+    },
+    {
+      "name": "invalid JSON is truncated like text",
+      "input": {
+        "text": "{xxxxxxxxxxxxxxxxxxxx}",
+        "max": 5
+      },
+      "output": "{xxxx\n… (17 more characters)"
+    },
+    {
+      "name": "valid JSON is never truncated",
+      "input": {
+        "text": "{\"a\":\"xxxxxxxxxxxxxxxxxxxx\"}",
+        "max": 5
+      },
+      "output": "{\n  \"a\": \"xxxxxxxxxxxxxxxxxxxx\"\n}"
+    },
+    {
+      "name": "empty",
+      "input": {
+        "text": ""
+      },
+      "output": ""
+    }
+  ],
+  "groupTranscriptCases": [
+    {
+      "name": "results attach by callId, out of order",
+      "input": [
+        {
+          "id": "1",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 1,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "a",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 1
+        },
+        {
+          "id": "2",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 2,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "b",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 2
+        },
+        {
+          "id": "3",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 3,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "b",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 3
+        },
+        {
+          "id": "4",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 4,
+          "role": "assistant",
+          "content": {
+            "type": "text",
+            "text": "t4"
+          },
+          "createdAt": 4
+        },
+        {
+          "id": "5",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 5,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "a",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 5
+        }
+      ],
+      "output": [
+        {
+          "kind": "tool",
+          "call": "1",
+          "result": "5"
+        },
+        {
+          "kind": "tool",
+          "call": "2",
+          "result": "3"
+        },
+        {
+          "kind": "entry",
+          "id": "4"
+        }
+      ]
+    },
+    {
+      "name": "result without its call is its own row",
+      "input": [
+        {
+          "id": "9",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 9,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "zz",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 9
+        }
+      ],
+      "output": [
+        {
+          "kind": "entry",
+          "id": "9"
+        }
+      ]
+    },
+    {
+      "name": "result before its call stays a row",
+      "input": [
+        {
+          "id": "1",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 1,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "a",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 1
+        },
+        {
+          "id": "2",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 2,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "a",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 2
+        }
+      ],
+      "output": [
+        {
+          "kind": "entry",
+          "id": "1"
+        },
+        {
+          "kind": "tool",
+          "call": "2",
+          "result": null
+        }
+      ]
+    },
+    {
+      "name": "a later result replaces an earlier one",
+      "input": [
+        {
+          "id": "1",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 1,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "a",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 1
+        },
+        {
+          "id": "2",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 2,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "a",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 2
+        },
+        {
+          "id": "3",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 3,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "a",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 3
+        }
+      ],
+      "output": [
+        {
+          "kind": "tool",
+          "call": "1",
+          "result": "3"
+        }
+      ]
+    },
+    {
+      "name": "a repeated callId pairs with the latest call",
+      "input": [
+        {
+          "id": "1",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 1,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "a",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 1
+        },
+        {
+          "id": "2",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 2,
+          "role": "tool",
+          "content": {
+            "type": "tool_call",
+            "callId": "a",
+            "name": "bash",
+            "input": {
+              "command": "ls"
+            }
+          },
+          "createdAt": 2
+        },
+        {
+          "id": "3",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 3,
+          "role": "tool",
+          "content": {
+            "type": "tool_result",
+            "callId": "a",
+            "name": "bash",
+            "output": [],
+            "isError": false
+          },
+          "createdAt": 3
+        }
+      ],
+      "output": [
+        {
+          "kind": "tool",
+          "call": "1",
+          "result": null
+        },
+        {
+          "kind": "tool",
+          "call": "2",
+          "result": "3"
+        }
+      ]
+    },
+    {
+      "name": "status and error entries pass through",
+      "input": [
+        {
+          "id": "1",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 1,
+          "role": "tool",
+          "content": {
+            "type": "status",
+            "text": "Moved to review"
+          },
+          "createdAt": 1
+        },
+        {
+          "id": "2",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 2,
+          "role": "tool",
+          "content": {
+            "type": "error",
+            "text": "boom"
+          },
+          "createdAt": 2
+        },
+        {
+          "id": "3",
+          "sessionId": "s",
+          "runId": "r",
+          "seq": 3,
+          "role": "tool",
+          "content": {
+            "type": "thinking",
+            "text": "hm"
+          },
+          "createdAt": 3
+        }
+      ],
+      "output": [
+        {
+          "kind": "entry",
+          "id": "1"
+        },
+        {
+          "kind": "entry",
+          "id": "2"
+        },
+        {
+          "kind": "entry",
+          "id": "3"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": []
+    }
+  ],
+  "keyOrderDeviationCases": [
+    {
+      "name": "toolPreview object",
+      "input": {
+        "fn": "toolPreview",
+        "name": "x",
+        "input": {
+          "z": 1,
+          "a": {
+            "y": 2,
+            "b": 3
+          }
+        }
+      },
+      "output": {
+        "ts": "{\"z\":1,\"a\":{\"y\":2,\"b\":3}}",
+        "sortedKeys": "{\"a\":{\"b\":3,\"y\":2},\"z\":1}"
+      }
+    },
+    {
+      "name": "toolPreview array of objects",
+      "input": {
+        "fn": "toolPreview",
+        "name": "x",
+        "input": [
+          {
+            "b": 1,
+            "a": 2
+          }
+        ]
+      },
+      "output": {
+        "ts": "[{\"b\":1,\"a\":2}]",
+        "sortedKeys": "[{\"a\":2,\"b\":1}]"
+      }
+    },
+    {
+      "name": "describeApprovalInput array of objects",
+      "input": {
+        "fn": "describeApprovalInput",
+        "name": "Odd",
+        "input": [
+          {
+            "b": 1,
+            "a": [
+              {
+                "d": 1,
+                "c": 2
+              }
+            ]
+          }
+        ]
+      },
+      "output": {
+        "ts": "[\n  {\n    \"b\": 1,\n    \"a\": [\n      {\n        \"d\": 1,\n        \"c\": 2\n      }\n    ]\n  }\n]",
+        "sortedKeys": "[\n  {\n    \"a\": [\n      {\n        \"c\": 2,\n        \"d\": 1\n      }\n    ],\n    \"b\": 1\n  }\n]"
+      }
+    }
+  ],
+  "moveSwitchLabelCases": [
+    {
+      "name": "planning",
+      "input": {
+        "status": "planning",
+        "pendingApproval": null
+      },
+      "output": null
+    },
+    {
+      "name": "in_progress",
+      "input": {
+        "status": "in_progress",
+        "pendingApproval": null
+      },
+      "output": null
+    },
+    {
+      "name": "blocked",
+      "input": {
+        "status": "blocked",
+        "pendingApproval": null
+      },
+      "output": null
+    },
+    {
+      "name": "review",
+      "input": {
+        "status": "review",
+        "pendingApproval": null
+      },
+      "output": "Move to in progress"
+    },
+    {
+      "name": "done",
+      "input": {
+        "status": "done",
+        "pendingApproval": null
+      },
+      "output": "Re-open and move to in progress"
+    },
+    {
+      "name": "review with a pending approval",
+      "input": {
+        "status": "review",
+        "pendingApproval": {
+          "id": "a",
+          "runId": "r",
+          "toolName": "Bash",
+          "input": {},
+          "requestedAt": 1
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "done with a pending approval",
+      "input": {
+        "status": "done",
+        "pendingApproval": {
+          "id": "a",
+          "runId": "r",
+          "toolName": "Bash",
+          "input": {},
+          "requestedAt": 1
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "unknown status",
+      "input": {
+        "status": "archived",
+        "pendingApproval": null
+      },
+      "output": null
+    }
+  ],
+  "newSessionPlaceholderCases": [
+    {
+      "name": "task",
+      "input": "task",
+      "output": "What should the agent do? Start it now, or plan it first…"
+    },
+    {
+      "name": "conductor",
+      "input": "conductor",
+      "output": "Describe a larger job. The conductor splits it into tickets and steers them…"
+    },
+    {
+      "name": "unknown kind",
+      "input": "epic",
+      "output": "What should the agent do? Start it now, or plan it first…"
+    }
+  ],
+  "normalizeUrlCases": [
+    {
+      "name": "bare host",
+      "input": "  example.com/x ",
+      "output": "https://example.com/x"
+    },
+    {
+      "name": "http",
+      "input": "http://a.b",
+      "output": "http://a.b"
+    },
+    {
+      "name": "about",
+      "input": "about:blank",
+      "output": "about:blank"
+    },
+    {
+      "name": "blank",
+      "input": "   ",
+      "output": ""
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "uppercase scheme",
+      "input": "HTTPS://X.Y",
+      "output": "HTTPS://X.Y"
+    },
+    {
+      "name": "host:port looks like a scheme",
+      "input": "localhost:3000",
+      "output": "localhost:3000"
+    },
+    {
+      "name": "ip:port",
+      "input": "1.2.3.4:80",
+      "output": "https://1.2.3.4:80"
+    },
+    {
+      "name": "mailto",
+      "input": "mailto:a@b.c",
+      "output": "mailto:a@b.c"
+    },
+    {
+      "name": "scheme with +.-",
+      "input": "git+ssh://h",
+      "output": "git+ssh://h"
+    },
+    {
+      "name": "NBSP trimmed",
+      "input": " example.com ",
+      "output": "https://example.com"
+    },
+    {
+      "name": "NEL is not trimmed",
+      "input": "x.y",
+      "output": "https://x.y"
+    },
+    {
+      "name": "inner space kept",
+      "input": "a b",
+      "output": "https://a b"
+    },
+    {
+      "name": "non-ASCII first letter",
+      "input": "é:x",
+      "output": "https://é:x"
+    },
+    {
+      "name": "long s is not s",
+      "input": "ſ:x",
+      "output": "https://ſ:x"
+    },
+    {
+      "name": "Kelvin sign is not k",
+      "input": "K:x",
+      "output": "https://K:x"
+    }
+  ],
+  "permissionModeLabelCases": [
+    {
+      "name": "auto",
+      "input": "auto",
+      "output": "Auto"
+    },
+    {
+      "name": "ask",
+      "input": "ask",
+      "output": "Ask"
+    },
+    {
+      "name": "read only",
+      "input": "read_only",
+      "output": "Read only"
+    },
+    {
+      "name": "unknown mode passes through",
+      "input": "yolo",
+      "output": "yolo"
+    }
+  ],
+  "permissionVerbCases": [
+    {
+      "name": "allow by classifier",
+      "input": {
+        "decision": "allow",
+        "source": "classifier"
+      },
+      "output": "Auto-approved"
+    },
+    {
+      "name": "allow by policy",
+      "input": {
+        "decision": "allow",
+        "source": "policy"
+      },
+      "output": "Allowed"
+    },
+    {
+      "name": "ask",
+      "input": {
+        "decision": "ask",
+        "source": "classifier"
+      },
+      "output": "Asked you"
+    },
+    {
+      "name": "deny",
+      "input": {
+        "decision": "deny",
+        "source": "policy"
+      },
+      "output": "Denied"
+    },
+    {
+      "name": "unknown decision reads as denied",
+      "input": {
+        "decision": "maybe",
+        "source": "policy"
+      },
+      "output": "Denied"
+    }
+  ],
+  "relativeTimeCases": [
+    {
+      "name": "null is never",
+      "input": {
+        "ts": null,
+        "now": 1800000000000
+      },
+      "output": "never"
+    },
+    {
+      "name": "0 is never (falsy)",
+      "input": {
+        "ts": 0,
+        "now": 1800000000000
+      },
+      "output": "never"
+    },
+    {
+      "name": "same instant",
+      "input": {
+        "ts": 1800000000000,
+        "now": 1800000000000
+      },
+      "output": "just now"
+    },
+    {
+      "name": "future is just now",
+      "input": {
+        "ts": 1800000300000,
+        "now": 1800000000000
+      },
+      "output": "just now"
+    },
+    {
+      "name": "9s",
+      "input": {
+        "ts": 1799999991000,
+        "now": 1800000000000
+      },
+      "output": "just now"
+    },
+    {
+      "name": "9.4s rounds to 9: just now",
+      "input": {
+        "ts": 1799999990600,
+        "now": 1800000000000
+      },
+      "output": "just now"
+    },
+    {
+      "name": "9.5s rounds to 10s",
+      "input": {
+        "ts": 1799999990500,
+        "now": 1800000000000
+      },
+      "output": "10s ago"
+    },
+    {
+      "name": "10s",
+      "input": {
+        "ts": 1799999990000,
+        "now": 1800000000000
+      },
+      "output": "10s ago"
+    },
+    {
+      "name": "59s",
+      "input": {
+        "ts": 1799999941000,
+        "now": 1800000000000
+      },
+      "output": "59s ago"
+    },
+    {
+      "name": "59.4s stays seconds",
+      "input": {
+        "ts": 1799999940600,
+        "now": 1800000000000
+      },
+      "output": "59s ago"
+    },
+    {
+      "name": "59.5s rounds to 1m",
+      "input": {
+        "ts": 1799999940500,
+        "now": 1800000000000
+      },
+      "output": "1m ago"
+    },
+    {
+      "name": "60s",
+      "input": {
+        "ts": 1799999940000,
+        "now": 1800000000000
+      },
+      "output": "1m ago"
+    },
+    {
+      "name": "89s",
+      "input": {
+        "ts": 1799999911000,
+        "now": 1800000000000
+      },
+      "output": "1m ago"
+    },
+    {
+      "name": "90s rounds to 2m",
+      "input": {
+        "ts": 1799999910000,
+        "now": 1800000000000
+      },
+      "output": "2m ago"
+    },
+    {
+      "name": "59m",
+      "input": {
+        "ts": 1799996460000,
+        "now": 1800000000000
+      },
+      "output": "59m ago"
+    },
+    {
+      "name": "59m29s stays minutes",
+      "input": {
+        "ts": 1799996431000,
+        "now": 1800000000000
+      },
+      "output": "59m ago"
+    },
+    {
+      "name": "59.5m rounds to 1h",
+      "input": {
+        "ts": 1799996430000,
+        "now": 1800000000000
+      },
+      "output": "1h ago"
+    },
+    {
+      "name": "1h",
+      "input": {
+        "ts": 1799996400000,
+        "now": 1800000000000
+      },
+      "output": "1h ago"
+    },
+    {
+      "name": "23h",
+      "input": {
+        "ts": 1799917200000,
+        "now": 1800000000000
+      },
+      "output": "23h ago"
+    },
+    {
+      "name": "23h29m stays hours",
+      "input": {
+        "ts": 1799915460000,
+        "now": 1800000000000
+      },
+      "output": "23h ago"
+    },
+    {
+      "name": "23h30m rounds to 1d",
+      "input": {
+        "ts": 1799915400000,
+        "now": 1800000000000
+      },
+      "output": "1d ago"
+    },
+    {
+      "name": "1d",
+      "input": {
+        "ts": 1799913600000,
+        "now": 1800000000000
+      },
+      "output": "1d ago"
+    },
+    {
+      "name": "29d",
+      "input": {
+        "ts": 1797494400000,
+        "now": 1800000000000
+      },
+      "output": "29d ago"
+    },
+    {
+      "name": "29d11h stays days",
+      "input": {
+        "ts": 1797454800000,
+        "now": 1800000000000
+      },
+      "output": "29d ago"
+    }
+  ],
+  "shortToolNameCases": [
+    {
+      "name": "harness tool",
+      "input": "mcp__harness__post_summary",
+      "output": "post_summary"
+    },
+    {
+      "name": "plain tool",
+      "input": "Bash",
+      "output": "Bash"
+    },
+    {
+      "name": "server name with an underscore doesn't match",
+      "input": "mcp__a_b__x",
+      "output": "mcp__a_b__x"
+    },
+    {
+      "name": "empty server name",
+      "input": "mcp____x",
+      "output": "mcp____x"
+    },
+    {
+      "name": "empty tool name",
+      "input": "mcp__x__",
+      "output": ""
+    },
+    {
+      "name": "not at the start",
+      "input": "xmcp__a__b",
+      "output": "xmcp__a__b"
+    },
+    {
+      "name": "only one prefix stripped",
+      "input": "mcp__a__mcp__b__c",
+      "output": "mcp__b__c"
+    },
+    {
+      "name": "uppercase prefix",
+      "input": "MCP__a__b",
+      "output": "MCP__a__b"
+    },
+    {
+      "name": "unicode server name",
+      "input": "mcp__é__tool",
+      "output": "tool"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    }
+  ],
+  "statusLabel": {
+    "planning": "Planning",
+    "in_progress": "In progress",
+    "blocked": "Blocked",
+    "review": "Review",
+    "done": "Done"
+  },
+  "tildifyCases": [
+    {
+      "name": "home path",
+      "input": "/Users/mark/Sites/harness",
+      "output": "~/Sites/harness"
+    },
+    {
+      "name": "home itself",
+      "input": "/Users/mark",
+      "output": "~"
+    },
+    {
+      "name": "home with trailing slash",
+      "input": "/Users/mark/",
+      "output": "~/"
+    },
+    {
+      "name": "only the first segment",
+      "input": "/Users/mark/Users/other",
+      "output": "~/Users/other"
+    },
+    {
+      "name": "no user segment",
+      "input": "/Users/",
+      "output": "/Users/"
+    },
+    {
+      "name": "not at the start",
+      "input": "/Volumes/x/Users/mark",
+      "output": "/Volumes/x/Users/mark"
+    },
+    {
+      "name": "linux home untouched",
+      "input": "/home/mark",
+      "output": "/home/mark"
+    },
+    {
+      "name": "case-sensitive",
+      "input": "/users/mark/x",
+      "output": "/users/mark/x"
+    },
+    {
+      "name": "unicode user name",
+      "input": "/Users/rené/x",
+      "output": "~/x"
+    },
+    {
+      "name": "emoji user name",
+      "input": "/Users/🚀/x",
+      "output": "~/x"
+    },
+    {
+      "name": "newline in the user segment",
+      "input": "/Users/a\nb/c",
+      "output": "~/c"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    }
+  ],
+  "toPagePointCases": [
+    {
+      "name": "centre",
+      "input": {
+        "local": {
+          "x": 200,
+          "y": 200
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": {
+        "x": 640,
+        "y": 400
+      }
+    },
+    {
+      "name": "top-left corner",
+      "input": {
+        "local": {
+          "x": 0,
+          "y": 75
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "bottom-right corner",
+      "input": {
+        "local": {
+          "x": 400,
+          "y": 325
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": {
+        "x": 1280,
+        "y": 800
+      }
+    },
+    {
+      "name": "above the image",
+      "input": {
+        "local": {
+          "x": 200,
+          "y": 74
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "below the image",
+      "input": {
+        "local": {
+          "x": 200,
+          "y": 326
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "left of the image",
+      "input": {
+        "local": {
+          "x": -1,
+          "y": 200
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "right of the image",
+      "input": {
+        "local": {
+          "x": 400.5,
+          "y": 200
+        },
+        "drawn": {
+          "x": 0,
+          "y": 75,
+          "w": 400,
+          "h": 250
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "nothing drawn",
+      "input": {
+        "local": {
+          "x": 1,
+          "y": 1
+        },
+        "drawn": {
+          "x": 0,
+          "y": 0,
+          "w": 0,
+          "h": 0
+        },
+        "page": {
+          "width": 1,
+          "height": 1
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "zero page",
+      "input": {
+        "local": {
+          "x": 1,
+          "y": 1
+        },
+        "drawn": {
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 2
+        },
+        "page": {
+          "width": 0,
+          "height": 5
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "half rounds up",
+      "input": {
+        "local": {
+          "x": 1,
+          "y": 1
+        },
+        "drawn": {
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 2
+        },
+        "page": {
+          "width": 5,
+          "height": 5
+        }
+      },
+      "output": {
+        "x": 3,
+        "y": 3
+      }
+    },
+    {
+      "name": "just under a half rounds down",
+      "input": {
+        "local": {
+          "x": 0.999,
+          "y": 1.001
+        },
+        "drawn": {
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 2
+        },
+        "page": {
+          "width": 5,
+          "height": 5
+        }
+      },
+      "output": {
+        "x": 2,
+        "y": 3
+      }
+    },
+    {
+      "name": "offset frame",
+      "input": {
+        "local": {
+          "x": 33.3,
+          "y": 66.6
+        },
+        "drawn": {
+          "x": 10,
+          "y": 20,
+          "w": 100,
+          "h": 50
+        },
+        "page": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "output": {
+        "x": 447,
+        "y": 1007
+      }
+    }
+  ],
+  "toolIconCases": [
+    {
+      "name": "bash",
+      "input": "bash",
+      "output": "terminal"
+    },
+    {
+      "name": "Bash",
+      "input": "Bash",
+      "output": "terminal"
+    },
+    {
+      "name": "BASH",
+      "input": "BASH",
+      "output": "tool"
+    },
+    {
+      "name": "browser tool",
+      "input": "browser_click",
+      "output": "globe"
+    },
+    {
+      "name": "browser prefix only",
+      "input": "browser",
+      "output": "globe"
+    },
+    {
+      "name": "mcp browser tool is not a prefix match",
+      "input": "mcp__harness__browser_open",
+      "output": "tool"
+    },
+    {
+      "name": "other",
+      "input": "read_file",
+      "output": "tool"
+    }
+  ],
+  "toolPreviewCases": [
+    {
+      "name": "bash first line",
+      "input": {
+        "name": "bash",
+        "input": {
+          "command": "bun test\nmore"
+        }
+      },
+      "output": "bun test"
+    },
+    {
+      "name": "url",
+      "input": {
+        "name": "browser_open",
+        "input": {
+          "url": "https://a"
+        }
+      },
+      "output": "https://a"
+    },
+    {
+      "name": "empty object",
+      "input": {
+        "name": "x",
+        "input": {}
+      },
+      "output": ""
+    },
+    {
+      "name": "single numeric field",
+      "input": {
+        "name": "x",
+        "input": {
+          "n": 1
+        }
+      },
+      "output": "{\"n\":1}"
+    },
+    {
+      "name": "priority: command before url",
+      "input": {
+        "name": "x",
+        "input": {
+          "url": "u",
+          "command": "c"
+        }
+      },
+      "output": "c"
+    },
+    {
+      "name": "priority: path before file_path",
+      "input": {
+        "name": "x",
+        "input": {
+          "file_path": "f",
+          "path": "p"
+        }
+      },
+      "output": "p"
+    },
+    {
+      "name": "skips empty strings",
+      "input": {
+        "name": "x",
+        "input": {
+          "command": "",
+          "url": "u"
+        }
+      },
+      "output": "u"
+    },
+    {
+      "name": "skips non-strings",
+      "input": {
+        "name": "x",
+        "input": {
+          "command": 5,
+          "text": "t"
+        }
+      },
+      "output": "t"
+    },
+    {
+      "name": "last field: text",
+      "input": {
+        "name": "x",
+        "input": {
+          "text": "hello"
+        }
+      },
+      "output": "hello"
+    },
+    {
+      "name": "every field in order",
+      "input": {
+        "name": "x",
+        "input": {
+          "selector": "#a",
+          "pattern": "p",
+          "key": "k",
+          "title": "t",
+          "question": "q",
+          "summary": "s",
+          "expression": "e"
+        }
+      },
+      "output": "#a"
+    },
+    {
+      "name": "only splits on \\n",
+      "input": {
+        "name": "x",
+        "input": {
+          "command": "a\r\nb"
+        }
+      },
+      "output": "a\r"
+    },
+    {
+      "name": "leading newline gives empty first line",
+      "input": {
+        "name": "x",
+        "input": {
+          "command": "\nsecond"
+        }
+      },
+      "output": ""
+    },
+    {
+      "name": "no picked field: compact JSON",
+      "input": {
+        "name": "x",
+        "input": {
+          "a": [
+            1,
+            {
+              "b": null
+            }
+          ],
+          "c": true
+        }
+      },
+      "output": "{\"a\":[1,{\"b\":null}],\"c\":true}"
+    },
+    {
+      "name": "numbers in JSON use JS formatting",
+      "input": {
+        "name": "x",
+        "input": {
+          "m": 0.1,
+          "n": 1e+21,
+          "z": 0
+        }
+      },
+      "output": "{\"m\":0.1,\"n\":1e+21,\"z\":0}"
+    },
+    {
+      "name": "array input is JSON",
+      "input": {
+        "name": "x",
+        "input": [
+          1,
+          "a"
+        ]
+      },
+      "output": "[1,\"a\"]"
+    },
+    {
+      "name": "empty array",
+      "input": {
+        "name": "x",
+        "input": []
+      },
+      "output": "[]"
+    },
+    {
+      "name": "string input as is (no split)",
+      "input": {
+        "name": "x",
+        "input": "multi\nline"
+      },
+      "output": "multi\nline"
+    },
+    {
+      "name": "number input",
+      "input": {
+        "name": "x",
+        "input": 3.5
+      },
+      "output": "3.5"
+    },
+    {
+      "name": "false input",
+      "input": {
+        "name": "x",
+        "input": false
+      },
+      "output": "false"
+    },
+    {
+      "name": "zero input",
+      "input": {
+        "name": "x",
+        "input": 0
+      },
+      "output": "0"
+    },
+    {
+      "name": "empty string input",
+      "input": {
+        "name": "x",
+        "input": ""
+      },
+      "output": ""
+    },
+    {
+      "name": "null",
+      "input": {
+        "name": "x",
+        "input": null
+      },
+      "output": ""
+    },
+    {
+      "name": "undefined (missing)",
+      "input": {
+        "name": "x"
+      },
+      "output": ""
+    }
+  ],
+  "triageLabel": {
+    "triaging": {
+      "label": "Triaging",
+      "tone": "amber"
+    },
+    "dispatched": {
+      "label": "Dispatched",
+      "tone": "green"
+    },
+    "declined": {
+      "label": "Declined",
+      "tone": "neutral"
+    },
+    "failed": {
+      "label": "Failed",
+      "tone": "red"
+    }
+  }
+}
