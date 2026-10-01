@@ -798,6 +798,15 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   the difference from the previous result. Before this, a work run whose agent ended its turn
   to wait on a background test run was cut short, and the orchestrator auto-submitted the
   "I'll be notified…" text (HARNESS-81).
+
+  A resumed session whose last process ended with background tasks still running (a submit
+  with a dev server up, say) opens differently (claude 2.1.286): the CLI reports those tasks
+  `stopped` ("didn't finish before the previous session ended"), then emits an `init` and an
+  empty `result` (`num_turns: 0`) before it reads the prompt, whose replay comes after. The
+  driver ignores a non-error `num_turns: 0` result that arrives before the prompt's replay (the
+  prompt is written with its own uuid). Before this, that result closed stdin, so the prompt's
+  turn still ran but the CLI exited after it and killed whatever it had put in the background:
+  HARNESS-139's completion run started sim-check in the background and was marked done.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
 

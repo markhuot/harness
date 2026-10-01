@@ -796,7 +796,9 @@ export class ClaudeCodeDriver implements Driver {
         /* child already gone */
       }
     };
-    writeUser(req.prompt, crypto.randomUUID());
+    const promptId = crypto.randomUUID();
+    let promptTaken = false;
+    writeUser(req.prompt, promptId);
     // Messages written to a previous attempt (a failed --resume) that its CLI never took in.
     for (const m of req.input?.inFlight() ?? []) writeUser(m.text, m.id);
     writeInput();
@@ -810,9 +812,17 @@ export class ClaudeCodeDriver implements Driver {
         } catch {
           continue; // non-JSON noise
         }
-        if (msg?.type === "user" && msg.isReplay === true && typeof msg.uuid === "string") req.input?.delivered(msg.uuid);
+        if (msg?.type === "user" && msg.isReplay === true && typeof msg.uuid === "string") {
+          if (msg.uuid === promptId) promptTaken = true;
+          req.input?.delivered(msg.uuid);
+        }
         const events = parser.handle(msg);
-        if (msg?.type === "result" && stdinOpen) {
+        // Resuming a session whose last process ended with background tasks still running, the
+        // CLI first reports them stopped and ends an empty turn (num_turns 0) before it reads the
+        // prompt (claude 2.1.286). That result isn't the end of this run's turn: closing stdin
+        // there let the prompt's turn run but killed the background work it started (HARNESS-139).
+        const orphanTurn = msg?.type === "result" && !promptTaken && msg.num_turns === 0 && !parser.result?.isError;
+        if (msg?.type === "result" && stdinOpen && !orphanTurn) {
           // The turn ended. Keep the CLI alive while a human message it hasn't taken in yet is
           // on stdin (it starts the next turn with it), or while the agent's own background
           // tasks run (a test suite it moved to the background, a sub-agent): their completion
