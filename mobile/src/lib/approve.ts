@@ -72,6 +72,7 @@ export function approveToast(choice: ApproveChoice, key: string): string {
 export const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = {
   merge: "Merge",
   pr: "Open PR",
+  cleanup: "Clean up",
   custom: "Custom",
 };
 

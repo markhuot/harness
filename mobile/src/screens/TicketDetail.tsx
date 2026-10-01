@@ -7,7 +7,7 @@ import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextIn
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { approveLabel, completionOptions, isConductor, keyLabel, secondaryKey, type CompletionAction, type RelatedTicket, type Ticket } from "@harness/shared";
+import { approveLabel, completionOptions, isConductor, keyLabel, resolveBaseBranch, secondaryKey, type CompletionAction, type RelatedTicket, type Ticket } from "@harness/shared";
 import {
   childrenOf,
   hasCustomDriver,
@@ -262,7 +262,8 @@ function Hero({ ticket, compact: compactTab }: { ticket: Ticket; compact: boolea
   const ready = isReady(ticket);
   const k = ticket.key;
   const label = keyLabel(ticket);
-  const opts = completionOptions(ticket, project, parent);
+  // A ticket on its base branch offers no merge or pull request, only clean up.
+  const opts = completionOptions(ticket, project, parent, resolveBaseBranch(ticket, project, state.settings, parent).branch);
   const send = (req: ApproveRequest, toast: string) => act(() => (req.via === "review" ? client.humanReview(k, req.body) : client.completeTicket(k, req.body)), toast);
   const approveMenu = async () => {
     const choice = await pick({ title: `Approve ${label}`, message: opts.parentBranch ? `It merges into ${opts.parentBranch}, its parent's branch.` : undefined, choices: approveMenuChoices(opts) });
@@ -571,7 +572,7 @@ function Complete({ ticket, initialAction, onClose }: { ticket: Ticket; initialA
   const c = useColors();
   const project = state.projects[ticket.projectId];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
-  const opts = completionOptions(ticket, project, parent);
+  const opts = completionOptions(ticket, project, parent, resolveBaseBranch(ticket, project, state.settings, parent).branch);
   // Both reviews passed and nothing completes it on its own: choose how the work lands here.
   const choose = isReady(ticket) && !project?.autoComplete && !opts.parentBranch && opts.actions.length > 1;
   const [choice, setChoice] = useState<CompletionAction>(initialAction && opts.actions.includes(initialAction) ? initialAction : opts.defaultAction);
@@ -583,7 +584,7 @@ function Complete({ ticket, initialAction, onClose }: { ticket: Ticket; initialA
       onClose();
     }
   };
-  const what = opts.parentBranch ? `merges the branch into ${opts.parentBranch}` : { merge: "merges the worktree branch", pr: "pushes the branch and opens a pull request", custom: "follows your instructions" }[choice];
+  const what = opts.parentBranch ? `merges the branch into ${opts.parentBranch}` : { merge: "merges the worktree branch", pr: "pushes the branch and opens a pull request", cleanup: "removes the worktree and the harness branch, once nothing on them would be lost", custom: "follows your instructions" }[choice];
   return (
     <SheetFrame title={`Complete ${keyLabel(ticket)}`} onClose={onClose} primary={<Button title="Complete" variant="primary" disabled={choice === "custom" && (choose || !!initialAction) && !instructions.trim()} onPress={() => void submit()} hapticKind={null} />}>
       {choose && (

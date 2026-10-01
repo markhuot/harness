@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { isConductor, keyLabel, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { isConductor, keyLabel, resolveBaseBranch, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   childrenOf,
@@ -352,7 +352,9 @@ function DetailHeader({
   // How the approved work lands: the Approve split button while the human review is open, the
   // Complete one once both reviews passed (state/approveMenu.ts).
   const landMode: LandMode = ticket.humanReview === "approved" ? "complete" : "approve";
-  const land = landMenu(landMode, ticket, project, parent);
+  // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
+  const base = resolveBaseBranch(ticket, project, state.settings, parent).branch;
+  const land = landMenu(landMode, ticket, project, parent, base);
   const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
   const completeWith = (action: CompletionAction, instructions?: string) => act(() => client.completeTicket(k, { action, ...(instructions ? { instructions } : {}) }), "Completion run queued");
   const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
@@ -361,7 +363,7 @@ function DetailHeader({
     if (c.kind === "sheet") return setSheet({ mode, action: c.action, required: c.required });
     void (mode === "approve" ? approveWith(c.action) : completeWith(c.action));
   };
-  const approve = () => choose("approve")(landMenu("approve", ticket, project, parent).primary);
+  const approve = () => choose("approve")(landMenu("approve", ticket, project, parent, base).primary);
   const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
   const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
   const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
@@ -381,6 +383,7 @@ function DetailHeader({
     "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
     "ticket.land.merge": landChoice("merge"),
     "ticket.land.pr": landChoice("pr"),
+    "ticket.land.cleanup": landChoice("cleanup"),
     "ticket.land.custom": landChoice("custom"),
     "ticket.requestChanges": canApprove && (() => setChanges(true)),
     "ticket.approveNoAction": reviewing && { label: land.noAction.label, run: approveNoAction },

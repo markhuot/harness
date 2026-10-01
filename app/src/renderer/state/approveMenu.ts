@@ -41,11 +41,18 @@ const asComplete = (label: string) => label.replace(/^Approve\b/, "Complete");
 /**
  * The split button for `ticket`. Approving: the primary runs the preselected action, and a plain
  * "Approve" (custom preselected) runs custom without instructions, a light wrap-up; in the menu
- * "Approve and…" asks for them. Completing: the primary opens the sheet (optional instructions for
+ * "Approve and…" asks for them. `base` is the ticket's effective base branch: a ticket working on
+ * it offers no merge or pull request. Completing: the primary opens the sheet (optional instructions for
  * the preselected action), as the Complete button always did.
  */
-export function landMenu(mode: LandMode, ticket: Parameters<typeof completionOptions>[0], project: Parameters<typeof completionOptions>[1], parent?: Parameters<typeof completionOptions>[2]): LandMenu {
-  const opts = completionOptions(ticket, project, parent);
+export function landMenu(
+  mode: LandMode,
+  ticket: Parameters<typeof completionOptions>[0],
+  project: Parameters<typeof completionOptions>[1],
+  parent?: Parameters<typeof completionOptions>[2],
+  base?: string | null,
+): LandMenu {
+  const opts = completionOptions(ticket, project, parent, base);
   const label = (l: string) => (mode === "complete" ? asComplete(l) : l);
   const primaryLabel = mode === "complete" && opts.defaultAction === "custom" && !opts.parentBranch ? "Complete" : label(approveLabel(opts));
   const primary: LandChoice =
@@ -61,7 +68,7 @@ export function landMenu(mode: LandMode, ticket: Parameters<typeof completionOpt
 /**
  * The split button as palette commands: the primary (ticket.approve / ticket.complete, labeled as
  * the button reads; completing opens the sheet, hence the "…"), then each menu choice by action
- * (ticket.land.merge, .pr, .custom), leaving out the one the primary already names. "Take no action"
+ * (ticket.land.merge, .pr, .cleanup, .custom), leaving out the one the primary already names. "Take no action"
  * is ticket.approveNoAction.
  */
 export function landCommands(menu: LandMenu, mode: LandMode): { primary: string; others: Partial<Record<CompletionAction, LandChoice>> } {

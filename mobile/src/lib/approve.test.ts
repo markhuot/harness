@@ -6,12 +6,16 @@ const git = { isGit: true, pullRequestHost: "github.com" };
 const plain = { isGit: false };
 
 describe("approveMenuChoices", () => {
-  test("a git project with a PR host lists merge, PR, custom, then no action", () => {
-    expect(approveMenuChoices(completionOptions({}, git)).map((c) => c.value)).toEqual(["merge", "pr", "custom", "none"]);
+  test("a git project with a PR host lists merge, PR, clean up, custom, then no action", () => {
+    expect(approveMenuChoices(completionOptions({}, git)).map((c) => c.value)).toEqual(["merge", "pr", "cleanup", "custom", "none"]);
   });
 
   test("without a PR host there's no Open PR row", () => {
-    expect(approveMenuChoices(completionOptions({}, { isGit: true, pullRequestHost: null })).map((c) => c.label)).toEqual(["Approve and merge", "Approve and…", "Approve and take no action"]);
+    expect(approveMenuChoices(completionOptions({}, { isGit: true, pullRequestHost: null })).map((c) => c.label)).toEqual(["Approve and merge", "Approve and clean up", "Approve and…", "Approve and take no action"]);
+  });
+
+  test("a ticket on its base branch offers clean up and custom, not merge or PR", () => {
+    expect(approveMenuChoices(completionOptions({ branch: "feature/pr-head" }, git, null, "feature/pr-head")).map((c) => c.value)).toEqual(["cleanup", "custom", "none"]);
   });
 
   test("a child on its parent's branch only offers taking no action", () => {
@@ -77,6 +81,7 @@ describe("completeMenuChoices", () => {
     expect(completeMenuChoices(completionOptions({}, git), true).map((c) => c.label)).toEqual([
       "Complete and merge",
       "Complete and open PR",
+      "Complete and clean up",
       "Complete and…",
       "Complete and take no action",
     ]);

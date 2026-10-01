@@ -175,12 +175,14 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
   switch (kind) {
     case "plan":
       return renderPrompt("system.plan", {}, o);
-    case "work":
+    case "work": {
+      const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt(
         "system.work",
-        { branch: ticket?.branch ?? "", skipAgentReview: !!ticket?.skipAgentReview, canSkipReview: project?.requireHumanReview !== false },
+        { branch: v.branch, onBase: v.onBase, skipAgentReview: !!ticket?.skipAgentReview, canSkipReview: project?.requireHumanReview !== false },
         o,
       );
+    }
     case "review": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt("system.review", { branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase }, o);
@@ -207,6 +209,26 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
             remoteName: pr?.remote ?? "origin",
             repo: pr?.repo ?? "<host>/<owner>/<repo>",
             pullRequestUrl: ticket?.pullRequestUrl ?? "",
+          },
+          o,
+        );
+      }
+      if (action === "cleanup") {
+        return renderPrompt(
+          "system.complete_cleanup",
+          {
+            branch,
+            baseBranch,
+            onBase,
+            workdir,
+            mainCheckout,
+            ownsWorktree,
+            harnessBranch: harness,
+            isHarnessBranch,
+            worktreesDir: b.worktreesDir ?? "",
+            leftoverPath: b.leftover?.path ?? "",
+            leftoverBranch: b.leftover?.branch ?? "",
+            leftoverIsHarness: !!b.leftover?.branch && b.leftover.branch === harness,
           },
           o,
         );
@@ -390,6 +412,12 @@ export function completePrompt(
           pullRequestUrl: ticket.pullRequestUrl ?? "",
           instructions: text,
         },
+        overrides,
+      );
+    case "cleanup":
+      return renderPrompt(
+        "run.complete_cleanup",
+        { ticket: label, branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ownsWorktree: v.ownsWorktree, isHarnessBranch: v.isHarnessBranch, instructions: text },
         overrides,
       );
     case "custom":

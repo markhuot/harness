@@ -16,8 +16,20 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Settings → Service on the Mac has a **Start at login** button. Click **Install** and macOS starts
   the service when you log in, and agents keep running after you quit Harness. **Remove** puts the
   service back inside the app.
+- A new **Approve and clean up** choice on the Mac and iPhone/iPad, in the Approve menu and as a
+  project's "When approved" default. It removes the ticket's worktree and branch without merging
+  or pushing anything. Use it when the work already landed: a ticket that pushed fixes to an open
+  pull request's branch, a branch you merged yourself, or a ticket that only changed something
+  outside git. If something on the branch would be lost (uncommitted changes, or commits that
+  aren't pushed or merged), the ticket moves to Blocked and says what's left, so you can sort out
+  those commits first.
 
 ### Changed
+
+- Tickets that triage makes for work on an open pull request (fixes, resolving conflicts) now work
+  on the pull request's own branch instead of a separate harness branch. Their Approve button reads
+  **Approve and clean up**, and the merge and open-PR choices are gone from the menu, since there's
+  nothing to merge. The same goes for any ticket whose branch is also its base branch.
 
 - On the Mac, the service now runs inside the app by default, so quitting Harness stops it. If
   agents are running, Harness asks before quitting. If you'd already set up the service to run in

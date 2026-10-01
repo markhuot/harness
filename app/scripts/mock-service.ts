@@ -1224,13 +1224,13 @@ function noteReady(t: Ticket) {
   completeRun(t);
 }
 
-/** Mirrors the service's completion run for the ticket's action (merge / pr / custom). */
+/** Mirrors the service's completion run for the ticket's action (merge / pr / cleanup / custom). */
 function completeRun(t: Ticket, instructions = t.completionInstructions ?? "") {
   const project = projects.get(t.projectId);
   // A stored choice the project no longer offers falls back to the default (as the service does).
   const action = resolveCompletionAction(t.completionAction ?? null, t, project, parentOf(t)).action ?? resolveCompletionAction(null, t, project, parentOf(t)).action!;
-  const prompt = { merge: "Finalize: merge the worktree branch.", pr: "Finalize: push the branch and open a pull request.", custom: "Finalize the work as instructed." }[action];
-  const result = { merge: "Merged the branch and cleaned up the worktree.", pr: "Pushed the branch and opened a pull request.", custom: instructions ? `Done: ${instructions}` : "Wrapped up." }[action];
+  const prompt = { merge: "Finalize: merge the worktree branch.", pr: "Finalize: push the branch and open a pull request.", cleanup: "Finalize: remove the worktree and branch.", custom: "Finalize the work as instructed." }[action];
+  const result = { merge: "Merged the branch and cleaned up the worktree.", pr: "Pushed the branch and opened a pull request.", cleanup: "Removed the worktree and the harness branch.", custom: instructions ? `Done: ${instructions}` : "Wrapped up." }[action];
   simulateRun(t, "complete", `${prompt} ${instructions}`.trim(), result, (cur) => {
     if (action === "pr" && !cur.pullRequestUrl) cur.pullRequestUrl = `https://${project?.pullRequestHost ?? "github.com"}/markhuot/${project?.name ?? "repo"}/pull/${400 + tickets.size}`;
     addSummary(cur.sessionId, cur.id, "agent", action === "pr" ? `Completed. Opened ${cur.pullRequestUrl}` : "Completed.");

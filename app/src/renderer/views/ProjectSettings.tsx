@@ -166,7 +166,7 @@ function ProjectSettings({ project }: { project: Project }) {
   );
 }
 
-const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = { merge: "Merge", pr: "Open PR", custom: "Custom" };
+const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = { merge: "Merge", pr: "Open PR", cleanup: "Clean up", custom: "Custom" };
 
 /**
  * The Approve button's preselected action for the project's tickets. Only for a git checkout:
@@ -175,8 +175,8 @@ const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = { merge: "Merg
 function CompletionActionRow({ project, onChange }: { project: Project; onChange: (v: CompletionAction) => void }) {
   const offered = offeredCompletionActions(project);
   const sub = project.pullRequestHost
-    ? "What Approve does by default: merge the branch, open a pull request, or follow instructions you give. The Approve menu offers the others."
-    : "What Approve does by default: merge the branch, or follow instructions you give. Open PR needs a remote on a host the gh CLI is logged into (gh auth login).";
+    ? "What Approve does by default: merge the branch, open a pull request, clean up a branch that's already pushed, or follow instructions you give. The Approve menu offers the others."
+    : "What Approve does by default: merge the branch, clean up a branch that's already pushed, or follow instructions you give. Open PR needs a remote on a host the gh CLI is logged into (gh auth login).";
   return (
     <Row title="When approved" sub={sub}>
       <select className="select" data-testid="completion-action" aria-label="When approved" value={projectCompletionDefault(project)} onChange={(e) => onChange(e.target.value as CompletionAction)}>
