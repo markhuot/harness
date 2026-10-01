@@ -46,7 +46,7 @@ export const approveRequestCases = cases(({ choice, instructions }: { choice: Ap
 
 type TicketIn = { completionAction?: CompletionAction | null; completionInstructions?: string | null };
 const primaryInputs: Record<string, { opts: CompletionOptions; ticket: TicketIn }> = {
-  "the preselected pr": { opts: opts["open PR preselects pr"], ticket: {} },
+  "the preselected pr": { opts: opts["open PR preselects pr"]!, ticket: {} },
   "a child on its parent's branch merges": { opts: completionOptions({ completionAction: "pr" }, gh, { branch: "harness/web-1" }), ticket: { completionAction: "pr" } },
   "a custom re-approval keeps its instructions": {
     opts: completionOptions({ completionAction: "custom" }, gh),
