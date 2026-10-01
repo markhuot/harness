@@ -4,7 +4,6 @@
 import {
   APPROVE_NO_ACTION_LABEL,
   approveLabel,
-  approveMenuActions,
   COMPLETION_ACTION_LABELS,
   completionOptions,
   type CompletionAction,
@@ -54,12 +53,12 @@ export function landMenu(
 ): LandMenu {
   const opts = completionOptions(ticket, project, parent, base);
   const label = (l: string) => (mode === "complete" ? asComplete(l) : l);
-  const primaryLabel = mode === "complete" && opts.defaultAction === "custom" && !opts.parentBranch ? "Complete" : label(approveLabel(opts));
+  const primaryLabel = mode === "complete" && opts.defaultAction === "custom" ? "Complete" : label(approveLabel(opts));
   const primary: LandChoice =
     mode === "complete"
       ? { kind: "sheet", action: opts.defaultAction, required: false, label: primaryLabel }
       : { kind: "run", action: opts.defaultAction, label: primaryLabel };
-  const items = approveMenuActions(opts).map((action): LandChoice =>
+  const items = opts.actions.map((action): LandChoice =>
     action === "custom" ? { kind: "sheet", action, required: true, label: label(COMPLETION_ACTION_LABELS.custom) } : { kind: "run", action, label: label(COMPLETION_ACTION_LABELS[action]) },
   );
   return { opts, primary, items, noAction: { kind: "none", label: label(APPROVE_NO_ACTION_LABEL) } };

@@ -36,11 +36,10 @@ describe("landMenu (approve)", () => {
     expect(landCommands(m, "approve").others).toEqual({ custom: { kind: "sheet", action: "custom", required: true, label: "Approve and…" } });
   });
 
-  test("a child on its parent's branch only merges into it: no menu actions, just take no action", () => {
-    const m = landMenu("approve", fresh, gh, { branch: "harness/web-1" });
-    expect(m.primary).toEqual({ kind: "run", action: "merge", label: "Approve and merge into harness/web-1" });
-    expect(m.items).toEqual([]);
-    expect(m.noAction.kind).toBe("none");
+  test("a child on its parent's branch only merges: the project's pr default and the other actions drop out", () => {
+    const m = landMenu("approve", { completionAction: "pr", pullRequestUrl: null }, gh, { branch: "harness/web-1" });
+    expect(m.primary).toEqual({ kind: "run", action: "merge", label: "Approve and merge" });
+    expect(m.items.map((i) => i.kind !== "none" && i.action)).toEqual(["merge"]);
   });
 });
 
@@ -52,9 +51,9 @@ describe("landMenu (complete)", () => {
     expect(m.noAction.label).toBe("Complete and take no action");
   });
 
-  test("outside git the primary reads Complete; on a parent branch it names the branch", () => {
+  test("outside git the primary reads Complete; a child on its parent's branch completes with merge", () => {
     expect(landMenu("complete", fresh, plain).primary.label).toBe("Complete");
-    expect(landMenu("complete", fresh, git, { branch: "harness/x" }).primary.label).toBe("Complete and merge into harness/x");
+    expect(landMenu("complete", fresh, plain, { branch: "harness/x" }).primary.label).toBe("Complete and merge");
   });
 });
 
@@ -88,7 +87,7 @@ describe("landCommands (the palette's split-button commands)", () => {
 
   test("a child on its parent's branch has only the primary", () => {
     const c = landCommands(landMenu("approve", fresh, gh, { branch: "harness/web-1" }), "approve");
-    expect(c.primary).toBe("Approve and merge into harness/web-1");
+    expect(c.primary).toBe("Approve and merge");
     expect(c.others).toEqual({});
   });
 });

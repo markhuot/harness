@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { completionOptions } from "@harness/shared";
-import { approveMenuChoices, approveRequest, completeBody, completeMenuChoices, completeMenuRequest, completionActionOptions, primaryApproveRequest } from "./approve";
+import { approveMenuChoices, approveRequest, completeBody, completeMenuChoices, completeMenuRequest, primaryApproveRequest } from "./approve";
 
 const git = { isGit: true, pullRequestHost: "github.com" };
 const plain = { isGit: false };
@@ -18,8 +18,8 @@ describe("approveMenuChoices", () => {
     expect(approveMenuChoices(completionOptions({ branch: "feature/pr-head" }, git, null, "feature/pr-head")).map((c) => c.value)).toEqual(["cleanup", "custom", "none"]);
   });
 
-  test("a child on its parent's branch only offers taking no action", () => {
-    expect(approveMenuChoices(completionOptions({}, git, { branch: "harness/web-1" })).map((c) => c.value)).toEqual(["none"]);
+  test("a child on its parent's branch offers merge only, then no action", () => {
+    expect(approveMenuChoices(completionOptions({}, git, { branch: "harness/web-1" })).map((c) => c.value)).toEqual(["merge", "none"]);
   });
 });
 
@@ -59,13 +59,6 @@ describe("primaryApproveRequest", () => {
 
   test("a plain no-git Approve with no earlier choice sends custom without instructions", () => {
     expect(primaryApproveRequest(completionOptions({}, plain), { completionInstructions: "stale" }).body).toEqual({ decision: "approve", action: "custom" });
-  });
-});
-
-describe("completionActionOptions", () => {
-  test("names the parent's branch on merge", () => {
-    expect(completionActionOptions(["merge"], "harness/web-1")).toEqual([{ value: "merge", label: "Merge into harness/web-1" }]);
-    expect(completionActionOptions(["merge", "pr", "custom"]).map((o) => o.label)).toEqual(["Merge", "Open PR", "Custom"]);
   });
 });
 
