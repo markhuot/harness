@@ -452,6 +452,29 @@ What the hosting screens (Ticket detail, New session, Settings, Project settings
   GREET project works. `bun ios/Tools/build.ts sim` builds Release, which leaves it out, so build
   with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` added to that xcodebuild line.
 
+## Settings screens (Features/Settings, Prompts, Watchers)
+
+What Settings, Project settings, the watcher form and Prompts share (HARNESS-144):
+
+- **Decisions live in HarnessKit's `SettingsRules`** (tested): listen labels and the localhost
+  confirm, what a committed max-runs or base-branch field saves, driver status and login labels,
+  watcher row lines, the identifier draft, rename toast and Remove project copy.
+- **Rows.** `SettingsRow(label:hint:)` puts the hint under the label and the control, so a long
+  hint never squeezes a picker to "…" (TicketSettingsRow keeps the hint beside the label, which
+  only suits short hints). `SettingsButtonRow` is a tappable row; `SettingsSectionHeader` is a
+  header with a trailing icon button ("Add watcher", "Refresh drivers").
+- **No modifiers on a Form `Section`.** SwiftUI applies them to every row of the section, so
+  Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` / `page` and the screen
+  presents them, and it runs the network, drivers and prompt-catalog loads once.
+- **AXe and segmented Pickers.** AXe lists a segmented Picker as one unlabeled element, so a
+  segment sim-check taps or waits for ("Compare with built-in") is a labeled Button
+  (PromptSegmented). Lazy Forms leave off-screen rows out of the AX tree too; the Prompts list is a
+  plain stack because sim-check waits for a row below the fold.
+- **The prompt editor** is a UIKit bridge (`PromptTextEditor`): a growing UITextView with
+  autocorrection and smart punctuation off, whose selection `PromptEditorHandle` keeps (UTF-16, as
+  `Prompts.insertText` takes it) and which scrolls its enclosing scroll view to keep the caret
+  above the keyboard.
+
 ## Disk budget (parallel agents)
 
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
@@ -538,11 +561,11 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
-- [ ] Watchers form (screens/WatcherForm, lib/watcherDraft)
+- [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
 - [x] Projects sheet (screens/Projects)
-- [ ] Project settings (screens/ProjectSettings)
-- [ ] Prompts list + editor (screens/Prompts, app/prompt/[id])
-- [ ] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
+- [x] Project settings (screens/ProjectSettings)
+- [x] Prompts list + editor (screens/Prompts, app/prompt/[id])
+- [x] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
 - [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
 - [ ] sim-check passes against the native build
 - [ ] Release pipeline switched to ios/ (publish-install.sh, testflight.ts), mobile/ deleted
