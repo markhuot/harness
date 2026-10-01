@@ -456,7 +456,11 @@ the whole goal lands on the base branch, by the parent's own merge, pull request
 completion, only when the parent completes. So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
 with the human review pending is the conductor's to act on (it stays dimmed on the board and
-isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
+isn't counted in the rollup). While the parent isn't done (`managingConductor`), the apps show
+the child's Approve and Complete split buttons with their usual labels, but disabled (the menu too),
+with `conductorManagedReason` ("Conductor managed: <parent> approves and lands this ticket") as the
+tooltip, and the palette leaves out their commands. The service still takes a human approval
+(over the API, say). A done parent hands its children back to the human. Top-level tickets in Review still wait on the human. When all children
 are done and the parent's run ends without submitting, the orchestrator submits it for review
 automatically; while any child isn't done, a run that ends without submitting leaves the parent in
 progress, and `submit_for_review` is refused (a parent in review or done would strand children

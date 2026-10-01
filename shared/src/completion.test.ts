@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { approveLabel, approveMenuActions, completionOptions, offeredCompletionActions, projectCompletionDefault, resolveCompletionAction, worksOnBase } from "./completion";
+import { approveLabel, completionOptions, managingConductor, offeredCompletionActions, projectCompletionDefault, resolveCompletionAction, worksOnBase } from "./completion";
 
 const git = { isGit: true, pullRequestHost: null } as const;
 const gh = { isGit: true, pullRequestHost: "github.com" } as const;
@@ -33,8 +33,8 @@ test("preselection: the ticket's earlier choice, then pr for a ticket with a pul
 test("a child of a parent on a branch only merges, into that branch", () => {
   const opts = completionOptions({ completionAction: "pr" }, { ...gh, completionAction: "pr" }, { branch: "harness/web-1" });
   expect(opts).toEqual({ actions: ["merge"], defaultAction: "merge", parentBranch: "harness/web-1" });
-  expect(approveLabel(opts)).toBe("Approve and merge into harness/web-1");
-  expect(approveMenuActions(opts)).toEqual([]);
+  // The label is merge's own: the branch isn't named, since the conductor lands the child.
+  expect(approveLabel(opts)).toBe("Approve and merge");
   expect(resolveCompletionAction("pr", null, gh, { branch: "harness/web-1" }).error).toContain("harness/web-1");
   expect(resolveCompletionAction("custom", null, gh, { branch: "harness/web-1" }).action).toBeNull();
   // A parent without a branch (it works in the project checkout) changes nothing.
@@ -51,7 +51,18 @@ test("resolving a requested action: offered ones pass, others are refused with a
 test("labels: plain Approve when custom is the primary choice, the action's label otherwise", () => {
   expect(approveLabel(completionOptions(null, plain))).toBe("Approve");
   expect(approveLabel(completionOptions(null, { ...gh, completionAction: "pr" }))).toBe("Approve and open PR");
-  expect(approveMenuActions(completionOptions(null, git))).toEqual(["merge", "cleanup", "custom"]);
+});
+
+test("a child is conductor managed while its parent isn't done", () => {
+  const parent = { key: "WEB-1", status: "in_progress" };
+  expect(managingConductor({ parentId: "p1" }, parent)).toBe(parent);
+  // A parent without a branch of its own still reviews and lands its children.
+  expect(managingConductor({ parentId: "p1" }, { key: "WEB-1", status: "review" })).toMatchObject({ key: "WEB-1" });
+  // A done parent runs no more, so the human approves the child again.
+  expect(managingConductor({ parentId: "p1" }, { key: "WEB-1", status: "done" })).toBeNull();
+  expect(managingConductor({ parentId: null }, parent)).toBeNull();
+  // The parent isn't loaded (yet): nothing to name, so nothing is disabled.
+  expect(managingConductor({ parentId: "p1" }, undefined)).toBeNull();
 });
 
 test("a finished parent, or a child with its own base branch, no longer keeps the child on the parent's branch", () => {

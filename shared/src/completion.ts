@@ -118,21 +118,24 @@ export const COMPLETION_ACTION_LABELS: Record<CompletionAction, string> = {
 export const APPROVE_NO_ACTION_LABEL = "Approve and take no action";
 
 /**
- * The Approve button's primary label for the preselected action: "Approve and merge into
- * harness/web-1" for a child on its parent's branch, a plain "Approve" when custom is the only
- * choice (no git: a light wrap-up), else the action's label.
+ * The Approve button's primary label for the preselected action: a plain "Approve" when custom is
+ * the choice (no git: a light wrap-up), else the action's label.
  */
 export function approveLabel(opts: CompletionOptions): string {
-  if (opts.parentBranch) return `Approve and merge into ${opts.parentBranch}`;
   if (opts.defaultAction === "custom") return "Approve";
   return COMPLETION_ACTION_LABELS[opts.defaultAction];
 }
 
 /**
- * The Approve menu's choices, in order (merge, pr, cleanup, then custom as "Approve and…", which
- * asks for instructions). Empty for a child on its parent's branch: it only merges. "Approve and
- * take no action" always follows them, after a separator.
+ * The conductor that approves and lands `ticket` in the human's place: its parent, until the parent
+ * is done (a done parent runs no more, so the human takes its children back). The apps disable the
+ * Approve and Complete buttons for such a ticket, with `conductorManagedReason` as the tooltip.
  */
-export function approveMenuActions(opts: CompletionOptions): CompletionAction[] {
-  return opts.parentBranch ? [] : opts.actions;
+export function managingConductor<P extends { key: string; status?: string }>(ticket: { parentId?: string | null } | null | undefined, parent: P | null | undefined): P | null {
+  return ticket?.parentId && parent && parent.status !== "done" ? parent : null;
+}
+
+/** Why the Approve and Complete buttons are disabled on a conductor-managed ticket. */
+export function conductorManagedReason(conductor: { key: string }): string {
+  return `Conductor managed: ${conductor.key} approves and lands this ticket`;
 }

@@ -15,6 +15,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Settings → Drivers to open its sign-in and review model. On iPhone and iPad, tap a driver to
   open its own screen. The Anthropic API key moved from General into the Anthropic API driver.
 - The default model now sits right below the driver list, and the separate Models section is gone.
+- A conductor's child tickets no longer show "Approve and merge into <branch>". Their Approve and
+  Complete buttons read as usual ("Approve and merge") but are turned off, menu included. On the
+  Mac, the tooltip says the ticket is conductor managed. On iPhone and iPad, a note under the
+  buttons says so. The conductor approves and lands its children itself. Once the conductor is
+  done, the buttons work again.
 
 ### Fixed
 

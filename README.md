@@ -128,7 +128,8 @@ you answer.
   Any ticket can become one: ask a ticket's agent for child tickets and it creates them
   under itself, then reviews and completes them the same way. Children branch from the
   conductor's branch and merge back into it, so the goal lands in one piece when you approve the
-  conductor.
+  conductor. A child's Approve and Complete buttons stay off while its conductor runs, because the
+  conductor approves and lands it.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in
