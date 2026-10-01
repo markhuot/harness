@@ -206,7 +206,7 @@
         <img src="icon512.png" alt="">
         <div>
           <h1>Harness</h1>
-          <span class="tag">Release app-20260930.1921</span>
+          <span class="tag">Release app-20261001.1617</span>
         </div>
       </header>
       <p>Harness runs AI coding agents on your Mac and puts each one on a kanban board as a ticket. You describe the work and the agent does it on its own branch, and nothing merges until you've reviewed it.</p>
@@ -305,9 +305,9 @@
       <h2>Getting started</h2>
       <ol class="steps">
         <li><strong>Get the Mac ready.</strong>
-          <p>Harness runs on an Apple silicon Mac with <a href="https://git-scm.com">git</a> and <a href="https://bun.sh">Bun</a>. Agents run through the <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code CLI</a>, signed in to your Claude team plan with <code>claude auth login</code> (an Anthropic API key in Settings works too). To use the iPhone app, install <a href="https://tailscale.com/download">Tailscale</a> on the Mac.</p></li>
+          <p>Harness runs on an Apple silicon Mac with <a href="https://git-scm.com">git</a>. Agents run through the <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code CLI</a>, signed in to your Claude team plan with <code>claude auth login</code> (an Anthropic API key in Settings works too). To use the iPhone app, install <a href="https://tailscale.com/download">Tailscale</a> on the Mac.</p></li>
         <li><strong>Install the Mac app.</strong>
-          <p>For now the app runs its background service from a copy of the Harness source, so build it from the repo. In Terminal, run <code>git clone https://github.com/markhuot/harness</code>, then <code>bun install</code> in that folder, then <code>cd app &amp;&amp; bun run install-app</code>. That puts Harness in the Applications folder in your home folder. The app starts the service the first time it opens, and the service keeps agents running after you quit the app.</p></li>
+          <p>Download Harness for Mac (below), unzip it, and drag Harness into your Applications folder. When you open it, it starts the background service that runs your agents. By default the service stops when you quit the app, so to keep agents running after you quit, open Settings &rarr; Service and click <strong>Install</strong> next to Start at login. macOS then starts the service whenever you log in.</p></li>
         <li><strong>Add a project.</strong>
           <p>Click <strong>+</strong> next to Projects in the sidebar and pick a folder you work in. A git repository works best, since each ticket then gets its own worktree and branch.</p></li>
         <li><strong>Make a ticket.</strong>
@@ -328,19 +328,19 @@
         <li>In TestFlight, tap <strong>Accept</strong>, then <strong>Install</strong>.</li>
       </ol>
       <p class="alt">Is your device registered to Mark's developer team? <a href="itms-services://?action=download-manifest&amp;url=https://harness-install.vercel.app/manifest.plist">Install the development build</a> instead.</p>
-      <div class="meta">Version 1.0.0 (202609301921) &middot; 11.5 MB &middot; 2026-09-30</div>
+      <div class="meta">Version 1.0.0 (202610011617) &middot; 11.5 MB &middot; 2026-10-01</div>
     </section>
 
     <section>
       <h2>Mac (Apple silicon)</h2>
-      <p>For now, build the Mac app from the repo (step 2 of Getting started). The download starts its service from the folder it was built in on Mark's Mac, so it won't run on other Macs yet.</p>
+      <p>The app includes the service that runs your agents, so you don't need Bun or a copy of the Harness source.</p>
       <a class="install secondary" href="https://github.com/markhuot/harness/releases/latest/download/Harness-mac.zip">Download for Mac</a>
       <p class="alt">The download is signed and notarized, so macOS opens it without a warning.</p>
-      <div class="meta">Version 0.1.0 &middot; 128.1 MB &middot; 2026-09-30</div>
+      <div class="meta">Version 0.1.0 &middot; 151.6 MB &middot; 2026-10-01</div>
     </section>
     </div>
 
-    <p class="foot">Neither build contains a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="https://github.com/markhuot/harness/releases/tag/app-20260930.1921">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
+    <p class="foot">Neither build contains a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="https://github.com/markhuot/harness/releases/tag/app-20261001.1617">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
   </div>
 </body>
 </html>
