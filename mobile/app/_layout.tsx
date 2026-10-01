@@ -37,6 +37,7 @@ function Themed() {
             <Stack.Screen name="inbox/[id]" options={{ title: "" }} />
             <Stack.Screen name="file" options={{ title: "" }} />
             <Stack.Screen name="project/[id]" options={{ title: "Project settings" }} />
+            <Stack.Screen name="driver/[id]" options={{ title: "" }} />
             <Stack.Screen name="prompts" options={{ title: "Prompts" }} />
             <Stack.Screen name="prompt/[id]" options={{ title: "" }} />
             <Stack.Screen name="new" options={{ presentation: "modal", title: "New session" }} />
