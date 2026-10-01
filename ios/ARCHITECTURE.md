@@ -475,6 +475,18 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   `Prompts.insertText` takes it) and which scrolls its enclosing scroll view to keep the caret
   above the keyboard.
 
+## New session (Features/NewSession)
+
+- **Decisions live in HarnessKit's `NewSessionEditor`** (tested): when the editor can start (the
+  reopened draft, or composerProject's pick), the predicted key until the first save, what the
+  store's copy of the saved draft means (another device's edit adopted only without unsent edits,
+  discarded, launched), the project switch (branch picks reset, a Default model follows), the
+  submit gate and Cancel's step. It wraps `DraftSync`; the screen feeds it `store.state` through
+  `.onChange` and acts on what it returns.
+- **Its own Cancel.** SheetHost leaves the shell's ✕ off this sheet; the screen's asks Save draft /
+  Discard draft / Keep editing for a non-empty draft. A swipe down (any `onDisappear`) saves.
+- MentionTextEditor takes `accessibilityName` ("Prompt", as sim-check looks for it) and `autofocus`.
+
 ## Disk budget (parallel agents)
 
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
@@ -559,7 +571,7 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
 - [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
-- [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
+- [x] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
 - [x] Projects sheet (screens/Projects)

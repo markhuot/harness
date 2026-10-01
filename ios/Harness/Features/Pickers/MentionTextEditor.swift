@@ -30,8 +30,13 @@ struct MentionTextEditor: View {
     var boxed = true
     var search: (@Sendable (String) async throws -> [FileMatch])?
     var searchCommands: (@Sendable (String) async throws -> [CommandMatch])?
+    /// The field's AX label (default: the placeholder), e.g. New session's "Prompt"
+    var accessibilityName: String?
+    /// Focus the field when it appears (New session's prompt)
+    var autofocus = false
 
     @Environment(BoardStore.self) private var store
+    @FocusState private var focused: Bool
     @Environment(\.palette) private var c
     @State private var caret = MentionCaret.none
     @State private var selection: TextSelection?
@@ -65,7 +70,14 @@ struct MentionTextEditor: View {
                 guard let range = Self.range(sel) else { return }
                 caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: text), end: PickerLogic.utf16Offset(range.upperBound, in: text))
             }
-            .accessibilityLabel(placeholder)
+            .focused($focused)
+            .accessibilityLabel(accessibilityName ?? placeholder)
+            .task {
+                guard autofocus else { return }
+                // A sheet's field takes focus once the sheet has finished sliding up.
+                try? await Task.sleep(for: .milliseconds(350))
+                focused = true
+            }
     }
 
     @ViewBuilder private func suggestions(_ shown: [MentionItem], target: MentionTarget?) -> some View {
