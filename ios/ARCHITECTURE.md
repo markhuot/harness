@@ -383,8 +383,8 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
 | BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
 | ProjectColorPicker | Pickers/ProjectColorPicker.swift | Projects | `ProjectColorPicker(value: String?, onChange:)` |
-| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:)` |
-| TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, onPatch: (UpdateTicketBody) -> Void)` |
+| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:)` (all after `text` optional) |
+| TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect), and
 the BoardScreen placeholder's column chips and card labels, which keep sim-check's pairing step
@@ -424,6 +424,33 @@ What screens that show agent text use (HARNESS-136):
   "Video x.mp4" thumbnails, "Close", "2 of 4 · 1.2 MB".
 - **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
   shows sample markdown and that ticket's summaries with their attachments.
+
+## Pickers and form controls (Features/Pickers)
+
+What the hosting screens (Ticket detail, New session, Settings, Project settings, Watchers) get:
+
+- **Selects.** `SelectMenu` is ui/selects.tsx's `Select`: a `Menu` of checkmark Toggles (subtitles,
+  disabled rows, an actions section headed by the problem line) whose trigger, `SelectTrigger`,
+  shows the value in the accent color with a spinner, a warning or the ⌃⌄ glyph. ModelPicker and
+  PermissionPicker are built on it. DriverModelPicker and BranchPicker use the same trigger, but
+  open a `PickerSheet`. That sheet draws its own header (Cancel, the title and an accessory) instead
+  of toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" by label.
+- **Model lists** come from `store.sharedModelCache`, one `ModelListCache` per store
+  (PickerClient.swift). `store.pickerClient` is the store's client as a `PickerClient`
+  (model lists, branches, files and commands; HarnessClient conforms).
+- **Rows.** Put a picker in `TicketSettingsRow(label:hint:) { control } footer: { … }`, not
+  `LabeledContent`. LabeledContent merges the label and the control into one AX element ("Model,
+  Model, Default (…)"), and a tap aimed at that element's center misses the trigger.
+- **TicketSettingsForm** renders bare rows for a `Form` `Section`. New session, which also needs
+  the branch hint (to open Options), passes its own `TicketBranches` and attaches
+  `.trackingBranches(branches, for: draft)` to its screen.
+- **Stale closures.** A TextField's `onSubmit` (and focus-change handlers) can fire with a closure
+  from an earlier render, which captured that render's ticket, value and callbacks. Read
+  `@State`, or a `PickerLatest` box set in `body`, at fire time. Never read a captured `let`.
+- **The debug gallery.** `-debugScreen pickers [-debugSection selects|model|branch|color|mentions|settings|draft]`
+  opens PickerGalleryView in a build with the DEBUG condition. It needs a paired service; dev-sim's
+  GREET project works. `bun ios/Tools/build.ts sim` builds Release, which leaves it out, so build
+  with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` added to that xcodebuild line.
 
 ## Disk budget (parallel agents)
 
@@ -497,6 +524,7 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Connection banner + reconnect (screens/ConnectionBanner)
 - [ ] Board: columns, cards, child dimming/rollups, moves, paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
 - [ ] Search tab (app/(tabs)/search)
+- [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
 - [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
 - [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
