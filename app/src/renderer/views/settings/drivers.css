@@ -1,0 +1,27 @@
+/* Settings → Drivers */
+
+.driver-item + .driver-item {
+  border-top: 1px solid var(--border);
+}
+.driver-row.open {
+  background: var(--bg-hover);
+}
+.driver-row .settings-row-sub {
+  white-space: normal;
+}
+
+/* A driver's own settings: nested rows on a sunken panel under its row */
+.driver-panel {
+  border-top: 1px solid var(--border);
+  background: var(--bg-sunken);
+}
+.driver-panel .settings-row {
+  padding-left: 28px;
+}
+.driver-panel .settings-row-sub {
+  white-space: normal;
+}
+
+.driver-default {
+  margin-top: 12px;
+}

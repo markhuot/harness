@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Settings groups each driver's settings under that driver. On the Mac, click a driver in
+  Settings → Drivers to open its sign-in and review model. On iPhone and iPad, tap a driver to
+  open its own screen. The Anthropic API key moved from General into the Anthropic API driver.
+- The default model now sits right below the driver list, and the separate Models section is gone.
+
 ### Fixed
 
 - An agent that picks up a ticket where an earlier run left a background job running (approving
