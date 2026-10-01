@@ -73,11 +73,12 @@ const corpus: Record<string, string> = {
   "mixed document":
     "# Summary\n\nDid **things** and `code`.\n\n- one\n- two\n\n```sh\nbun test\n```\n\n> note\n\n| k | v |\n|:-|-:|\n| x | 1 |\n\n---\nBye",
   emoji: "# 🎉 Party\n- 👍🏽 ok\n| 🅰️ | b |\n|---|---|\n| 👨‍👩‍👧 | é |",
-  "combining marks": "#́ not a heading\n-́ not a list\n> é",
-  "NBSP as whitespace": "# nbsp heading\n- nbsp item\n \n``` js \ncode\n```",
+  "combining marks": "#\u0301 not a heading\n-\u0301 not a list\n> e\u0301",
+  "NBSP as whitespace": "#\u00a0nbsp heading\n-\u00a0nbsp item\n\u00a0\n```\u00a0js\u00a0\ncode\n```",
   "NEL is not whitespace": "#\u0085nel\n\u0085\n- a\u0085",
-  "line separator U+2028": "a b\n# h x",
-  "BOM is whitespace": "﻿# bom\n﻿",
+  "line separator U+2028": "a\u2028b\n# h\u2028x",
+  // Not at the start of a string: JSONSerialization (the Swift fixture loader) drops a leading U+FEFF.
+  "BOM is whitespace": "x\n\ufeff\n#\ufeffbom\n-\ufeffitem\n\ufeff---\n \ufeff# not a heading",
   "vertical tab and form feed": "#\u000bvt\n-\u000cff",
 };
 
@@ -144,7 +145,7 @@ const inlineCorpus: Record<string, string> = {
   "key after digit": "1ABC-1",
   "key after accented letter": "éABC-1",
   "key before accented letter": "ABC-1é",
-  "key with combining mark after": "ABC-1́",
+  "key with combining mark after": "ABC-1\u0301",
   "two-part key": "A-B-1",
   "single letter key": "A-1",
   "key with leading zeros": "UTF-8 SHA-256 X-007",
@@ -152,8 +153,8 @@ const inlineCorpus: Record<string, string> = {
   "key next to emoji": "🎉ABC-1🎉",
   "full-width digits": "ABC-１２",
   "everything": "**Done**: merged `main` into [PR](https://gh.test/1) for HARNESS-5 — see https://x.y and *notes*.",
-  "tabs and NBSP": "a\t**b** *c*",
-  "em with NBSP start": "* x*",
+  "tabs and NBSP": "a\t**b**\u00a0*c*",
+  "em with NBSP start": "*\u00a0x*",
   "em with NEL start": "*\u0085x*",
 };
 
@@ -173,7 +174,7 @@ export const plainTextCases = cases(plainText, {
   "table row with whitespace around": "  | a | b |  \n|---|---|\n | 1 | 2 |",
   "pipe row only one pipe": "| a",
   "CR-separated lines": "| a | b |\r|---|\r| 1 | 2 |",
-  "U+2028-separated lines": "# a - b | x | y |",
+  "U+2028-separated lines": "# a\u2028- b\u2028| x | y |",
   "NEL inside a line": "| a\u0085 | b |",
   "strong with newline inside": "**a\nb**",
   "code with newline inside": "`a\nb`",

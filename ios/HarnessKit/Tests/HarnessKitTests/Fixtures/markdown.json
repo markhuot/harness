@@ -1826,11 +1826,11 @@
     },
     {
       "name": "BOM is whitespace",
-      "input": "﻿# bom\n﻿",
+      "input": "x\n﻿\n#﻿bom\n-﻿item\n﻿---\n ﻿# not a heading",
       "output": [
         {
           "t": "text",
-          "text": "﻿# bom\n﻿"
+          "text": "x\n﻿\n#﻿bom\n-﻿item\n﻿---\n ﻿# not a heading"
         }
       ]
     },
@@ -2962,11 +2962,29 @@
     },
     {
       "name": "BOM is whitespace",
-      "input": "﻿# bom\n﻿",
+      "input": "x\n﻿\n#﻿bom\n-﻿item\n﻿---\n ﻿# not a heading",
       "output": [
         {
           "t": "p",
-          "text": "﻿# bom"
+          "text": "x"
+        },
+        {
+          "t": "h",
+          "level": 1,
+          "text": "bom"
+        },
+        {
+          "t": "ul",
+          "items": [
+            "item"
+          ]
+        },
+        {
+          "t": "hr"
+        },
+        {
+          "t": "p",
+          "text": " ﻿# not a heading"
         }
       ]
     },
@@ -3351,8 +3369,8 @@
     },
     {
       "name": "BOM is whitespace",
-      "input": "﻿# bom\n﻿",
-      "output": "# bom"
+      "input": "x\n﻿\n#﻿bom\n-﻿item\n﻿---\n ﻿# not a heading",
+      "output": "x bom • item --- # not a heading"
     },
     {
       "name": "vertical tab and form feed",
