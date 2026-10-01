@@ -1,0 +1,2717 @@
+{
+  "jsNumberCases": [
+    {
+      "name": "\"\"",
+      "input": "",
+      "output": "0"
+    },
+    {
+      "name": "\" \"",
+      "input": " ",
+      "output": "0"
+    },
+    {
+      "name": "\"12\"",
+      "input": "12",
+      "output": "12"
+    },
+    {
+      "name": "\" 12 \"",
+      "input": " 12 ",
+      "output": "12"
+    },
+    {
+      "name": "\"\\t\\n\\u000b\\f\\r 12         　﻿\"",
+      "input": "\t\n\u000b\f\r 12         　﻿",
+      "output": "12"
+    },
+    {
+      "name": "\"12\"",
+      "input": "12",
+      "output": "NaN"
+    },
+    {
+      "name": "\"᠎12\"",
+      "input": "᠎12",
+      "output": "NaN"
+    },
+    {
+      "name": "\"abc\"",
+      "input": "abc",
+      "output": "NaN"
+    },
+    {
+      "name": "\"1e2\"",
+      "input": "1e2",
+      "output": "100"
+    },
+    {
+      "name": "\"1E+2\"",
+      "input": "1E+2",
+      "output": "100"
+    },
+    {
+      "name": "\"1e-2\"",
+      "input": "1e-2",
+      "output": "0.01"
+    },
+    {
+      "name": "\"-1.25e-3\"",
+      "input": "-1.25e-3",
+      "output": "-0.00125"
+    },
+    {
+      "name": "\"+1.5\"",
+      "input": "+1.5",
+      "output": "1.5"
+    },
+    {
+      "name": "\"-0\"",
+      "input": "-0",
+      "output": "0"
+    },
+    {
+      "name": "\"0x10\"",
+      "input": "0x10",
+      "output": "16"
+    },
+    {
+      "name": "\"0XfF\"",
+      "input": "0XfF",
+      "output": "255"
+    },
+    {
+      "name": "\"0x\"",
+      "input": "0x",
+      "output": "NaN"
+    },
+    {
+      "name": "\"0xg\"",
+      "input": "0xg",
+      "output": "NaN"
+    },
+    {
+      "name": "\"-0x10\"",
+      "input": "-0x10",
+      "output": "NaN"
+    },
+    {
+      "name": "\"+0x10\"",
+      "input": "+0x10",
+      "output": "NaN"
+    },
+    {
+      "name": "\"0b101\"",
+      "input": "0b101",
+      "output": "5"
+    },
+    {
+      "name": "\"0B2\"",
+      "input": "0B2",
+      "output": "NaN"
+    },
+    {
+      "name": "\"0o17\"",
+      "input": "0o17",
+      "output": "15"
+    },
+    {
+      "name": "\"0O8\"",
+      "input": "0O8",
+      "output": "NaN"
+    },
+    {
+      "name": "\"0b\"",
+      "input": "0b",
+      "output": "NaN"
+    },
+    {
+      "name": "\".5\"",
+      "input": ".5",
+      "output": "0.5"
+    },
+    {
+      "name": "\"5.\"",
+      "input": "5.",
+      "output": "5"
+    },
+    {
+      "name": "\"5.e1\"",
+      "input": "5.e1",
+      "output": "50"
+    },
+    {
+      "name": "\".e1\"",
+      "input": ".e1",
+      "output": "NaN"
+    },
+    {
+      "name": "\".\"",
+      "input": ".",
+      "output": "NaN"
+    },
+    {
+      "name": "\"+\"",
+      "input": "+",
+      "output": "NaN"
+    },
+    {
+      "name": "\"-\"",
+      "input": "-",
+      "output": "NaN"
+    },
+    {
+      "name": "\"e3\"",
+      "input": "e3",
+      "output": "NaN"
+    },
+    {
+      "name": "\"1e\"",
+      "input": "1e",
+      "output": "NaN"
+    },
+    {
+      "name": "\"1e+\"",
+      "input": "1e+",
+      "output": "NaN"
+    },
+    {
+      "name": "\"Infinity\"",
+      "input": "Infinity",
+      "output": "Infinity"
+    },
+    {
+      "name": "\"-Infinity\"",
+      "input": "-Infinity",
+      "output": "-Infinity"
+    },
+    {
+      "name": "\"+Infinity\"",
+      "input": "+Infinity",
+      "output": "Infinity"
+    },
+    {
+      "name": "\"infinity\"",
+      "input": "infinity",
+      "output": "NaN"
+    },
+    {
+      "name": "\"Inf\"",
+      "input": "Inf",
+      "output": "NaN"
+    },
+    {
+      "name": "\"inf\"",
+      "input": "inf",
+      "output": "NaN"
+    },
+    {
+      "name": "\"nan\"",
+      "input": "nan",
+      "output": "NaN"
+    },
+    {
+      "name": "\"NaN\"",
+      "input": "NaN",
+      "output": "NaN"
+    },
+    {
+      "name": "\"1e400\"",
+      "input": "1e400",
+      "output": "Infinity"
+    },
+    {
+      "name": "\"-1e400\"",
+      "input": "-1e400",
+      "output": "-Infinity"
+    },
+    {
+      "name": "\"1e-400\"",
+      "input": "1e-400",
+      "output": "0"
+    },
+    {
+      "name": "\"1_000\"",
+      "input": "1_000",
+      "output": "NaN"
+    },
+    {
+      "name": "\"1,5\"",
+      "input": "1,5",
+      "output": "NaN"
+    },
+    {
+      "name": "\"12abc\"",
+      "input": "12abc",
+      "output": "NaN"
+    },
+    {
+      "name": "\"0.1\"",
+      "input": "0.1",
+      "output": "0.1"
+    },
+    {
+      "name": "\"0.30000000000000004\"",
+      "input": "0.30000000000000004",
+      "output": "0.30000000000000004"
+    },
+    {
+      "name": "\"123456789012345678901234567890\"",
+      "input": "123456789012345678901234567890",
+      "output": "1.2345678901234568e+29"
+    },
+    {
+      "name": "\"9007199254740993\"",
+      "input": "9007199254740993",
+      "output": "9007199254740992"
+    },
+    {
+      "name": "\"0x1fffffffffffff\"",
+      "input": "0x1fffffffffffff",
+      "output": "9007199254740991"
+    },
+    {
+      "name": "\"0x20000000000001\"",
+      "input": "0x20000000000001",
+      "output": "9007199254740992"
+    },
+    {
+      "name": "\"0x1p3\"",
+      "input": "0x1p3",
+      "output": "NaN"
+    },
+    {
+      "name": "\"١٢\"",
+      "input": "١٢",
+      "output": "NaN"
+    },
+    {
+      "name": "\"00012\"",
+      "input": "00012",
+      "output": "12"
+    },
+    {
+      "name": "\"-00.10\"",
+      "input": "-00.10",
+      "output": "-0.1"
+    },
+    {
+      "name": "\"1e0001\"",
+      "input": "1e0001",
+      "output": "10"
+    },
+    {
+      "name": "\"1.7976931348623157e308\"",
+      "input": "1.7976931348623157e308",
+      "output": "1.7976931348623157e+308"
+    },
+    {
+      "name": "\"1.7976931348623159e308\"",
+      "input": "1.7976931348623159e308",
+      "output": "Infinity"
+    },
+    {
+      "name": "\"5e-324\"",
+      "input": "5e-324",
+      "output": "5e-324"
+    },
+    {
+      "name": "\"2e-324\"",
+      "input": "2e-324",
+      "output": "0"
+    }
+  ],
+  "toDraftCases": [
+    {
+      "name": "new watcher",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "",
+        "command": "",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "new watcher, no settings",
+      "input": {
+        "watcher": null,
+        "settings": null
+      },
+      "output": {
+        "name": "",
+        "command": "",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "legacy direct-exec quoted into one line",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "node",
+          "args": [
+            "/Users/me/My Scripts/watch.js",
+            "--since",
+            "it's"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "node '/Users/me/My Scripts/watch.js' --since 'it'\\''s'",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "shell watcher untouched",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "while true; do curl -s https://example.com | jq -c '.[]'; sleep 60; done",
+          "args": [],
+          "prompt": "Dispatch mine.",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "while true; do curl -s https://example.com | jq -c '.[]'; sleep 60; done",
+        "prompt": "Dispatch mine.",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "own driver and model",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "codex",
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "codex": "gpt-5"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "codex",
+          "model": "gpt-5"
+        }
+      }
+    },
+    {
+      "name": "model for the settings watcher driver",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "dummy": "fast"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "dummy"
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "dummy",
+          "model": "fast"
+        }
+      }
+    },
+    {
+      "name": "model for another driver: Default",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "codex": "gpt-5"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "no settings: own driver and model",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "codex",
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "codex": "gpt-5"
+          }
+        },
+        "settings": null
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "codex",
+          "model": "gpt-5"
+        }
+      }
+    },
+    {
+      "name": "no settings: own driver, empty model",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "codex",
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "codex": ""
+          }
+        },
+        "settings": null
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "codex",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "no settings: own driver, no models",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "codex",
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "settings": null
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "codex",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "no settings: no driver",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": null
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "no settings: empty driver",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "",
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "models": {
+            "": "x"
+          }
+        },
+        "settings": null
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "cwd and interval mode kept",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira",
+          "command": "watch-jira",
+          "args": [],
+          "prompt": "",
+          "cwd": "~/Sites",
+          "env": {},
+          "mode": "interval",
+          "intervalSec": 45,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira",
+        "command": "watch-jira",
+        "prompt": "",
+        "cwd": "~/Sites",
+        "mode": "interval",
+        "intervalSec": "45",
+        "enabled": false,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "protocol sample 0",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "jira-sprint",
+        "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+        "cwd": "~/Sites/nytimes",
+        "mode": "interval",
+        "intervalSec": "300",
+        "enabled": true,
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        }
+      }
+    },
+    {
+      "name": "protocol sample 1 (legacy)",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "name": "legacy",
+        "command": "/usr/local/bin/poll --json --since=1h",
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": "60",
+        "enabled": false,
+        "choice": {
+          "driver": null,
+          "model": null
+        }
+      }
+    }
+  ],
+  "watcherBodyCases": [
+    {
+      "name": "new watcher: Default, no models",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "fields trimmed",
+      "input": {
+        "draft": {
+          "name": " w ",
+          "command": "  echo hi\n",
+          "prompt": "\n  Only mine.  \n",
+          "cwd": "  ~/x  ",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "Only mine.",
+        "cwd": "~/x",
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "blank cwd → null",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": " \t ",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "NBSP-only cwd is blank too",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": " ",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "NEL cwd is not trimmed",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": "",
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "pin a driver, clear others",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": "claude-code",
+            "model": "opus"
+          }
+        },
+        "existing": {
+          "models": {
+            "codex": "gpt-5"
+          }
+        }
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": "claude-code",
+        "models": {
+          "codex": null,
+          "claude-code": "opus"
+        }
+      }
+    },
+    {
+      "name": "Default clears every stored model",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": {
+          "models": {
+            "claude-code": "opus",
+            "codex": "gpt-5"
+          }
+        }
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {
+          "claude-code": null,
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "existing without models",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": "codex",
+            "model": null
+          }
+        },
+        "existing": {}
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": "codex",
+        "models": {
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "interval mode, disabled",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "interval",
+          "intervalSec": "120",
+          "enabled": false,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "interval",
+        "intervalSec": 120,
+        "enabled": false,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"300\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "300",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 300,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \" 12 \"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": " 12 ",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 12,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"\\n12\\t\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "\n12\t",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 12,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"   \"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "   ",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"abc\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "abc",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e2\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e2",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 100,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1E2\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1E2",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 100,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0x10\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0x10",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 16,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0X1f\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0X1f",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 31,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0b101\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0b101",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 5,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0o17\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0o17",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 15,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-3\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-3",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 1,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-0\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-0",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0.4\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0.4",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0.5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0.5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 1,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1.5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1.5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 2,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"2.5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "2.5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 3,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-0.5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-0.5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-1.5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-1.5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 1,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"12abc\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "12abc",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1_000\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1_000",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"+7\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "+7",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 7,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-0x10\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-0x10",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \".5\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": ".5",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 1,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"5.\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "5.",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 5,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"5.e1\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "5.e1",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 50,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \".\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": ".",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"e3\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "e3",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"Infinity\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "Infinity",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": null,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"-Infinity\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "-Infinity",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 1,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"+Infinity\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "+Infinity",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": null,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"infinity\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "infinity",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e400\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e400",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": null,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e-400\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e-400",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \" 42　\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": " 42　",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 42,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"42\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "42",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"007\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "007",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 7,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1,000\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1,000",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"٣\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "٣",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e+2\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e+2",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 100,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"1e-2\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "1e-2",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"0x\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "0x",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"12 34\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "12 34",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"NaN\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "NaN",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 60,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"9007199254740993\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "9007199254740993",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 9007199254740992,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    },
+    {
+      "name": "interval \"123456789.987\"",
+      "input": {
+        "draft": {
+          "name": "w",
+          "command": "echo hi",
+          "prompt": "",
+          "cwd": "",
+          "mode": "loop",
+          "intervalSec": "123456789.987",
+          "enabled": true,
+          "choice": {
+            "driver": null,
+            "model": null
+          }
+        },
+        "existing": null
+      },
+      "output": {
+        "name": "w",
+        "command": "echo hi",
+        "args": [],
+        "prompt": "",
+        "cwd": null,
+        "mode": "loop",
+        "intervalSec": 123456790,
+        "enabled": true,
+        "driver": null,
+        "models": {}
+      }
+    }
+  ]
+}

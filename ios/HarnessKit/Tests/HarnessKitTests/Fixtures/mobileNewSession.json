@@ -1,0 +1,101 @@
+{
+  "skipReviewHintCases": [
+    {
+      "name": "review, skipped, on: off starts it",
+      "input": {
+        "status": "review",
+        "agentReview": "skipped",
+        "skipAgentReview": true
+      },
+      "output": "Off starts the review"
+    },
+    {
+      "name": "review, pending, off: on skips it",
+      "input": {
+        "status": "review",
+        "agentReview": "pending",
+        "skipAgentReview": false
+      },
+      "output": "On skips the pending review"
+    },
+    {
+      "name": "review, pending, missing flag: on skips it",
+      "input": {
+        "status": "review",
+        "agentReview": "pending"
+      },
+      "output": "On skips the pending review"
+    },
+    {
+      "name": "review, approved",
+      "input": {
+        "status": "review",
+        "agentReview": "approved",
+        "skipAgentReview": false
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "review, changes requested",
+      "input": {
+        "status": "review",
+        "agentReview": "changes_requested",
+        "skipAgentReview": false
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "review, skipped, flag off",
+      "input": {
+        "status": "review",
+        "agentReview": "skipped",
+        "skipAgentReview": false
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "review, pending, flag on",
+      "input": {
+        "status": "review",
+        "agentReview": "pending",
+        "skipAgentReview": true
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "in progress, pending",
+      "input": {
+        "status": "in_progress",
+        "agentReview": "pending",
+        "skipAgentReview": false
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "in progress, skipped, on",
+      "input": {
+        "status": "in_progress",
+        "agentReview": "skipped",
+        "skipAgentReview": true
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "planning, pending",
+      "input": {
+        "status": "planning",
+        "agentReview": "pending"
+      },
+      "output": "When it's submitted"
+    },
+    {
+      "name": "done, skipped, on",
+      "input": {
+        "status": "done",
+        "agentReview": "skipped",
+        "skipAgentReview": true
+      },
+      "output": "When it's submitted"
+    }
+  ]
+}
