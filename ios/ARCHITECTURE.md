@@ -579,3 +579,5 @@ Things AXe and sim-check can't drive, to try by hand on a device:
   after a refresh.
 - An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
   scrolls through on the way. A swipe from one column to the next plays exactly one.
+- `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
+  turn it off for its run (or HARNESS-145 asks the human).

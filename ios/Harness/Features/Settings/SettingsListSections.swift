@@ -166,9 +166,7 @@ struct SettingsProjectsSection: View {
             placeholder: "/Users/you/Sites/app",
             action: "Add"
         ) { text in
-            let path = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !path.isEmpty, let api = store.settingsAPI else { return }
-            actions.perform("Project added") { _ = try await api.createProject(CreateProjectBody(path: path)) }
+            Task { await store.addProject(path: text, actions: actions) }
         }
     }
 }
