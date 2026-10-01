@@ -250,7 +250,8 @@ public final class BoardStore {
 
     // MARK: Snapshot
 
-    /// The full snapshot for the current scope, then a summaries backfill.
+    /// The full snapshot for the current scope. Returns once it's applied; the summaries backfill
+    /// it starts runs on its own.
     public func refresh() async {
         do {
             let snapshot = try await loadSnapshot(scope)
@@ -262,7 +263,8 @@ public final class BoardStore {
             syncDetails()
             authError = nil
             loadError = nil
-            await backfillSummaries(snapshot)
+            // Not awaited (store.tsx's `void pool(...)`): pull to refresh ends once the snapshot lands.
+            Task { await self.backfillSummaries(snapshot) }
         } catch {
             guard !closed else { return }
             if Connection.isUnauthorized(error) {

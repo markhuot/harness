@@ -171,6 +171,26 @@ struct BoardStoreTests {
         #expect(h.client.inFlightSummaries.withLock { $0.max } == 6)
     }
 
+    @Test func refreshReturnsOnceTheSnapshotLandsWithoutWaitingForSummaries() async {
+        let h = Harness()
+        let never = Deferred<[Summary]>() // never settled
+        h.client.s.withLock {
+            $0.live = [Self.tk("w1")]
+            $0.summaryHold = ["W1": never]
+        }
+        var returned = false
+        let refresh = Task { await h.store.refresh(); returned = true }
+        await eventually { h.client.count("summaries W1") == 1 }
+        // A refresh that waited on the backfill would still be pending here.
+        let finished = await eventually({ returned }, timeout: .milliseconds(500))
+        #expect(finished)
+        #expect(h.store.state.ready)
+        #expect(!never.isSettled)
+        #expect(h.store.state.summaries["s-W1"] == nil)
+        never.resolve([]) // let the backfill (and a waiting refresh) finish
+        await refresh.value
+    }
+
     @Test func reconnectsBumpTheEpochButTheFirstConnectDoesNot() async {
         let h = Harness()
         h.store.start()

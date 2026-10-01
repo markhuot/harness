@@ -183,12 +183,15 @@ here and in a doc comment:
 These modules ran in parallel with the board-state port (HARNESS-131), so a few names live in two
 places until someone dedupes them:
 
-- `Approve.Option` stands in for `SelectOption` (lib/selectOptions.ts).
-- `Prefs.hideChildrenDefault` stands in for `HIDE_CHILDREN_DEFAULT` (state/conductor.ts).
-- `Related` uses a private `RelatedKeyed: TicketKeyed`, and `ProjectKey.TicketInfo` maps tickets
-  for the same reason: nothing declared `extension Ticket: TicketKeyed` yet.
+- `Approve.Option` stays: it isn't a straight swap for `SelectOption` (State/SelectOptions.swift).
+  It's `SelectOption<CompletionAction>`, so `value` is a typed `CompletionAction`, and `label` is
+  optional because TS leaves it undefined for an action this build doesn't know (the
+  "unknown action has no label" fixture pins that). `SelectOption` is the plain-string form with a
+  required label. Folding them together means making `SelectOption` generic with an optional
+  label, which changes its other callers.
 - `Completion.ProjectInfo/TicketInfo/ParentInfo` and `ProjectKey.ProjectInfo/TicketInfo` are
-  narrow input shapes. Overloads take `Ticket`/`Project` directly.
+  narrow input shapes (the fixture cases decode partial entities into them). Overloads take
+  `Ticket`/`Project` directly. `Ticket` and `RelatedTicket` conform to `TicketKeyed` (Keys.swift).
 - `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
   promotes at 1024) behave differently in TS too.
 
