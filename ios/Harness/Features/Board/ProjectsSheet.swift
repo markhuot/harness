@@ -137,12 +137,9 @@ struct ProjectsSheet: View {
     }
 
     private func addProject() {
-        let path = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty, let api = store.client as? HarnessClient else { return }
+        let path = newPath
         Task {
-            if let p = await actions.run("Project added", { try await api.createProject(CreateProjectBody(path: path)) }) {
-                choose(p.id)
-            }
+            if let p = await store.addProject(path: path, actions: actions) { choose(p.id) }
         }
     }
 }
