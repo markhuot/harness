@@ -600,5 +600,10 @@ Things AXe and sim-check can't drive, to try by hand on a device:
   after a refresh.
 - An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
   scrolls through on the way. A swipe from one column to the next plays exactly one.
+- sim-check's "tapping a board card pushes its ticket and Back returns" timed out in HARNESS-139's
+  full interaction run, though a card push worked by hand with one card in the column. Rerun it with
+  the real Board and ticket detail both merged. If it still fails, find out whether the tap lands
+  on the wrong card (a lazy column, the hero, a stale frame) or Back doesn't settle, and fix the app
+  or make the step label-based.
 - `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
   turn it off for its run (or HARNESS-145 asks the human).
