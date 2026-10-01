@@ -751,6 +751,8 @@ export const WatcherBody: P.WatcherBody[] = [
   { cwd: null, driver: null, models: { "claude-code": null } },
   { enabled: false },
   { args: [], lastRunAt: null, lastError: null, live: WatcherLive[0]! },
+  // A whole Watcher sent back as a body (the app's edit form round-trips one).
+  { id: "wat_1", name: "jira", command: "watch-jira", createdAt: T0, updatedAt: T0, lastRunAt: T0, lastError: "exit 1" },
 ];
 
 export const InjectOutputBody: { source: string; text: unknown; prompt?: string }[] = [

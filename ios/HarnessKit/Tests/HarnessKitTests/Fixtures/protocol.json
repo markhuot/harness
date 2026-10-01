@@ -2876,6 +2876,15 @@
         "nextRunAt": null,
         "failures": 0
       }
+    },
+    {
+      "id": "wat_1",
+      "name": "jira",
+      "command": "watch-jira",
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "lastRunAt": 1759190400000,
+      "lastError": "exit 1"
     }
   ],
   "WatcherLive": [
