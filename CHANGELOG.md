@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- An agent that picks up a ticket where an earlier run left a background job running (approving
+  a ticket whose agent submitted with a dev server or test run still going, for example) now
+  waits for the background jobs it starts. Before, the run ended as soon as the agent's first
+  reply came back, stopped those jobs, and could mark the ticket done before its work was merged.
+
 ## [app-20261001.1617](https://github.com/markhuot/harness/releases/tag/app-20261001.1617) - 2026-10-01
 
 ### Added
