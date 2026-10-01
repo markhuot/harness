@@ -77,8 +77,9 @@ const corpus: Record<string, string> = {
   "NBSP as whitespace": "#\u00a0nbsp heading\n-\u00a0nbsp item\n\u00a0\n```\u00a0js\u00a0\ncode\n```",
   "NEL is not whitespace": "#\u0085nel\n\u0085\n- a\u0085",
   "line separator U+2028": "a\u2028b\n# h\u2028x",
-  // Not at the start of a string: JSONSerialization (the Swift fixture loader) drops a leading U+FEFF.
   "BOM is whitespace": "x\n\ufeff\n#\ufeffbom\n-\ufeffitem\n\ufeff---\n \ufeff# not a heading",
+  // A leading U+FEFF also pins the Swift fixture loader, which must not drop it.
+  "leading BOM": "\ufeff# heading\n\ufeffpara",
   "vertical tab and form feed": "#\u000bvt\n-\u000cff",
 };
 

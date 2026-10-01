@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import HarnessKit
 
 /// Loads the JSON that `bun shared/scripts/export-fixtures.ts` writes to Fixtures/<module>.json.
 ///
@@ -23,11 +24,13 @@ enum Fixture {
     }
 
     /// One named export decoded as `T`.
+    ///
+    /// Goes through `JSONValue` and JSONDecoder, not JSONSerialization, which silently drops a
+    /// leading U+FEFF from strings.
     static func value<T: Decodable>(_ module: String, _ export: String, as type: T.Type = T.self) throws -> T {
-        let root = try JSONSerialization.jsonObject(with: data(module), options: [.fragmentsAllowed])
-        guard let dict = root as? [String: Any], let value = dict[export] else { throw FixtureError.missingExport(module, export) }
-        let bytes = try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
-        return try JSONDecoder().decode(T.self, from: bytes)
+        let root = try JSONDecoder().decode([String: JSONValue].self, from: data(module))
+        guard let value = root[export] else { throw FixtureError.missingExport(module, export) }
+        return try value.decode(as: T.self)
     }
 
     /// A case list (`[{ name, input, output }]`) for parameterized tests. Traps when the fixture

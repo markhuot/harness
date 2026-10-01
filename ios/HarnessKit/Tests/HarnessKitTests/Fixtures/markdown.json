@@ -1835,6 +1835,16 @@
       ]
     },
     {
+      "name": "leading BOM",
+      "input": "﻿# heading\n﻿para",
+      "output": [
+        {
+          "t": "text",
+          "text": "﻿# heading\n﻿para"
+        }
+      ]
+    },
+    {
       "name": "vertical tab and form feed",
       "input": "#\u000bvt\n-\fff",
       "output": [
@@ -2989,6 +2999,16 @@
       ]
     },
     {
+      "name": "leading BOM",
+      "input": "﻿# heading\n﻿para",
+      "output": [
+        {
+          "t": "p",
+          "text": "﻿# heading\n﻿para"
+        }
+      ]
+    },
+    {
       "name": "vertical tab and form feed",
       "input": "#\u000bvt\n-\fff",
       "output": [
@@ -3371,6 +3391,11 @@
       "name": "BOM is whitespace",
       "input": "x\n﻿\n#﻿bom\n-﻿item\n﻿---\n ﻿# not a heading",
       "output": "x bom • item --- # not a heading"
+    },
+    {
+      "name": "leading BOM",
+      "input": "﻿# heading\n﻿para",
+      "output": "# heading para"
     },
     {
       "name": "vertical tab and form feed",
