@@ -341,6 +341,14 @@ to it in the same folder. It doesn't edit another area's files, App/, UI/ or Har
 a signature has to change, change its call sites in the same commit and say so in the summary.
 Shared helpers a feature needs go in a new file under its own folder (or a new HarnessKit file).
 
+**Shared folders: prefix new files, and keep type names unique.** Some folders hold slots for
+several tickets that run in parallel. `Ticket/` is shared by Ticket detail, Transcript + Agents,
+and Browser + Plugin tabs. A new file in a shared folder starts with its area's prefix
+(`TicketDetail*.swift`, `Transcript*.swift`, `Agents*.swift`, `Browser*.swift`, `Plugin*.swift`),
+so two tickets never create the same file. Every new type name must be unique across the app
+target, because it's one module and a clash only shows up when the branches merge. Prefix types
+the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot's type.
+
 | Slot | File (ios/Harness/Features/…) | Area | Signature |
 | --- | --- | --- | --- |
 | BoardScreen | Board/BoardScreen.swift | Board + Search | `BoardScreen(mode: BoardMode)` (`.board`, `.search`) |
