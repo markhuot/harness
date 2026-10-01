@@ -23,12 +23,22 @@ public enum TranscriptLogic {
         }
     }
 
-    /// The grouped entries, then the live deltas, then "Working…" while busy with no delta.
+    /// The grouped entries, then the live deltas, then "Working…" while busy with no delta. Entries
+    /// that draw nothing (a bare tool_call, content this build doesn't know) are left out, so the
+    /// list doesn't space around empty rows.
     public static func rows(items: [Format.TranscriptItem], deltas: [LiveDelta], working: Bool) -> [Row] {
-        var rows = items.map(Row.item)
+        var rows = items.filter(draws).map(Row.item)
         rows.append(contentsOf: deltas.map { .delta(runId: $0.runId, text: $0.text) })
         if working, deltas.isEmpty { rows.append(.working) }
         return rows
+    }
+
+    static func draws(_ item: Format.TranscriptItem) -> Bool {
+        guard case let .entry(e) = item else { return true }
+        switch e.content {
+        case .toolCall, .unknown: return false
+        default: return true
+        }
     }
 
     /// The deltas a transcript streams: none for a sub-agent.

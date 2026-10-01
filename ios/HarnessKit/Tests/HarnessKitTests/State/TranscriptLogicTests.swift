@@ -36,6 +36,14 @@ struct TranscriptLogicTests {
         #expect(streaming == [.item(items[0]), .delta(runId: "r1", text: "Hel")])
     }
 
+    @Test("entries that draw nothing get no row")
+    func silentEntries() {
+        let unknown = Self.entry("u", .unknown(type: "future", raw: .object(["type": .string("future")])))
+        let items: [Format.TranscriptItem] = [.entry(unknown), .entry(Self.entry("c", .toolCall(callId: "k", name: "x", input: .null))),
+                                              .entry(Self.entry("s", .status(text: "Run started (work)")))]
+        #expect(TranscriptLogic.rows(items: items, deltas: [], working: false).map(\.id) == ["s"])
+    }
+
     @Test("a tool call and its result are one row whose id is the call's")
     func toolPairing() {
         let call = Self.entry("c", .toolCall(callId: "k1", name: "Bash", input: .object(["command": .string("ls")])), seq: 1)
