@@ -1,0 +1,1125 @@
+{
+  "parseTemplateCases": [
+    {
+      "name": "unclosed if on line 2",
+      "input": "a\n{{#if x}}b",
+      "output": {
+        "error": "Line 2: {{#if x}} is never closed with {{/if}}"
+      }
+    },
+    {
+      "name": "stray /if",
+      "input": "{{/if}}",
+      "output": {
+        "error": "Line 1: {{/if}} without an open {{#if}}"
+      }
+    },
+    {
+      "name": "stray else",
+      "input": "{{else}}",
+      "output": {
+        "error": "Line 1: {{else}} without an open {{#if}}"
+      }
+    },
+    {
+      "name": "stray else if",
+      "input": "{{else if y}}",
+      "output": {
+        "error": "Line 1: {{else if y}} without an open {{#if}}"
+      }
+    },
+    {
+      "name": "second else",
+      "input": "{{#if x}}a{{else}}b{{else}}c{{/if}}",
+      "output": {
+        "error": "Line 1: a second {{else}} in the same {{#if}}"
+      }
+    },
+    {
+      "name": "else if after else",
+      "input": "{{#if x}}a{{else}}b{{else if y}}c{{/if}}",
+      "output": {
+        "error": "Line 1: {{else if y}} after {{else}}"
+      }
+    },
+    {
+      "name": "extra /if",
+      "input": "{{#if x}}{{/if}}{{/if}}",
+      "output": {
+        "error": "Line 1: {{/if}} without an open {{#if}}"
+      }
+    },
+    {
+      "name": "unclosed braces",
+      "input": "hi {{name",
+      "output": {
+        "error": "Line 1: \"{{\" is never closed with \"}}\""
+      }
+    },
+    {
+      "name": "each is not a tag",
+      "input": "{{#each items}}",
+      "output": {
+        "error": "Line 1: {{#each items}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "two words",
+      "input": "{{two words}}",
+      "output": {
+        "error": "Line 1: {{two words}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "empty tag",
+      "input": "{{}}",
+      "output": {
+        "error": "Line 1: {{}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "bad variable name",
+      "input": "{{#if 1x}}{{/if}}",
+      "output": {
+        "error": "Line 1: \"1x\" in {{#if 1x}} isn't a variable name"
+      }
+    },
+    {
+      "name": "if without a name",
+      "input": "{{#if}}{{/if}}",
+      "output": {
+        "error": "Line 1: {{#if}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "nested else-if chain still needs the outer /if",
+      "input": "{{#if a}}{{#if b}}x{{else if c}}y{{/if}}",
+      "output": {
+        "error": "Line 1: {{#if a}} is never closed with {{/if}}"
+      }
+    },
+    {
+      "name": "nested else-if chain closed",
+      "input": "{{#if a}}{{#if b}}x{{else if c}}y{{/if}}{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "text",
+                    "text": "x"
+                  }
+                ],
+                "else": [
+                  {
+                    "type": "if",
+                    "name": "c",
+                    "then": [
+                      {
+                        "type": "text",
+                        "text": "y"
+                      }
+                    ],
+                    "else": []
+                  }
+                ]
+              }
+            ],
+            "else": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "ok": []
+      }
+    },
+    {
+      "name": "text only",
+      "input": "Hello\nworld",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "Hello\nworld"
+          }
+        ]
+      }
+    },
+    {
+      "name": "single braces",
+      "input": "`browser_open` { url } {x}",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "`browser_open` { url } {x}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "variable with padding",
+      "input": "Hi {{ name }},\n  {{n}} left ",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "Hi "
+          },
+          {
+            "type": "var",
+            "name": "name"
+          },
+          {
+            "type": "text",
+            "text": ",\n  "
+          },
+          {
+            "type": "var",
+            "name": "n"
+          },
+          {
+            "type": "text",
+            "text": " left "
+          }
+        ]
+      }
+    },
+    {
+      "name": "full chain",
+      "input": "[{{#if a}}A{{else if b}}B{{else if c}}C{{else}}D{{/if}}]",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "["
+          },
+          {
+            "type": "if",
+            "name": "a",
+            "then": [
+              {
+                "type": "text",
+                "text": "A"
+              }
+            ],
+            "else": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "text",
+                    "text": "B"
+                  }
+                ],
+                "else": [
+                  {
+                    "type": "if",
+                    "name": "c",
+                    "then": [
+                      {
+                        "type": "text",
+                        "text": "C"
+                      }
+                    ],
+                    "else": [
+                      {
+                        "type": "text",
+                        "text": "D"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "nested",
+      "input": "{{#if a}}{{#if b}}ab{{else}}a{{/if}}!{{else}}{{#if b}}b{{/if}}-{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "text",
+                    "text": "ab"
+                  }
+                ],
+                "else": [
+                  {
+                    "type": "text",
+                    "text": "a"
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "!"
+              }
+            ],
+            "else": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "text",
+                    "text": "b"
+                  }
+                ],
+                "else": []
+              },
+              {
+                "type": "text",
+                "text": "-"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "tab and newline inside tags",
+      "input": "{{#if\ta}}x{{else\n if\tb}}y{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [
+              {
+                "type": "text",
+                "text": "x"
+              }
+            ],
+            "else": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "text",
+                    "text": "y"
+                  }
+                ],
+                "else": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NBSP padding is trimmed",
+      "input": "{{ x }}",
+      "output": {
+        "ok": [
+          {
+            "type": "var",
+            "name": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "underscore names",
+      "input": "{{_}}{{a_1}}{{_B}}",
+      "output": {
+        "ok": [
+          {
+            "type": "var",
+            "name": "_"
+          },
+          {
+            "type": "var",
+            "name": "a_1"
+          },
+          {
+            "type": "var",
+            "name": "_B"
+          }
+        ]
+      }
+    },
+    {
+      "name": "triple braces",
+      "input": "{{{x}}}",
+      "output": {
+        "error": "Line 1: {{{x}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "close before open",
+      "input": "}} {{x}}",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "}} "
+          },
+          {
+            "type": "var",
+            "name": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "adjacent tags",
+      "input": "{{a}}{{b}}",
+      "output": {
+        "ok": [
+          {
+            "type": "var",
+            "name": "a"
+          },
+          {
+            "type": "var",
+            "name": "b"
+          }
+        ]
+      }
+    },
+    {
+      "name": "emoji text kept",
+      "input": "😀{{x}}é",
+      "output": {
+        "ok": [
+          {
+            "type": "text",
+            "text": "😀"
+          },
+          {
+            "type": "var",
+            "name": "x"
+          },
+          {
+            "type": "text",
+            "text": "é"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CRLF counts as one line each",
+      "input": "a\r\nb\r\n{{#if x}}",
+      "output": {
+        "error": "Line 3: {{#if x}} is never closed with {{/if}}"
+      }
+    },
+    {
+      "name": "unclosed on line 3 after text",
+      "input": "x\ny\nz {{a",
+      "output": {
+        "error": "Line 3: \"{{\" is never closed with \"}}\""
+      }
+    },
+    {
+      "name": "error on line 3 counts newlines in tags",
+      "input": "{{#if a}}\n{{\n}}\n{{/if}}",
+      "output": {
+        "error": "Line 2: {{\n}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "else after else if chain",
+      "input": "{{#if a}}{{else if b}}{{else}}{{else}}{{/if}}",
+      "output": {
+        "error": "Line 1: a second {{else}} in the same {{#if}}"
+      }
+    },
+    {
+      "name": "else if non-name",
+      "input": "{{#if a}}{{else if 2}}{{/if}}",
+      "output": {
+        "error": "Line 1: \"2\" in {{else if 2}} isn't a variable name"
+      }
+    },
+    {
+      "name": "if with two names",
+      "input": "{{#if a b}}{{/if}}",
+      "output": {
+        "error": "Line 1: {{#if a b}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "elseif without space",
+      "input": "{{#if a}}{{elseif b}}{{/if}}",
+      "output": {
+        "error": "Line 1: {{elseif b}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "hyphen name",
+      "input": "{{a-b}}",
+      "output": {
+        "error": "Line 1: {{a-b}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "unicode name",
+      "input": "{{ñ}}",
+      "output": {
+        "error": "Line 1: {{ñ}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "unicode if name",
+      "input": "{{#if ñ}}{{/if}}",
+      "output": {
+        "error": "Line 1: \"ñ\" in {{#if ñ}} isn't a variable name"
+      }
+    },
+    {
+      "name": "NEL is not trimmed",
+      "input": "{{x}}",
+      "output": {
+        "error": "Line 1: {{x}} isn't a template tag (use {{name}}, {{#if name}}, {{else}}, {{else if name}} or {{/if}})"
+      }
+    },
+    {
+      "name": "/if with spaces",
+      "input": "{{ /if }}",
+      "output": {
+        "error": "Line 1: {{/if}} without an open {{#if}}"
+      }
+    },
+    {
+      "name": "#if with trailing space inside",
+      "input": "{{#if a }}x{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [
+              {
+                "type": "text",
+                "text": "x"
+              }
+            ],
+            "else": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "else with spaces",
+      "input": "{{#if a}}{{ else }}{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [],
+            "else": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "unclosed inner and outer reports the outer",
+      "input": "{{#if a}}\n{{#if b}}",
+      "output": {
+        "error": "Line 1: {{#if a}} is never closed with {{/if}}"
+      }
+    },
+    {
+      "name": "chain inside chain",
+      "input": "{{#if a}}{{else if b}}{{#if c}}{{else if d}}{{/if}}{{/if}}",
+      "output": {
+        "ok": [
+          {
+            "type": "if",
+            "name": "a",
+            "then": [],
+            "else": [
+              {
+                "type": "if",
+                "name": "b",
+                "then": [
+                  {
+                    "type": "if",
+                    "name": "c",
+                    "then": [],
+                    "else": [
+                      {
+                        "type": "if",
+                        "name": "d",
+                        "then": [],
+                        "else": []
+                      }
+                    ]
+                  }
+                ],
+                "else": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "nested open after closed",
+      "input": "{{#if a}}{{/if}}\n{{#if b}}",
+      "output": {
+        "error": "Line 2: {{#if b}} is never closed with {{/if}}"
+      }
+    }
+  ],
+  "renderTemplateCases": [
+    {
+      "name": "substitutes and copies text exactly",
+      "input": {
+        "template": "Hi {{name}},\n  {{ n }} left ",
+        "vars": {
+          "name": "Ada",
+          "n": 3
+        }
+      },
+      "output": {
+        "ok": "Hi Ada,\n  3 left "
+      }
+    },
+    {
+      "name": "if string",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": "a"
+        }
+      },
+      "output": {
+        "ok": "yes"
+      }
+    },
+    {
+      "name": "if true",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": true
+        }
+      },
+      "output": {
+        "ok": "yes"
+      }
+    },
+    {
+      "name": "if 2",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": 2
+        }
+      },
+      "output": {
+        "ok": "yes"
+      }
+    },
+    {
+      "name": "if empty string",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": ""
+        }
+      },
+      "output": {
+        "ok": "no"
+      }
+    },
+    {
+      "name": "if false",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": false
+        }
+      },
+      "output": {
+        "ok": "no"
+      }
+    },
+    {
+      "name": "if 0",
+      "input": {
+        "template": "{{#if x}}yes{{else}}no{{/if}}",
+        "vars": {
+          "x": 0
+        }
+      },
+      "output": {
+        "ok": "no"
+      }
+    },
+    {
+      "name": "falsy without else",
+      "input": {
+        "template": "a{{#if x}}b{{/if}}c",
+        "vars": {
+          "x": false
+        }
+      },
+      "output": {
+        "ok": "ac"
+      }
+    },
+    {
+      "name": "chain A",
+      "input": {
+        "template": "[{{#if a}}A{{else if b}}B{{else if c}}C{{else}}D{{/if}}]",
+        "vars": {
+          "a": true,
+          "b": true,
+          "c": true
+        }
+      },
+      "output": {
+        "ok": "[A]"
+      }
+    },
+    {
+      "name": "chain B",
+      "input": {
+        "template": "[{{#if a}}A{{else if b}}B{{else if c}}C{{else}}D{{/if}}]",
+        "vars": {
+          "a": false,
+          "b": true,
+          "c": true
+        }
+      },
+      "output": {
+        "ok": "[B]"
+      }
+    },
+    {
+      "name": "chain C",
+      "input": {
+        "template": "[{{#if a}}A{{else if b}}B{{else if c}}C{{else}}D{{/if}}]",
+        "vars": {
+          "a": false,
+          "b": false,
+          "c": true
+        }
+      },
+      "output": {
+        "ok": "[C]"
+      }
+    },
+    {
+      "name": "chain D",
+      "input": {
+        "template": "[{{#if a}}A{{else if b}}B{{else if c}}C{{else}}D{{/if}}]",
+        "vars": {
+          "a": false,
+          "b": false,
+          "c": false
+        }
+      },
+      "output": {
+        "ok": "[D]"
+      }
+    },
+    {
+      "name": "chain without else",
+      "input": {
+        "template": "[{{#if a}}A{{else if b}}B{{/if}}]",
+        "vars": {
+          "a": false,
+          "b": false
+        }
+      },
+      "output": {
+        "ok": "[]"
+      }
+    },
+    {
+      "name": "nested ab",
+      "input": {
+        "template": "{{#if a}}{{#if b}}ab{{else}}a{{/if}}!{{else}}{{#if b}}b{{/if}}-{{/if}}",
+        "vars": {
+          "a": true,
+          "b": true
+        }
+      },
+      "output": {
+        "ok": "ab!"
+      }
+    },
+    {
+      "name": "nested a",
+      "input": {
+        "template": "{{#if a}}{{#if b}}ab{{else}}a{{/if}}!{{else}}{{#if b}}b{{/if}}-{{/if}}",
+        "vars": {
+          "a": true,
+          "b": false
+        }
+      },
+      "output": {
+        "ok": "a!"
+      }
+    },
+    {
+      "name": "nested b",
+      "input": {
+        "template": "{{#if a}}{{#if b}}ab{{else}}a{{/if}}!{{else}}{{#if b}}b{{/if}}-{{/if}}",
+        "vars": {
+          "a": false,
+          "b": true
+        }
+      },
+      "output": {
+        "ok": "b-"
+      }
+    },
+    {
+      "name": "nested none",
+      "input": {
+        "template": "{{#if a}}{{#if b}}ab{{else}}a{{/if}}!{{else}}{{#if b}}b{{/if}}-{{/if}}",
+        "vars": {
+          "a": false,
+          "b": false
+        }
+      },
+      "output": {
+        "ok": "-"
+      }
+    },
+    {
+      "name": "missing variable",
+      "input": {
+        "template": "{{x}}",
+        "vars": {}
+      },
+      "output": {
+        "error": "Missing template variable {{x}}"
+      }
+    },
+    {
+      "name": "missing condition",
+      "input": {
+        "template": "{{#if x}}a{{/if}}",
+        "vars": {}
+      },
+      "output": {
+        "error": "Missing template variable {{x}}"
+      }
+    },
+    {
+      "name": "unreached missing variable",
+      "input": {
+        "template": "{{#if a}}{{y}}{{/if}}",
+        "vars": {
+          "a": false
+        }
+      },
+      "output": {
+        "ok": ""
+      }
+    },
+    {
+      "name": "values are not re-parsed",
+      "input": {
+        "template": "{{v}}",
+        "vars": {
+          "v": "{{#if x}}"
+        }
+      },
+      "output": {
+        "ok": "{{#if x}}"
+      }
+    },
+    {
+      "name": "single braces",
+      "input": {
+        "template": "`browser_open` { url } {x}",
+        "vars": {}
+      },
+      "output": {
+        "ok": "`browser_open` { url } {x}"
+      }
+    },
+    {
+      "name": "parse error is thrown",
+      "input": {
+        "template": "{{#if a}}",
+        "vars": {
+          "a": true
+        }
+      },
+      "output": {
+        "error": "Line 1: {{#if a}} is never closed with {{/if}}"
+      }
+    },
+    {
+      "name": "numbers print like JS",
+      "input": {
+        "template": "{{a}} {{b}} {{c}} {{d}} {{e}}",
+        "vars": {
+          "a": 1.5,
+          "b": 0,
+          "c": 1e+21,
+          "d": 1e-7,
+          "e": 100
+        }
+      },
+      "output": {
+        "ok": "1.5 0 1e+21 1e-7 100"
+      }
+    },
+    {
+      "name": "booleans print",
+      "input": {
+        "template": "{{t}}/{{f}}",
+        "vars": {
+          "t": true,
+          "f": false
+        }
+      },
+      "output": {
+        "ok": "true/false"
+      }
+    },
+    {
+      "name": "negative is truthy",
+      "input": {
+        "template": "{{#if n}}y{{else}}n{{/if}}",
+        "vars": {
+          "n": -1
+        }
+      },
+      "output": {
+        "ok": "y"
+      }
+    },
+    {
+      "name": "whitespace string is truthy",
+      "input": {
+        "template": "{{#if s}}y{{else}}n{{/if}}",
+        "vars": {
+          "s": " "
+        }
+      },
+      "output": {
+        "ok": "y"
+      }
+    },
+    {
+      "name": "string 0 is truthy",
+      "input": {
+        "template": "{{#if s}}y{{else}}n{{/if}}",
+        "vars": {
+          "s": "0"
+        }
+      },
+      "output": {
+        "ok": "y"
+      }
+    },
+    {
+      "name": "string false is truthy",
+      "input": {
+        "template": "{{#if s}}y{{else}}n{{/if}}",
+        "vars": {
+          "s": "false"
+        }
+      },
+      "output": {
+        "ok": "y"
+      }
+    },
+    {
+      "name": "unicode values",
+      "input": {
+        "template": "{{a}}|{{b}}",
+        "vars": {
+          "a": "😀",
+          "b": "é"
+        }
+      },
+      "output": {
+        "ok": "😀|é"
+      }
+    },
+    {
+      "name": "CRLF text kept",
+      "input": {
+        "template": "a\r\n{{x}}\r\n",
+        "vars": {
+          "x": "b"
+        }
+      },
+      "output": {
+        "ok": "a\r\nb\r\n"
+      }
+    },
+    {
+      "name": "toString is not a variable",
+      "input": {
+        "template": "{{toString}}",
+        "vars": {}
+      },
+      "output": {
+        "error": "Missing template variable {{toString}}"
+      }
+    },
+    {
+      "name": "__proto__ is not a variable",
+      "input": {
+        "template": "{{__proto__}}",
+        "vars": {}
+      },
+      "output": {
+        "error": "Missing template variable {{__proto__}}"
+      }
+    }
+  ],
+  "templateErrorCases": [
+    {
+      "name": "valid",
+      "input": {
+        "src": "{{#if a}}{{b}}{{/if}}",
+        "allowed": [
+          "a",
+          "b",
+          "c"
+        ]
+      },
+      "output": null
+    },
+    {
+      "name": "unknown variables listed with the known ones",
+      "input": {
+        "src": "{{ticket}} {{#if brnch}}x{{/if}} {{tickt}}",
+        "allowed": [
+          "ticket",
+          "branch"
+        ]
+      },
+      "output": "Unknown variables {{brnch}}, {{tickt}}: the variables are {{ticket}}, {{branch}}"
+    },
+    {
+      "name": "no variables",
+      "input": {
+        "src": "{{x}}",
+        "allowed": []
+      },
+      "output": "Unknown variable {{x}}: it has no variables"
+    },
+    {
+      "name": "syntax before variables",
+      "input": {
+        "src": "{{nope}}{{/if}}",
+        "allowed": []
+      },
+      "output": "Line 1: {{/if}} without an open {{#if}}"
+    },
+    {
+      "name": "one unknown with one known",
+      "input": {
+        "src": "{{y}}",
+        "allowed": [
+          "x"
+        ]
+      },
+      "output": "Unknown variable {{y}}: the variables are {{x}}"
+    },
+    {
+      "name": "unknown condition only",
+      "input": {
+        "src": "{{#if z}}{{/if}}",
+        "allowed": [
+          "a"
+        ]
+      },
+      "output": "Unknown variable {{z}}: the variables are {{a}}"
+    },
+    {
+      "name": "repeated unknown named once",
+      "input": {
+        "src": "{{q}}{{q}}",
+        "allowed": [
+          "a"
+        ]
+      },
+      "output": "Unknown variable {{q}}: the variables are {{a}}"
+    },
+    {
+      "name": "empty template",
+      "input": {
+        "src": "",
+        "allowed": []
+      },
+      "output": null
+    },
+    {
+      "name": "unclosed",
+      "input": {
+        "src": "{{#if a}}",
+        "allowed": [
+          "a"
+        ]
+      },
+      "output": "Line 1: {{#if a}} is never closed with {{/if}}"
+    }
+  ],
+  "templateVariablesCases": [
+    {
+      "name": "each once, in first-use order",
+      "input": "{{a}}{{#if b}}{{a}}{{else if c}}{{d}}{{/if}}",
+      "output": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ]
+    },
+    {
+      "name": "none",
+      "input": "plain",
+      "output": []
+    },
+    {
+      "name": "else branch only",
+      "input": "{{#if x}}{{else}}{{y}}{{x}}{{/if}}",
+      "output": [
+        "x",
+        "y"
+      ]
+    },
+    {
+      "name": "nested order",
+      "input": "{{#if a}}{{#if b}}{{c}}{{/if}}{{/if}}{{b}}",
+      "output": [
+        "a",
+        "b",
+        "c"
+      ]
+    }
+  ]
+}

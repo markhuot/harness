@@ -73,7 +73,28 @@ so adding a file never means editing project.yml or Package.swift.
   work on code units, so ports compare and split on `unicodeScalars` (not Characters), count
   UTF-16 where TS uses `.length`, and use `JSCompat` (Logic/Themes/JSCompat.swift) for `trim`,
   `\s`, `Math.round` and number formatting. Fixture cases with combining marks, NBSP/NEL and
-  emoji pin each of these.
+  emoji pin each of these. More of the same, found while porting the content helpers:
+  - Swift `String ==`, `<`, `hasPrefix`, `split` and String dictionary keys use canonical
+    equivalence and Characters (`"\r\n"` is one Character; é == e + U+0301). JS `===` and `<`
+    compare UTF-16 code units. Compare `utf16` (or scalars) wherever TS compares or sorts strings.
+  - `toLowerCase` applies Final_Sigma; Swift's `lowercased()` doesn't. Use `Mentions.JS.lowercase`
+    (Logic/Mentions.swift), which also has UTF-16 `slice`/`indexOf` helpers.
+  - Caret and range offsets stay UTF-16 in the Swift API (they match `NSRange`/UITextView). Swift
+    can't hold a lone surrogate, so a JS split inside a surrogate pair becomes U+FFFD; fixtures
+    either avoid it or export code units.
+  - Regexes: Markdown.swift keeps the TS patterns on NSRegularExpression (UTF-16, like JS) but
+    spells out JS meanings ICU doesn't share: `\s` as the ECMAScript whitespace set, `\d`/`\w`/`\b`
+    ASCII-only, `.` as `[^\n\r  ]`, a bare `$` as `\z` (ICU's `$` also matches before a
+    final newline), multiline `^` as a lookbehind on line terminators. `/i` without `u` folds
+    ASCII only.
+  - `Number(string)` has its own grammar (trims, empty → 0, `0x`/`0o`/`0b`, `.5`, `Infinity`);
+    `toFixed(1)` rounds ties up on the binary value where `%.1f` rounds to even. See
+    FileViewer.swift.
+  - `JSON.stringify` writes keys in insertion order (integer-like keys first). For byte-exact JSON
+    (PluginHost.buildInjection) the case file sorts keys and Swift writes them in the same order;
+    `PluginHost.jsonStringify` matches JSON.stringify's escaping (U+2028/2029, `/`, numbers).
+  - Lookups on plain TS object literals see `Object.prototype` (`codeLanguage("constructor")`,
+    `keyPress("toString")`). Swift ports don't reproduce that, and fixtures leave those inputs out.
 - Free-form JSON (`unknown` in TS) is `JSONValue`.
 - Errors from the service are `HarnessAPIError(status, message, data)`. `data` stays raw JSON, so
   a 404 from getTicket can be decoded as `RemoteKeyMatches`.
@@ -88,6 +109,10 @@ so adding a file never means editing project.yml or Package.swift.
   comments when porting.
 - Tests use Swift Testing (`@Test`, `#expect`). A test must be able to fail: test branches,
   boundaries and error paths, not literals against themselves.
+- All test files share one module, so test-only names clash across files (even `private` ones
+  inside `@Test` macro expansions). Nest fixture input structs inside the `@Suite` type (or an
+  extension of it), and put shared test helpers (like `sameScalars` in FileLinksTests.swift) in
+  Support/ instead of redeclaring them.
 
 ## Fixture pipeline (TS ↔ Swift parity)
 
@@ -124,7 +149,45 @@ Swift side has to follow.
 
 When porting a module: write the case file from the TS source and its `*.test.ts` (plus extra edge
 cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
-fixtures can't express (request sequences, timing).
+fixtures can't express (request sequences, timing). Stateful machines (TouchGesture, ResizeGate,
+PluginHostBridge, MentionCaret, stickStep) get both: direct ports of their TS tests, and fixture
+sequences (`{ events[], outputs[] }`) that the case file computes by driving the TS implementation.
+Timers become explicit timestamps or a `deadline` + `tick(now:)` API, so tests never wait.
+
+`Fixture.value` decodes through `JSONValue`/JSONDecoder. Don't switch it back to
+JSONSerialization: that silently drops a leading U+FEFF from strings (the "leading BOM" markdown
+case pins this).
+
+### Deliberate differences from TS
+
+Ports match TS on every fixture. Where Swift can't or shouldn't follow TS, the difference is listed
+here and in a doc comment:
+
+- `Prefs.normalize` drops unknown keys and turns non-string ids into nil (TS passes both through).
+  The prefs blob is local to each app, so nothing else reads the extra keys.
+- `Completion.approveLabel` returns nil for an unknown completion action (TS: undefined label).
+- `Related.remoteMatchesOf` decodes the 404 body as `[RelatedTicket]` and returns nil when it
+  doesn't fit (TS returns it unchecked).
+- `ResizeGate.take` rejects NaN, Infinity and sizes that overflow Int. `WheelCoalescer` disarms
+  its deadline on flush (the RN screen's stale `setTimeout` can fire the next batch early).
+- `PluginBridge.origin(of:)` stands in for `new URL().origin` without a full WHATWG parser (no
+  IPv4 shorthand, IDNA, or IPv6 re-compression).
+- `patchRows` drops one scalar where JS `slice(1)` drops one code unit; line numbers past
+  `Int.max` saturate.
+
+### Local stand-ins to dedupe
+
+These modules ran in parallel with the board-state port (HARNESS-131), so a few names live in two
+places until someone dedupes them:
+
+- `Approve.Option` stands in for `SelectOption` (lib/selectOptions.ts).
+- `Prefs.hideChildrenDefault` stands in for `HIDE_CHILDREN_DEFAULT` (state/conductor.ts).
+- `Related` uses a private `RelatedKeyed: TicketKeyed`, and `ProjectKey.TicketInfo` maps tickets
+  for the same reason: nothing declared `extension Ticket: TicketKeyed` yet.
+- `Completion.ProjectInfo/TicketInfo/ParentInfo` and `ProjectKey.ProjectInfo/TicketInfo` are
+  narrow input shapes. Overloads take `Ticket`/`Project` directly.
+- `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
+  promotes at 1024) behave differently in TS too.
 
 ## Disk budget (parallel agents)
 
@@ -163,7 +226,24 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Keys, file links, branches, permissions, watchers, command line, project colors (shared/src/*.ts)
 - [x] Pair/manual entry parsing, saved servers, connection probe (mobile/src/lib/pair, servers, connection)
 - [x] Themes registry, color math, project key colors (shared/src/themes)
-- [ ] State: reducer, paging, models, format, drafts, conductor, markdown, branches (shared/src/state)
+- [ ] State: reducer, paging, models, format, drafts, conductor, branches (shared/src/state)
+- [x] Content helpers (HarnessKit/Logic, fixture parity), RN source in parentheses:
+  - Markdown blocks/inline/plainText (state/markdown), code fences + normalizePatch (state/code),
+    diff parsing (diff)
+  - Mentions, slash commands, mention caret (mentions, commands, lib/mentionCaret)
+  - Templates and prompts (templates, prompts)
+  - Completion and approve menus/requests (completion, lib/approve)
+  - Ticket tabs (state/tabs), project key rename preview (state/projectKey)
+  - Attachments (state/attachments, lib/attachments), stick to bottom (state + lib/stickToBottom,
+    plus a SwiftUI ScrollPhase → event mapping)
+  - Plugin host bridge + injection (state/pluginBridge, lib/pluginHost), browser touch/keyboard
+    input (lib/browserInput)
+  - Related tickets (lib/related), file viewer routes/windows/patch rows (lib/fileViewer)
+  - Prefs + v2 migration (lib/prefs), theme picker (lib/themePicker)
+  - Already covered elsewhere: icons (state/icons → Themes/Icons.swift), syntax highlighting
+    (lib/highlight, HARNESS-133). RN-only, not ported: lib/keyboard (works around
+    KeyboardAvoidingView's parent-relative frame; SwiftUI's keyboard avoidance doesn't need it),
+    lib/device and lib/storage (platform glue for the app target).
 - [ ] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
 - [ ] Saved servers + Keychain token storage (lib/storage, lib/servers)
 - [ ] Connection banner + reconnect (screens/ConnectionBanner)

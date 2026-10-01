@@ -1,0 +1,1392 @@
+{
+  "pickerCaptionCases": [
+    {
+      "name": "light picker, theme system, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "light picker, theme system, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "Used when iOS is in light mode."
+    },
+    {
+      "name": "dark picker, theme system, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "Used when iOS is in dark mode."
+    },
+    {
+      "name": "dark picker, theme system, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "light picker, theme light, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "light picker, theme light, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "dark picker, theme light, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "Used when Theme is Dark, or System with iOS in dark mode."
+    },
+    {
+      "name": "dark picker, theme light, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "Used when Theme is Dark, or System with iOS in dark mode."
+    },
+    {
+      "name": "light picker, theme dark, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "Used when Theme is Light, or System with iOS in light mode."
+    },
+    {
+      "name": "light picker, theme dark, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "Used when Theme is Light, or System with iOS in light mode."
+    },
+    {
+      "name": "dark picker, theme dark, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "dark picker, theme dark, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "a stale dark pick shows the default selected",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "one-light"
+        },
+        "systemDark": true
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "an unknown light pick shows the default selected and active",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "nope",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": "In use now."
+    },
+    {
+      "name": "a light theme picked as dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "github-light"
+        },
+        "systemDark": false
+      },
+      "output": "Used when Theme is Light, or System with iOS in light mode."
+    }
+  ],
+  "themeLinkPrefsCases": [
+    {
+      "name": "takes valid picks and appearance",
+      "input": {
+        "darkTheme": "catppuccin-mocha",
+        "lightTheme": "rose-pine-dawn",
+        "theme": "dark"
+      },
+      "output": {
+        "lightTheme": "rose-pine-dawn",
+        "darkTheme": "catppuccin-mocha",
+        "theme": "dark"
+      }
+    },
+    {
+      "name": "drops unknown ids, wrong-appearance ids and bad appearances",
+      "input": {
+        "darkTheme": "one-light",
+        "lightTheme": "nope",
+        "theme": "sepia"
+      },
+      "output": {}
+    },
+    {
+      "name": "drops repeated params (arrays)",
+      "input": {
+        "darkTheme": [
+          "dracula",
+          "nord"
+        ]
+      },
+      "output": {}
+    },
+    {
+      "name": "nothing",
+      "input": {},
+      "output": {}
+    },
+    {
+      "name": "empty values are dropped",
+      "input": {
+        "darkTheme": "",
+        "lightTheme": "",
+        "theme": ""
+      },
+      "output": {}
+    },
+    {
+      "name": "only the appearance",
+      "input": {
+        "theme": "system"
+      },
+      "output": {
+        "theme": "system"
+      }
+    },
+    {
+      "name": "upper-case appearance is dropped",
+      "input": {
+        "theme": "Light"
+      },
+      "output": {}
+    },
+    {
+      "name": "unrelated params are ignored",
+      "input": {
+        "tab": "appearance",
+        "lightTheme": "github-light"
+      },
+      "output": {
+        "lightTheme": "github-light"
+      }
+    },
+    {
+      "name": "a dark id is not a light pick",
+      "input": {
+        "lightTheme": "dracula"
+      },
+      "output": {}
+    }
+  ],
+  "themeOptionsCases": [
+    {
+      "name": "light picker, theme system, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "light picker, theme system, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme system, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme system, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "light picker, theme light, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "light picker, theme light, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme light, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme light, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "light",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "light picker, theme dark, system light",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "light picker, theme dark, system dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme dark, system light",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "dark picker, theme dark, system dark",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "a stale dark pick shows the default selected",
+      "input": {
+        "appearance": "dark",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "github-light",
+          "darkTheme": "one-light"
+        },
+        "systemDark": true
+      },
+      "output": [
+        {
+          "id": "harness-dark",
+          "appearance": "dark",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "one-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-frappe",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-macchiato",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-mocha",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "dracula",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "nord",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-dark",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine",
+          "appearance": "dark",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "an unknown light pick shows the default selected and active",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "system",
+          "lightTheme": "nope",
+          "darkTheme": "catppuccin-mocha"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": true,
+          "active": true
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    },
+    {
+      "name": "a light theme picked as dark",
+      "input": {
+        "appearance": "light",
+        "prefs": {
+          "theme": "dark",
+          "lightTheme": "github-light",
+          "darkTheme": "github-light"
+        },
+        "systemDark": false
+      },
+      "output": [
+        {
+          "id": "harness-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "one-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "catppuccin-latte",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "solarized-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "github-light",
+          "appearance": "light",
+          "selected": true,
+          "active": false
+        },
+        {
+          "id": "gruvbox-light",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "tokyo-night-day",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        },
+        {
+          "id": "rose-pine-dawn",
+          "appearance": "light",
+          "selected": false,
+          "active": false
+        }
+      ]
+    }
+  ],
+  "themePrefKeyCases": [
+    {
+      "name": "light",
+      "input": "light",
+      "output": "lightTheme"
+    },
+    {
+      "name": "dark",
+      "input": "dark",
+      "output": "darkTheme"
+    }
+  ]
+}

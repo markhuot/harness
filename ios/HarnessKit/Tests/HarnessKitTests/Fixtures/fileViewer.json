@@ -1,0 +1,2010 @@
+{
+  "fileLinesCases": [
+    {
+      "name": "trailing newline",
+      "input": "a\nb\n",
+      "output": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "blank last line",
+      "input": "a\nb\n\n",
+      "output": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "name": "CRLF",
+      "input": "a\r\nb",
+      "output": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "name": "only newline",
+      "input": "\n",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "name": "two newlines",
+      "input": "\n\n",
+      "output": [
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "lone CR kept",
+      "input": "a\rb",
+      "output": [
+        "a\rb"
+      ]
+    },
+    {
+      "name": "CRLF trailing",
+      "input": "a\r\nb\r\n",
+      "output": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "no trailing newline",
+      "input": "x",
+      "output": [
+        "x"
+      ]
+    },
+    {
+      "name": "U+2028 is not a line break",
+      "input": "a b",
+      "output": [
+        "a b"
+      ]
+    },
+    {
+      "name": "emoji",
+      "input": "😀\ncafé\n",
+      "output": [
+        "😀",
+        "café"
+      ]
+    }
+  ],
+  "fileRouteForCases": [
+    {
+      "name": "relative link in the markdown's ticket",
+      "input": {
+        "link": {
+          "path": "src/app.ts",
+          "absolute": false,
+          "startLine": 10,
+          "endLine": 20
+        },
+        "ctx": {
+          "ticketKey": "HARNESS-1",
+          "projectId": "p1"
+        }
+      },
+      "output": {
+        "path": "src/app.ts",
+        "ticket": "HARNESS-1",
+        "start": "10",
+        "end": "20"
+      }
+    },
+    {
+      "name": "one line",
+      "input": {
+        "link": {
+          "path": "src/app.ts",
+          "absolute": false,
+          "startLine": 7
+        },
+        "ctx": {
+          "ticketKey": "HARNESS-1"
+        }
+      },
+      "output": {
+        "path": "src/app.ts",
+        "ticket": "HARNESS-1",
+        "start": "7"
+      }
+    },
+    {
+      "name": "link's ticket wins",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false,
+          "ticketKey": "OTHER-2"
+        },
+        "ctx": {
+          "ticketKey": "HARNESS-1"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "ticket": "OTHER-2"
+      }
+    },
+    {
+      "name": "link's project wins",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false,
+          "projectId": "p9"
+        },
+        "ctx": {
+          "ticketKey": "HARNESS-1"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "project": "p9"
+      }
+    },
+    {
+      "name": "context project",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false
+        },
+        "ctx": {
+          "projectId": "p1"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "project": "p1"
+      }
+    },
+    {
+      "name": "no root",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false
+        },
+        "ctx": {}
+      },
+      "output": null
+    },
+    {
+      "name": "absolute path passes through",
+      "input": {
+        "link": {
+          "path": "/Users/me/site/a.ts",
+          "absolute": true,
+          "startLine": 3
+        },
+        "ctx": {
+          "ticketKey": "K-1"
+        }
+      },
+      "output": {
+        "path": "/Users/me/site/a.ts",
+        "ticket": "K-1",
+        "start": "3"
+      }
+    },
+    {
+      "name": "triage context project",
+      "input": {
+        "link": {
+          "path": "src/app.ts",
+          "absolute": false,
+          "startLine": 3
+        },
+        "ctx": {
+          "projectId": "p1"
+        }
+      },
+      "output": {
+        "path": "src/app.ts",
+        "project": "p1",
+        "start": "3"
+      }
+    },
+    {
+      "name": "triage context empty",
+      "input": {
+        "link": {
+          "path": "src/app.ts",
+          "absolute": false
+        },
+        "ctx": {}
+      },
+      "output": null
+    },
+    {
+      "name": "no context at all",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "link's ticket over its project",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false,
+          "projectId": "p",
+          "ticketKey": "T-1"
+        },
+        "ctx": {
+          "projectId": "q"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "ticket": "T-1"
+      }
+    },
+    {
+      "name": "link's project over context ticket",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false,
+          "projectId": "p"
+        },
+        "ctx": {
+          "ticketKey": "T-1",
+          "projectId": "q"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "project": "p"
+      }
+    },
+    {
+      "name": "empty context ticket falls to project",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false
+        },
+        "ctx": {
+          "ticketKey": "",
+          "projectId": "p"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "project": "p"
+      }
+    },
+    {
+      "name": "empty context project is no root",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "absolute": false
+        },
+        "ctx": {
+          "projectId": ""
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "end without start is dropped",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "endLine": 4,
+          "absolute": false
+        },
+        "ctx": {
+          "ticketKey": "K"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "ticket": "K"
+      }
+    },
+    {
+      "name": "start zero is no range",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "startLine": 0,
+          "endLine": 4,
+          "absolute": false
+        },
+        "ctx": {
+          "ticketKey": "K"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "ticket": "K"
+      }
+    },
+    {
+      "name": "end zero is dropped",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "startLine": 3,
+          "endLine": 0,
+          "absolute": false
+        },
+        "ctx": {
+          "ticketKey": "K"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "ticket": "K",
+        "start": "3"
+      }
+    },
+    {
+      "name": "empty link ticket falls back",
+      "input": {
+        "link": {
+          "path": "a.ts",
+          "ticketKey": "",
+          "projectId": "lp",
+          "absolute": false
+        },
+        "ctx": {
+          "ticketKey": "K"
+        }
+      },
+      "output": {
+        "path": "a.ts",
+        "project": "lp"
+      }
+    }
+  ],
+  "fileRouteForURLCases": [
+    {
+      "name": "keeps the range and ticket",
+      "input": "harness://file/src/a%20b.ts?ticket=HARNESS-3#L4-L9",
+      "output": {
+        "path": "src/a b.ts",
+        "ticket": "HARNESS-3",
+        "start": "4",
+        "end": "9"
+      }
+    },
+    {
+      "name": "upper-case prefix with project",
+      "input": "HARNESS://FILE/x.ts?project=p1",
+      "output": {
+        "path": "x.ts",
+        "project": "p1"
+      }
+    },
+    {
+      "name": "no ticket or project still opens",
+      "input": "harness://file/x.ts#L2",
+      "output": {
+        "path": "x.ts"
+      }
+    },
+    {
+      "name": "pair link",
+      "input": "harness://pair?url=http%3A%2F%2Fh&token=t",
+      "output": null
+    },
+    {
+      "name": "settings link",
+      "input": "harness://settings?theme=dark",
+      "output": null
+    },
+    {
+      "name": "ticket link",
+      "input": "harness://ticket/K-1?tab=transcript",
+      "output": null
+    },
+    {
+      "name": "empty path",
+      "input": "harness://file/",
+      "output": null
+    },
+    {
+      "name": "escaping the root",
+      "input": "harness://file/../etc/passwd",
+      "output": null
+    },
+    {
+      "name": "reversed range",
+      "input": "harness://file/src/app.ts?ticket=K-1#L5-L2",
+      "output": {
+        "path": "src/app.ts",
+        "ticket": "K-1",
+        "start": "2",
+        "end": "5"
+      }
+    },
+    {
+      "name": "relative path is not an OS link",
+      "input": "src/app.ts#L3",
+      "output": null
+    },
+    {
+      "name": "absolute path",
+      "input": "harness://file//Users/me/a.ts#L1-L2",
+      "output": {
+        "path": "/Users/me/a.ts"
+      }
+    },
+    {
+      "name": "unicode path",
+      "input": "harness://file/%C3%BCber.ts",
+      "output": {
+        "path": "über.ts"
+      }
+    },
+    {
+      "name": "mixed-case prefix",
+      "input": "Harness://File/a.ts?ticket=K-9#L3",
+      "output": {
+        "path": "a.ts",
+        "ticket": "K-9",
+        "start": "3"
+      }
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "short string",
+      "input": "harness://fil",
+      "output": null
+    }
+  ],
+  "formatSizeCases": [
+    {
+      "name": "bytes",
+      "input": 512,
+      "output": "512 B"
+    },
+    {
+      "name": "1.5 KB",
+      "input": 1536,
+      "output": "1.5 KB"
+    },
+    {
+      "name": "20 KB",
+      "input": 20480,
+      "output": "20 KB"
+    },
+    {
+      "name": "3.0 MB",
+      "input": 3145728,
+      "output": "3.0 MB"
+    },
+    {
+      "name": "zero",
+      "input": 0,
+      "output": "0 B"
+    },
+    {
+      "name": "1023 B",
+      "input": 1023,
+      "output": "1023 B"
+    },
+    {
+      "name": "1 KB",
+      "input": 1024,
+      "output": "1.0 KB"
+    },
+    {
+      "name": "just under 10 KB",
+      "input": 10239,
+      "output": "10.0 KB"
+    },
+    {
+      "name": "10 KB",
+      "input": 10240,
+      "output": "10 KB"
+    },
+    {
+      "name": "toFixed tie 1.25 rounds up",
+      "input": 1280,
+      "output": "1.3 KB"
+    },
+    {
+      "name": "toFixed tie 1.75",
+      "input": 1792,
+      "output": "1.8 KB"
+    },
+    {
+      "name": "toFixed 9.95 tie",
+      "input": 10188.8,
+      "output": "9.9 KB"
+    },
+    {
+      "name": "9.96 KB reads 10.0",
+      "input": 10199.04,
+      "output": "10.0 KB"
+    },
+    {
+      "name": "Math.round half up",
+      "input": 10752,
+      "output": "11 KB"
+    },
+    {
+      "name": "1023.9 KB does not promote",
+      "input": 1048476,
+      "output": "1024 KB"
+    },
+    {
+      "name": "1 MB",
+      "input": 1048576,
+      "output": "1.0 MB"
+    },
+    {
+      "name": "1.5 GB",
+      "input": 1610612736,
+      "output": "1.5 GB"
+    },
+    {
+      "name": "beyond GB stays GB",
+      "input": 5497558138880,
+      "output": "5120 GB"
+    },
+    {
+      "name": "fractional bytes",
+      "input": 12.5,
+      "output": "12.5 B"
+    },
+    {
+      "name": "negative",
+      "input": -5,
+      "output": "-5 B"
+    }
+  ],
+  "highlightWindowCases": [
+    {
+      "name": "whole file fits",
+      "input": {
+        "lengths": [
+          3,
+          3,
+          3
+        ],
+        "center": 1,
+        "maxChars": 100
+      },
+      "output": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "grows both ways",
+      "input": {
+        "lengths": [
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9
+        ],
+        "center": 5,
+        "maxChars": 35
+      },
+      "output": [
+        4,
+        7
+      ]
+    },
+    {
+      "name": "at the start",
+      "input": {
+        "lengths": [
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9
+        ],
+        "center": 0,
+        "maxChars": 35
+      },
+      "output": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "at the end",
+      "input": {
+        "lengths": [
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9
+        ],
+        "center": 9,
+        "maxChars": 35
+      },
+      "output": [
+        7,
+        10
+      ]
+    },
+    {
+      "name": "big line on one side",
+      "input": {
+        "lengths": [
+          1,
+          1,
+          1,
+          1,
+          500,
+          1,
+          1,
+          1
+        ],
+        "center": 5,
+        "maxChars": 20
+      },
+      "output": [
+        5,
+        8
+      ]
+    },
+    {
+      "name": "oversized center",
+      "input": {
+        "lengths": [
+          1,
+          999,
+          1
+        ],
+        "center": 1,
+        "maxChars": 50
+      },
+      "output": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "center past the end",
+      "input": {
+        "lengths": [
+          1,
+          1
+        ],
+        "center": 40,
+        "maxChars": 100
+      },
+      "output": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "empty",
+      "input": {
+        "lengths": [],
+        "center": 0,
+        "maxChars": 100
+      },
+      "output": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "negative center",
+      "input": {
+        "lengths": [
+          1,
+          1,
+          1
+        ],
+        "center": -4,
+        "maxChars": 4
+      },
+      "output": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "exact budget",
+      "input": {
+        "lengths": [
+          4,
+          4,
+          4
+        ],
+        "center": 1,
+        "maxChars": 15
+      },
+      "output": [
+        0,
+        3
+      ]
+    },
+    {
+      "name": "one short of budget",
+      "input": {
+        "lengths": [
+          4,
+          4,
+          4
+        ],
+        "center": 1,
+        "maxChars": 14
+      },
+      "output": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "zero budget",
+      "input": {
+        "lengths": [
+          1,
+          1,
+          1
+        ],
+        "center": 1,
+        "maxChars": 0
+      },
+      "output": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "grows down before up",
+      "input": {
+        "lengths": [
+          1,
+          1,
+          1
+        ],
+        "center": 1,
+        "maxChars": 4
+      },
+      "output": [
+        1,
+        3
+      ]
+    },
+    {
+      "name": "empty lines",
+      "input": {
+        "lengths": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "center": 2,
+        "maxChars": 3
+      },
+      "output": [
+        1,
+        4
+      ]
+    },
+    {
+      "name": "uneven sides",
+      "input": {
+        "lengths": [
+          10,
+          1,
+          1,
+          5,
+          1,
+          1,
+          1,
+          30
+        ],
+        "center": 3,
+        "maxChars": 16
+      },
+      "output": [
+        1,
+        7
+      ]
+    }
+  ],
+  "initialScrollIndexCases": [
+    {
+      "name": "middle",
+      "input": {
+        "start": 50,
+        "total": 100
+      },
+      "output": 46
+    },
+    {
+      "name": "near the top",
+      "input": {
+        "start": 2,
+        "total": 100
+      },
+      "output": 0
+    },
+    {
+      "name": "past the end",
+      "input": {
+        "start": 500,
+        "total": 100
+      },
+      "output": 99
+    },
+    {
+      "name": "no start",
+      "input": {
+        "total": 100
+      },
+      "output": 0
+    },
+    {
+      "name": "empty file",
+      "input": {
+        "start": 5,
+        "total": 0
+      },
+      "output": 0
+    },
+    {
+      "name": "start zero",
+      "input": {
+        "start": 0,
+        "total": 100
+      },
+      "output": 0
+    },
+    {
+      "name": "negative start",
+      "input": {
+        "start": -5,
+        "total": 100
+      },
+      "output": 0
+    },
+    {
+      "name": "exactly context + 1",
+      "input": {
+        "start": 4,
+        "total": 100
+      },
+      "output": 0
+    },
+    {
+      "name": "custom context",
+      "input": {
+        "start": 50,
+        "total": 100,
+        "context": 10
+      },
+      "output": 39
+    },
+    {
+      "name": "zero context",
+      "input": {
+        "start": 50,
+        "total": 100,
+        "context": 0
+      },
+      "output": 49
+    },
+    {
+      "name": "last line",
+      "input": {
+        "start": 100,
+        "total": 100
+      },
+      "output": 96
+    },
+    {
+      "name": "negative total",
+      "input": {
+        "start": 5,
+        "total": -1
+      },
+      "output": 0
+    },
+    {
+      "name": "one-line file",
+      "input": {
+        "start": 1,
+        "total": 1
+      },
+      "output": 0
+    }
+  ],
+  "patchRowsCases": [
+    {
+      "name": "two hunks",
+      "input": "diff --git a/src/app.ts b/src/app.ts\nindex 1111111..2222222 100644\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -3,4 +3,5 @@ function main() {\n const a = 1;\n-const b = 2;\n+const b = 3;\n+const c = 4;\n\n return a;\n@@ -20,2 +21,1 @@\n--- dashes removed\n end\n\\ No newline at end of file\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -3,4 +3,5 @@ function main() {",
+          "oldLine": null,
+          "newLine": null,
+          "source": 4
+        },
+        {
+          "kind": "ctx",
+          "text": "const a = 1;",
+          "oldLine": 3,
+          "newLine": 3,
+          "source": 5
+        },
+        {
+          "kind": "del",
+          "text": "const b = 2;",
+          "oldLine": 4,
+          "newLine": null,
+          "source": 6
+        },
+        {
+          "kind": "add",
+          "text": "const b = 3;",
+          "oldLine": null,
+          "newLine": 4,
+          "source": 7
+        },
+        {
+          "kind": "add",
+          "text": "const c = 4;",
+          "oldLine": null,
+          "newLine": 5,
+          "source": 8
+        },
+        {
+          "kind": "ctx",
+          "text": "",
+          "oldLine": 5,
+          "newLine": 6,
+          "source": 9
+        },
+        {
+          "kind": "ctx",
+          "text": "return a;",
+          "oldLine": 6,
+          "newLine": 7,
+          "source": 10
+        },
+        {
+          "kind": "hunk",
+          "text": "@@ -20,2 +21,1 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 11
+        },
+        {
+          "kind": "del",
+          "text": "-- dashes removed",
+          "oldLine": 20,
+          "newLine": null,
+          "source": 12
+        },
+        {
+          "kind": "ctx",
+          "text": "end",
+          "oldLine": 21,
+          "newLine": 21,
+          "source": 13
+        }
+      ]
+    },
+    {
+      "name": "untracked file",
+      "input": "diff --git a/n.ts b/n.ts\nnew file mode 100644\n--- /dev/null\n+++ b/n.ts\n@@ -0,0 +1,2 @@\n+one\n+two\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -0,0 +1,2 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 4
+        },
+        {
+          "kind": "add",
+          "text": "one",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 5
+        },
+        {
+          "kind": "add",
+          "text": "two",
+          "oldLine": null,
+          "newLine": 2,
+          "source": 6
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": []
+    },
+    {
+      "name": "binary",
+      "input": "diff --git a/i.png b/i.png\nindex 1..2 100644\nBinary files a/i.png and b/i.png differ\n",
+      "output": []
+    },
+    {
+      "name": "no trailing newline",
+      "input": "@@ -1 +1 @@\n-a\n+b",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1 +1 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "del",
+          "text": "a",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        }
+      ]
+    },
+    {
+      "name": "trailing blank context kept when not last",
+      "input": "@@ -1,2 +1,2 @@\n-a\n+b\n\n x\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1,2 +1,2 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "del",
+          "text": "a",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        },
+        {
+          "kind": "ctx",
+          "text": "",
+          "oldLine": 2,
+          "newLine": 2,
+          "source": 3
+        },
+        {
+          "kind": "ctx",
+          "text": "x",
+          "oldLine": 3,
+          "newLine": 3,
+          "source": 4
+        }
+      ]
+    },
+    {
+      "name": "CRLF",
+      "input": "@@ -1 +1 @@\r\n-a\r\n+b\r\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1 +1 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "del",
+          "text": "a",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        }
+      ]
+    },
+    {
+      "name": "lines before the first hunk",
+      "input": "-stray\n+stray\n@@ -4 +4 @@\n-a\n+b\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -4 +4 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 2
+        },
+        {
+          "kind": "del",
+          "text": "a",
+          "oldLine": 4,
+          "newLine": null,
+          "source": 3
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 4,
+          "source": 4
+        }
+      ]
+    },
+    {
+      "name": "bare @@ keeps numbering",
+      "input": "@@ -1 +1 @@\n-a\n+b\n@@ @@\n c\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1 +1 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "del",
+          "text": "a",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        },
+        {
+          "kind": "hunk",
+          "text": "@@ @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 3
+        },
+        {
+          "kind": "ctx",
+          "text": "c",
+          "oldLine": 2,
+          "newLine": 2,
+          "source": 4
+        }
+      ]
+    },
+    {
+      "name": "first hunk bare starts at zero",
+      "input": "@@ @@\n a\n+b\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "ctx",
+          "text": "a",
+          "oldLine": 0,
+          "newLine": 0,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "b",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        }
+      ]
+    },
+    {
+      "name": "deleted file",
+      "input": "--- a/g.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-x\n-y\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1,2 +0,0 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 2
+        },
+        {
+          "kind": "del",
+          "text": "x",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 3
+        },
+        {
+          "kind": "del",
+          "text": "y",
+          "oldLine": 2,
+          "newLine": null,
+          "source": 4
+        }
+      ]
+    },
+    {
+      "name": "only a newline",
+      "input": "\n",
+      "output": []
+    },
+    {
+      "name": "header only",
+      "input": "diff --git a/a b/a\nold mode 100644\nnew mode 100755\n",
+      "output": []
+    },
+    {
+      "name": "emoji and combining marks",
+      "input": "@@ -1 +1 @@\n-café\n+café 😀\n",
+      "output": [
+        {
+          "kind": "hunk",
+          "text": "@@ -1 +1 @@",
+          "oldLine": null,
+          "newLine": null,
+          "source": 0
+        },
+        {
+          "kind": "del",
+          "text": "café",
+          "oldLine": 1,
+          "newLine": null,
+          "source": 1
+        },
+        {
+          "kind": "add",
+          "text": "café 😀",
+          "oldLine": null,
+          "newLine": 1,
+          "source": 2
+        }
+      ]
+    }
+  ],
+  "readFileParamsCases": [
+    {
+      "name": "no path",
+      "input": {
+        "ticket": "K-1"
+      },
+      "output": null
+    },
+    {
+      "name": "empty path",
+      "input": {
+        "path": "",
+        "ticket": "K-1"
+      },
+      "output": null
+    },
+    {
+      "name": "ticket over project",
+      "input": {
+        "path": "a",
+        "ticket": "K-1",
+        "project": "p"
+      },
+      "output": {
+        "root": {
+          "kind": "ticket",
+          "key": "K-1"
+        },
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "project",
+      "input": {
+        "path": "a",
+        "project": "p"
+      },
+      "output": {
+        "root": {
+          "kind": "project",
+          "id": "p"
+        },
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "no root",
+      "input": {
+        "path": "a"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "single line",
+      "input": {
+        "path": "a",
+        "start": "7"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          7,
+          7
+        ]
+      }
+    },
+    {
+      "name": "reversed",
+      "input": {
+        "path": "a",
+        "start": "9",
+        "end": "3"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          3,
+          9
+        ]
+      }
+    },
+    {
+      "name": "start zero",
+      "input": {
+        "path": "a",
+        "start": "0"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "junk start",
+      "input": {
+        "path": "a",
+        "start": "x",
+        "end": "4"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "fractional start",
+      "input": {
+        "path": "a",
+        "start": "2.5"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "junk end",
+      "input": {
+        "path": "a",
+        "start": "4",
+        "end": "nope"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          4,
+          4
+        ]
+      }
+    },
+    {
+      "name": "arrays",
+      "input": {
+        "path": [
+          "a.ts",
+          "b.ts"
+        ],
+        "ticket": [
+          "K-1"
+        ]
+      },
+      "output": {
+        "root": {
+          "kind": "ticket",
+          "key": "K-1"
+        },
+        "path": "a.ts",
+        "range": null
+      }
+    },
+    {
+      "name": "empty array path",
+      "input": {
+        "path": []
+      },
+      "output": null
+    },
+    {
+      "name": "empty first array value",
+      "input": {
+        "path": [
+          "",
+          "b"
+        ]
+      },
+      "output": null
+    },
+    {
+      "name": "empty ticket falls to project",
+      "input": {
+        "path": "a",
+        "ticket": "",
+        "project": "p"
+      },
+      "output": {
+        "root": {
+          "kind": "project",
+          "id": "p"
+        },
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "empty project",
+      "input": {
+        "path": "a",
+        "project": ""
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "end without start",
+      "input": {
+        "path": "a",
+        "end": "5"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "same start and end",
+      "input": {
+        "path": "a",
+        "start": "5",
+        "end": "5"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          5,
+          5
+        ]
+      }
+    },
+    {
+      "name": "negative start",
+      "input": {
+        "path": "a",
+        "start": "-3"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "padded number",
+      "input": {
+        "path": "a",
+        "start": " 12 ",
+        "end": "\n14\t"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          12,
+          14
+        ]
+      }
+    },
+    {
+      "name": "NBSP-padded number",
+      "input": {
+        "path": "a",
+        "start": " 12"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          12,
+          12
+        ]
+      }
+    },
+    {
+      "name": "NEL-padded number is NaN",
+      "input": {
+        "path": "a",
+        "start": "12"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "plus sign",
+      "input": {
+        "path": "a",
+        "start": "+3"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "name": "hex start",
+      "input": {
+        "path": "a",
+        "start": "0x10"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          16,
+          16
+        ]
+      }
+    },
+    {
+      "name": "upper-case hex",
+      "input": {
+        "path": "a",
+        "start": "0XfF"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          255,
+          255
+        ]
+      }
+    },
+    {
+      "name": "binary start",
+      "input": {
+        "path": "a",
+        "start": "0b11"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          3,
+          3
+        ]
+      }
+    },
+    {
+      "name": "octal start",
+      "input": {
+        "path": "a",
+        "start": "0o17"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          15,
+          15
+        ]
+      }
+    },
+    {
+      "name": "signed hex is NaN",
+      "input": {
+        "path": "a",
+        "start": "-0x10"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "exponent start",
+      "input": {
+        "path": "a",
+        "start": "1e2"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          100,
+          100
+        ]
+      }
+    },
+    {
+      "name": "upper-case exponent",
+      "input": {
+        "path": "a",
+        "start": "2E1"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          20,
+          20
+        ]
+      }
+    },
+    {
+      "name": "negative exponent",
+      "input": {
+        "path": "a",
+        "start": "50e-1"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          5,
+          5
+        ]
+      }
+    },
+    {
+      "name": "fraction that is whole",
+      "input": {
+        "path": "a",
+        "start": "3.0",
+        "end": "6."
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          3,
+          6
+        ]
+      }
+    },
+    {
+      "name": "leading dot",
+      "input": {
+        "path": "a",
+        "start": ".5e1"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          5,
+          5
+        ]
+      }
+    },
+    {
+      "name": "leading zeros",
+      "input": {
+        "path": "a",
+        "start": "007"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          7,
+          7
+        ]
+      }
+    },
+    {
+      "name": "empty start is zero",
+      "input": {
+        "path": "a",
+        "start": ""
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "whitespace start is zero",
+      "input": {
+        "path": "a",
+        "start": "  "
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "Infinity",
+      "input": {
+        "path": "a",
+        "start": "Infinity"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "underscore separator",
+      "input": {
+        "path": "a",
+        "start": "1_000"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "lone dot",
+      "input": {
+        "path": "a",
+        "start": "."
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "lone e",
+      "input": {
+        "path": "a",
+        "start": "e5"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "inner space",
+      "input": {
+        "path": "a",
+        "start": "1 2"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "arabic digits",
+      "input": {
+        "path": "a",
+        "start": "١٢"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "2^53 + 1 rounds",
+      "input": {
+        "path": "a",
+        "start": "9007199254740993"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": [
+          9007199254740992,
+          9007199254740992
+        ]
+      }
+    },
+    {
+      "name": "inf literal is NaN",
+      "input": {
+        "path": "a",
+        "start": "inf"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "hex float is NaN",
+      "input": {
+        "path": "a",
+        "start": "0x1p3"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "nan literal is NaN",
+      "input": {
+        "path": "a",
+        "start": "nan"
+      },
+      "output": {
+        "root": null,
+        "path": "a",
+        "range": null
+      }
+    },
+    {
+      "name": "unicode path",
+      "input": {
+        "path": "über/naïve.ts",
+        "ticket": "K"
+      },
+      "output": {
+        "root": {
+          "kind": "ticket",
+          "key": "K"
+        },
+        "path": "über/naïve.ts",
+        "range": null
+      }
+    }
+  ],
+  "triageLinkContextCases": [
+    {
+      "name": "dispatched and loaded",
+      "input": {
+        "key": "GREET-4",
+        "dispatched": {
+          "projectId": "p1"
+        }
+      },
+      "output": {
+        "projectId": "p1"
+      }
+    },
+    {
+      "name": "not loaded",
+      "input": {
+        "key": "GREET-4"
+      },
+      "output": {
+        "ticketKey": "GREET-4"
+      }
+    },
+    {
+      "name": "nothing dispatched",
+      "input": {},
+      "output": {}
+    },
+    {
+      "name": "empty key",
+      "input": {
+        "key": ""
+      },
+      "output": {}
+    },
+    {
+      "name": "loaded without key",
+      "input": {
+        "dispatched": {
+          "projectId": "p2"
+        }
+      },
+      "output": {
+        "projectId": "p2"
+      }
+    }
+  ]
+}
