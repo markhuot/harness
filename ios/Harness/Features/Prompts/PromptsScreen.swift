@@ -11,25 +11,28 @@ struct PromptsScreen: View {
     var body: some View {
         ZStack {
             if let prompts = catalog.prompts {
-                Form {
-                    Section {
-                        Text(promptsIntro)
-                            .font(.system(size: 13))
-                            .foregroundStyle(c.text3)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    }
-                    ForEach(Prompts.groupPrompts(prompts), id: \.title) { g in
-                        Section {
-                            ForEach(g.entries) { p in row(p) }
-                        } header: {
-                            Text(g.title)
-                        } footer: {
-                            Text(g.description)
+                // A plain stack, not a lazy Form: every row is in the accessibility tree from the
+                // start, as in RN's ScrollView (sim-check waits for a row below the fold).
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text(promptsIntro).font(.system(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
+                        ForEach(Prompts.groupPrompts(prompts), id: \.title) { g in
+                            VStack(alignment: .leading, spacing: 8) {
+                                SectionTitle(g.title).padding(.horizontal, 4)
+                                Card {
+                                    ForEach(Array(g.entries.enumerated()), id: \.element.id) { i, p in
+                                        if i > 0 { Divider().overlay(c.border) }
+                                        row(p)
+                                    }
+                                }
+                                Text(g.description).font(.system(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
+                            }
                         }
                     }
+                    .padding(16)
+                    .padding(.bottom, 40)
                 }
-                .settingsFormStyle(c)
+                .background(c.bg)
             } else {
                 PromptsLoading(error: catalog.error)
             }
@@ -51,10 +54,11 @@ struct PromptsScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Icon("chevronRight", size: 13).foregroundStyle(c.text3)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .settingsRowBackground(c)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(p.label)
         .accessibilityValue(Prompts.promptState(p).label)

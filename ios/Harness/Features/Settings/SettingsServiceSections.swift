@@ -83,7 +83,7 @@ struct SettingsGeneralSection: View {
 
     var body: some View {
         Section("General") {
-            TicketSettingsRow(label: "Max concurrent runs", hint: "Agent runs across all sessions. Extra runs wait in the queue.") {
+            SettingsRow(label: "Max concurrent runs", hint: "Agent runs across all sessions. Extra runs wait in the queue.") {
                 DraftField(value: String(settings.maxConcurrentRuns)) { v in
                     if let n = SettingsRules.maxConcurrentRuns(v) { save(SettingsPatch(maxConcurrentRuns: n)) }
                 }
@@ -91,7 +91,7 @@ struct SettingsGeneralSection: View {
                 .frame(maxWidth: 80)
                 .accessibilityLabel("Max concurrent runs")
             }
-            TicketSettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
+            SettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in
                     switch SettingsRules.settingsBaseBranchCommit(v, current: settings.baseBranch) {
                     case .none: break
@@ -171,7 +171,7 @@ struct SettingsModelsSection: View {
     var body: some View {
         let models = ModelSettings(settings)
         Section {
-            TicketSettingsRow(label: "Default model", hint: "Used for new sessions unless the project or ticket picks its own.") {
+            SettingsRow(label: "Default model", hint: "Used for new sessions unless the project or ticket picks its own.") {
                 DriverModelPicker(
                     value: Models.settingsChoice(models),
                     resolved: Watchers.TriageChoice(driver: settings.defaultDriver, model: nil),
@@ -180,7 +180,7 @@ struct SettingsModelsSection: View {
                 ) { save(Models.settingsChoicePatch($0, models)) }
             }
             ForEach(store.state.drivers) { d in
-                TicketSettingsRow(label: d.name, hint: "Model for agent review runs") {
+                SettingsRow(label: d.name, hint: "Model for agent review runs") {
                     ModelPicker(driver: d.id, value: settings.reviewModels[d.id] ?? nil, defaultLabel: "Same as work", plainDefault: true, title: "Review model") { m in
                         save(SettingsPatch(reviewModels: [d.id: m]))
                     }
@@ -208,12 +208,12 @@ struct SettingsPermissionsSection: View {
 
     var body: some View {
         Section {
-            TicketSettingsRow(label: "Default mode", hint: Permissions.label(for: settings.permissionMode)?.description) {
+            SettingsRow(label: "Default mode", hint: Permissions.label(for: settings.permissionMode)?.description) {
                 PermissionPicker(value: settings.permissionMode) { m in
                     if let m { save(SettingsPatch(permissionMode: m)) }
                 }
             }
-            TicketSettingsRow(label: "Auto-mode classifier", hint: "Judges actions in auto mode for the Anthropic API driver. Claude Code tickets use Claude Code's own classifier.") {
+            SettingsRow(label: "Auto-mode classifier", hint: "Judges actions in auto mode for the Anthropic API driver. Claude Code tickets use Claude Code's own classifier.") {
                 SelectMenu(
                     value: settings.classifier,
                     options: ClassifierBackend.allKnown.map { PickerOption(value: $0, label: Format.classifierLabels[$0] ?? $0.rawValue) },
@@ -243,7 +243,7 @@ struct SettingsTriageSection: View {
 
     var body: some View {
         Section {
-            TicketSettingsRow(label: "Default model") {
+            SettingsRow(label: "Default model") {
                 DriverModelPicker(
                     value: Watchers.settingsWatcherChoice(settings),
                     resolved: Watchers.TriageChoice(driver: settings.defaultDriver, model: settings.defaultModels[settings.defaultDriver] ?? nil),

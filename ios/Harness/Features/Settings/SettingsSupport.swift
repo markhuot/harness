@@ -21,6 +21,29 @@ extension View {
     }
 }
 
+/// A settings row with a control (RN SRow): the label and the control on one line, the hint across
+/// the row under them, so a long hint never squeezes the control. Labels and controls stay separate
+/// AX elements (see ARCHITECTURE.md § Pickers: LabeledContent merges them).
+struct SettingsRow<Control: View>: View {
+    let label: String
+    var hint: String?
+    @ViewBuilder var control: Control
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(label).font(.system(size: 15)).foregroundStyle(c.text).layoutPriority(1)
+                Spacer(minLength: 8)
+                control
+            }
+            if let hint, !hint.isEmpty { Text(hint).font(.system(size: 12.5)).foregroundStyle(c.text3) }
+        }
+        .settingsRowBackground(c)
+    }
+}
+
 /// A tappable Form row (RN SRow with onPress): title, an optional subtitle and a trailing view,
 /// the whole row hit-testable. `accessibilityLabel` replaces the merged label when given.
 struct SettingsButtonRow<Title: View, Subtitle: View, Trailing: View>: View {

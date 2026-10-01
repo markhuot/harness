@@ -93,14 +93,10 @@ private struct PromptDetailView: View {
                 }
 
                 if editing {
-                    Picker("View", selection: Binding(get: { compare }, set: { v in
+                    PromptSegmented(compare: compare) { v in
                         compare = v
                         handle.blur()
-                    })) {
-                        Text("Edit").tag(false)
-                        Text("Compare with built-in").tag(true)
                     }
-                    .pickerStyle(.segmented)
                 }
 
                 // Above the field, so it stays in view while editing a prompt that runs to a few screens.
@@ -254,6 +250,45 @@ private struct PromptDetailView: View {
         // The new value lands natively on the next frame; then the caret goes right after the
         // insert, where the next insert (and the next keystroke) expects it.
         handle.focus(caret: next.caret)
+    }
+}
+
+/// Edit / Compare with built-in (RN Segmented). Two buttons drawn as a segmented control rather
+/// than a segmented Picker, whose segments AXe doesn't list by label (sim-check waits for
+/// "Compare with built-in").
+private struct PromptSegmented: View {
+    let compare: Bool
+    let onChange: (Bool) -> Void
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment("Edit", selected: !compare) { onChange(false) }
+            segment("Compare with built-in", selected: compare) { onChange(true) }
+        }
+        .padding(2)
+        .background(c.bgSunken, in: .capsule)
+    }
+
+    private func segment(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            if !selected {
+                haptic(.select)
+                action()
+            }
+        } label: {
+            Text(label)
+                .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                .foregroundStyle(c.text)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 32)
+                .background(selected ? c.bgElev : .clear, in: .capsule)
+                .shadow(color: selected ? .black.opacity(0.08) : .clear, radius: 2, y: 1)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

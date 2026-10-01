@@ -52,7 +52,7 @@ private struct ProjectSettingsForm: View {
 
         Form {
             Section("General") {
-                TicketSettingsRow(label: "Name") {
+                SettingsRow(label: "Name") {
                     DraftField(value: project.name, prompt: "Name") { v in
                         let name = v.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !name.isEmpty { save(UpdateProjectBody(name: name)) }
@@ -91,7 +91,7 @@ private struct ProjectSettingsForm: View {
             }
 
             Section("Agents") {
-                TicketSettingsRow(label: "Default model", hint: "Used for new sessions in this project. Global default follows the app setting.") {
+                SettingsRow(label: "Default model", hint: "Used for new sessions in this project. Global default follows the app setting.") {
                     DriverModelPicker(
                         value: Models.projectChoice(modelProject, modelSettings),
                         resolved: settings.map { Watchers.TriageChoice(driver: $0.defaultDriver, model: Models.inheritedModel($0.defaultDriver, level: .project, project: modelProject, settings: modelSettings)) }
@@ -101,14 +101,14 @@ private struct ProjectSettingsForm: View {
                         inheritedModel: { Models.inheritedModel($0, level: .project, project: modelProject, settings: modelSettings) }
                     ) { save(Models.projectChoicePatch($0, modelProject)) }
                 }
-                TicketSettingsRow(label: "Permission mode", hint: "\(Permissions.label(for: project.permissionMode ?? inherited)?.description ?? "") Tickets can override it.") {
+                SettingsRow(label: "Permission mode", hint: "\(Permissions.label(for: project.permissionMode ?? inherited)?.description ?? "") Tickets can override it.") {
                     PermissionPicker(value: project.permissionMode, inherited: inherited) { save(UpdateProjectBody(permissionMode: Patch($0))) }
                 }
                 toggleRow("Worktree per ticket", hint: "Each ticket works on its own branch (harness/<key>) when the folder is a git repo.", on: project.useWorktrees) {
                     save(UpdateProjectBody(useWorktrees: $0))
                 }
                 if isGit {
-                    TicketSettingsRow(label: "Base branch", hint: "Tickets merge into it when they complete, and new branches start from it. Empty follows the app setting.") {
+                    SettingsRow(label: "Base branch", hint: "Tickets merge into it when they complete, and new branches start from it. Empty follows the app setting.") {
                         DraftField(
                             value: project.baseBranch.optional ?? "",
                             prompt: Branches.inheritedBaseLabel(Branches.resolveBaseBranch(ticket: nil, project: nil, settings: settings?.baseBranch)),
@@ -134,7 +134,7 @@ private struct ProjectSettingsForm: View {
                 }
                 if isGit {
                     let info = Completion.ProjectInfo(project)
-                    TicketSettingsRow(label: "When approved", hint: "What the Approve button does by default: merge the branch, open a pull request, or follow instructions you give. Each approval can pick another.") {
+                    SettingsRow(label: "When approved", hint: "What the Approve button does by default: merge the branch, open a pull request, or follow instructions you give. Each approval can pick another.") {
                         SelectMenu(
                             value: Completion.projectCompletionDefault(info),
                             options: Approve.completionActionOptions(Completion.offeredCompletionActions(info)).map {
@@ -179,7 +179,7 @@ private struct ProjectSettingsForm: View {
     }
 
     private func toggleRow(_ label: String, hint: String, on: Bool, set: @escaping (Bool) -> Void) -> some View {
-        TicketSettingsRow(label: label, hint: hint) {
+        SettingsRow(label: label, hint: hint) {
             Toggle(label, isOn: Binding(get: { on }, set: set)).labelsHidden().tint(c.accent).accessibilityLabel(label)
         }
     }

@@ -59,7 +59,7 @@ struct WatcherFormScreen: View {
                     .accessibilityLabel("Working directory")
             }
             Section {
-                TicketSettingsRow(label: "Model") {
+                SettingsRow(label: "Model") {
                     DriverModelPicker(value: draft.choice, resolved: resolved) { choice in
                         edited = true
                         draft.choice = choice

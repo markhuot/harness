@@ -193,7 +193,7 @@ private struct SettingsNetworkSection: View {
     var body: some View {
         if let net = model.network {
             Section {
-                TicketSettingsRow(label: "Listen on", hint: net.error) {
+                SettingsRow(label: "Listen on", hint: net.error) {
                     SelectMenu(
                         value: net.mode,
                         options: SettingsRules.listenChoices.map { PickerOption(value: $0, label: SettingsRules.listenLabel($0)) },
