@@ -34,7 +34,7 @@ ios/
       Fixtures/          generated JSON from shared/fixtures (committed)
       Support/           Fixture loader, jsonEqual
     Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
-  Tools/                 build.ts, dev-sim.ts (README § Dev loop), build-highlighter.ts, bun tests
+  Tools/                 build.ts, dev-sim.ts + axe.ts (README § Dev loop), build-highlighter.ts, bun tests
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both

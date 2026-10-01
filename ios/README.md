@@ -134,10 +134,15 @@ opens in order after that, and `--shot NAME` saves `ios/build/screens/NAME-light
 `NAME-dark.png`. The run ends by stopping the daemon and deleting its temp home, unless `--keep`
 leaves it up (it prints the URL, token path and pid) until Ctrl-C.
 
-The first `openurl` on a fresh simulator can stop at iOS's "Open in “Harness”?" prompt. Tap Open
-in Simulator.app, or with AXe: `DEVELOPER_DIR=~/Library/Caches/harness-sim-check/xcode-shim/Xcode.app/Contents/Developer axe tap --label Open --udid <udid>`
-(sim-check creates that shim on its first run). `axe describe-ui` lists the screen's AXLabels,
-which is the quickest way to check that a deep link landed where it should.
+dev-sim checks the screen with [AXe](https://github.com/cameroncooke/AXe)
+(`brew install cameroncooke/axe/axe`; it refuses to run without it), as sim-check does. After
+each `openurl` it taps Open on iOS's "Open in “Harness”?" prompt, which the first link on a fresh
+simulator stops at. Pairing counts only once the board's column chips ("Planning, 1") show, and a
+link only once the screen changes. Otherwise the run exits 1 with the labels it saw, before any
+screenshot, and it cancels a leftover prompt first, so a stale pair link can't be accepted later.
+To read the screen yourself, `axe describe-ui` lists the AXLabels. It needs the Xcode shim that
+dev-sim and sim-check create:
+`DEVELOPER_DIR=~/Library/Caches/harness-sim-check/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.

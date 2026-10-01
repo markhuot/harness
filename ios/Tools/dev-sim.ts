@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
+import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
 const REPO = resolve(IOS, "..");
@@ -26,6 +27,9 @@ export const USAGE = `Usage: bun ios/Tools/dev-sim.ts --sim <name> [options]
 Creates (if missing) and boots the simulator <name> (an iPhone 18 Pro on the newest installed iOS
 runtime), starts a throwaway daemon with a seeded project, builds the native app with
 \`bun ios/Tools/build.ts sim\`, installs it fresh (no saved servers, keychain reset) and pairs it.
+Pairing and each link are checked on screen with AXe (iOS's "Open in “Harness”?" is tapped); a
+run that doesn't reach the board, or a link that doesn't change the screen, fails with the labels
+it saw instead of saving screenshots of the wrong screen.
 
   --sim <name>     the simulator to use; name it after your ticket: harness-<KEY>
   --no-build       install the app that's already built (${DEFAULT_APP.replace(REPO + "/", "")})
@@ -211,16 +215,61 @@ async function buildApp(): Promise<string> {
   return app;
 }
 
-/** Installs the app fresh (no saved servers or tokens) and cold-launches it on the pair link. */
-async function installAndPair(udid: string, app: string, pairUrl: string) {
+type Axe = ReturnType<typeof axeFor>;
+
+/** Fails with what's on screen, after cancelling a leftover "Open in “Harness”?" prompt (it would
+ * otherwise accept this run's link later, for a daemon that's gone by then). */
+async function failOnScreen(axe: Axe, what: string, labels: string[]): Promise<never> {
+  if (screenState(labels) === "prompt") await axe.tap("Cancel");
+  throw new Error(`${what}; on screen: ${labels.slice(0, 14).join(" | ") || "(nothing)"}`);
+}
+
+/**
+ * Opens `url` and waits until the screen `accept`s, tapping Open on iOS's "Open in “Harness”?"
+ * prompt whenever it shows. `fail` ends the wait early (the Pair screen's error).
+ */
+async function openAndWait(udid: string, axe: Axe, url: string, what: string, accept: (labels: string[]) => boolean, opts: { ms?: number; fail?: (labels: string[]) => boolean } = {}) {
+  await simctl("openurl", udid, url);
+  const end = Date.now() + (opts.ms ?? 15000);
+  let labels: string[] = [];
+  while (Date.now() < end) {
+    labels = await axe.labels();
+    if (screenState(labels) === "prompt") {
+      await axe.tap("Open");
+      continue;
+    }
+    if (opts.fail?.(labels)) return failOnScreen(axe, what, labels);
+    if (accept(labels)) return labels;
+    await Bun.sleep(150);
+  }
+  return failOnScreen(axe, `timed out: ${what}`, labels);
+}
+
+/** Installs the app fresh (no saved servers or tokens), cold-launches it on the pair link and waits for the board. */
+async function installAndPair(udid: string, axe: Axe, app: string, pairUrl: string) {
   await sh(["xcrun", "simctl", "terminate", udid, BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, app);
   await simctl("ui", udid, "appearance", "light");
   log("pairing…");
-  await simctl("openurl", udid, pairUrl);
-  await Bun.sleep(4000); // a cold launch, the pairing request and the first board load
+  await openAndWait(udid, axe, pairUrl, "pairing (the board never showed)", (l) => screenState(l) === "board", {
+    ms: 40000,
+    fail: (l) => screenState(l) === "pairFailed",
+  });
+  log("paired: the board is up");
+}
+
+/** Opens a link in the running app and waits for a new screen (any screen of the app's, when the
+ * same link was just opened and nothing should change). */
+async function openLink(udid: string, axe: Axe, link: string, previous: { url: string; key: string }) {
+  const before = previous.url === link ? null : previous.key;
+  const labels = await openAndWait(udid, axe, link, `opening ${link} (the app never left the previous screen)`, (l) => {
+    const state = screenState(l);
+    return (state === "app" || state === "board") && (before === null || screenKey(l) !== before);
+  });
+  await Bun.sleep(400); // the push or sheet animation finishes drawing
+  return { url: link, key: screenKey(labels) };
 }
 
 async function shoot(udid: string, name: string) {
@@ -339,6 +388,9 @@ async function main(o: Options): Promise<void> {
   const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
   if (!process.env.DEVELOPER_DIR && existsSync(xcode)) process.env.DEVELOPER_DIR = xcode;
 
+  // Pairing and links are confirmed on screen, which needs AXe.
+  if (!o.seedOnly && !hasAxe()) throw new UsageError("dev-sim reads the screen with AXe: brew install cameroncooke/axe/axe");
+
   if (!o.seedOnly && !o.build) {
     const app = o.app ?? DEFAULT_APP;
     if (!existsSync(app)) throw new UsageError(`${app} doesn't exist; drop --no-build to build it`);
@@ -359,11 +411,12 @@ async function main(o: Options): Promise<void> {
     printSeeded(d, seeded);
     if (device) {
       const [udid, app] = await device;
-      await installAndPair(udid, app, buildPairUrl(d.base, d.token));
+      const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
+      await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));
+      let previous = { url: "", key: screenKey(await axe.labels()) };
       for (const link of o.links) {
         log(`opening ${link}`);
-        await simctl("openurl", udid, link);
-        await Bun.sleep(2500);
+        previous = await openLink(udid, axe, link, previous);
       }
       if (o.shot) await shoot(udid, o.shot);
       log(`simulator: ${o.sim} (${udid}); delete it when the ticket is done: xcrun simctl delete ${o.sim}`);
