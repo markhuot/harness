@@ -13,12 +13,10 @@ import { NetworkManager, parseHostOverride, type NetworkDeps } from "./api/netwo
 import type { WsData } from "./api/ws";
 import type { Driver } from "./drivers/types";
 import type { BrowserService } from "./browser/types";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { PluginHost, type PluginDir } from "./plugins/host";
 import { CodeWatch } from "./code-watch";
-
-/** Built-in plugins shipped with the repo. */
-export const BUILTIN_PLUGINS_DIR = resolve(import.meta.dir, "..", "..", "plugins");
+import { BUILTIN_PLUGINS_DIR } from "./runtime";
 
 export interface CreateHarnessOptions {
   home: string;

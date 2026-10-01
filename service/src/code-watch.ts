@@ -60,6 +60,23 @@ export function sourceFingerprint(root: string = REPO_ROOT): string {
   return hash.digest("hex").slice(0, 16);
 }
 
+/**
+ * The compiled service's stand-in for sourceFingerprint: it has no source on disk, but a new
+ * Harness.app replaces its executable (another inode, size or mtime), which makes a service
+ * launchd still runs from the old one stale. While the file is missing (the app is being
+ * replaced, or was moved) the last value stands, so the service doesn't restart onto nothing.
+ */
+export function executableFingerprint(path: string): () => string {
+  let last = "missing";
+  return () => {
+    try {
+      const s = statSync(path);
+      last = createHash("sha256").update(`${s.ino}:${s.size}:${s.mtimeMs}`).digest("hex").slice(0, 16);
+    } catch {}
+    return last;
+  };
+}
+
 export interface CodeWatchOptions {
   fingerprint: () => string;
   /** No runs queued, running or starting. */
