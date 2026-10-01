@@ -61,11 +61,8 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     ctx.clearRect(0, 0, cw, ch);
     const { bitmap, width, height } = frame.current;
     if (!bitmap) return;
-    // Frames are page CSS pixels; fit that page into the stage (with a little breathing room).
-    const pad = 12;
-    const r = fitRect(cw - pad * 2, ch - pad * 2, width || bitmap.width, height || bitmap.height);
-    r.x += pad;
-    r.y += pad;
+    // Frames are page CSS pixels; fit that page into the stage, full bleed (the page is resized to the stage).
+    const r = fitRect(cw, ch, width || bitmap.width, height || bitmap.height);
     drawn.current = r;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
