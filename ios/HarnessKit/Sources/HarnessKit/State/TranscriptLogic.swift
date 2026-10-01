@@ -33,6 +33,18 @@ public enum TranscriptLogic {
         return rows
     }
 
+    /// How many of the newest rows the list draws at first, and how many more each "Show earlier
+    /// messages" adds. The native list is a plain stack: a lazy one re-estimates the rows it hasn't
+    /// measured as they scroll by, so its height jumps and the bottom can't be held. A window keeps
+    /// heights exact while a transcript of thousands of entries stays cheap to draw.
+    public static let windowStep = 150
+
+    /// The newest `limit` rows, and how many older ones are left out.
+    public static func window(_ rows: [Row], limit: Int) -> (rows: ArraySlice<Row>, hidden: Int) {
+        let hidden = max(0, rows.count - max(limit, 0))
+        return (rows[hidden...], hidden)
+    }
+
     static func draws(_ item: Format.TranscriptItem) -> Bool {
         guard case let .entry(e) = item else { return true }
         switch e.content {

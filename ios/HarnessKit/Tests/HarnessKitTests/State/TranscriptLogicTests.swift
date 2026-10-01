@@ -36,6 +36,18 @@ struct TranscriptLogicTests {
         #expect(streaming == [.item(items[0]), .delta(runId: "r1", text: "Hel")])
     }
 
+    @Test("the window keeps the newest rows and counts the rest")
+    func window() {
+        let rows = (0..<5).map { TranscriptLogic.Row.delta(runId: "r\($0)", text: "") }
+        let w = TranscriptLogic.window(rows, limit: 3)
+        #expect(w.rows.map(\.id) == ["delta-r2", "delta-r3", "delta-r4"])
+        #expect(w.hidden == 2)
+        #expect(TranscriptLogic.window(rows, limit: 5).hidden == 0)
+        #expect(TranscriptLogic.window(rows, limit: 99).rows.count == 5)
+        #expect(TranscriptLogic.window(rows, limit: 0).rows.isEmpty)
+        #expect(TranscriptLogic.window([], limit: 3).hidden == 0)
+    }
+
     @Test("entries that draw nothing get no row")
     func silentEntries() {
         let unknown = Self.entry("u", .unknown(type: "future", raw: .object(["type": .string("future")])))

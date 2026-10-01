@@ -55,13 +55,17 @@ struct StickToBottomTests {
 
     @Test("ScrollGeometry insets fold in so the bottom is distance zero")
     func insets() {
-        // 2000pt content, 600pt container, 50pt top and 80pt bottom insets: SwiftUI's offset runs
-        // from -50 at the top to 2000 + 80 - 600 = 1480 at the bottom.
+        // 2000pt content in a 730pt frame with 50pt top and 80pt bottom insets: containerSize is the
+        // frame less the insets (600pt), and the offset runs from -50 at the top to
+        // 2000 + 80 - 730 = 1350 at the bottom (measured on iOS 27 under the composer's inset:
+        // offset 6474, content 6861, container 387, bottom inset 122 at the end).
         let top = ScrollMetrics(contentOffsetY: -50, contentHeight: 2000, containerHeight: 600, topInset: 50, bottomInset: 80)
-        let bottom = ScrollMetrics(contentOffsetY: 1480, contentHeight: 2000, containerHeight: 600, topInset: 50, bottomInset: 80)
+        let bottom = ScrollMetrics(contentOffsetY: 1350, contentHeight: 2000, containerHeight: 600, topInset: 50, bottomInset: 80)
+        let measured = ScrollMetrics(contentOffsetY: 6474, contentHeight: 6861, containerHeight: 387, bottomInset: 122)
         #expect(top.offset == 0)
-        #expect(StickToBottom.distanceFromBottom(top) == 2130 - 600)
+        #expect(StickToBottom.distanceFromBottom(top) == 2000 - 600)
         #expect(StickToBottom.distanceFromBottom(bottom) == 0)
+        #expect(StickToBottom.distanceFromBottom(measured) == 0)
     }
 
     private static func at(_ offset: Double) -> ScrollMetrics { ScrollMetrics(offset: offset, contentHeight: 2000, viewportHeight: 600) }
@@ -124,5 +128,17 @@ struct StickToBottomTests {
         #expect(StickToBottom.events(from: .idle, to: .animating, metrics: m) == [])
         #expect(StickToBottom.events(from: .idle, to: .tracking, metrics: m) == [])
         #expect(StickToBottom.events(from: .interacting, to: .interacting, metrics: m) == [])
+    }
+
+    @Test("a fling that bounces back off the end stays pinned")
+    func bounceAtTheEnd() {
+        // Measured under the composer's inset: the end is distance zero, so the bounce back from
+        // an overshoot (the offset moving up) lands on the bottom and isn't read as scrolling away.
+        func at(_ off: Double) -> ScrollMetrics { ScrollMetrics(contentOffsetY: off, contentHeight: 6861, containerHeight: 387, bottomInset: 122) }
+        let (stick, follows) = Self.drive(StickToBottom.stuck, [
+            (.interacting, at(6474)), (nil, at(6560)), (.decelerating, at(6572)), (nil, at(6520)), (nil, at(6474)), (.idle, at(6474)),
+        ])
+        #expect(stick.pinned)
+        #expect(follows.last == true)
     }
 }

@@ -18,6 +18,7 @@ struct TranscriptView<Header: View>: View {
     @Environment(\.palette) private var c
     @State private var error: String?
     @State private var memo = TranscriptItemsMemo()
+    @State private var limit = TranscriptLogic.windowStep
 
     var body: some View {
         let state = store.state
@@ -29,39 +30,58 @@ struct TranscriptView<Header: View>: View {
         let subagents = state.subagentsOf(sessionId)
         let who = TranscriptLogic.who(subagentId: subagentId)
         let loading = transcript?.loaded != true && error == nil
+        let window = TranscriptLogic.window(rows, limit: limit)
 
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                header
-                if let error {
-                    HStack(alignment: .top, spacing: 6) {
-                        Icon("alert", size: 14).foregroundStyle(c.red)
-                        Text("Couldn't load the transcript: \(error)").font(.system(size: 15)).foregroundStyle(c.red)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(10)
-                    .background(c.redSoft, in: .rect(cornerRadius: 8))
-                }
-                if rows.isEmpty {
-                    if loading {
-                        Spinner().padding(30).frame(maxWidth: .infinity)
-                    } else {
-                        EmptyState(icon: "message", title: "No messages yet", message: emptyHint ?? defaultHint)
-                            .padding(.top, 30)
-                    }
-                }
-                ForEach(rows) { row in
-                    TranscriptRowView(row: row, who: who, agent: agent(for: row, in: subagents))
-                        .equatable()
+        ScrollViewReader { proxy in
+            ScrollView {
+                list(window, empty: rows.isEmpty, loading: loading, who: who, subagents: subagents) { first in
+                    // The next batch, keeping the row the user was reading at the top.
+                    limit += TranscriptLogic.windowStep
+                    if let first { DispatchQueue.main.async { proxy.scrollTo(first, anchor: .top) } }
                 }
             }
-            .padding(14)
-            .padding(.bottom, 10)
+            .scrollDismissesKeyboard(.interactively)
+            .ticketStickToBottom()
+            .ticketHeroScroll()
         }
-        .scrollDismissesKeyboard(.interactively)
-        .ticketStickToBottom()
-        .ticketHeroScroll()
         .task(id: "\(sessionId)/\(subagentId ?? "")/\(store.epoch)") { await backfill() }
+    }
+
+    /// A plain stack of the window's rows (not a lazy one: see TranscriptLogic.windowStep).
+    private func list(_ window: (rows: ArraySlice<TranscriptLogic.Row>, hidden: Int), empty: Bool, loading: Bool, who: String,
+                      subagents: [Subagent]?, showEarlier: @escaping (String?) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if window.hidden > 0 {
+                HButton("Show earlier messages (\(window.hidden))", icon: "arrowUp", variant: .ghost, small: true) {
+                    showEarlier(window.rows.first?.id)
+                }
+            }
+            if let error {
+                HStack(alignment: .top, spacing: 6) {
+                    Icon("alert", size: 14).foregroundStyle(c.red)
+                    Text("Couldn't load the transcript: \(error)").font(.system(size: 15)).foregroundStyle(c.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .background(c.redSoft, in: .rect(cornerRadius: 8))
+            }
+            if empty {
+                if loading {
+                    Spinner().padding(30).frame(maxWidth: .infinity)
+                } else {
+                    EmptyState(icon: "message", title: "No messages yet", message: emptyHint ?? defaultHint)
+                        .padding(.top, 30)
+                }
+            }
+            ForEach(window.rows) { row in
+                TranscriptRowView(row: row, who: who, agent: agent(for: row, in: subagents))
+                    .equatable()
+                    .id(row.id)
+            }
+        }
+        .padding(14)
+        .padding(.bottom, 10)
     }
 
     private var defaultHint: String {
