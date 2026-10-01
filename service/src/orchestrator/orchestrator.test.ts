@@ -1240,6 +1240,22 @@ describe("triage", () => {
     expect(t.externalRef).toBeNull();
   });
 
+  test("dispatch can put the new ticket on an existing branch, as its base too; a bad branch name is refused", async () => {
+    const h = setup();
+    Bun.spawnSync(["git", "init", "-q"], { cwd: h.project.path }); // a branch needs a git repo
+    const errors: string[] = [];
+    h.driver.script = async function* (req) {
+      const ops = req.toolContext.ops;
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Bad", description: "x", branch: "bad..name" }).catch((e: Error) => errors.push(e.message));
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Fix PR 12", description: "Resolve the conflicts", branch: "feature/pr-12", baseBranch: "feature/pr-12" });
+    };
+    const s = await h.orch.injectOutput("github", '{"pr":12}');
+    await h.orch.idle();
+    expect(errors[0]).toContain("..");
+    expect(h.orch.getSession(s!.id).outcome).toBe("Dispatched to ACME-1 in ACME");
+    expect(h.orch.ticketDetail("ACME-1").ticket).toMatchObject({ title: "Fix PR 12", requestedBranch: "feature/pr-12", baseBranch: "feature/pr-12" });
+  });
+
   test("one output with several items can dispatch each; decline is refused after a dispatch", async () => {
     const h = setup();
     let declineErr: unknown = null;

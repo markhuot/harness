@@ -284,6 +284,10 @@ export interface HarnessOps {
       description: string;
       start?: boolean;
       conductor?: boolean;
+      /** The new ticket's branch (CreateTicketBody.branch); ignored with ticketKey */
+      branch?: string;
+      /** The new ticket's base branch override (CreateTicketBody.baseBranch); ignored with ticketKey */
+      baseBranch?: string;
     },
   ): Promise<Ticket>;
   /** `title` replaces the Inbox title derived from the raw output. */

@@ -5,18 +5,18 @@ import { parentLandingBranch } from "./branches";
 import { COMPLETION_ACTIONS, type CompletionAction, type Project, type Ticket } from "./protocol";
 
 type ProjectLike = Pick<Project, "isGit" | "completionAction" | "completionActions" | "pullRequestHost">;
-type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl"> & { baseBranch?: string | null };
+type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl"> & { baseBranch?: string | null; branch?: string | null };
 type ParentLike = { branch?: string | null; status?: string } | null | undefined;
 
 /**
- * The actions a project offers from what its checkout supports: custom only outside git; merge and
- * custom in a git repo; pr as well when a pull request can be opened (`pullRequestHost`). Uses the
- * service's list when it sent one.
+ * The actions a project offers from what its checkout supports: custom only outside git; merge,
+ * cleanup and custom in a git repo; pr as well when a pull request can be opened
+ * (`pullRequestHost`). Uses the service's list when it sent one.
  */
 export function offeredCompletionActions(project: Pick<Project, "isGit" | "completionActions" | "pullRequestHost"> | null | undefined): CompletionAction[] {
   if (project?.completionActions) return project.completionActions;
   if (project?.isGit === false) return ["custom"];
-  return project?.pullRequestHost ? ["merge", "pr", "custom"] : ["merge", "custom"];
+  return project?.pullRequestHost ? ["merge", "pr", "cleanup", "custom"] : ["merge", "cleanup", "custom"];
 }
 
 /** Whether a string from a request is a completion action at all. */
@@ -35,6 +35,15 @@ export function projectCompletionDefault(project: ProjectLike | null | undefined
   return offered.includes("merge") ? "merge" : offered[0] ?? "custom";
 }
 
+/**
+ * Whether the ticket works on its base branch itself (`branch` is the effective base, as on a
+ * ticket made to push to an existing pull request's branch): there's nothing to merge or open a
+ * pull request from.
+ */
+export function worksOnBase(ticket: Pick<TicketLike, "branch"> | null | undefined, base: string | null | undefined): boolean {
+  return !!ticket?.branch && !!base && ticket.branch === base;
+}
+
 export interface CompletionOptions {
   /** The actions this ticket may complete with, in menu order */
   actions: CompletionAction[];
@@ -50,16 +59,22 @@ export interface CompletionOptions {
 }
 
 /**
- * What approving `ticket` can do. A child whose parent has a branch only merges into it. Otherwise
- * the project's offered actions, preselecting the ticket's earlier choice, then pr when the ticket
- * already opened a pull request (so a re-approval updates it), then the project default.
+ * What approving `ticket` can do. A child whose parent has a branch only merges into it.
+ * Otherwise the project's offered actions; cleanup always among them, since even a worktree with no
+ * commits (the work was a database or config change outside git) is worth removing. A ticket on
+ * its base branch (`base`, the effective base branch, when the caller knows it) has nothing to
+ * merge or open a pull request from, so those two drop out. Preselects
+ * the ticket's earlier choice, then pr when the ticket already opened a pull request (so a
+ * re-approval updates it), then the project default, then the first action left.
  */
-export function completionOptions(ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, parent?: ParentLike): CompletionOptions {
+export function completionOptions(ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, parent?: ParentLike, base?: string | null): CompletionOptions {
   const parentBranch = parentLandingBranch(ticket, parent);
   if (parentBranch) return { actions: ["merge"], defaultAction: "merge", parentBranch };
-  const actions = offeredCompletionActions(project);
+  const onBase = worksOnBase(ticket, base);
+  const actions = offeredCompletionActions(project).filter((a) => !(onBase && (a === "merge" || a === "pr")));
   const earlier = ticket?.completionAction;
-  let defaultAction = projectCompletionDefault(project);
+  const projectDefault = projectCompletionDefault(project);
+  let defaultAction = actions.includes(projectDefault) ? projectDefault : actions[0] ?? "custom";
   if (earlier && actions.includes(earlier)) defaultAction = earlier;
   else if (ticket?.pullRequestUrl && actions.includes("pr")) defaultAction = "pr";
   return { actions, defaultAction, parentBranch: null };
@@ -74,17 +89,20 @@ export function resolveCompletionAction(
   ticket: TicketLike | null | undefined,
   project: ProjectLike | null | undefined,
   parent?: ParentLike,
+  base?: string | null,
 ): { action: CompletionAction; error: null } | { action: null; error: string } {
-  const opts = completionOptions(ticket, project, parent);
+  const opts = completionOptions(ticket, project, parent, base);
   if (!requested) return { action: opts.defaultAction, error: null };
   if (opts.actions.includes(requested)) return { action: requested, error: null };
-  return { action: null, error: completionRefusal(requested, opts) };
+  return { action: null, error: completionRefusal(requested, opts, ticket, project, base) };
 }
 
-function completionRefusal(action: CompletionAction, opts: CompletionOptions): string {
+function completionRefusal(action: CompletionAction, opts: CompletionOptions, ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, base?: string | null): string {
   if (opts.parentBranch) return `this ticket merges into its parent's branch ${opts.parentBranch}, so it can't complete with "${action}"`;
+  const offered = offeredCompletionActions(project).includes(action);
+  if (offered && worksOnBase(ticket, base)) return `this ticket works on its base branch ${base}, so there is nothing to ${action === "pr" ? "open a pull request from" : "merge"}: complete it with "cleanup" or "custom"`;
   if (action === "pr") return `"pr" needs a git remote on a host gh is logged into (run gh auth login)`;
-  if (action === "merge") return `"merge" needs a git repository`;
+  if (action === "merge" || action === "cleanup") return `"${action}" needs a git repository`;
   return `"${action}" isn't offered here (offered: ${opts.actions.join(", ")})`;
 }
 
@@ -92,6 +110,7 @@ function completionRefusal(action: CompletionAction, opts: CompletionOptions): s
 export const COMPLETION_ACTION_LABELS: Record<CompletionAction, string> = {
   merge: "Approve and merge",
   pr: "Approve and open PR",
+  cleanup: "Approve and clean up",
   custom: "Approve and…",
 };
 
@@ -110,9 +129,9 @@ export function approveLabel(opts: CompletionOptions): string {
 }
 
 /**
- * The Approve menu's choices, in order (merge, pr, then custom as "Approve and…", which asks for
- * instructions). Empty for a child on its parent's branch: it only merges. "Approve and take no
- * action" always follows them, after a separator.
+ * The Approve menu's choices, in order (merge, pr, cleanup, then custom as "Approve and…", which
+ * asks for instructions). Empty for a child on its parent's branch: it only merges. "Approve and
+ * take no action" always follows them, after a separator.
  */
 export function approveMenuActions(opts: CompletionOptions): CompletionAction[] {
   return opts.parentBranch ? [] : opts.actions;

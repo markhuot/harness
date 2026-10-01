@@ -314,7 +314,10 @@ the base branch (`git worktree add -b <branch> <dir> <base>`). It blocks with "C
 worktree: …" naming the branch and path when the branch is already checked out in another
 worktree, or naming the base when the base branch doesn't exist. `requestedBranch` can change
 (HTTP, `update_ticket`) only while the ticket has no worktree on disk. `plannedBranch(ticket)` is
-what clients show: the branch it uses, or will use. `GET /projects/:id/branches?q=&limit=`
+what clients show: the branch it uses, or will use. A ticket whose branch *is* its base branch
+(both set to an existing pull request's head, as triage does for fixes on an open PR) works and
+pushes on that branch directly: `system.work` tells it so (`onBase`), and approving it only
+offers `cleanup` and `custom` (see "Completion"). `GET /projects/:id/branches?q=&limit=`
 (`BranchInfo[]`: name, lastCommitAt, checkedOutAt) feeds the new-session branch picker.
 
 **Re-pointing** is the ticket's own agent's job (`update_branch`, work and conductor runs): a
@@ -386,10 +389,11 @@ How an approved ticket's work lands is chosen per approval (`CompletionAction`, 
 | --- | --- | --- |
 | `merge` ("Approve and merge") | `system.complete_merge`, `run.complete_merge` | Merges the ticket branch into the base branch by name, from wherever the base is checked out (`git worktree list`): merge there when a worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is `harness/<key>`, deleted from the worktree that has the base checked out (`branch -d` checks against what's checked out where it runs). A harness worktree left behind by `update_branch` is removed only once its commits are merged. |
 | `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url }`, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
+| `cleanup` ("Approve and clean up") | `system.complete_cleanup`, `run.complete_cleanup` | For work that already landed or never needed git: a ticket on an existing pull request's head branch that pushed there itself, a branch merged by hand, or an empty worktree after a database or config change. It merges, pushes and opens nothing. It stops if the worktree has uncommitted changes or the branch has commits on no remote branch (and, off the base, not in the base branch); otherwise it removes the harness worktree and deletes `harness/<key>` with `branch -D` (the check already proved its commits are safe; `-d` refuses commits that are only on a remote). A branch the harness didn't create is kept. Afterwards the service checks: while the harness worktree or `harness/<key>` is still there, the ticket moves to `blocked` ("Cleanup didn't finish") instead of done, so the human can deal with the commits. |
 | `custom` ("Approve and…") | `system.complete_custom`, `run.complete_custom` | Commits leftovers, then does what the approver's instructions say, merging, pushing or deleting nothing they don't ask for. With no instructions (the plain "Approve" of a folder outside git) it's a light wrap-up. |
 
 **What a project offers** (`Project.completionActions`, worked out on every read like `isGit`):
-`custom` only outside git; `merge` and `custom` in a git repo; `pr` as well when
+`custom` only outside git; `merge`, `cleanup` and `custom` in a git repo; `pr` as well when
 `Project.pullRequestHost` is set. That takes three checks, all file reads (`store/remotes.ts`,
 cached for 2 s per path): `gh` is on the daemon's PATH; the repo's git config (following a
 worktree's `.git` file to the common dir) has a remote, `origin` or the only one, whose URL parses
@@ -410,9 +414,16 @@ it's approved (`POST /review`, `review_ticket`) or completed (`POST /complete`,
 `complete_ticket`), because a human approval can come before the agent review finishes. A new
 action without instructions drops the old instructions. `completionOptions` (shared) decides what
 a ticket may do and what's preselected: a child on its parent's branch only merges; otherwise the
-offered actions, preselecting the ticket's earlier choice, then `pr` for a ticket that already has
-a `pullRequestUrl` (a re-approval updates the same pull request), then the project default. An
-action the ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
+offered actions (`cleanup` always among them in git, even for a worktree with no commits, when
+the work was a change outside git), less `merge` and `pr` for a ticket whose branch is its
+effective base branch (`worksOnBase`: there's nothing to merge or
+open a pull request from; triage makes such tickets with `dispatch_ticket { branch, base_branch }`
+for work on an existing pull request's branch). It preselects the ticket's earlier choice, then
+`pr` for a ticket that already has a `pullRequestUrl` (a re-approval updates the same pull
+request), then the project default, then the first action left (so a ticket on its base branch
+preselects `cleanup`). The apps pass the base branch they resolve (`resolveBaseBranch`); the
+service passes its own, which can also fall back to the main checkout's branch. An action the
+ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
 ticket, so the run's system prompt and first message agree.
 
 **Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
@@ -440,7 +451,7 @@ takes its first child. Children default to `autoStart: true`: they start as soon
 (coalesced) run of the parent's own kind (conductor or work) with `conductorUpdatePrompt`. The conductor acts as the human reviewer
 for its children (`review_ticket`) and completes them (`complete_ticket`). When the parent works in
 a worktree of its own, its children branch from its branch and merge back into it (the `"parent"`
-base branch source, "Branches"): they only complete with `merge` (`pr` and `custom` get a 400), and
+base branch source, "Branches"): they only complete with `merge` (`pr`, `cleanup` and `custom` get a 400), and
 the whole goal lands on the base branch, by the parent's own merge, pull request or custom
 completion, only when the parent completes. So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
@@ -553,7 +564,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
 | `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
-| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs") |
+| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |

@@ -2,7 +2,7 @@
 // settings), plus deleting projects and tickets. Reads are open to every ticket run
 // and triage; every mutation is a gated tool (defineGatedTool): a human approves each call.
 
-import { commandLine, PERMISSION_MODES, PROJECT_COLORS, type PublicSettings, type Watcher } from "@harness/shared";
+import { commandLine, COMPLETION_ACTIONS, PERMISSION_MODES, PROJECT_COLORS, type PublicSettings, type Watcher } from "@harness/shared";
 import type { WatcherFields } from "./types";
 import { defineGatedTool, defineTool, json, schema } from "./util";
 
@@ -306,9 +306,9 @@ const projectProps = {
   auto_complete: { type: "boolean", description: "Complete tickets as soon as both reviews approve. Default true." },
   completion_action: {
     type: "string",
-    enum: ["merge", "pr", "custom"],
+    enum: [...COMPLETION_ACTIONS],
     description:
-      "What approving a ticket does by default: \"merge\" its branch into the base branch, \"pr\" (push and open a GitHub pull request; needs a remote gh is logged into), or \"custom\" (the approver's instructions). Default merge.",
+      "What approving a ticket does by default: \"merge\" its branch into the base branch, \"pr\" (push and open a GitHub pull request; needs a remote gh is logged into), \"cleanup\" (only remove the worktree and branch, for work that lands by itself, e.g. pushed to an existing pull request), or \"custom\" (the approver's instructions). Default merge.",
   },
   permission_mode: permissionModeProp,
   default_models: modelMapProp,
