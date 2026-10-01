@@ -11,6 +11,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The agent reviewer now looks past the diff at the rest of the codebase, and requests changes
+  when the work duplicates logic that already exists or puts it somewhere other than the module
+  built for it (for example, database queries written outside the repository that holds the rest).
 - On iPhone and iPad, a ticket's header (its title, badges and buttons) now slides out of the way
   when you scroll down its Summaries, Transcript, Tickets, Agents or Details tab, leaving the tabs
   pinned at the top and more room to read. Scroll back up a little, tap the current tab, or tap the
