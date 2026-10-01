@@ -1,0 +1,1770 @@
+{
+  "activeMentionCases": [
+    {
+      "name": "at the start",
+      "input": {
+        "text": "@sr",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "sr",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a space",
+      "input": {
+        "text": "see @src/ap",
+        "caret": 11
+      },
+      "output": {
+        "start": 4,
+        "end": 11,
+        "query": "src/ap",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a bracket",
+      "input": {
+        "text": "fix (@a",
+        "caret": 7
+      },
+      "output": {
+        "start": 5,
+        "end": 7,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a newline",
+      "input": {
+        "text": "line\n@x",
+        "caret": 7
+      },
+      "output": {
+        "start": 5,
+        "end": 7,
+        "query": "x",
+        "quoted": false
+      }
+    },
+    {
+      "name": "bare @",
+      "input": {
+        "text": "look at @",
+        "caret": 9
+      },
+      "output": {
+        "start": 8,
+        "end": 9,
+        "query": "",
+        "quoted": false
+      }
+    },
+    {
+      "name": "email address",
+      "input": {
+        "text": "mail mark@exam",
+        "caret": 14
+      },
+      "output": null
+    },
+    {
+      "name": "a@",
+      "input": {
+        "text": "a@",
+        "caret": 2
+      },
+      "output": null
+    },
+    {
+      "name": "caret after the word",
+      "input": {
+        "text": "@src done",
+        "caret": 9
+      },
+      "output": null
+    },
+    {
+      "name": "caret before the @",
+      "input": {
+        "text": "@src",
+        "caret": 0
+      },
+      "output": null
+    },
+    {
+      "name": "no @",
+      "input": {
+        "text": "plain text",
+        "caret": 10
+      },
+      "output": null
+    },
+    {
+      "name": "caret mid-word runs to the end of the word",
+      "input": {
+        "text": "@src/app.ts next",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 11,
+        "query": "sr",
+        "quoted": false
+      }
+    },
+    {
+      "name": "quoted with a space",
+      "input": {
+        "text": "see @\"My Doc",
+        "caret": 12
+      },
+      "output": {
+        "start": 4,
+        "end": 12,
+        "query": "My Doc",
+        "quoted": true
+      }
+    },
+    {
+      "name": "quoted ends at the closing quote",
+      "input": {
+        "text": "@\"My Doc.md\" rest",
+        "caret": 5
+      },
+      "output": {
+        "start": 0,
+        "end": 12,
+        "query": "My ",
+        "quoted": true
+      }
+    },
+    {
+      "name": "closed quoted mention before the caret",
+      "input": {
+        "text": "@\"a b\" and more",
+        "caret": 15
+      },
+      "output": null
+    },
+    {
+      "name": "caret 0 on empty text",
+      "input": {
+        "text": "",
+        "caret": 0
+      },
+      "output": null
+    },
+    {
+      "name": "negative caret",
+      "input": {
+        "text": "@a",
+        "caret": -1
+      },
+      "output": null
+    },
+    {
+      "name": "caret past the end",
+      "input": {
+        "text": "@a",
+        "caret": 3
+      },
+      "output": null
+    },
+    {
+      "name": "caret at the end exactly",
+      "input": {
+        "text": "x @ab",
+        "caret": 5
+      },
+      "output": {
+        "start": 2,
+        "end": 5,
+        "query": "ab",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after an opening brace",
+      "input": {
+        "text": "{@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after an opening square bracket",
+      "input": {
+        "text": "[@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a single quote",
+      "input": {
+        "text": "'@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a backtick",
+      "input": {
+        "text": "`@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a double quote",
+      "input": {
+        "text": "\"@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a tab",
+      "input": {
+        "text": "\t@a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after NBSP (JS whitespace)",
+      "input": {
+        "text": " @a",
+        "caret": 3
+      },
+      "output": {
+        "start": 1,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after NEL (not JS whitespace)",
+      "input": {
+        "text": "@a",
+        "caret": 3
+      },
+      "output": null
+    },
+    {
+      "name": "after an ideographic space",
+      "input": {
+        "text": "x　@a",
+        "caret": 4
+      },
+      "output": {
+        "start": 2,
+        "end": 4,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "after a closing bracket is no boundary",
+      "input": {
+        "text": ")@a",
+        "caret": 3
+      },
+      "output": null
+    },
+    {
+      "name": "two @s: the inner one is mid-word",
+      "input": {
+        "text": "@a@b",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "space then @@",
+      "input": {
+        "text": " @@b",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "word ends at a tab",
+      "input": {
+        "text": "@ab\tc",
+        "caret": 2
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "word ends at NBSP",
+      "input": {
+        "text": "@ab c",
+        "caret": 2
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "word does not end at NEL",
+      "input": {
+        "text": "@abc",
+        "caret": 2
+      },
+      "output": {
+        "start": 0,
+        "end": 5,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "quoted open, nothing typed",
+      "input": {
+        "text": "@\"",
+        "caret": 2
+      },
+      "output": {
+        "start": 0,
+        "end": 2,
+        "query": "",
+        "quoted": true
+      }
+    },
+    {
+      "name": "quoted with a newline before the caret",
+      "input": {
+        "text": "@\"a\nb",
+        "caret": 5
+      },
+      "output": null
+    },
+    {
+      "name": "quoted close on a later line is not the end",
+      "input": {
+        "text": "@\"ab\nc\"",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "a",
+        "quoted": true
+      }
+    },
+    {
+      "name": "quoted close before a newline",
+      "input": {
+        "text": "@\"ab\"\nc",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 5,
+        "query": "a",
+        "quoted": true
+      }
+    },
+    {
+      "name": "quoted after an email-like @",
+      "input": {
+        "text": "x@\"a",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "quoted with a bracket boundary",
+      "input": {
+        "text": "(@\"a b",
+        "caret": 6
+      },
+      "output": {
+        "start": 1,
+        "end": 6,
+        "query": "a b",
+        "quoted": true
+      }
+    },
+    {
+      "name": "quote not after @",
+      "input": {
+        "text": "say \"hi",
+        "caret": 7
+      },
+      "output": null
+    },
+    {
+      "name": "unquoted query starting with a quote",
+      "input": {
+        "text": "@x\"",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "x\"",
+        "quoted": false
+      }
+    },
+    {
+      "name": "quoted at index 0 is unquoted-scanned",
+      "input": {
+        "text": "\"",
+        "caret": 1
+      },
+      "output": null
+    },
+    {
+      "name": "emoji before the mention",
+      "input": {
+        "text": "😀 @sr",
+        "caret": 6
+      },
+      "output": {
+        "start": 3,
+        "end": 6,
+        "query": "sr",
+        "quoted": false
+      }
+    },
+    {
+      "name": "emoji in the query",
+      "input": {
+        "text": "@😀a",
+        "caret": 4
+      },
+      "output": {
+        "start": 0,
+        "end": 4,
+        "query": "😀a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "combining mark before the mention",
+      "input": {
+        "text": "é @a",
+        "caret": 5
+      },
+      "output": {
+        "start": 3,
+        "end": 5,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "combining mark right before the @ is no boundary",
+      "input": {
+        "text": "é@a",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "combining mark in the query",
+      "input": {
+        "text": "@é",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "é",
+        "quoted": false
+      }
+    },
+    {
+      "name": "CJK and emoji before a quoted mention",
+      "input": {
+        "text": "日本😀 @\"My Doc\" x",
+        "caret": 11
+      },
+      "output": {
+        "start": 5,
+        "end": 14,
+        "query": "My D",
+        "quoted": true
+      }
+    },
+    {
+      "name": "flag emoji after the caret runs the word",
+      "input": {
+        "text": "@a🇩🇪 b",
+        "caret": 2
+      },
+      "output": {
+        "start": 0,
+        "end": 6,
+        "query": "a",
+        "quoted": false
+      }
+    },
+    {
+      "name": "ZWJ family before",
+      "input": {
+        "text": "👨‍👩‍👧 @x",
+        "caret": 11
+      },
+      "output": {
+        "start": 9,
+        "end": 11,
+        "query": "x",
+        "quoted": false
+      }
+    }
+  ],
+  "formatMentionCases": [
+    {
+      "name": "plain",
+      "input": "src/app.ts",
+      "output": "@src/app.ts"
+    },
+    {
+      "name": "space",
+      "input": "a b.md",
+      "output": "@\"a b.md\""
+    },
+    {
+      "name": "tab",
+      "input": "a\tb",
+      "output": "@\"a\tb\""
+    },
+    {
+      "name": "quote",
+      "input": "a\"b",
+      "output": "@\"ab\""
+    },
+    {
+      "name": "quote and space",
+      "input": "a \"b\" c",
+      "output": "@\"a b c\""
+    },
+    {
+      "name": "NBSP",
+      "input": "a b",
+      "output": "@\"a b\""
+    },
+    {
+      "name": "NEL is not whitespace",
+      "input": "ab",
+      "output": "@ab"
+    },
+    {
+      "name": "emoji",
+      "input": "😀.md",
+      "output": "@😀.md"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "@"
+    }
+  ],
+  "insertMentionCases": [
+    {
+      "name": "file with a space and the caret after it",
+      "input": {
+        "text": "look at @sr please",
+        "mention": {
+          "start": 8,
+          "end": 11,
+          "query": "sr",
+          "quoted": false
+        },
+        "path": "src/app.ts"
+      },
+      "output": {
+        "text": "look at @src/app.ts please",
+        "caret": 20
+      }
+    },
+    {
+      "name": "file at the end of the text",
+      "input": {
+        "text": "@ap",
+        "mention": {
+          "start": 0,
+          "end": 3,
+          "query": "ap",
+          "quoted": false
+        },
+        "path": "app.ts"
+      },
+      "output": {
+        "text": "@app.ts ",
+        "caret": 8
+      }
+    },
+    {
+      "name": "directory",
+      "input": {
+        "text": "@sr",
+        "mention": {
+          "start": 0,
+          "end": 3,
+          "query": "sr",
+          "quoted": false
+        },
+        "path": "src/"
+      },
+      "output": {
+        "text": "@src/",
+        "caret": 5
+      }
+    },
+    {
+      "name": "quoted file",
+      "input": {
+        "text": "@my",
+        "mention": {
+          "start": 0,
+          "end": 3,
+          "query": "my",
+          "quoted": false
+        },
+        "path": "My Docs/a b.md"
+      },
+      "output": {
+        "text": "@\"My Docs/a b.md\" ",
+        "caret": 18
+      }
+    },
+    {
+      "name": "quoted directory stays open",
+      "input": {
+        "text": "@my",
+        "mention": {
+          "start": 0,
+          "end": 3,
+          "query": "my",
+          "quoted": false
+        },
+        "path": "My Docs/"
+      },
+      "output": {
+        "text": "@\"My Docs/",
+        "caret": 10
+      }
+    },
+    {
+      "name": "inside an open quoted directory",
+      "input": {
+        "text": "@\"My Docs/",
+        "mention": {
+          "start": 0,
+          "end": 10,
+          "query": "My Docs/",
+          "quoted": true
+        },
+        "path": "My Docs/a b.md"
+      },
+      "output": {
+        "text": "@\"My Docs/a b.md\" ",
+        "caret": 18
+      }
+    },
+    {
+      "name": "quote characters are stripped from a path",
+      "input": {
+        "text": "@a",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "we\"ird name.md"
+      },
+      "output": {
+        "text": "@\"weird name.md\" ",
+        "caret": 17
+      }
+    },
+    {
+      "name": "quote without whitespace still quotes",
+      "input": {
+        "text": "@a",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "a\"b.md"
+      },
+      "output": {
+        "text": "@\"ab.md\" ",
+        "caret": 9
+      }
+    },
+    {
+      "name": "after already starts with a newline",
+      "input": {
+        "text": "@a\nnext",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "a.ts"
+      },
+      "output": {
+        "text": "@a.ts\nnext",
+        "caret": 6
+      }
+    },
+    {
+      "name": "after already starts with a tab",
+      "input": {
+        "text": "@a\tnext",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "a.ts"
+      },
+      "output": {
+        "text": "@a.ts\tnext",
+        "caret": 6
+      }
+    },
+    {
+      "name": "after starts with NBSP",
+      "input": {
+        "text": "@a x",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "a.ts"
+      },
+      "output": {
+        "text": "@a.ts x",
+        "caret": 6
+      }
+    },
+    {
+      "name": "directory before existing text",
+      "input": {
+        "text": "@src rest",
+        "mention": {
+          "start": 0,
+          "end": 4,
+          "query": "s",
+          "quoted": false
+        },
+        "path": "src/"
+      },
+      "output": {
+        "text": "@src/ rest",
+        "caret": 5
+      }
+    },
+    {
+      "name": "quoted mention replaced to its closing quote",
+      "input": {
+        "text": "@\"My Doc.md\" rest",
+        "mention": {
+          "start": 0,
+          "end": 12,
+          "query": "My ",
+          "quoted": true
+        },
+        "path": "My Doc.md"
+      },
+      "output": {
+        "text": "@\"My Doc.md\" rest",
+        "caret": 13
+      }
+    },
+    {
+      "name": "unquoted mid-word replaced to the word end",
+      "input": {
+        "text": "@src/app.ts next",
+        "mention": {
+          "start": 0,
+          "end": 11,
+          "query": "sr",
+          "quoted": false
+        },
+        "path": "src/lib.ts"
+      },
+      "output": {
+        "text": "@src/lib.ts next",
+        "caret": 12
+      }
+    },
+    {
+      "name": "emoji before the mention",
+      "input": {
+        "text": "😀 @sr",
+        "mention": {
+          "start": 3,
+          "end": 6,
+          "query": "sr",
+          "quoted": false
+        },
+        "path": "src/app.ts"
+      },
+      "output": {
+        "text": "😀 @src/app.ts ",
+        "caret": 15
+      }
+    },
+    {
+      "name": "emoji in the picked path",
+      "input": {
+        "text": "@a",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "😀/a.ts"
+      },
+      "output": {
+        "text": "@😀/a.ts ",
+        "caret": 9
+      }
+    },
+    {
+      "name": "combining mark in the picked path",
+      "input": {
+        "text": "x @e",
+        "mention": {
+          "start": 2,
+          "end": 4,
+          "query": "e",
+          "quoted": false
+        },
+        "path": "é.md"
+      },
+      "output": {
+        "text": "x @é.md ",
+        "caret": 9
+      }
+    },
+    {
+      "name": "path with NBSP is quoted",
+      "input": {
+        "text": "@a",
+        "mention": {
+          "start": 0,
+          "end": 2,
+          "query": "a",
+          "quoted": false
+        },
+        "path": "a b.md"
+      },
+      "output": {
+        "text": "@\"a b.md\" ",
+        "caret": 10
+      }
+    },
+    {
+      "name": "empty path",
+      "input": {
+        "text": "@",
+        "mention": {
+          "start": 0,
+          "end": 1,
+          "query": "",
+          "quoted": false
+        },
+        "path": ""
+      },
+      "output": {
+        "text": "@ ",
+        "caret": 2
+      }
+    },
+    {
+      "name": "path that is only a slash",
+      "input": {
+        "text": "@",
+        "mention": {
+          "start": 0,
+          "end": 1,
+          "query": "",
+          "quoted": false
+        },
+        "path": "/"
+      },
+      "output": {
+        "text": "@/",
+        "caret": 2
+      }
+    }
+  ],
+  "parseMentionsCases": [
+    {
+      "name": "unquoted and quoted, once each",
+      "input": "Read @src/a.ts and @\"docs/My Notes.md\", then @src/a.ts again",
+      "output": [
+        "src/a.ts",
+        "docs/My Notes.md"
+      ]
+    },
+    {
+      "name": "sentence punctuation dropped",
+      "input": "Look at @README.md. Also (@lib/x.ts), ok?",
+      "output": [
+        "README.md",
+        "lib/x.ts"
+      ]
+    },
+    {
+      "name": "email and lone @",
+      "input": "mail mark@example.com @ now",
+      "output": []
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": []
+    },
+    {
+      "name": "only punctuation after @",
+      "input": "@.,;",
+      "output": []
+    },
+    {
+      "name": "trailing quote run",
+      "input": "see @a.ts'\"",
+      "output": [
+        "a.ts"
+      ]
+    },
+    {
+      "name": "quoted path is trimmed",
+      "input": "@\"  spaced  \"",
+      "output": [
+        "spaced"
+      ]
+    },
+    {
+      "name": "quoted whitespace only",
+      "input": "@\"   \"",
+      "output": []
+    },
+    {
+      "name": "quoted across a newline does not match",
+      "input": "@\"a\nb\"",
+      "output": []
+    },
+    {
+      "name": "unclosed quote",
+      "input": "@\"open ended",
+      "output": []
+    },
+    {
+      "name": "unquoted stops at a quote",
+      "input": "@a\"b\"",
+      "output": [
+        "a"
+      ]
+    },
+    {
+      "name": "mention containing an @",
+      "input": "x @a@b",
+      "output": [
+        "a@b"
+      ]
+    },
+    {
+      "name": "email swallows a following @",
+      "input": "a@b @c",
+      "output": [
+        "c"
+      ]
+    },
+    {
+      "name": "after brackets and quotes",
+      "input": "(@a) [@b] {@c} '@d' `@e` \"@f\"",
+      "output": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+      ]
+    },
+    {
+      "name": "after NBSP",
+      "input": " @a",
+      "output": [
+        "a"
+      ]
+    },
+    {
+      "name": "after NEL is not a boundary",
+      "input": "@a",
+      "output": []
+    },
+    {
+      "name": "dots inside are kept",
+      "input": "@a.b.c.",
+      "output": [
+        "a.b.c"
+      ]
+    },
+    {
+      "name": "inner closing bracket kept",
+      "input": "@a)b.ts)",
+      "output": [
+        "a)b.ts"
+      ]
+    },
+    {
+      "name": "emoji path",
+      "input": "@😀/a.ts and @é.md!",
+      "output": [
+        "😀/a.ts",
+        "é.md"
+      ]
+    },
+    {
+      "name": "trailing NBSP is part of the word",
+      "input": "@a ",
+      "output": [
+        "a"
+      ]
+    },
+    {
+      "name": "duplicate after punctuation strip",
+      "input": "@a.ts @a.ts.",
+      "output": [
+        "a.ts"
+      ]
+    },
+    {
+      "name": "CRLF ends a mention",
+      "input": "@a.ts\r\n@b.ts",
+      "output": [
+        "a.ts",
+        "b.ts"
+      ]
+    },
+    {
+      "name": "quoted then unquoted adjacency",
+      "input": "@\"a b\"@c",
+      "output": [
+        "a b",
+        "c"
+      ]
+    }
+  ],
+  "rankPathsCases": [
+    {
+      "name": "path prefix src/l",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "src/l"
+      },
+      "output": [
+        "src/lib/",
+        "src/lib/format.ts"
+      ]
+    },
+    {
+      "name": "path prefix app",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "app"
+      },
+      "output": [
+        "app/",
+        "app/main.ts",
+        "src/app.ts"
+      ]
+    },
+    {
+      "name": "name prefix form",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "form"
+      },
+      "output": [
+        "src/lib/format.ts",
+        "docs/formatting.md"
+      ]
+    },
+    {
+      "name": "folder prefix lib",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "lib"
+      },
+      "output": [
+        "src/lib/",
+        "src/lib/format.ts"
+      ]
+    },
+    {
+      "name": "substring mat",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "mat"
+      },
+      "output": [
+        "src/lib/format.ts",
+        "docs/formatting.md"
+      ]
+    },
+    {
+      "name": "demoted app/",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "app",
+        "demotePrefix": "app/"
+      },
+      "output": [
+        "app/",
+        "app/main.ts",
+        "src/app.ts"
+      ]
+    },
+    {
+      "name": "demoted dist/ behind its rank",
+      "input": {
+        "paths": [
+          "dist/fmt.ts",
+          "src/fmt.ts",
+          "x/fmtr/a.ts"
+        ],
+        "query": "fmt",
+        "demotePrefix": "dist/"
+      },
+      "output": [
+        "src/fmt.ts",
+        "dist/fmt.ts",
+        "x/fmtr/a.ts"
+      ]
+    },
+    {
+      "name": "demoted real match beats loose",
+      "input": {
+        "paths": [
+          "dist/fmt.ts",
+          "f/m/t.ts"
+        ],
+        "query": "fmt",
+        "demotePrefix": "dist/"
+      },
+      "output": [
+        "dist/fmt.ts"
+      ]
+    },
+    {
+      "name": "fmt matches outright",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "fmt"
+      },
+      "output": [
+        "test/fmt.ts"
+      ]
+    },
+    {
+      "name": "loose frmt",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "frmt"
+      },
+      "output": [
+        "src/lib/format.ts",
+        "docs/formatting.md"
+      ]
+    },
+    {
+      "name": "completed folder lists its contents",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "src/"
+      },
+      "output": [
+        "src/lib/",
+        "src/app.ts",
+        "src/lib/format.ts"
+      ]
+    },
+    {
+      "name": "file typed in full first",
+      "input": {
+        "paths": [
+          ".envrc",
+          ".env"
+        ],
+        "query": ".env"
+      },
+      "output": [
+        ".env",
+        ".envrc"
+      ]
+    },
+    {
+      "name": "README.md in full",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "README.md"
+      },
+      "output": [
+        "README.md"
+      ]
+    },
+    {
+      "name": "case-insensitive",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "readme"
+      },
+      "output": [
+        "README.md"
+      ]
+    },
+    {
+      "name": "no match",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "zzz"
+      },
+      "output": []
+    },
+    {
+      "name": "empty query lists the top level",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": ""
+      },
+      "output": [
+        "app/",
+        "src/",
+        "README.md"
+      ]
+    },
+    {
+      "name": "limit 2",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "s",
+        "limit": 2
+      },
+      "output": [
+        "src/",
+        "src/lib/"
+      ]
+    },
+    {
+      "name": "limit 0",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "s",
+        "limit": 0
+      },
+      "output": []
+    },
+    {
+      "name": "negative limit slices from the end",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "s",
+        "limit": -1
+      },
+      "output": [
+        "src/",
+        "src/lib/",
+        "src/app.ts",
+        "src/lib/format.ts",
+        "app/main.ts",
+        "test/fmt.ts"
+      ]
+    },
+    {
+      "name": "upper-case query",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "SRC/L"
+      },
+      "output": [
+        "src/lib/",
+        "src/lib/format.ts"
+      ]
+    },
+    {
+      "name": "empty paths",
+      "input": {
+        "paths": [],
+        "query": "a"
+      },
+      "output": []
+    },
+    {
+      "name": "empty query demoted top level",
+      "input": {
+        "paths": [
+          "src/",
+          "src/app.ts",
+          "src/lib/",
+          "src/lib/format.ts",
+          "app/",
+          "app/main.ts",
+          "README.md",
+          "docs/formatting.md",
+          "test/fmt.ts"
+        ],
+        "query": "",
+        "demotePrefix": "app"
+      },
+      "output": [
+        "src/",
+        "README.md",
+        "app/"
+      ]
+    },
+    {
+      "name": "ties by length then code units",
+      "input": {
+        "paths": [
+          "b/a.ts",
+          "a/a.ts",
+          "B/a.ts",
+          "a.ts"
+        ],
+        "query": "a"
+      },
+      "output": [
+        "a.ts",
+        "a/a.ts",
+        "B/a.ts",
+        "b/a.ts"
+      ]
+    },
+    {
+      "name": "upper-case sorts before lower-case by code unit",
+      "input": {
+        "paths": [
+          "Zed",
+          "apple",
+          "Zap"
+        ],
+        "query": ""
+      },
+      "output": [
+        "Zap",
+        "Zed",
+        "apple"
+      ]
+    },
+    {
+      "name": "astral sorts after BMP private use by code unit",
+      "input": {
+        "paths": [
+          "😀",
+          "～",
+          ""
+        ],
+        "query": ""
+      },
+      "output": [
+        "",
+        "～",
+        "😀"
+      ]
+    },
+    {
+      "name": "length counts UTF-16",
+      "input": {
+        "paths": [
+          "x/😀.ts",
+          "x/abcd.ts"
+        ],
+        "query": "x/"
+      },
+      "output": [
+        "x/😀.ts",
+        "x/abcd.ts"
+      ]
+    },
+    {
+      "name": "unicode case folding",
+      "input": {
+        "paths": [
+          "Über/a.ts",
+          "über.md"
+        ],
+        "query": "ü"
+      },
+      "output": [
+        "über.md",
+        "Über/a.ts"
+      ]
+    },
+    {
+      "name": "final sigma lower-cases to ς",
+      "input": {
+        "paths": [
+          "ΟΔΟΣ",
+          "ΟΔΟΣ/x"
+        ],
+        "query": "οδος"
+      },
+      "output": [
+        "ΟΔΟΣ",
+        "ΟΔΟΣ/x"
+      ]
+    },
+    {
+      "name": "medial sigma lower-cases to σ",
+      "input": {
+        "paths": [
+          "ΣΑ"
+        ],
+        "query": "σα"
+      },
+      "output": [
+        "ΣΑ"
+      ]
+    },
+    {
+      "name": "dotted capital I lower-cases to two units",
+      "input": {
+        "paths": [
+          "İx"
+        ],
+        "query": "i̇x"
+      },
+      "output": [
+        "İx"
+      ]
+    },
+    {
+      "name": "loose match walks code points",
+      "input": {
+        "paths": [
+          "a😀b"
+        ],
+        "query": "ab"
+      },
+      "output": [
+        "a😀b"
+      ]
+    },
+    {
+      "name": "loose match never matches an astral query char",
+      "input": {
+        "paths": [
+          "a😀xb"
+        ],
+        "query": "a😀b"
+      },
+      "output": []
+    },
+    {
+      "name": "astral substring still matches",
+      "input": {
+        "paths": [
+          "x😀y"
+        ],
+        "query": "😀"
+      },
+      "output": [
+        "x😀y"
+      ]
+    },
+    {
+      "name": "folder exact match only skipped with a slash",
+      "input": {
+        "paths": [
+          "src",
+          "src/"
+        ],
+        "query": "src"
+      },
+      "output": [
+        "src",
+        "src/"
+      ]
+    },
+    {
+      "name": "trailing slash name segment",
+      "input": {
+        "paths": [
+          "a/lib/",
+          "lib-x/"
+        ],
+        "query": "lib"
+      },
+      "output": [
+        "lib-x/",
+        "a/lib/"
+      ]
+    },
+    {
+      "name": "top level directory with trailing slash only",
+      "input": {
+        "paths": [
+          "a/",
+          "a/b/",
+          "c"
+        ],
+        "query": ""
+      },
+      "output": [
+        "c",
+        "a/"
+      ]
+    },
+    {
+      "name": "combining mark path is not composed",
+      "input": {
+        "paths": [
+          "café.md",
+          "café.md"
+        ],
+        "query": "café"
+      },
+      "output": [
+        "café.md"
+      ]
+    },
+    {
+      "name": "duplicate paths both kept",
+      "input": {
+        "paths": [
+          "a.ts",
+          "a.ts"
+        ],
+        "query": "a"
+      },
+      "output": [
+        "a.ts",
+        "a.ts"
+      ]
+    }
+  ]
+}
