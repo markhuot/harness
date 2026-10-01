@@ -399,6 +399,32 @@ tab on its own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<
 dev-sim installs a Release build, so build with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` to
 get them there.
 
+## Content components (Features/Content)
+
+What screens that show agent text use (HARNESS-136):
+
+- **MarkdownView** parses through `MarkdownCache` (bounded, by source text), so re-rendering a long
+  transcript doesn't re-parse every message. Ticket keys link only when `ticketLinkable` (it reads
+  the store when one is in the environment). `MarkdownView.scrollsSideways(text)` (RN
+  `scrollsSideways`) says whether a bubble needs a definite width: tables and code scroll sideways.
+  Tables lay out with `MarkdownTableLayout` on HarnessKit's `MarkdownTable` (columns capped at
+  240 pt).
+- **Links.** Screens set where relative file links open with `.fileLinkScope(ticketKey:)`,
+  `.fileLinkScope(projectId:)` or `.fileLinkScope(FileViewer.triageLinkContext(…))` (RN
+  `FileLinkScope`); MarkdownView's `linkContext` argument wins when it names a root. Where a link
+  goes is `LinkRouting.target` (HarnessKit, tested): other schemes open in the system, harness://
+  links that aren't files go through the Router, file links push `.file`, and a file link with no
+  root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
+- **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
+- **AttachmentRow** presents `AttachmentViewer` itself (a clear fullScreenCover that fades in).
+  `AttachmentMedia` caches images and video posters for the row and the viewer. Pager pages are a
+  page-style TabView; a page must keep one view for its whole life (swapping a page's view as it
+  comes and goes made the pager jump back a page), so video pages keep one AVPlayerViewController
+  and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
+  "Video x.mp4" thumbnails, "Close", "2 of 4 · 1.2 MB".
+- **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
+  shows sample markdown and that ticket's summaries with their attachments.
+
 ## Pickers and form controls (Features/Pickers)
 
 What the hosting screens (Ticket detail, New session, Settings, Project settings, Watchers) get:
@@ -501,7 +527,9 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
 - [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
-- [ ] Summaries + attachments viewer (ui/Attachments, lib/attachments)
+- [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
+  viewer (ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments)
+- [ ] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
 - [ ] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
 - [x] Browser tab (screens/BrowserTab, lib/browserInput)

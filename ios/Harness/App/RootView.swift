@@ -13,7 +13,8 @@ struct RootView: View {
 
     #if DEBUG
     /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
-    /// (`browser:<KEY>` and `plugin:<KEY>:<pluginId>:<tabId>`: BrowserPluginDebugScreen).
+    /// (`browser:<KEY>` and `plugin:<KEY>:<pluginId>:<tabId>`: BrowserPluginDebugScreen; `content`,
+    /// once paired: ContentPreviewView).
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
@@ -63,7 +64,16 @@ struct RootView: View {
         } else if app.active == nil {
             NavigationStack { ConnectScreen() }
         } else if let store = app.store {
+            #if DEBUG
+            if debugScreen == "content" {
+                // Needs the paired store, and the Board tab's stack so file and ticket links push.
+                TabStack(tab: .board) { ContentPreviewView() }.environment(store)
+            } else {
+                MainTabs().environment(store)
+            }
+            #else
             MainTabs().environment(store)
+            #endif
         } else {
             LoadingScreen()
         }
