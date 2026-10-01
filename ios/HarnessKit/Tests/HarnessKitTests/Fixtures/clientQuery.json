@@ -1,0 +1,109 @@
+{
+  "queryCases": [
+    {
+      "name": "no params",
+      "input": [],
+      "output": ""
+    },
+    {
+      "name": "all empty or null",
+      "input": [
+        [
+          "q",
+          ""
+        ],
+        [
+          "cursor",
+          null
+        ]
+      ],
+      "output": ""
+    },
+    {
+      "name": "keeps order and drops empties",
+      "input": [
+        [
+          "status",
+          "done"
+        ],
+        [
+          "projectId",
+          null
+        ],
+        [
+          "q",
+          "fix bug"
+        ],
+        [
+          "limit",
+          50
+        ],
+        [
+          "cursor",
+          ""
+        ]
+      ],
+      "output": "?status=done&q=fix+bug&limit=50"
+    },
+    {
+      "name": "form encoding (space is +, reserved characters escaped)",
+      "input": [
+        [
+          "q",
+          "a b&c=d/é!~*()'+"
+        ]
+      ],
+      "output": "?q=a+b%26c%3Dd%2F%C3%A9%21%7E*%28%29%27%2B"
+    },
+    {
+      "name": "comma-joined status list",
+      "input": [
+        [
+          "status",
+          "planning,review"
+        ]
+      ],
+      "output": "?status=planning%2Creview"
+    },
+    {
+      "name": "zero is kept",
+      "input": [
+        [
+          "limit",
+          0
+        ]
+      ],
+      "output": "?limit=0"
+    },
+    {
+      "name": "fractional number",
+      "input": [
+        [
+          "after",
+          1.5
+        ]
+      ],
+      "output": "?after=1.5"
+    },
+    {
+      "name": "path with slashes and dots",
+      "input": [
+        [
+          "path",
+          "src/app/../x y.ts"
+        ]
+      ],
+      "output": "?path=src%2Fapp%2F..%2Fx+y.ts"
+    },
+    {
+      "name": "emoji",
+      "input": [
+        [
+          "q",
+          "🚀 launch"
+        ]
+      ],
+      "output": "?q=%F0%9F%9A%80+launch"
+    }
+  ]
+}

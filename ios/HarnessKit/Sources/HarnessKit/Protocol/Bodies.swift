@@ -1,0 +1,434 @@
+import Foundation
+
+// ---------------------------------------------------------------------------
+// REST API request bodies (responses are the entities, wrapped as { data })
+// ---------------------------------------------------------------------------
+//
+// `field?: T | null` is `Patch<T>`: `.absent` (the default) leaves the key out, `.null` sends an
+// explicit null (clear / inherit), `.value` sets it. Per-driver and per-prompt maps are
+// `[String: String?]`, where a nil value is sent as null (clears that entry).
+
+public struct CreateProjectBody: Codable, Sendable, Equatable {
+    public var path: String
+    public var name: String?
+    public var key: String?
+    public var defaultDriver: Patch<String>
+    public var useWorktrees: Bool?
+    public var requireHumanReview: Bool?
+    public var autoComplete: Bool?
+    /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
+    public var color: Patch<String>
+    /// null → settings.permissionMode
+    public var permissionMode: Patch<PermissionMode>
+    /// Per-driver default models; PATCH merges per driver, null clears one
+    public var defaultModels: [String: String?]?
+    /// A valid branch name; null or "" → inherit settings.baseBranch
+    public var baseBranch: Patch<String>
+    /// The default completion action; must be one the project offers. Default "merge".
+    public var completionAction: CompletionAction?
+
+    public init(
+        path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
+        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil, autoComplete: Bool? = nil,
+        color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
+        completionAction: CompletionAction? = nil
+    ) {
+        self.path = path
+        self.name = name
+        self.key = key
+        self.defaultDriver = defaultDriver
+        self.useWorktrees = useWorktrees
+        self.requireHumanReview = requireHumanReview
+        self.autoComplete = autoComplete
+        self.color = color
+        self.permissionMode = permissionMode
+        self.defaultModels = defaultModels
+        self.baseBranch = baseBranch
+        self.completionAction = completionAction
+    }
+}
+
+/// PATCH /projects/:id: `Partial<CreateProjectBody>`.
+public struct UpdateProjectBody: Codable, Sendable, Equatable {
+    public var path: String?
+    public var name: String?
+    public var key: String?
+    public var defaultDriver: Patch<String>
+    public var useWorktrees: Bool?
+    public var requireHumanReview: Bool?
+    public var autoComplete: Bool?
+    /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
+    public var color: Patch<String>
+    /// null → settings.permissionMode
+    public var permissionMode: Patch<PermissionMode>
+    /// Per-driver default models; PATCH merges per driver, null clears one
+    public var defaultModels: [String: String?]?
+    /// A valid branch name; null or "" → inherit settings.baseBranch
+    public var baseBranch: Patch<String>
+    /// The default completion action; must be one the project offers.
+    public var completionAction: CompletionAction?
+
+    public init(
+        path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
+        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil, autoComplete: Bool? = nil,
+        color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
+        completionAction: CompletionAction? = nil
+    ) {
+        self.path = path
+        self.name = name
+        self.key = key
+        self.defaultDriver = defaultDriver
+        self.useWorktrees = useWorktrees
+        self.requireHumanReview = requireHumanReview
+        self.autoComplete = autoComplete
+        self.color = color
+        self.permissionMode = permissionMode
+        self.defaultModels = defaultModels
+        self.baseBranch = baseBranch
+        self.completionAction = completionAction
+    }
+}
+
+public struct CreateTicketBody: Codable, Sendable, Equatable {
+    public var projectId: String
+    /// First message / brief. Title is derived from it when title is omitted.
+    public var prompt: String
+    public var title: String?
+    public var kind: TicketKind?
+    public var driver: String?
+    /// Model for this ticket's runs (null / omitted → defaults)
+    public var model: Patch<String>
+    /// Permission mode override (null / omitted → project → settings)
+    public var permissionMode: Patch<PermissionMode>
+    /// Skip planning and start work right away (default true for quick sessions)
+    public var start: Bool?
+    /// Worktree for this ticket: false → the project checkout (null / omitted → project.useWorktrees)
+    public var useWorktree: Patch<Bool>
+    /// The branch the ticket's worktree checks out (Ticket.requestedBranch). null / omitted / "" →
+    /// harness/<key>. An existing local branch is checked out as is (the ticket blocks if another
+    /// worktree has it checked out); a new name is created from the base branch. Needs a worktree:
+    /// refused with useWorktree false. Pick names from GET /projects/:id/branches.
+    public var branch: Patch<String>
+    /// Base branch override (Ticket.baseBranch); null / "" → inherit the project's
+    public var baseBranch: Patch<String>
+    /// Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false.
+    public var skipAgentReview: Bool?
+    public var dependsOn: [String]?
+    public var autoStart: Bool?
+    public var parentId: Patch<String>
+    /// Use this key instead of the next native key. Only for imports and tests: watcher tickets get
+    /// native keys and carry the remote ID in externalRef.
+    public var key: String?
+    public var externalRef: Patch<ExternalRef>
+    /// Save it as a draft (Ticket.draft): created in planning with no run, whatever `start` says.
+    /// POST /tickets/:key/submit launches it later. The prompt may be empty for a draft.
+    public var draft: Bool?
+
+    public init(
+        projectId: String, prompt: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
+        model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
+        useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
+        skipAgentReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
+        parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
+        draft: Bool? = nil
+    ) {
+        self.projectId = projectId
+        self.prompt = prompt
+        self.title = title
+        self.kind = kind
+        self.driver = driver
+        self.model = model
+        self.permissionMode = permissionMode
+        self.start = start
+        self.useWorktree = useWorktree
+        self.branch = branch
+        self.baseBranch = baseBranch
+        self.skipAgentReview = skipAgentReview
+        self.dependsOn = dependsOn
+        self.autoStart = autoStart
+        self.parentId = parentId
+        self.key = key
+        self.externalRef = externalRef
+        self.draft = draft
+    }
+}
+
+public struct UpdateTicketBody: Codable, Sendable, Equatable {
+    public var title: String?
+    public var description: String?
+    /// manual moves from the board
+    public var status: TicketStatus?
+    /// Changing the driver clears the model unless `model` is given too
+    public var driver: String?
+    /// Applies from the next run (claude-code resumes the conversation with the new --model)
+    public var model: Patch<String>
+    /// Applies from the next tool call / run; null → inherit from the project / settings
+    public var permissionMode: Patch<PermissionMode>
+    /// Base branch override; null / "" → inherit the project's. Applies from the next run.
+    public var baseBranch: Patch<String>
+    /// The branch for the ticket's worktree (see CreateTicketBody.branch). Only while the ticket has
+    /// no worktree (409 once it has one: its agent re-points it with the update_branch tool).
+    public var branch: Patch<String>
+    /// Ticket.skipAgentReview. Turning it on while the ticket waits on its agent review skips that
+    /// review (a queued review run is dropped); turning it off while the review is "skipped" starts one.
+    public var skipAgentReview: Bool?
+    public var dependsOn: [String]?
+    public var position: Double?
+    /// Link the ticket to a remote ID by hand (source "manual"), or null to unlink it
+    public var externalRef: Patch<ExternalRefInput>
+    /// Drafts only (409 otherwise): what the ticket is, fixed once it launches
+    public var kind: TicketKind?
+    /// Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches
+    public var useWorktree: Patch<Bool>
+    /// Drafts only (409 otherwise): move the draft to another project. It takes that project's next
+    /// key; the old key is kept as an alias (like a project rename), so open panes follow it.
+    public var projectId: String?
+
+    public init(
+        title: String? = nil, description: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
+        model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
+        dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
+        kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil
+    ) {
+        self.title = title
+        self.description = description
+        self.status = status
+        self.driver = driver
+        self.model = model
+        self.permissionMode = permissionMode
+        self.baseBranch = baseBranch
+        self.branch = branch
+        self.skipAgentReview = skipAgentReview
+        self.dependsOn = dependsOn
+        self.position = position
+        self.externalRef = externalRef
+        self.kind = kind
+        self.useWorktree = useWorktree
+        self.projectId = projectId
+    }
+}
+
+/// POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first.
+public struct SubmitTicketBody: Codable, Sendable, Equatable {
+    public var start: Bool
+    public init(start: Bool) { self.start = start }
+}
+
+public struct HumanReviewBody: Codable, Sendable, Equatable {
+    public var decision: HumanReviewDecision
+    public var notes: String?
+    /// With "approve": how the work lands once the ticket is ready (kept on the ticket until then).
+    /// Omitted → the ticket's earlier choice, else the project default. Must be one the ticket offers.
+    public var action: CompletionAction?
+    /// With "approve": instructions for the completion run (required in spirit for custom).
+    public var instructions: String?
+
+    public init(decision: HumanReviewDecision, notes: String? = nil, action: CompletionAction? = nil, instructions: String? = nil) {
+        self.decision = decision
+        self.notes = notes
+        self.action = action
+        self.instructions = instructions
+    }
+}
+
+/// POST /tickets/:key/messages
+public struct MessageBody: Codable, Sendable, Equatable {
+    public var text: String
+    /// true: move the ticket before its agent gets the message: a review ticket back to in
+    /// progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
+    /// (planning → the plan run; blocked, review, done → a chat run with the work tools).
+    public var move: Bool?
+
+    public init(text: String, move: Bool? = nil) {
+        self.text = text
+        self.move = move
+    }
+}
+
+/// Re-open a done ticket: back to in progress, with notes for the agent
+public struct ReopenBody: Codable, Sendable, Equatable {
+    public var notes: String
+    public init(notes: String) { self.notes = notes }
+}
+
+public struct ApprovalBody: Codable, Sendable, Equatable {
+    /// allow_once: this exact call; allow_tool: every future call of this tool on this ticket; deny
+    public var decision: ApprovalDecision
+    /// Optional note passed to the agent (why denied / what to do instead)
+    public var message: String?
+
+    public init(decision: ApprovalDecision, message: String? = nil) {
+        self.decision = decision
+        self.message = message
+    }
+}
+
+public struct CompleteBody: Codable, Sendable, Equatable {
+    /// How the work lands; omitted → the choice made at approval, else the project default.
+    public var action: CompletionAction?
+    /// Extra instructions for the completion run, e.g. "merge into main"
+    public var instructions: String?
+    /// Mark done without running the agent ("Approve and take no action"): on a ticket in review this
+    /// also records the human approval.
+    public var skipAgent: Bool?
+
+    public init(action: CompletionAction? = nil, instructions: String? = nil, skipAgent: Bool? = nil) {
+        self.action = action
+        self.instructions = instructions
+        self.skipAgent = skipAgent
+    }
+}
+
+/// POST /watchers and PATCH /watchers/:id bodies: Watcher fields, with `models` as a per-driver
+/// patch (merged over the stored map; null clears a driver's entry). POST needs `name` and `command`.
+public struct WatcherBody: Codable, Sendable, Equatable {
+    public var id: String?
+    public var name: String?
+    public var command: String?
+    public var args: [String]?
+    public var prompt: String?
+    public var cwd: Patch<String>
+    public var env: [String: String]?
+    public var mode: WatcherMode?
+    public var intervalSec: Int?
+    public var enabled: Bool?
+    public var driver: Patch<String>
+    public var models: [String: String?]?
+    public var lastRunAt: Patch<Timestamp>
+    public var lastError: Patch<String>
+    public var createdAt: Timestamp?
+    public var updatedAt: Timestamp?
+    public var live: WatcherLive?
+
+    public init(
+        id: String? = nil, name: String? = nil, command: String? = nil, args: [String]? = nil, prompt: String? = nil,
+        cwd: Patch<String> = .absent, env: [String: String]? = nil, mode: WatcherMode? = nil, intervalSec: Int? = nil,
+        enabled: Bool? = nil, driver: Patch<String> = .absent, models: [String: String?]? = nil,
+        lastRunAt: Patch<Timestamp> = .absent, lastError: Patch<String> = .absent, createdAt: Timestamp? = nil,
+        updatedAt: Timestamp? = nil, live: WatcherLive? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.command = command
+        self.args = args
+        self.prompt = prompt
+        self.cwd = cwd
+        self.env = env
+        self.mode = mode
+        self.intervalSec = intervalSec
+        self.enabled = enabled
+        self.driver = driver
+        self.models = models
+        self.lastRunAt = lastRunAt
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.live = live
+    }
+}
+
+/// PATCH /settings: `Partial<Settings>`. Maps merge per key (a nil value clears that entry);
+/// `anthropicApiKey: .null` removes the stored key.
+public struct SettingsPatch: Codable, Sendable, Equatable {
+    public var defaultDriver: String?
+    public var maxConcurrentRuns: Int?
+    public var permissionMode: PermissionMode?
+    public var classifier: ClassifierBackend?
+    public var defaultModels: [String: String?]?
+    public var reviewModels: [String: String?]?
+    public var watcherDriver: Patch<String>
+    public var watcherModels: [String: String?]?
+    public var anthropicApiKey: Patch<String>
+    public var baseBranch: String?
+    public var listen: ListenSetting?
+    /// Prompt id (`PromptId.rawValue`) → template; nil (null) or "" resets one to the built-in.
+    public var prompts: [String: String?]?
+
+    public init(
+        defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
+        classifier: ClassifierBackend? = nil, defaultModels: [String: String?]? = nil,
+        reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
+        watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
+        baseBranch: String? = nil, listen: ListenSetting? = nil, prompts: [String: String?]? = nil
+    ) {
+        self.defaultDriver = defaultDriver
+        self.maxConcurrentRuns = maxConcurrentRuns
+        self.permissionMode = permissionMode
+        self.classifier = classifier
+        self.defaultModels = defaultModels
+        self.reviewModels = reviewModels
+        self.watcherDriver = watcherDriver
+        self.watcherModels = watcherModels
+        self.anthropicApiKey = anthropicApiKey
+        self.baseBranch = baseBranch
+        self.listen = listen
+        self.prompts = prompts
+    }
+}
+
+/// POST /watchers/inject: feed output directly, as if a watcher named `source` printed `text`
+/// (objects are sent as JSON text). `prompt` plays the watcher's prompt.
+public struct InjectOutputBody: Codable, Sendable, Equatable {
+    public var source: String
+    public var text: JSONValue
+    public var prompt: String?
+
+    public init(source: String, text: JSONValue, prompt: String? = nil) {
+        self.source = source
+        self.text = text
+        self.prompt = prompt
+    }
+}
+
+/// POST /browser/:sessionId/navigate
+public struct NavigateBody: Codable, Sendable, Equatable {
+    public var url: String
+    public init(url: String) { self.url = url }
+}
+
+// ---------------------------------------------------------------------------
+// Response envelopes and small inline response shapes
+// ---------------------------------------------------------------------------
+
+/// Every successful response: `{ data }`.
+public struct ApiOk<T> {
+    public var data: T
+    public init(data: T) { self.data = data }
+}
+
+extension ApiOk: Sendable where T: Sendable {}
+extension ApiOk: Equatable where T: Equatable {}
+extension ApiOk: Decodable where T: Decodable {}
+extension ApiOk: Encodable where T: Encodable {}
+
+/// Every failed response: `{ error }` (some add a `data`, e.g. RemoteKeyMatches on a 404).
+public struct ApiError: Codable, Sendable, Equatable {
+    public var error: String
+    public init(error: String) { self.error = error }
+}
+
+/// `{ ok: true }` (deletes, restarts, watcher runs).
+public struct OkResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public init(ok: Bool = true) { self.ok = ok }
+}
+
+/// POST /drivers/:id/login
+public struct DriverLoginResponse: Codable, Sendable, Equatable {
+    @Nullable public var url: String?
+    public var message: String
+
+    public init(url: String? = nil, message: String) {
+        self.url = url
+        self.message = message
+    }
+}
+
+/// POST /token/rotate
+public struct RotateTokenResponse: Codable, Sendable, Equatable {
+    public var token: String
+    public init(token: String) { self.token = token }
+}

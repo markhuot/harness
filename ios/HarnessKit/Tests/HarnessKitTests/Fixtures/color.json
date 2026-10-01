@@ -1,0 +1,1384 @@
+{
+  "alphaCases": [
+    {
+      "name": "light badge",
+      "input": {
+        "c": "#e5484d",
+        "a": 0.14
+      },
+      "output": "rgba(229, 72, 77, 0.14)"
+    },
+    {
+      "name": "dark badge",
+      "input": {
+        "c": "#0090ff",
+        "a": 0.2
+      },
+      "output": "rgba(0, 144, 255, 0.2)"
+    },
+    {
+      "name": "zero",
+      "input": {
+        "c": "#000000",
+        "a": 0
+      },
+      "output": "rgba(0, 0, 0, 0)"
+    },
+    {
+      "name": "one prints as integer",
+      "input": {
+        "c": "#ffffff",
+        "a": 1
+      },
+      "output": "rgba(255, 255, 255, 1)"
+    },
+    {
+      "name": "float noise kept",
+      "input": {
+        "c": "#123456",
+        "a": 0.30000000000000004
+      },
+      "output": "rgba(18, 52, 86, 0.30000000000000004)"
+    },
+    {
+      "name": "tiny uses exponent",
+      "input": {
+        "c": "#123456",
+        "a": 1e-7
+      },
+      "output": "rgba(18, 52, 86, 1e-7)"
+    },
+    {
+      "name": "one millionth stays decimal",
+      "input": {
+        "c": "#123456",
+        "a": 0.000001
+      },
+      "output": "rgba(18, 52, 86, 0.000001)"
+    },
+    {
+      "name": "hundred-thousandth",
+      "input": {
+        "c": "#123456",
+        "a": 0.00001
+      },
+      "output": "rgba(18, 52, 86, 0.00001)"
+    },
+    {
+      "name": "negative",
+      "input": {
+        "c": "#123456",
+        "a": -0.25
+      },
+      "output": "rgba(18, 52, 86, -0.25)"
+    },
+    {
+      "name": "large integer",
+      "input": {
+        "c": "#123456",
+        "a": 123456789
+      },
+      "output": "rgba(18, 52, 86, 123456789)"
+    },
+    {
+      "name": "huge uses exponent",
+      "input": {
+        "c": "#123456",
+        "a": 1e+21
+      },
+      "output": "rgba(18, 52, 86, 1e+21)"
+    },
+    {
+      "name": "just under 1e21 stays integer",
+      "input": {
+        "c": "#123456",
+        "a": 100000000000000000000
+      },
+      "output": "rgba(18, 52, 86, 100000000000000000000)"
+    },
+    {
+      "name": "translucent source composited over white",
+      "input": {
+        "c": "rgba(0, 0, 0, 0.5)",
+        "a": 0.5
+      },
+      "output": "rgba(128, 128, 128, 0.5)"
+    },
+    {
+      "name": "channels over 255 clamp",
+      "input": {
+        "c": "rgb(300, 0, 0)",
+        "a": 0.5
+      },
+      "output": "rgba(255, 0, 0, 0.5)"
+    }
+  ],
+  "contrastCases": [
+    {
+      "name": "black on white",
+      "input": {
+        "fg": "#000000",
+        "bg": "#ffffff"
+      },
+      "output": 21
+    },
+    {
+      "name": "same color",
+      "input": {
+        "fg": "#ffffff",
+        "bg": "#ffffff"
+      },
+      "output": 1
+    },
+    {
+      "name": "AA gray passes",
+      "input": {
+        "fg": "#767676",
+        "bg": "#ffffff"
+      },
+      "output": 4.542224959605253
+    },
+    {
+      "name": "AA gray fails",
+      "input": {
+        "fg": "#777777",
+        "bg": "#ffffff"
+      },
+      "output": 4.478089453577214
+    },
+    {
+      "name": "order does not matter",
+      "input": {
+        "fg": "#ffffff",
+        "bg": "#767676"
+      },
+      "output": 4.542224959605253
+    },
+    {
+      "name": "translucent fg over bg",
+      "input": {
+        "fg": "rgba(0, 0, 0, 0.5)",
+        "bg": "#ffffff"
+      },
+      "output": 3.976653024912438
+    },
+    {
+      "name": "translucent bg over white",
+      "input": {
+        "fg": "#000000",
+        "bg": "rgba(0, 0, 0, 0.5)"
+      },
+      "output": 5.280822809644651
+    }
+  ],
+  "distanceCases": [
+    {
+      "name": "identical",
+      "input": {
+        "a": "#5e6ad2",
+        "b": "#5e6ad2"
+      },
+      "output": 0
+    },
+    {
+      "name": "black to white",
+      "input": {
+        "a": "#000000",
+        "b": "#ffffff"
+      },
+      "output": 0.9999999934735468
+    },
+    {
+      "name": "near neighbors",
+      "input": {
+        "a": "#5e6ad2",
+        "b": "#515cc4"
+      },
+      "output": 0.04540814693458142
+    }
+  ],
+  "isColorCases": [
+    {
+      "name": "hex3 lower",
+      "input": "#fff",
+      "output": true
+    },
+    {
+      "name": "hex3 upper",
+      "input": "#FFF",
+      "output": true
+    },
+    {
+      "name": "hex3 mixed",
+      "input": "#a1C",
+      "output": true
+    },
+    {
+      "name": "hex4 alpha expands",
+      "input": "#0008",
+      "output": true
+    },
+    {
+      "name": "hex6",
+      "input": "#5e6ad2",
+      "output": true
+    },
+    {
+      "name": "hex6 upper",
+      "input": "#5E6AD2",
+      "output": true
+    },
+    {
+      "name": "hex8 half alpha",
+      "input": "#00000080",
+      "output": true
+    },
+    {
+      "name": "hex8 zero alpha",
+      "input": "#12345600",
+      "output": true
+    },
+    {
+      "name": "hex8 full alpha",
+      "input": "#123456ff",
+      "output": true
+    },
+    {
+      "name": "hex2 rejected",
+      "input": "#12",
+      "output": false
+    },
+    {
+      "name": "hex5 rejected",
+      "input": "#12345",
+      "output": false
+    },
+    {
+      "name": "hex7 rejected",
+      "input": "#1234567",
+      "output": false
+    },
+    {
+      "name": "hex9 rejected",
+      "input": "#123456789",
+      "output": false
+    },
+    {
+      "name": "non-hex digit rejected",
+      "input": "#gggggg",
+      "output": false
+    },
+    {
+      "name": "bare hash rejected",
+      "input": "#",
+      "output": false
+    },
+    {
+      "name": "no hash rejected",
+      "input": "ffffff",
+      "output": false
+    },
+    {
+      "name": "surrounding spaces trimmed",
+      "input": "  #abc  ",
+      "output": true
+    },
+    {
+      "name": "nbsp and bom trimmed",
+      "input": " #abc﻿",
+      "output": true
+    },
+    {
+      "name": "crlf trimmed",
+      "input": "\r\n#abc\r\n",
+      "output": true
+    },
+    {
+      "name": "line separator trimmed",
+      "input": " #abc ",
+      "output": true
+    },
+    {
+      "name": "NEL is not JS whitespace",
+      "input": "#abc",
+      "output": false
+    },
+    {
+      "name": "rgb tight",
+      "input": "rgb(1,2,3)",
+      "output": true
+    },
+    {
+      "name": "rgb upper",
+      "input": "RGB(1, 2, 3)",
+      "output": true
+    },
+    {
+      "name": "rgba token style",
+      "input": "rgba(15, 17, 22, 0.045)",
+      "output": true
+    },
+    {
+      "name": "rgb with alpha accepted",
+      "input": "rgb(1, 2, 3, 0.5)",
+      "output": true
+    },
+    {
+      "name": "rgba without alpha accepted",
+      "input": "rgba(1, 2, 3)",
+      "output": true
+    },
+    {
+      "name": "spaces around everything",
+      "input": "rgba(  1 , 2 ,3 , 1  )",
+      "output": true
+    },
+    {
+      "name": "tabs and newlines inside",
+      "input": "rgb(\t1,\n2,\r3)",
+      "output": true
+    },
+    {
+      "name": "nbsp inside counts as whitespace",
+      "input": "rgb( 1, 2, 3)",
+      "output": true
+    },
+    {
+      "name": "NEL inside rejected",
+      "input": "rgb(1, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "channels over 255 kept",
+      "input": "rgb(300, 0, 0)",
+      "output": true
+    },
+    {
+      "name": "alpha over 1 kept",
+      "input": "rgba(0, 0, 0, 2)",
+      "output": true
+    },
+    {
+      "name": "alpha zero",
+      "input": "rgba(0, 0, 0, 0)",
+      "output": true
+    },
+    {
+      "name": "fractional channels",
+      "input": "rgb(1.5, 2.25, .5)",
+      "output": true
+    },
+    {
+      "name": "trailing dot",
+      "input": "rgb(1., 2, 3)",
+      "output": true
+    },
+    {
+      "name": "leading zeros",
+      "input": "rgb(007, 010, 0.50)",
+      "output": true
+    },
+    {
+      "name": "two dots parse as NaN",
+      "input": "rgb(1.2.3, 0, 0)",
+      "output": true
+    },
+    {
+      "name": "lone dot parses as NaN",
+      "input": "rgba(0, 0, 0, .)",
+      "output": true
+    },
+    {
+      "name": "negative rejected",
+      "input": "rgb(-1, 0, 0)",
+      "output": false
+    },
+    {
+      "name": "percent rejected",
+      "input": "rgb(1%, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "exponent rejected",
+      "input": "rgb(1e2, 0, 0)",
+      "output": false
+    },
+    {
+      "name": "space separated rejected",
+      "input": "rgb(1 2 3)",
+      "output": false
+    },
+    {
+      "name": "slash alpha rejected",
+      "input": "rgb(1 2 3 / 0.5)",
+      "output": false
+    },
+    {
+      "name": "five args rejected",
+      "input": "rgba(1, 2, 3, 4, 5)",
+      "output": false
+    },
+    {
+      "name": "two args rejected",
+      "input": "rgb(1, 2)",
+      "output": false
+    },
+    {
+      "name": "trailing junk rejected",
+      "input": "rgb(1, 2, 3)x",
+      "output": false
+    },
+    {
+      "name": "unclosed rejected",
+      "input": "rgb(1, 2, 3",
+      "output": false
+    },
+    {
+      "name": "space before paren rejected",
+      "input": "rgb (1, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "rgbaa rejected",
+      "input": "rgbaa(1, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "arabic-indic digit rejected",
+      "input": "rgb(١, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "fullwidth digit rejected",
+      "input": "rgb(１, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "hsl rejected",
+      "input": "hsl(0, 0%, 0%)",
+      "output": false
+    },
+    {
+      "name": "named color rejected",
+      "input": "red",
+      "output": false
+    },
+    {
+      "name": "transparent rejected",
+      "input": "transparent",
+      "output": false
+    },
+    {
+      "name": "css var rejected",
+      "input": "var(--bg)",
+      "output": false
+    },
+    {
+      "name": "empty rejected",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "whitespace only rejected",
+      "input": "   ",
+      "output": false
+    },
+    {
+      "name": "shadow list rejected",
+      "input": "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "output": false
+    }
+  ],
+  "luminanceCases": [
+    {
+      "name": "black",
+      "input": [
+        0,
+        0,
+        0
+      ],
+      "output": 0
+    },
+    {
+      "name": "white",
+      "input": [
+        255,
+        255,
+        255
+      ],
+      "output": 1
+    },
+    {
+      "name": "linear segment boundary",
+      "input": [
+        10,
+        10,
+        10
+      ],
+      "output": 0.003035269835488375
+    },
+    {
+      "name": "just past the boundary",
+      "input": [
+        11,
+        11,
+        11
+      ],
+      "output": 0.0033465357638991604
+    },
+    {
+      "name": "accent",
+      "input": [
+        94,
+        106,
+        210
+      ],
+      "output": 0.1734089495540851
+    }
+  ],
+  "mixCases": [
+    {
+      "name": "none of b",
+      "input": {
+        "a": "#ff0000",
+        "b": "#0000ff",
+        "amount": 0
+      },
+      "output": "#ff0000"
+    },
+    {
+      "name": "all of b",
+      "input": {
+        "a": "#ff0000",
+        "b": "#0000ff",
+        "amount": 1
+      },
+      "output": "#0000ff"
+    },
+    {
+      "name": "half",
+      "input": {
+        "a": "#000000",
+        "b": "#ffffff",
+        "amount": 0.5
+      },
+      "output": "#808080"
+    },
+    {
+      "name": "rounding on odd steps",
+      "input": {
+        "a": "#e5484d",
+        "b": "#000000",
+        "amount": 0.14
+      },
+      "output": "#c53e42"
+    },
+    {
+      "name": "translucent inputs composited over white",
+      "input": {
+        "a": "rgba(0, 0, 0, 0.5)",
+        "b": "#000000",
+        "amount": 0.5
+      },
+      "output": "#404040"
+    },
+    {
+      "name": "amount above 1 clamps",
+      "input": {
+        "a": "#808080",
+        "b": "#ffffff",
+        "amount": 3
+      },
+      "output": "#ffffff"
+    },
+    {
+      "name": "negative amount clamps",
+      "input": {
+        "a": "#808080",
+        "b": "#ffffff",
+        "amount": -3
+      },
+      "output": "#000000"
+    }
+  ],
+  "oklabCases": [
+    {
+      "name": "black",
+      "input": "#000000",
+      "output": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "white",
+      "input": "#ffffff",
+      "output": [
+        0.9999999934735462,
+        8.095285553011422e-11,
+        3.727390762708893e-8
+      ]
+    },
+    {
+      "name": "red",
+      "input": "#ff0000",
+      "output": [
+        0.6279553606145516,
+        0.22486306106597398,
+        0.1258462985307351
+      ]
+    },
+    {
+      "name": "accent",
+      "input": "#5e6ad2",
+      "output": [
+        0.5673764888949561,
+        0.014383628226640188,
+        -0.15787233215324498
+      ]
+    },
+    {
+      "name": "translucent",
+      "input": "rgba(0, 0, 0, 0.5)",
+      "output": [
+        0.5981807266228486,
+        4.842454215392422e-11,
+        2.2296533230825588e-8
+      ]
+    }
+  ],
+  "overCases": [
+    {
+      "name": "opaque fg wins",
+      "input": {
+        "fg": "#5e6ad2",
+        "backdrop": "#ffffff"
+      },
+      "output": [
+        94,
+        106,
+        210
+      ]
+    },
+    {
+      "name": "half black over white",
+      "input": {
+        "fg": "rgba(0, 0, 0, 0.5)",
+        "backdrop": "#ffffff"
+      },
+      "output": [
+        127.5,
+        127.5,
+        127.5
+      ]
+    },
+    {
+      "name": "token over dark",
+      "input": {
+        "fg": "rgba(94, 106, 210, 0.12)",
+        "backdrop": "#111214"
+      },
+      "output": [
+        26.240000000000002,
+        28.56,
+        42.8
+      ]
+    },
+    {
+      "name": "translucent backdrop composited over white first",
+      "input": {
+        "fg": "rgba(0, 0, 0, 0.5)",
+        "backdrop": "rgba(0, 0, 0, 0.5)"
+      },
+      "output": [
+        63.75,
+        63.75,
+        63.75
+      ]
+    },
+    {
+      "name": "hex8 fg",
+      "input": {
+        "fg": "#ff000080",
+        "backdrop": "#0000ff"
+      },
+      "output": [
+        128,
+        0,
+        127
+      ]
+    },
+    {
+      "name": "alpha above 1 extrapolates",
+      "input": {
+        "fg": "rgba(100, 100, 100, 2)",
+        "backdrop": "#000000"
+      },
+      "output": [
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "alpha zero is the backdrop",
+      "input": {
+        "fg": "rgba(255, 0, 0, 0)",
+        "backdrop": "#123456"
+      },
+      "output": [
+        18,
+        52,
+        86
+      ]
+    }
+  ],
+  "parseColorCases": [
+    {
+      "name": "hex3 lower",
+      "input": "#fff",
+      "output": {
+        "rgb": [
+          255,
+          255,
+          255
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex3 upper",
+      "input": "#FFF",
+      "output": {
+        "rgb": [
+          255,
+          255,
+          255
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex3 mixed",
+      "input": "#a1C",
+      "output": {
+        "rgb": [
+          170,
+          17,
+          204
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex4 alpha expands",
+      "input": "#0008",
+      "output": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "a": 0.5333333333333333
+      }
+    },
+    {
+      "name": "hex6",
+      "input": "#5e6ad2",
+      "output": {
+        "rgb": [
+          94,
+          106,
+          210
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex6 upper",
+      "input": "#5E6AD2",
+      "output": {
+        "rgb": [
+          94,
+          106,
+          210
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex8 half alpha",
+      "input": "#00000080",
+      "output": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "a": 0.5019607843137255
+      }
+    },
+    {
+      "name": "hex8 zero alpha",
+      "input": "#12345600",
+      "output": {
+        "rgb": [
+          18,
+          52,
+          86
+        ],
+        "a": 0
+      }
+    },
+    {
+      "name": "hex8 full alpha",
+      "input": "#123456ff",
+      "output": {
+        "rgb": [
+          18,
+          52,
+          86
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "hex2 rejected",
+      "input": "#12",
+      "output": null
+    },
+    {
+      "name": "hex5 rejected",
+      "input": "#12345",
+      "output": null
+    },
+    {
+      "name": "hex7 rejected",
+      "input": "#1234567",
+      "output": null
+    },
+    {
+      "name": "hex9 rejected",
+      "input": "#123456789",
+      "output": null
+    },
+    {
+      "name": "non-hex digit rejected",
+      "input": "#gggggg",
+      "output": null
+    },
+    {
+      "name": "bare hash rejected",
+      "input": "#",
+      "output": null
+    },
+    {
+      "name": "no hash rejected",
+      "input": "ffffff",
+      "output": null
+    },
+    {
+      "name": "surrounding spaces trimmed",
+      "input": "  #abc  ",
+      "output": {
+        "rgb": [
+          170,
+          187,
+          204
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "nbsp and bom trimmed",
+      "input": " #abc﻿",
+      "output": {
+        "rgb": [
+          170,
+          187,
+          204
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "crlf trimmed",
+      "input": "\r\n#abc\r\n",
+      "output": {
+        "rgb": [
+          170,
+          187,
+          204
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "line separator trimmed",
+      "input": " #abc ",
+      "output": {
+        "rgb": [
+          170,
+          187,
+          204
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "NEL is not JS whitespace",
+      "input": "#abc",
+      "output": null
+    },
+    {
+      "name": "rgb tight",
+      "input": "rgb(1,2,3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "rgb upper",
+      "input": "RGB(1, 2, 3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "rgba token style",
+      "input": "rgba(15, 17, 22, 0.045)",
+      "output": {
+        "rgb": [
+          15,
+          17,
+          22
+        ],
+        "a": 0.045
+      }
+    },
+    {
+      "name": "rgb with alpha accepted",
+      "input": "rgb(1, 2, 3, 0.5)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 0.5
+      }
+    },
+    {
+      "name": "rgba without alpha accepted",
+      "input": "rgba(1, 2, 3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "spaces around everything",
+      "input": "rgba(  1 , 2 ,3 , 1  )",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "tabs and newlines inside",
+      "input": "rgb(\t1,\n2,\r3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "nbsp inside counts as whitespace",
+      "input": "rgb( 1, 2, 3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "NEL inside rejected",
+      "input": "rgb(1, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "channels over 255 kept",
+      "input": "rgb(300, 0, 0)",
+      "output": {
+        "rgb": [
+          300,
+          0,
+          0
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "alpha over 1 kept",
+      "input": "rgba(0, 0, 0, 2)",
+      "output": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "a": 2
+      }
+    },
+    {
+      "name": "alpha zero",
+      "input": "rgba(0, 0, 0, 0)",
+      "output": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "a": 0
+      }
+    },
+    {
+      "name": "fractional channels",
+      "input": "rgb(1.5, 2.25, .5)",
+      "output": {
+        "rgb": [
+          1.5,
+          2.25,
+          0.5
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "trailing dot",
+      "input": "rgb(1., 2, 3)",
+      "output": {
+        "rgb": [
+          1,
+          2,
+          3
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "leading zeros",
+      "input": "rgb(007, 010, 0.50)",
+      "output": {
+        "rgb": [
+          7,
+          10,
+          0.5
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "two dots parse as NaN",
+      "input": "rgb(1.2.3, 0, 0)",
+      "output": {
+        "rgb": [
+          null,
+          0,
+          0
+        ],
+        "a": 1
+      }
+    },
+    {
+      "name": "lone dot parses as NaN",
+      "input": "rgba(0, 0, 0, .)",
+      "output": {
+        "rgb": [
+          0,
+          0,
+          0
+        ],
+        "a": null
+      }
+    },
+    {
+      "name": "negative rejected",
+      "input": "rgb(-1, 0, 0)",
+      "output": null
+    },
+    {
+      "name": "percent rejected",
+      "input": "rgb(1%, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "exponent rejected",
+      "input": "rgb(1e2, 0, 0)",
+      "output": null
+    },
+    {
+      "name": "space separated rejected",
+      "input": "rgb(1 2 3)",
+      "output": null
+    },
+    {
+      "name": "slash alpha rejected",
+      "input": "rgb(1 2 3 / 0.5)",
+      "output": null
+    },
+    {
+      "name": "five args rejected",
+      "input": "rgba(1, 2, 3, 4, 5)",
+      "output": null
+    },
+    {
+      "name": "two args rejected",
+      "input": "rgb(1, 2)",
+      "output": null
+    },
+    {
+      "name": "trailing junk rejected",
+      "input": "rgb(1, 2, 3)x",
+      "output": null
+    },
+    {
+      "name": "unclosed rejected",
+      "input": "rgb(1, 2, 3",
+      "output": null
+    },
+    {
+      "name": "space before paren rejected",
+      "input": "rgb (1, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "rgbaa rejected",
+      "input": "rgbaa(1, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "arabic-indic digit rejected",
+      "input": "rgb(١, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "fullwidth digit rejected",
+      "input": "rgb(１, 2, 3)",
+      "output": null
+    },
+    {
+      "name": "hsl rejected",
+      "input": "hsl(0, 0%, 0%)",
+      "output": null
+    },
+    {
+      "name": "named color rejected",
+      "input": "red",
+      "output": null
+    },
+    {
+      "name": "transparent rejected",
+      "input": "transparent",
+      "output": null
+    },
+    {
+      "name": "css var rejected",
+      "input": "var(--bg)",
+      "output": null
+    },
+    {
+      "name": "empty rejected",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "whitespace only rejected",
+      "input": "   ",
+      "output": null
+    },
+    {
+      "name": "shadow list rejected",
+      "input": "0 1px 2px rgba(0, 0, 0, 0.3)",
+      "output": null
+    }
+  ],
+  "readableCases": [
+    {
+      "name": "already readable is unchanged",
+      "input": {
+        "color": "#000000",
+        "backdrops": [
+          "#ffffff"
+        ],
+        "min": 4.5,
+        "toward": "#000000"
+      },
+      "output": "#000000"
+    },
+    {
+      "name": "nudged toward black",
+      "input": {
+        "color": "#f5c400",
+        "backdrops": [
+          "#ffffff",
+          "#fbfbfc"
+        ],
+        "min": 4.5,
+        "toward": "#000000"
+      },
+      "output": "#896e00"
+    },
+    {
+      "name": "nudged toward white",
+      "input": {
+        "color": "#3e63dd",
+        "backdrops": [
+          "#111214",
+          "#1a1b1e"
+        ],
+        "min": 4.5,
+        "toward": "#ffffff"
+      },
+      "output": "#617fe3"
+    },
+    {
+      "name": "every backdrop must pass",
+      "input": {
+        "color": "#8a8c94",
+        "backdrops": [
+          "#ffffff",
+          "#8a8c94"
+        ],
+        "min": 3,
+        "toward": "#000000"
+      },
+      "output": "#3f4044"
+    },
+    {
+      "name": "unreachable returns toward",
+      "input": {
+        "color": "#808080",
+        "backdrops": [
+          "#808080"
+        ],
+        "min": 22,
+        "toward": "#000000"
+      },
+      "output": "#000000"
+    },
+    {
+      "name": "no backdrops is trivially readable",
+      "input": {
+        "color": "#ffff00",
+        "backdrops": [],
+        "min": 4.5,
+        "toward": "#000000"
+      },
+      "output": "#ffff00"
+    },
+    {
+      "name": "exactly at the minimum passes",
+      "input": {
+        "color": "#000000",
+        "backdrops": [
+          "#ffffff"
+        ],
+        "min": 21,
+        "toward": "#ffffff"
+      },
+      "output": "#000000"
+    }
+  ],
+  "toHexCases": [
+    {
+      "name": "black",
+      "input": [
+        0,
+        0,
+        0
+      ],
+      "output": "#000000"
+    },
+    {
+      "name": "white",
+      "input": [
+        255,
+        255,
+        255
+      ],
+      "output": "#ffffff"
+    },
+    {
+      "name": "halves round up",
+      "input": [
+        0.5,
+        1.5,
+        2.5
+      ],
+      "output": "#010203"
+    },
+    {
+      "name": "just under a half rounds down",
+      "input": [
+        0.49999999999999994,
+        127.49,
+        254.4999
+      ],
+      "output": "#007ffe"
+    },
+    {
+      "name": "clamped high",
+      "input": [
+        255.4,
+        255.5,
+        1000
+      ],
+      "output": "#ffffff"
+    },
+    {
+      "name": "clamped low",
+      "input": [
+        -0.5,
+        -0.6,
+        -1000
+      ],
+      "output": "#000000"
+    },
+    {
+      "name": "single digit pads",
+      "input": [
+        1,
+        10,
+        15
+      ],
+      "output": "#010a0f"
+    }
+  ]
+}

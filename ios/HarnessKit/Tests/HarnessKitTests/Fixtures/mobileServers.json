@@ -1,0 +1,806 @@
+{
+  "serverCases": [
+    {
+      "name": "pairing the same Mac again reuses its entry; a new URL adds one",
+      "input": {
+        "list": [],
+        "ops": [
+          {
+            "op": "upsert",
+            "baseUrl": "http://100.64.0.2:7717",
+            "now": 1
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://100.64.0.2:7717",
+            "now": 2
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://mac.local:7717",
+            "now": 3
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "100.64.0.2:7717",
+              "baseUrl": "http://100.64.0.2:7717",
+              "addedAt": 1
+            }
+          ],
+          "server": {
+            "id": "s1",
+            "name": "100.64.0.2:7717",
+            "baseUrl": "http://100.64.0.2:7717",
+            "addedAt": 1
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "100.64.0.2:7717",
+              "baseUrl": "http://100.64.0.2:7717",
+              "addedAt": 1
+            }
+          ],
+          "server": {
+            "id": "s1",
+            "name": "100.64.0.2:7717",
+            "baseUrl": "http://100.64.0.2:7717",
+            "addedAt": 1
+          },
+          "added": false
+        },
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "100.64.0.2:7717",
+              "baseUrl": "http://100.64.0.2:7717",
+              "addedAt": 1
+            },
+            {
+              "id": "s2",
+              "name": "mac.local:7717",
+              "baseUrl": "http://mac.local:7717",
+              "addedAt": 3
+            }
+          ],
+          "server": {
+            "id": "s2",
+            "name": "mac.local:7717",
+            "baseUrl": "http://mac.local:7717",
+            "addedAt": 3
+          },
+          "added": true
+        }
+      ]
+    },
+    {
+      "name": "upsert matches the exact base URL only",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          }
+        ],
+        "ops": [
+          {
+            "op": "upsert",
+            "baseUrl": "http://A",
+            "now": 5
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://a/",
+            "now": 6
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://a",
+            "now": 7
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "s1",
+              "name": "A",
+              "baseUrl": "http://A",
+              "addedAt": 5
+            }
+          ],
+          "server": {
+            "id": "s1",
+            "name": "A",
+            "baseUrl": "http://A",
+            "addedAt": 5
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "s1",
+              "name": "A",
+              "baseUrl": "http://A",
+              "addedAt": 5
+            },
+            {
+              "id": "s2",
+              "name": "a/",
+              "baseUrl": "http://a/",
+              "addedAt": 6
+            }
+          ],
+          "server": {
+            "id": "s2",
+            "name": "a/",
+            "baseUrl": "http://a/",
+            "addedAt": 6
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "s1",
+              "name": "A",
+              "baseUrl": "http://A",
+              "addedAt": 5
+            },
+            {
+              "id": "s2",
+              "name": "a/",
+              "baseUrl": "http://a/",
+              "addedAt": 6
+            }
+          ],
+          "server": {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          "added": false
+        }
+      ]
+    },
+    {
+      "name": "upsert finds the first of duplicate URLs",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://a",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "upsert",
+            "baseUrl": "http://a",
+            "now": 9
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "b",
+              "name": "b",
+              "baseUrl": "http://a",
+              "addedAt": 2
+            }
+          ],
+          "server": {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          "added": false
+        }
+      ]
+    },
+    {
+      "name": "upsert names https servers by host and path",
+      "input": {
+        "list": [],
+        "ops": [
+          {
+            "op": "upsert",
+            "baseUrl": "https://mac.local/harness",
+            "now": 1700000000000
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "mac.local/harness",
+              "baseUrl": "https://mac.local/harness",
+              "addedAt": 1700000000000
+            }
+          ],
+          "server": {
+            "id": "s1",
+            "name": "mac.local/harness",
+            "baseUrl": "https://mac.local/harness",
+            "addedAt": 1700000000000
+          },
+          "added": true
+        }
+      ]
+    },
+    {
+      "name": "removing the active server falls back to the next one",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "a",
+            "activeId": "a"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "b",
+              "name": "b",
+              "baseUrl": "http://b",
+              "addedAt": 2
+            }
+          ],
+          "active": "b"
+        }
+      ]
+    },
+    {
+      "name": "removing another server keeps the active one",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "a",
+            "activeId": "b"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "b",
+              "name": "b",
+              "baseUrl": "http://b",
+              "addedAt": 2
+            }
+          ],
+          "active": "b"
+        }
+      ]
+    },
+    {
+      "name": "removing the last server leaves none active",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "a",
+            "activeId": "a"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [],
+          "active": null
+        }
+      ]
+    },
+    {
+      "name": "removing with nothing active",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "b",
+            "activeId": null
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            }
+          ],
+          "active": null
+        }
+      ]
+    },
+    {
+      "name": "removing an unknown id changes nothing",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "zzz",
+            "activeId": "a"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "b",
+              "name": "b",
+              "baseUrl": "http://b",
+              "addedAt": 2
+            }
+          ],
+          "active": "a"
+        }
+      ]
+    },
+    {
+      "name": "removing the active middle server falls back to the first",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          },
+          {
+            "id": "c",
+            "name": "Studio Mac",
+            "baseUrl": "https://10.0.0.2:7717/harness",
+            "addedAt": 3
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "b",
+            "activeId": "b"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "c",
+              "name": "Studio Mac",
+              "baseUrl": "https://10.0.0.2:7717/harness",
+              "addedAt": 3
+            }
+          ],
+          "active": "a"
+        }
+      ]
+    },
+    {
+      "name": "a stale active id is kept",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          }
+        ],
+        "ops": [
+          {
+            "op": "remove",
+            "id": "a",
+            "activeId": "gone"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [],
+          "active": "gone"
+        }
+      ]
+    },
+    {
+      "name": "renaming to blank restores the host name",
+      "input": {
+        "list": [
+          {
+            "id": "c",
+            "name": "Studio Mac",
+            "baseUrl": "https://10.0.0.2:7717/harness",
+            "addedAt": 3
+          }
+        ],
+        "ops": [
+          {
+            "op": "rename",
+            "id": "c",
+            "name": "  "
+          },
+          {
+            "op": "rename",
+            "id": "c",
+            "name": " Laptop "
+          },
+          {
+            "op": "rename",
+            "id": "c",
+            "name": ""
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "c",
+              "name": "10.0.0.2:7717/harness",
+              "baseUrl": "https://10.0.0.2:7717/harness",
+              "addedAt": 3
+            }
+          ]
+        },
+        {
+          "list": [
+            {
+              "id": "c",
+              "name": "Laptop",
+              "baseUrl": "https://10.0.0.2:7717/harness",
+              "addedAt": 3
+            }
+          ]
+        },
+        {
+          "list": [
+            {
+              "id": "c",
+              "name": "10.0.0.2:7717/harness",
+              "baseUrl": "https://10.0.0.2:7717/harness",
+              "addedAt": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "renaming an unknown id changes nothing",
+      "input": {
+        "list": [
+          {
+            "id": "a",
+            "name": "a",
+            "baseUrl": "http://a",
+            "addedAt": 1
+          },
+          {
+            "id": "b",
+            "name": "b",
+            "baseUrl": "http://b",
+            "addedAt": 2
+          }
+        ],
+        "ops": [
+          {
+            "op": "rename",
+            "id": "zzz",
+            "name": "x"
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "a",
+              "name": "a",
+              "baseUrl": "http://a",
+              "addedAt": 1
+            },
+            {
+              "id": "b",
+              "name": "b",
+              "baseUrl": "http://b",
+              "addedAt": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rename, remove and re-add in one session",
+      "input": {
+        "list": [],
+        "ops": [
+          {
+            "op": "upsert",
+            "baseUrl": "http://h:1",
+            "now": 10
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://h:2",
+            "now": 11
+          },
+          {
+            "op": "rename",
+            "id": "s1",
+            "name": "First"
+          },
+          {
+            "op": "remove",
+            "id": "s1",
+            "activeId": "s1"
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://h:1",
+            "now": 12
+          },
+          {
+            "op": "upsert",
+            "baseUrl": "http://h:2",
+            "now": 13
+          }
+        ]
+      },
+      "output": [
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "h:1",
+              "baseUrl": "http://h:1",
+              "addedAt": 10
+            }
+          ],
+          "server": {
+            "id": "s1",
+            "name": "h:1",
+            "baseUrl": "http://h:1",
+            "addedAt": 10
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "h:1",
+              "baseUrl": "http://h:1",
+              "addedAt": 10
+            },
+            {
+              "id": "s2",
+              "name": "h:2",
+              "baseUrl": "http://h:2",
+              "addedAt": 11
+            }
+          ],
+          "server": {
+            "id": "s2",
+            "name": "h:2",
+            "baseUrl": "http://h:2",
+            "addedAt": 11
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "s1",
+              "name": "First",
+              "baseUrl": "http://h:1",
+              "addedAt": 10
+            },
+            {
+              "id": "s2",
+              "name": "h:2",
+              "baseUrl": "http://h:2",
+              "addedAt": 11
+            }
+          ]
+        },
+        {
+          "list": [
+            {
+              "id": "s2",
+              "name": "h:2",
+              "baseUrl": "http://h:2",
+              "addedAt": 11
+            }
+          ],
+          "active": "s2"
+        },
+        {
+          "list": [
+            {
+              "id": "s2",
+              "name": "h:2",
+              "baseUrl": "http://h:2",
+              "addedAt": 11
+            },
+            {
+              "id": "s3",
+              "name": "h:1",
+              "baseUrl": "http://h:1",
+              "addedAt": 12
+            }
+          ],
+          "server": {
+            "id": "s3",
+            "name": "h:1",
+            "baseUrl": "http://h:1",
+            "addedAt": 12
+          },
+          "added": true
+        },
+        {
+          "list": [
+            {
+              "id": "s2",
+              "name": "h:2",
+              "baseUrl": "http://h:2",
+              "addedAt": 11
+            },
+            {
+              "id": "s3",
+              "name": "h:1",
+              "baseUrl": "http://h:1",
+              "addedAt": 12
+            }
+          ],
+          "server": {
+            "id": "s2",
+            "name": "h:2",
+            "baseUrl": "http://h:2",
+            "addedAt": 11
+          },
+          "added": false
+        }
+      ]
+    }
+  ]
+}

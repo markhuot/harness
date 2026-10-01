@@ -1,0 +1,1304 @@
+{
+  "describeErrorCases": [
+    {
+      "name": "api 401",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 401,
+          "message": "unauthorized"
+        }
+      },
+      "output": "The service rejected the token (401). Show the pairing QR code on the Mac again and rescan it."
+    },
+    {
+      "name": "api 401 with no message",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 401,
+          "message": ""
+        }
+      },
+      "output": "The service rejected the token (401). Show the pairing QR code on the Mac again and rescan it."
+    },
+    {
+      "name": "api 403 keeps its message",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 403,
+          "message": "Forbidden here"
+        }
+      },
+      "output": "Forbidden here"
+    },
+    {
+      "name": "api 409",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 409,
+          "message": "Key taken"
+        }
+      },
+      "output": "Key taken"
+    },
+    {
+      "name": "api 500 with no message",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 500,
+          "message": ""
+        }
+      },
+      "output": "HTTP 500"
+    },
+    {
+      "name": "api message naming a network failure is still the api message",
+      "input": {
+        "error": {
+          "kind": "api",
+          "status": 502,
+          "message": "Network request failed"
+        },
+        "baseUrl": "http://h:1"
+      },
+      "output": "Network request failed"
+    },
+    {
+      "name": "network request failed with base",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "Network request failed"
+        },
+        "baseUrl": "http://h:1"
+      },
+      "output": "Couldn't reach h:1. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+    },
+    {
+      "name": "network request failed without base",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "Network request failed"
+        }
+      },
+      "output": "Couldn't reach the service."
+    },
+    {
+      "name": "network request failed with empty base",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "Network request failed"
+        },
+        "baseUrl": ""
+      },
+      "output": "Couldn't reach the service."
+    },
+    {
+      "name": "failed to fetch",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "TypeError: Failed to fetch"
+        },
+        "baseUrl": "https://mac.local/harness"
+      },
+      "output": "Couldn't reach mac.local/harness. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+    },
+    {
+      "name": "could not connect",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "Could not connect to the server."
+        },
+        "baseUrl": "http://100.64.0.2:7717"
+      },
+      "output": "Couldn't reach 100.64.0.2:7717. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+    },
+    {
+      "name": "load failed",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "Load failed"
+        }
+      },
+      "output": "Couldn't reach the service."
+    },
+    {
+      "name": "upper case",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "NETWORK REQUEST FAILED"
+        }
+      },
+      "output": "Couldn't reach the service."
+    },
+    {
+      "name": "other message",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "boom"
+        }
+      },
+      "output": "boom"
+    },
+    {
+      "name": "empty message",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": ""
+        }
+      },
+      "output": ""
+    },
+    {
+      "name": "near miss",
+      "input": {
+        "error": {
+          "kind": "error",
+          "message": "network request"
+        }
+      },
+      "output": "network request"
+    }
+  ],
+  "isUnauthorizedCases": [
+    {
+      "name": "api 401",
+      "input": {
+        "kind": "api",
+        "status": 401,
+        "message": "x"
+      },
+      "output": true
+    },
+    {
+      "name": "api 403",
+      "input": {
+        "kind": "api",
+        "status": 403,
+        "message": "x"
+      },
+      "output": false
+    },
+    {
+      "name": "plain error mentioning 401",
+      "input": {
+        "kind": "error",
+        "message": "401"
+      },
+      "output": false
+    }
+  ],
+  "probeServerCases": [
+    {
+      "name": "healthy service and good token",
+      "input": {
+        "baseUrl": "http://100.64.0.2:7717/",
+        "token": "tok",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "http://100.64.0.2:7717/health",
+            "authorization": null
+          },
+          {
+            "url": "http://100.64.0.2:7717/settings",
+            "authorization": "Bearer tok"
+          }
+        ]
+      }
+    },
+    {
+      "name": "no trailing slash",
+      "input": {
+        "baseUrl": "http://h:7717",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "http://h:7717/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:7717/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "only one trailing slash is dropped",
+      "input": {
+        "baseUrl": "http://h//",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "http://h//health",
+            "authorization": null
+          },
+          {
+            "url": "http://h//settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "base with a path",
+      "input": {
+        "baseUrl": "https://mac.local/harness/",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "https://mac.local/harness/health",
+            "authorization": null
+          },
+          {
+            "url": "https://mac.local/harness/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "token with spaces and symbols",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "a b+c/=",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer a b+c/="
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing version",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": ""
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "null version",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":null}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": ""
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "health 204 is ok status but no body",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 204
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 204)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health 299 with good body",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 299,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"9\"}}"
+        },
+        "settings": {
+          "status": 200,
+          "body": "{\"data\":{}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "9"
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 204",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 204
+        }
+      },
+      "output": {
+        "result": {
+          "ok": true,
+          "version": "0.1.0"
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 401",
+      "input": {
+        "baseUrl": "http://h:7717",
+        "token": "old",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 401,
+          "body": "{\"error\":\"unauthorized\"}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unauthorized",
+          "message": "The service rejected the token (401). Show the pairing QR code on the Mac again and rescan it."
+        },
+        "calls": [
+          {
+            "url": "http://h:7717/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:7717/settings",
+            "authorization": "Bearer old"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 403",
+      "input": {
+        "baseUrl": "http://h:7717",
+        "token": "old",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 403
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unauthorized",
+          "message": "The service rejected the token (401). Show the pairing QR code on the Mac again and rescan it."
+        },
+        "calls": [
+          {
+            "url": "http://h:7717/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:7717/settings",
+            "authorization": "Bearer old"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 404",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 404
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "error",
+          "message": "The service answered HTTP 404."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 500",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 500,
+          "body": "oops"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "error",
+          "message": "The service answered HTTP 500."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 302",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 302
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "error",
+          "message": "The service answered HTTP 302."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings 199",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "status": 199
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "error",
+          "message": "The service answered HTTP 199."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings network failure",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "throw": "network"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unreachable",
+          "message": "Couldn't reach h:1. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:1/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings timeout",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "h:1 stopped answering."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:1/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings other error",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"0.1.0\",\"pid\":1}}"
+        },
+        "settings": {
+          "throw": "other"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unreachable",
+          "message": "Couldn't reach h:1. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          },
+          {
+            "url": "http://h:1/settings",
+            "authorization": "Bearer t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "health network failure",
+      "input": {
+        "baseUrl": "http://100.64.0.2:7717",
+        "token": "t",
+        "health": {
+          "throw": "network"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unreachable",
+          "message": "Couldn't reach 100.64.0.2:7717. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://100.64.0.2:7717/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health other error",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "throw": "other"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unreachable",
+          "message": "Couldn't reach h. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health timeout, default 6s",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "health": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "h:1 didn't answer within 6s. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health timeout 2.5s rounds up",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "timeoutMs": 2500,
+        "health": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "h:1 didn't answer within 3s. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health timeout 1.499s rounds down",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "timeoutMs": 1499,
+        "health": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "h:1 didn't answer within 1s. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health timeout 0.4s rounds to 0",
+      "input": {
+        "baseUrl": "http://h:1",
+        "token": "t",
+        "timeoutMs": 400,
+        "health": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "h:1 didn't answer within 0s. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h:1/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "health timeout https base",
+      "input": {
+        "baseUrl": "https://mac.local/harness",
+        "token": "t",
+        "health": {
+          "throw": "abort"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "timeout",
+          "message": "mac.local/harness didn't answer within 6s. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "https://mac.local/harness/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "router login page",
+      "input": {
+        "baseUrl": "http://h:80",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "<html>router login</html>"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h:80 answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h:80/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "404 with empty body",
+      "input": {
+        "baseUrl": "http://h:80",
+        "token": "t",
+        "health": {
+          "status": 404,
+          "body": ""
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h:80 answered, but it isn't a Harness service (HTTP 404)."
+        },
+        "calls": [
+          {
+            "url": "http://h:80/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data.ok false",
+      "input": {
+        "baseUrl": "http://h:80",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":false}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h:80 answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h:80/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data.ok is the string true",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":\"true\"}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data.ok is 1",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":1}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data is null",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":null}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data is a string",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":\"ok\"}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "ok at the top level",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"ok\":true}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "healthy body but HTTP 500",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 500,
+          "body": "{\"data\":{\"ok\":true,\"version\":\"1\"}}"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 500)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "body is a number",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "5"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "body is an array",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "[]"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "body is null with 200",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "null"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "unreachable",
+          "message": "Couldn't reach h. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "body is null with 500",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 500,
+          "body": "null"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 500)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "truncated JSON",
+      "input": {
+        "baseUrl": "http://h",
+        "token": "t",
+        "health": {
+          "status": 200,
+          "body": "{\"data\":{\"ok\":true"
+        }
+      },
+      "output": {
+        "result": {
+          "ok": false,
+          "kind": "not-harness",
+          "message": "h answered, but it isn't a Harness service (HTTP 200)."
+        },
+        "calls": [
+          {
+            "url": "http://h/health",
+            "authorization": null
+          }
+        ]
+      }
+    }
+  ],
+  "unauthorizedMessage": "The service rejected the token (401). Show the pairing QR code on the Mac again and rescan it.",
+  "unreachableMessageCases": [
+    {
+      "name": "http",
+      "input": "http://100.64.0.2:7717",
+      "output": "Couldn't reach 100.64.0.2:7717. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+    },
+    {
+      "name": "https",
+      "input": "https://mac.local/harness",
+      "output": "Couldn't reach mac.local/harness. Check that the Mac is awake and on the same network or tailnet, and that Harness → Settings → Network lets the service listen beyond localhost."
+    }
+  ]
+}

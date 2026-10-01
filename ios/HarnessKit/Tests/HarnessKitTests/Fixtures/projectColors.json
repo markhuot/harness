@@ -1,0 +1,494 @@
+{
+  "isProjectColorIdCases": [
+    {
+      "name": "preset id",
+      "input": "red",
+      "output": true
+    },
+    {
+      "name": "last preset",
+      "input": "pink",
+      "output": true
+    },
+    {
+      "name": "upper-case preset",
+      "input": "RED",
+      "output": false
+    },
+    {
+      "name": "padded preset",
+      "input": " teal ",
+      "output": false
+    },
+    {
+      "name": "unknown name",
+      "input": "magenta",
+      "output": false
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "whitespace only",
+      "input": "   ",
+      "output": false
+    },
+    {
+      "name": "nbsp padded preset",
+      "input": " blue ",
+      "output": false
+    },
+    {
+      "name": "hex6 lower",
+      "input": "#e5484d",
+      "output": false
+    },
+    {
+      "name": "hex6 upper",
+      "input": "#E5484D",
+      "output": false
+    },
+    {
+      "name": "hex6 padded",
+      "input": "  #AaBbCc\n",
+      "output": false
+    },
+    {
+      "name": "hex3 expands",
+      "input": "#ABC",
+      "output": false
+    },
+    {
+      "name": "hex4 rejected",
+      "input": "#abcd",
+      "output": false
+    },
+    {
+      "name": "hex8 rejected",
+      "input": "#aabbccdd",
+      "output": false
+    },
+    {
+      "name": "hex7 rejected",
+      "input": "#abcdef0",
+      "output": false
+    },
+    {
+      "name": "no hash rejected",
+      "input": "abcdef",
+      "output": false
+    },
+    {
+      "name": "non-hex digit rejected",
+      "input": "#abcdeg",
+      "output": false
+    },
+    {
+      "name": "rgb() rejected",
+      "input": "rgb(1, 2, 3)",
+      "output": false
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": false
+    },
+    {
+      "name": "number",
+      "input": 42,
+      "output": false
+    },
+    {
+      "name": "boolean",
+      "input": true,
+      "output": false
+    },
+    {
+      "name": "object",
+      "input": {
+        "id": "red"
+      },
+      "output": false
+    },
+    {
+      "name": "array",
+      "input": [
+        "red"
+      ],
+      "output": false
+    }
+  ],
+  "normalizeProjectColorCases": [
+    {
+      "name": "preset id",
+      "input": "red",
+      "output": {
+        "value": "red"
+      }
+    },
+    {
+      "name": "last preset",
+      "input": "pink",
+      "output": {
+        "value": "pink"
+      }
+    },
+    {
+      "name": "upper-case preset",
+      "input": "RED",
+      "output": {
+        "value": "red"
+      }
+    },
+    {
+      "name": "padded preset",
+      "input": " teal ",
+      "output": {
+        "value": "teal"
+      }
+    },
+    {
+      "name": "unknown name",
+      "input": "magenta",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": {
+        "value": null
+      }
+    },
+    {
+      "name": "whitespace only",
+      "input": "   ",
+      "output": {
+        "value": null
+      }
+    },
+    {
+      "name": "nbsp padded preset",
+      "input": " blue ",
+      "output": {
+        "value": "blue"
+      }
+    },
+    {
+      "name": "hex6 lower",
+      "input": "#e5484d",
+      "output": {
+        "value": "#e5484d"
+      }
+    },
+    {
+      "name": "hex6 upper",
+      "input": "#E5484D",
+      "output": {
+        "value": "#e5484d"
+      }
+    },
+    {
+      "name": "hex6 padded",
+      "input": "  #AaBbCc\n",
+      "output": {
+        "value": "#aabbcc"
+      }
+    },
+    {
+      "name": "hex3 expands",
+      "input": "#ABC",
+      "output": {
+        "value": "#aabbcc"
+      }
+    },
+    {
+      "name": "hex4 rejected",
+      "input": "#abcd",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "hex8 rejected",
+      "input": "#aabbccdd",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "hex7 rejected",
+      "input": "#abcdef0",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "no hash rejected",
+      "input": "abcdef",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "non-hex digit rejected",
+      "input": "#abcdeg",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "rgb() rejected",
+      "input": "rgb(1, 2, 3)",
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": {
+        "value": null
+      }
+    },
+    {
+      "name": "number",
+      "input": 42,
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "boolean",
+      "input": true,
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "object",
+      "input": {
+        "id": "red"
+      },
+      "output": {
+        "invalid": true
+      }
+    },
+    {
+      "name": "array",
+      "input": [
+        "red"
+      ],
+      "output": {
+        "invalid": true
+      }
+    }
+  ],
+  "projectColorHexCases": [
+    {
+      "name": "none",
+      "input": null,
+      "output": null
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "red",
+      "input": "red",
+      "output": "#e5484d"
+    },
+    {
+      "name": "orange",
+      "input": "orange",
+      "output": "#f76b15"
+    },
+    {
+      "name": "yellow",
+      "input": "yellow",
+      "output": "#f5c400"
+    },
+    {
+      "name": "lime",
+      "input": "lime",
+      "output": "#8bc53f"
+    },
+    {
+      "name": "green",
+      "input": "green",
+      "output": "#30a46c"
+    },
+    {
+      "name": "teal",
+      "input": "teal",
+      "output": "#12a594"
+    },
+    {
+      "name": "cyan",
+      "input": "cyan",
+      "output": "#00a2c7"
+    },
+    {
+      "name": "blue",
+      "input": "blue",
+      "output": "#0090ff"
+    },
+    {
+      "name": "indigo",
+      "input": "indigo",
+      "output": "#3e63dd"
+    },
+    {
+      "name": "purple",
+      "input": "purple",
+      "output": "#8e4ec6"
+    },
+    {
+      "name": "pink",
+      "input": "pink",
+      "output": "#d6409f"
+    },
+    {
+      "name": "upper-case preset",
+      "input": "PURPLE",
+      "output": "#8e4ec6"
+    },
+    {
+      "name": "custom hex",
+      "input": "#123456",
+      "output": "#123456"
+    },
+    {
+      "name": "custom hex upper",
+      "input": "#ABCDEF",
+      "output": "#abcdef"
+    },
+    {
+      "name": "custom hex3",
+      "input": "#f0a",
+      "output": "#ff00aa"
+    },
+    {
+      "name": "custom hex equal to a preset swatch stays custom",
+      "input": "#e5484d",
+      "output": "#e5484d"
+    },
+    {
+      "name": "unusable value",
+      "input": "bogus",
+      "output": null
+    },
+    {
+      "name": "hex4 unusable",
+      "input": "#abcd",
+      "output": null
+    }
+  ],
+  "projectColorNameCases": [
+    {
+      "name": "none",
+      "input": null,
+      "output": "Default"
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": "Default"
+    },
+    {
+      "name": "red",
+      "input": "red",
+      "output": "Red"
+    },
+    {
+      "name": "orange",
+      "input": "orange",
+      "output": "Orange"
+    },
+    {
+      "name": "yellow",
+      "input": "yellow",
+      "output": "Yellow"
+    },
+    {
+      "name": "lime",
+      "input": "lime",
+      "output": "Lime"
+    },
+    {
+      "name": "green",
+      "input": "green",
+      "output": "Green"
+    },
+    {
+      "name": "teal",
+      "input": "teal",
+      "output": "Teal"
+    },
+    {
+      "name": "cyan",
+      "input": "cyan",
+      "output": "Cyan"
+    },
+    {
+      "name": "blue",
+      "input": "blue",
+      "output": "Blue"
+    },
+    {
+      "name": "indigo",
+      "input": "indigo",
+      "output": "Indigo"
+    },
+    {
+      "name": "purple",
+      "input": "purple",
+      "output": "Purple"
+    },
+    {
+      "name": "pink",
+      "input": "pink",
+      "output": "Pink"
+    },
+    {
+      "name": "upper-case preset",
+      "input": "PURPLE",
+      "output": "Purple"
+    },
+    {
+      "name": "custom hex",
+      "input": "#123456",
+      "output": "Custom"
+    },
+    {
+      "name": "custom hex upper",
+      "input": "#ABCDEF",
+      "output": "Custom"
+    },
+    {
+      "name": "custom hex3",
+      "input": "#f0a",
+      "output": "Custom"
+    },
+    {
+      "name": "custom hex equal to a preset swatch stays custom",
+      "input": "#e5484d",
+      "output": "Custom"
+    },
+    {
+      "name": "unusable value",
+      "input": "bogus",
+      "output": "Default"
+    },
+    {
+      "name": "hex4 unusable",
+      "input": "#abcd",
+      "output": "Default"
+    }
+  ]
+}
