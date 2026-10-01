@@ -34,6 +34,7 @@ struct BoardScreen: View {
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("\(t.key) \(t.title)")
+                        .listRowBackground(c.bgElev)
                     }
                 } header: {
                     let n = BoardColumns.columnCount(store.state, app.prefs.boardProject, shown: columns, status: status, searching: false)

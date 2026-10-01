@@ -3,7 +3,7 @@
 // output to ios/build/<command>.log, printing only its tail when it fails. Progress goes to stderr,
 // and the path of what was built is the one line on stdout.
 //
-//   bun ios/Tools/build.ts sim                         Release, iphonesimulator, unsigned, arm64
+//   bun ios/Tools/build.ts sim                         Release, iphonesimulator, ad-hoc signed, arm64
 //   bun ios/Tools/build.ts archive --build-number N    Release archive for devices (CFBundleVersion N),
 //                                                      signed automatically with team 47P4ZSALX4
 //   bun ios/Tools/build.ts export --method dev|testflight
@@ -199,10 +199,13 @@ const project = () => ["-project", join(IOS, "Harness.xcodeproj"), "-scheme", "H
 
 function sim(): string {
   xcodegen();
-  log("==> Building for the simulator (Release, arm64, unsigned)");
+  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
   run("sim", [
     "xcodebuild", ...project(), "-configuration", "Release", "-sdk", "iphonesimulator",
-    "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=NO", "CODE_SIGNING_ALLOWED=NO", "build",
+    "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES",
+    // Ad-hoc signed, not unsigned: the simulator only grants the Keychain to a signed app (its
+    // simulated entitlements), and pairing stores the token there.
+    "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build",
   ]);
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }

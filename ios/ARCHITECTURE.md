@@ -14,9 +14,12 @@ keep working, but iPad-specific layouts are separate work.
 ios/
   project.yml            XcodeGen spec (source of truth for the app target and Info.plist)
   Harness/               the app target: SwiftUI only (views, navigation, SwiftUI bridges)
-    HarnessApp.swift     @main App (SwiftUI App lifecycle = UIScene lifecycle)
+    HarnessApp.swift     @main App: creates AppModel, Router, ToastCenter, Actions (§ App shell)
+    App/                 RootView + MainTabs, Destinations (Route → screen), KeychainStorage, Actions
+    Features/<Area>/     one file per feature slot (§ Feature slots), plus Connect/Pair/Scan
+    UI/                  the kit: badges, buttons, callouts, toasts, haptics, icons, banners
     Resources/           Assets.xcassets (AppIcon, LaunchBackground, SplashIcon)
-    Theme/               Color(css:) and other SwiftUI bridges for HarnessKit types
+    Theme/               Palette (theme tokens as Colors), Color(css:) and other bridges
   HarnessKit/            Swift package: everything that doesn't draw
     Sources/HarnessKit/
       Protocol/          Codable ports of shared/src/protocol.ts
@@ -25,12 +28,13 @@ ios/
       State/             board state: BoardState + reducer, paging, selectors, the shared/src/state
                          and mobile/src/lib ports around it, and the @MainActor stores (BoardStore,
                          BoardLoader, DetailFetcher, DraftSync, ModelListCache)
+      Shell/             DeepLink (harness:// → Route), Router, AppModel (servers, pairing, prefs)
       Resources/         generated JSON bundled with the package (themes.json)
     Tests/HarnessKitTests/
       Fixtures/          generated JSON from shared/fixtures (committed)
       Support/           Fixture loader, jsonEqual
     Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
-  Tools/                 bun tests for the ios/ config (config.test.ts), build-highlighter.ts
+  Tools/                 build.ts, dev-sim.ts (README § Dev loop), build-highlighter.ts, bun tests
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both
@@ -269,6 +273,109 @@ lists match). Keep scenario data small: the 120-ticket paging tests are scaled d
   forwards scene phases (`sceneDidEnterBackground()`, `sceneBecameActive()`), and reads
   `state`, `epoch`, `authError` and `loadError` through Observation.
 
+## App shell
+
+The pieces every screen uses. They're in place, so feature tickets shouldn't change them; when a
+feature needs something new here, add to it without changing what's there.
+
+- **AppModel** (HarnessKit/Shell, port of state/app.tsx): `loaded`, `prefs` + `setPref(\.key, v)`,
+  `servers`, `active` (server + token), `pair(address, skipProbe:)`, `activate`, `forget`, `rename`,
+  `connectionNonce`, and `store`: the one `BoardStore` for the active server, rebuilt whenever the
+  server, its token or the nonce changes (RN's `<StoreProvider key={id:nonce}>`). Storage is the
+  Keychain (`KeychainStorage`, readable after first unlock) under the RN keys `harness.servers`,
+  `harness.prefs`, `harness.token.<id>`, in its own service, so the two apps don't share pairings.
+  `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
+- **Environment.** Views read `@Environment(AppModel.self)`, `@Environment(Router.self)`,
+  `@Environment(BoardStore.self)` (inside the tabs and RequireStore only), `@Environment(ToastCenter.self)`,
+  `@Environment(Actions.self)` and `@Environment(\.palette)`.
+- **Theme.** `Palette` is the resolved theme's tokens as SwiftUI Colors (`c.bgElev`, `c.status(s)`,
+  `c.tone(.red)`, `c[token]` for shadow tokens), resolved by `Themes.resolve` from prefs and the
+  system appearance. RootView sets `preferredColorScheme` from Settings → Appearance (alerts,
+  sheets and the keyboard follow it), `tint` = accent and the window background = `bg`. Use
+  palette colors, never `Color.primary`/system grays, for anything the desktop themes.
+- **Actions** (RN `useAction`): `actions.perform("Started") { try await store.client… }` plays the
+  error haptic and toasts `Connection.describeError` on failure, and toasts the message on success.
+  `await actions.run { … }` returns the value (nil after a failure).
+- **Toasts.** `ToastCenter.show(message, kind: .error | .info)`: at most 3 at the top, errors 6 s,
+  info 2.6 s, tap to dismiss, selectable text. Sheets draw their own overlay too.
+- **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab`, a path per tab, one `sheet` and
+  one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
+  `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
+  to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
+  a NavigationStack with a Cancel (✕) toolbar button by `SheetHost` (Projects excepted), so a sheet
+  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack.
+  `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
+- **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
+
+  | Link | Opens |
+  | --- | --- |
+  | `harness://board`, `/search`, `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that tab, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
+  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped) |
+  | `harness://inbox/<sessionId>` | push TriageScreen |
+  | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
+  | `harness://project/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, PromptsScreen, PromptDetailScreen |
+  | `harness://projects[?from=search]` | Projects sheet (0.6 / large detents) |
+  | `harness://new[?projectId=\|key=]`, `/watcher[?id=]`, `/connect` | New session, Watcher, Connect sheets |
+  | `harness://pair?url=&token=` | Pair sheet: waits for the Keychain, pairs, goes to the Board |
+  | `harness://scan` | the QR scanner (full-screen cover, over a sheet when one is up) |
+
+- **Route guard.** Without an active server the root is ConnectScreen. Sheets that need the store
+  wrap their slot in `RequireStore` (spinner until loaded, Connect without a server).
+- **UI kit** (Harness/UI, ports of ui/kit.tsx and friends): `Badge(tone:outline:icon:)`,
+  `StatusDot`, `StatusPill`, `ProjectKeyBadge`, `ReviewMark`, `DriverBadge`, `KindBadge`,
+  `ModelBadge`, `DepChip`, `HButton` / `.buttonStyle(.harness(.primary))` (primary, secondary,
+  ghost, danger, dangerSolid; small; loading; haptic), `Card`, `Callout`, `EmptyState`
+  (ContentUnavailableView), `Spinner`, `LoadingScreen`, `SectionTitle`, `RelativeTimeText` /
+  `NowReader` (TimelineView at 30 s, 10 s or 1 s, as RN's useNow), `TicketKeyLabel`,
+  `RelatedTicketRows`, `ProgressBar`, `ConductorRollup`, `ParentCrumb`, `ConnectionBanner` (put it
+  in a tab root's `.safeAreaInset(edge: .top)`), `Icon("name")` (every shared icon name maps to an
+  SF Symbol, Icons.symbols in HarnessKit, checked by a test), `haptic(.success)`,
+  `.confirmation($item)` / `.choiceSheet($item)` (RN confirm / pick), `DraftField` (commits on
+  return or blur). Settings-style screens are plain `Form` + `LabeledContent`.
+
+## Feature slots
+
+Each later feature ticket owns the files listed for it: it replaces the placeholder body (keeping
+the initializer, which RouteScreen/SheetHost and other slots already call) and adds new files next
+to it in the same folder. It doesn't edit another area's files, App/, UI/ or HarnessKit/Shell. If
+a signature has to change, change its call sites in the same commit and say so in the summary.
+Shared helpers a feature needs go in a new file under its own folder (or a new HarnessKit file).
+
+| Slot | File (ios/Harness/Features/…) | Area | Signature |
+| --- | --- | --- | --- |
+| BoardScreen | Board/BoardScreen.swift | Board + Search | `BoardScreen(mode: BoardMode)` (`.board`, `.search`) |
+| ProjectsSheet | Board/ProjectsSheet.swift | Projects | `ProjectsSheet(fromSearch: Bool)` |
+| TicketDetailScreen | Ticket/TicketDetailScreen.swift | Ticket detail | `TicketDetailScreen(key: String, initialTab: TicketTab?)` |
+| TranscriptView | Ticket/TranscriptView.swift | Transcript | `TranscriptView(sessionId: String, subagentId: String? = nil)` |
+| AgentsTabView | Ticket/AgentsTabView.swift | Agents | `AgentsTabView(ticket: Ticket)` |
+| SubagentView | Ticket/SubagentView.swift | Agents | `SubagentView(ticket: Ticket, subagentId: String)` |
+| BrowserTabView | Ticket/BrowserTabView.swift | Browser | `BrowserTabView(ticket: Ticket)` |
+| PluginTabView | Ticket/PluginTabView.swift | Plugin tabs | `PluginTabView(ticket: Ticket, tab: PluginTab)` |
+| InboxScreen | Inbox/InboxScreen.swift | Inbox | `InboxScreen()` |
+| TriageScreen | Inbox/TriageScreen.swift | Inbox | `TriageScreen(sessionId: String)` |
+| SettingsScreen | Settings/SettingsScreen.swift | Settings | `SettingsScreen()` (placeholder already has Macs + appearance; keep both) |
+| ProjectSettingsScreen | Settings/ProjectSettingsScreen.swift | Projects | `ProjectSettingsScreen(projectId: String)` |
+| PromptsScreen | Prompts/PromptsScreen.swift | Prompts | `PromptsScreen()` |
+| PromptDetailScreen | Prompts/PromptDetailScreen.swift | Prompts | `PromptDetailScreen(id: String)` |
+| WatcherFormScreen | Watchers/WatcherFormScreen.swift | Watchers | `WatcherFormScreen(id: String?)` |
+| NewSessionScreen | NewSession/NewSessionScreen.swift | New session | `NewSessionScreen(projectId: String?, key: String?)` |
+| FileViewerScreen | Files/FileViewerScreen.swift | File viewer | `FileViewerScreen(params: FileRouteParams)` |
+| MarkdownView | Content/MarkdownView.swift | Markdown | `MarkdownView(text:, size: = 15, color: = nil, linkContext: = FileLinkContext())` |
+| CodeBlockView | Content/CodeBlockView.swift | Markdown / File viewer | `CodeBlockView(code:, language: = nil, showLineNumbers: = false, highlightLines: ClosedRange<Int>? = nil)` |
+| AttachmentRow | Content/AttachmentRow.swift | Summaries & attachments | `AttachmentRow(attachments: [SummaryAttachment])` |
+| DriverModelPicker | Pickers/DriverModelPicker.swift | Pickers | `DriverModelPicker(value:, resolved:, title:, defaultLabel:, onlyDriver:, disabled:, inheritedModel:, onChange:)` (Watchers.TriageChoice) |
+| ModelPicker | Pickers/ModelPicker.swift | Pickers | `ModelPicker(driver:, value:, inherited:, defaultLabel:, plainDefault:, title:, disabled:, onChange: (String?) -> Void)` |
+| PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
+| BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
+| ProjectColorPicker | Pickers/ProjectColorPicker.swift | Projects | `ProjectColorPicker(value: String?, onChange:)` |
+| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:)` |
+| TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, onPatch: (UpdateTicketBody) -> Void)` |
+
+Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect), and
+the BoardScreen placeholder's column chips and card labels, which keep sim-check's pairing step
+working until the Board ticket replaces it. The shared parameters a slot needs come from the
+environment (store, router, palette), not from extra initializer arguments.
+
 ## Disk budget (parallel agents)
 
 This Mac has only about 13 GiB free, and up to 5 tickets build at the same time. HARNESS-130
@@ -284,16 +391,29 @@ already crashed once when the disk filled up. Every ticket must follow these rul
   instead of building.
 - Don't download simulator runtimes. Use the iOS 27.0/27.1 runtimes that are already installed.
 
-## Accessibility labels and sim-check
+## Accessibility labels and sim-check (read this before porting a screen)
 
-`mobile/scripts/sim-check.ts` drives the app through the accessibility tree (AXe) and deep links
-(`harness://pair?…`, `harness://board`, `harness://search`, `harness://ticket/<key>?tab=…`,
-`harness://new[?projectId=]`, `harness://prompt/<id>`, `harness://projects`,
-`harness://settings?darkTheme=…`). Visible labels and `accessibilityLabel`s that sim-check looks
-for must match the RN app's exactly (e.g. "Message the agent…", "Reset to built-in",
-"Image phone.png", "Prompt"), and the same deep links must route to the same screens. Then
-sim-check can become the native app's parity test. When a screen is ported, grep sim-check for
-its strings and keep them.
+**sim-check finds everything by AXLabel**: the visible text of an element, or its
+`accessibilityLabel`. `mobile/scripts/sim-check.ts` drives the app through the accessibility tree
+(AXe) and deep links, and `bun mobile/scripts/sim-check.ts --native` runs it against this app. The
+rule for every screen:
+
+- Wherever sim-check looks for a label, the native UI exposes **exactly** the RN app's label. Grep
+  sim-check.ts for the screen's strings before you port it and keep every one: column chips
+  "Planning, 3" (`"<Status>, <count>"`), card labels starting "GREET-1 <title>", "Options" /
+  "Options, …", "Cancel", "Allow once", "Start work", "Message the agent…", "Reset to built-in",
+  "Customize", "Image phone.png", "Prompt", "Model, …", "Agent review: skipped", "Remote ID JIRA-62"…
+- A composite control whose label sim-check reads (a card, a chip) uses
+  `.accessibilityElement(children: .ignore)` + `.accessibilityLabel(…)`, so AXe sees one element
+  with the whole string instead of its pieces.
+- The root AX element must stay the app ("Harness"), so no full-screen overlay may take
+  accessibility focus above the window.
+- Every route in § App shell is reachable by the same `harness://` link as in RN, with the same
+  semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
+
+`bun mobile/scripts/sim-check.ts --native --udid=harness-<KEY> --only=<screen>` checks one screen
+on your own simulator. `--only=connect` passes as of HARNESS-135; each feature ticket should make
+its own screens' `--only=` entries pass.
 
 ## Parity checklist
 
@@ -326,9 +446,9 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
     (lib/highlight, HARNESS-133). RN-only, not ported: lib/keyboard (works around
     KeyboardAvoidingView's parent-relative frame; SwiftUI's keyboard avoidance doesn't need it),
     lib/device and lib/storage (platform glue for the app target).
-- [ ] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
-- [ ] Saved servers + Keychain token storage (lib/storage, lib/servers)
-- [ ] Connection banner + reconnect (screens/ConnectionBanner)
+- [x] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
+- [x] Saved servers + Keychain token storage (lib/storage, lib/servers)
+- [x] Connection banner + reconnect (screens/ConnectionBanner)
 - [ ] Board: columns, cards, child dimming/rollups, moves, paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
 - [ ] Search tab (app/(tabs)/search)
 - [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
@@ -346,6 +466,6 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] Projects + project settings (screens/Projects, ProjectSettings)
 - [ ] Prompts list + editor (screens/Prompts, app/prompt/[id])
 - [ ] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
-- [ ] Deep links (app/+native-intent)
+- [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
 - [ ] sim-check passes against the native build
 - [ ] Release pipeline switched to ios/ (publish-install.sh, testflight.ts), mobile/ deleted

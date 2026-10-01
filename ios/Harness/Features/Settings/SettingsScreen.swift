@@ -32,7 +32,7 @@ struct SettingsScreen: View {
                     }
                     .swipeActions {
                         Button("Forget", role: .destructive) {
-                            confirm = Confirmation(title: "Forget \(s.name)?", message: "Its token is deleted from this iPhone. Pair again to use it.", action: "Forget") {
+                            confirm = Confirmation(title: "Forget \(s.name)?", message: "Its token is deleted from this \(deviceName). Pair again to use it.", action: "Forget") {
                                 app.forget(s.id)
                             }
                         }

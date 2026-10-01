@@ -36,16 +36,20 @@ struct ConnectScreen: View {
                 }
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0))
+                .listRowSeparator(.hidden)
 
                 if let authError = app.store?.authError {
                     Callout(tone: .red, icon: "key", title: "Token rejected", message: authError)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+                        .listRowSeparator(.hidden)
                 }
                 HButton("Scan QR code", icon: "eye", variant: .primary) { router.present(.scan) }
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+                    // Inside the section's rounded clip, so the button's own corners show.
+                    .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 8, trailing: 0))
+                    .listRowSeparator(.hidden)
             }
 
             if !app.servers.isEmpty {
@@ -67,6 +71,7 @@ struct ConnectScreen: View {
                             }
                         }
                         .accessibilityAddTraits(app.active?.id == s.id ? .isSelected : [])
+                        .listRowBackground(c.bgElev)
                     }
                 }
             }
@@ -85,6 +90,7 @@ struct ConnectScreen: View {
                         .onSubmit { field = .token }
                         .accessibilityLabel("Service URL")
                 }
+                .listRowBackground(c.bgElev)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Token").font(.system(size: 13, weight: .semibold)).foregroundStyle(c.text2)
                     SecureField("From Settings → Network → Show token", text: $token)
@@ -96,6 +102,7 @@ struct ConnectScreen: View {
                         .onSubmit { Task { await connect() } }
                         .accessibilityLabel("Token")
                 }
+                .listRowBackground(c.bgElev)
             } header: {
                 Text("Enter manually")
             } footer: {
@@ -106,12 +113,14 @@ struct ConnectScreen: View {
                 if let error {
                     Callout(tone: .red, icon: "wifiOff", message: error)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
+                        .listRowSeparator(.hidden)
                 }
                 HButton("Connect", loading: busy, haptic: nil) { Task { await connect() } }
                     .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+                    // Inside the section's rounded clip, so the button's own corners show.
+                    .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 8, trailing: 0))
             }
         }
         .scrollContentBackground(.hidden)

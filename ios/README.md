@@ -38,7 +38,7 @@ xcrun simctl launch harness-<KEY> com.markhuot.harness.dev
 Or open `Harness.xcodeproj` in Xcode and press Run.
 
 `bun ios/Tools/build.ts sim` (from the repo root) runs XcodeGen and builds the Release
-configuration for the simulator, unsigned and arm64 only, into
+configuration for the simulator, ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. That's the build sim-check
 will drive. It's `com.markhuot.harness`, so install it with `simctl` and launch that id.
 
@@ -50,7 +50,7 @@ The path of what it built is the only line on stdout.
 
 | Command | Builds |
 | --- | --- |
-| `sim` | Release, iphonesimulator, unsigned, arm64 |
+| `sim` | Release, iphonesimulator, ad-hoc signed, arm64 |
 | `device --device <name or UDID> [--launch]` | Debug ("Harness Dev"), installed with `xcrun devicectl` |
 | `archive --build-number N` | Release archive for devices at `ios/build/Harness.xcarchive`, `CFBundleVersion` N |
 | `export --method dev` | development-signed `ios/build/ipa-dev/Harness.ipa` (`ExportOptions.plist`) |
@@ -133,6 +133,11 @@ review, GREET-2 in planning, GREET-3 blocked and GREET-4 done. It builds with
 opens in order after that, and `--shot NAME` saves `ios/build/screens/NAME-light.png` and
 `NAME-dark.png`. The run ends by stopping the daemon and deleting its temp home, unless `--keep`
 leaves it up (it prints the URL, token path and pid) until Ctrl-C.
+
+The first `openurl` on a fresh simulator can stop at iOS's "Open in “Harness”?" prompt. Tap Open
+in Simulator.app, or with AXe: `DEVELOPER_DIR=~/Library/Caches/harness-sim-check/xcode-shim/Xcode.app/Contents/Developer axe tap --label Open --udid <udid>`
+(sim-check creates that shim on its first run). `axe describe-ui` lists the screen's AXLabels,
+which is the quickest way to check that a deep link landed where it should.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.
