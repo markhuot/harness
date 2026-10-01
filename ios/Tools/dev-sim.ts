@@ -1,16 +1,17 @@
-// A dev loop for one ticket's work on the native app: its own simulator, its own throwaway daemon
-// with a little data on it, the app built, installed fresh and paired, then deep links and
-// screenshots on request. Every ticket names its own simulator (harness-<KEY>), so parallel agents
-// never drive each other's (ARCHITECTURE.md § Disk budget).
+// A dev loop for one ticket's work on the native app: the shared simulator (harness-shared, iOS
+// 27.0), a throwaway daemon of its own with a little data on it, the app built, installed fresh and
+// paired, then deep links and screenshots on request. It holds the simulator's lock from install to
+// the last screenshot, so parallel agents take turns on the one device (CLAUDE.md → Simulators).
 //
-//   bun ios/Tools/dev-sim.ts --sim harness-HARNESS-140 [--no-build] [--link harness://…]… [--shot NAME] [--keep]
+//   bun ios/Tools/dev-sim.ts [--sim harness-shared] [--no-build] [--link harness://…]… [--shot NAME] [--keep]
 //   bun ios/Tools/dev-sim.ts --seed-only [--keep]
 //
 // Run with --help for what each flag does.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
+import { acquire, checkDisk, ensureDevice, freeGiB, SHARED_DEVICE, type Device } from "../../mobile/Tools/sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
@@ -18,33 +19,36 @@ const REPO = resolve(IOS, "..");
 export const SCREENS = join(IOS, "build", "screens");
 const DEFAULT_APP = join(IOS, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const BUNDLE = "com.markhuot.harness";
-/** ARCHITECTURE.md § Disk budget: no xcodebuild with less than this free. */
-const MIN_FREE_GIB = 5;
 
-export const USAGE = `Usage: bun ios/Tools/dev-sim.ts --sim <name> [options]
+export const USAGE = `Usage: bun ios/Tools/dev-sim.ts [options]
        bun ios/Tools/dev-sim.ts --seed-only [--keep]
 
-Creates (if missing) and boots the simulator <name> (an iPhone 18 Pro on the newest installed iOS
-runtime), starts a throwaway daemon with a seeded project, builds the native app with
-\`bun ios/Tools/build.ts sim\`, installs it fresh (no saved servers, keychain reset) and pairs it.
+Boots the shared simulator (harness-shared on iOS 27.0, created if missing), starts a throwaway
+daemon with a seeded project, builds the native app with \`bun ios/Tools/build.ts sim\`, then takes
+the simulator's lock, installs the app fresh (no saved servers, keychain reset) and pairs it. The
+lock is held until the last link and screenshot are done; under \`bun run sim with-lock\` it's
+already held.
 Pairing and each link are checked on screen with AXe (iOS's "Open in “Harness”?" is tapped); a
 run that doesn't reach the board, or a link that doesn't change the screen, fails with the labels
 it saw instead of saving screenshots of the wrong screen.
 
-  --sim <name>     the simulator to use; name it after your ticket: harness-<KEY>
+  --sim <name>     the shared simulator (default harness-shared); never create your own. Any
+                   other name must be an existing iOS 27.0 simulator
   --no-build       install the app that's already built (${DEFAULT_APP.replace(REPO + "/", "")})
   --app <path>     install this Harness.app instead (implies --no-build)
   --link <url>     after pairing, open this link in the app (harness://ticket/GREET-1?tab=details);
                    repeat it to open several in order
   --shot <name>    then save ios/build/screens/<name>-light.png and <name>-dark.png
-  --keep           leave the daemon running until Ctrl-C (prints its URL, token and pid)
+  --keep           leave the daemon running until Ctrl-C (prints its URL, token and pid). The
+                   simulator lock is let go first, so another agent may reinstall the app
+                   meanwhile; only the daemon stays up
   --seed-only      start and seed the daemon, print what it seeded, and stop there (no simulator)
   --help           this text
 
-Delete the simulator when the ticket is done: xcrun simctl delete <name>`;
+Leave harness-shared alone; delete ios/build and ios/HarnessKit/.build when done.`;
 
 export type Options = {
-  sim?: string;
+  sim: string;
   build: boolean;
   app?: string;
   links: string[];
@@ -58,7 +62,8 @@ export class UsageError extends Error {}
 
 /** Parses the command line; `--flag value` and `--flag=value` both work. */
 export function parseArgs(argv: string[]): Options {
-  const o: Options = { build: true, links: [], keep: false, seedOnly: false, help: false };
+  const o: Options = { sim: SHARED_DEVICE, build: true, links: [], keep: false, seedOnly: false, help: false };
+  let simGiven = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const eq = a.indexOf("=");
@@ -75,6 +80,7 @@ export function parseArgs(argv: string[]): Options {
     switch (name) {
       case "sim":
         o.sim = value();
+        simGiven = true;
         break;
       case "app":
         o.app = resolve(value());
@@ -115,19 +121,11 @@ export function parseArgs(argv: string[]): Options {
   }
   if (o.help) return o;
   if (o.seedOnly) {
-    if (o.sim || o.links.length || o.shot || o.app || !o.build) throw new UsageError("--seed-only takes only --keep");
+    if (simGiven || o.links.length || o.shot || o.app || !o.build) throw new UsageError("--seed-only takes only --keep");
     return o;
   }
-  if (!o.sim) throw new UsageError("--sim <name> is required (name it harness-<KEY>)");
-  if (/^sim-check /.test(o.sim)) throw new UsageError(`${o.sim} belongs to sim-check; use a simulator of your own (harness-<KEY>)`);
+  if (/^sim-check /.test(o.sim)) throw new UsageError(`${o.sim} belongs to sim-check; use the shared simulator (${SHARED_DEVICE})`);
   return o;
-}
-
-/** Free space in GiB from `df -k <path>` output (its second line's Available column). */
-export function dfAvailableGiB(dfOutput: string): number | null {
-  const line = dfOutput.trim().split("\n")[1];
-  const kb = Number(line?.trim().split(/\s+/)[3]);
-  return Number.isFinite(kb) ? kb / 1024 / 1024 : null;
 }
 
 // ------------------------------------------------------------------ helpers
@@ -172,41 +170,22 @@ function freePort(): number {
 
 // ------------------------------------------------------------------ simulator
 
-type Device = { udid: string; name: string; state: string; isAvailable: boolean };
-
-/** The simulator named `name`, created (iPhone 18 Pro, newest installed iOS) and booted if need be. */
-async function bootSimulator(name: string): Promise<string> {
+/**
+ * The simulator's UDID, booted. Only harness-shared is ever created (by ensureDevice, on iOS 27.0);
+ * any other name has to exist already.
+ */
+async function simulatorFor(name: string): Promise<string> {
+  if (name === SHARED_DEVICE) return ensureDevice(name, { log });
   const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
-  let d = Object.values(list.devices).flat().find((x) => x.isAvailable && (x.name === name || x.udid === name));
-  if (!d) d = { udid: await createDevice(name), name, state: "Shutdown", isAvailable: true };
-  if (d.state !== "Booted") {
-    log(`booting ${name}…`);
-    await simctl("boot", d.udid);
-    await sh(["xcrun", "simctl", "bootstatus", d.udid, "-b"]);
-  }
-  return d.udid;
-}
-
-/** Never downloads a runtime: only those already installed are considered. */
-async function createDevice(name: string): Promise<string> {
-  type Runtime = { identifier: string; version: string; platform?: string; isAvailable: boolean; supportedDeviceTypes?: { identifier: string; name: string }[] };
-  const runtimes = (JSON.parse(await simctl("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes
-    .filter((r) => r.isAvailable && (r.platform ?? r.identifier).includes("iOS"))
-    .sort((a, b) => Bun.semver.order(b.version, a.version));
-  const pick = (want: (n: string) => boolean) => runtimes.map((r) => ({ r, type: r.supportedDeviceTypes?.find((t) => want(t.name)) })).find((x) => x.type);
-  const found = pick((n) => n === "iPhone 18 Pro") ?? pick((n) => /^iPhone/.test(n));
-  if (!found) throw new Error("no installed iOS runtime has an iPhone simulator (dev-sim never downloads one)");
-  log(`creating simulator "${name}" (${found.type!.name}, iOS ${found.r.version})`);
-  return simctl("create", name, found.type!.identifier, found.r.identifier);
+  const d = Object.values(list.devices).flat().find((x) => x.isAvailable && (x.name === name || x.udid === name));
+  if (!d) throw new Error(`no simulator named ${name}; dev-sim only ever creates ${SHARED_DEVICE} (drop --sim to use it)`);
+  return ensureDevice(d.name, { log });
 }
 
 /** Builds with ios/Tools/build.ts sim (its progress on stderr) and returns the .app it printed. */
 async function buildApp(): Promise<string> {
-  const free = dfAvailableGiB(await sh(["df", "-k", homedir()]));
-  if (free !== null && free < MIN_FREE_GIB) {
-    throw new Error(`only ${free.toFixed(1)} GiB free on ${homedir()}; ARCHITECTURE.md § Disk budget says not to build under ${MIN_FREE_GIB} GiB`);
-  }
-  log(`building the native app (${free?.toFixed(1) ?? "?"} GiB free)…`);
+  checkDisk();
+  log(`building the native app (${freeGiB().toFixed(1)} GiB free)…`);
   const p = Bun.spawn(["bun", join(IOS, "Tools", "build.ts"), "sim"], { cwd: REPO, env: process.env, stdout: "pipe", stderr: "inherit" });
   const [out, code] = await Promise.all([new Response(p.stdout).text(), p.exited]);
   if (code !== 0) throw new Error(`bun ios/Tools/build.ts sim → exit ${code}`);
@@ -397,7 +376,7 @@ async function main(o: Options): Promise<void> {
   }
 
   // The simulator boots and the app builds while the daemon starts and seeds.
-  const device = o.seedOnly ? null : Promise.all([bootSimulator(o.sim!), o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP)]);
+  const device = o.seedOnly ? null : Promise.all([simulatorFor(o.sim), o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP)]);
   device?.catch(() => {}); // awaited below; don't let an early failure go unhandled meanwhile
   const d = await startDaemon();
   let stopped = false;
@@ -406,37 +385,53 @@ async function main(o: Options): Promise<void> {
     stopped = true;
     await stopDaemon(d);
   };
+  // The simulator lock, taken after the build and seed so a long xcodebuild doesn't hold the device.
+  let release: (() => void) | null = null;
+  const letGo = () => {
+    release?.();
+    release = null;
+  };
+  const onSignal = () => {
+    letGo();
+    void stop().then(() => process.exit(130));
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
   try {
     const seeded = await seed(d);
     printSeeded(d, seeded);
     if (device) {
       const [udid, app] = await device;
-      const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
-      await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));
-      let previous = { url: "", key: screenKey(await axe.labels()) };
-      for (const link of o.links) {
-        log(`opening ${link}`);
-        previous = await openLink(udid, axe, link, previous);
+      release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      try {
+        const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
+        await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));
+        let previous = { url: "", key: screenKey(await axe.labels()) };
+        for (const link of o.links) {
+          log(`opening ${link}`);
+          previous = await openLink(udid, axe, link, previous);
+        }
+        if (o.shot) await shoot(udid, o.shot);
+        // Without --keep the daemon goes away next, and the app would spin reconnecting.
+        if (!o.keep) await sh(["xcrun", "simctl", "terminate", udid, BUNDLE], { allowFail: true });
+      } finally {
+        letGo();
       }
-      if (o.shot) await shoot(udid, o.shot);
-      log(`simulator: ${o.sim} (${udid}); delete it when the ticket is done: xcrun simctl delete ${o.sim}`);
+      log(`simulator: ${o.sim} (${udid}); leave it alone, and delete ios/build and ios/HarnessKit/.build when done`);
     }
   } catch (e) {
     await stopDaemon(d, true);
     stopped = true;
     throw e;
   }
+  process.off("SIGINT", onSignal);
+  process.off("SIGTERM", onSignal);
 
   if (!o.keep) {
-    if (device) {
-      // Once the daemon is gone the app would spin reconnecting.
-      const [udid] = await device;
-      await sh(["xcrun", "simctl", "terminate", udid, BUNDLE], { allowFail: true });
-    }
     await stop();
     return;
   }
-  log(`--keep: daemon running at ${d.base} (pid ${d.proc.pid}); token in ${join(d.home, "token")}. Ctrl-C stops it.`);
+  log(`--keep: daemon running at ${d.base} (pid ${d.proc.pid}); token in ${join(d.home, "token")}. The simulator lock is released, so another agent may reinstall the app. Ctrl-C stops the daemon.`);
   await new Promise<void>((done) => {
     const quit = () => void stop().then(done);
     process.once("SIGINT", quit);

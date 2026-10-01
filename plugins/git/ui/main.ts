@@ -588,6 +588,8 @@ class ChangesView {
 
 async function main() {
   const root = document.getElementById("app")!;
+  // The iOS app hosts this page in a React Native WebView; the Mac app in an iframe. Layout differs per host.
+  document.documentElement.dataset.host = (window as { ReactNativeWebView?: unknown }).ReactNativeWebView ? "ios" : "desktop";
   try {
     const host = await connect();
     (window as unknown as { __gitPlugin: ChangesView }).__gitPlugin = new ChangesView(root, host);

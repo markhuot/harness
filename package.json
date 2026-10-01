@@ -9,6 +9,7 @@
     "app": "bun run --cwd app dev",
     "typecheck": "bunx tsc -p service --noEmit && bunx tsc -p app --noEmit && bunx tsc -p plugins --noEmit && bunx tsc -p plugins/tsconfig.server.json --noEmit && bunx tsc -p mobile --noEmit && bunx tsc -p ios --noEmit",
     "plugins:build": "bun run --filter '@harness/plugin-*' build",
+    "sim": "bun mobile/Tools/sim.ts",
     "release:prepare": "bun mobile/Tools/release.ts prepare",
     "release:publish": "mobile/Tools/publish-install.sh"
   },
