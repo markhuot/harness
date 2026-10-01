@@ -1581,19 +1581,19 @@
       ]
     },
     {
-      "name": "astral sorts after BMP private use by code unit",
+      "name": "astral sorts before BMP private use by code unit",
       "input": {
         "paths": [
+          "",
           "😀",
-          "～",
-          ""
+          "～～"
         ],
         "query": ""
       },
       "output": [
-        "",
-        "～",
-        "😀"
+        "😀",
+        "",
+        "～～"
       ]
     },
     {

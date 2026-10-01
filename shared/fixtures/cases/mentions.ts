@@ -169,7 +169,7 @@ export const rankPathsCases = cases(
       "empty query demoted top level": { paths, query: "", demotePrefix: "app" },
       "ties by length then code units": { paths: ["b/a.ts", "a/a.ts", "B/a.ts", "a.ts"], query: "a" },
       "upper-case sorts before lower-case by code unit": { paths: ["Zed", "apple", "Zap"], query: "" },
-      "astral sorts after BMP private use by code unit": { paths: ["\u{1F600}", "～", ""], query: "" },
+      "astral sorts before BMP private use by code unit": { paths: ["\uE000\uE000", "\u{1F600}", "\uFF5E\uFF5E"], query: "" },
       "length counts UTF-16": { paths: ["x/😀.ts", "x/abcd.ts"], query: "x/" },
       "unicode case folding": { paths: ["Über/a.ts", "über.md"], query: "ü" },
       "final sigma lower-cases to ς": { paths: ["ΟΔΟΣ", "ΟΔΟΣ/x"], query: "οδος" },
