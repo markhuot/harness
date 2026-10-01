@@ -508,6 +508,28 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   Discard draft / Keep editing for a non-empty draft. A swipe down (any `onDisappear`) saves.
 - The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (sim-check looks for it) and `autofocus`.
 
+## File viewer (Features/Files)
+
+- **Decisions live in HarnessKit:** `FileViewerRules` holds the title, subtitle, badges, meta line,
+  Diff counts, body and diff states, error copy and Copy link. `FileHighlightWindows` is the 40k-char
+  window around what's on screen, and the colored lines it piles up. `FileViewerLoader` loads the
+  file, then the diff when git says the file is dirty. It drops stale loads and splits the lines and
+  patch rows off the main actor. All of these have tests.
+- **`FileCodeList`** is a UICollectionView with a fixed-row layout (19 pt rows, one scroll view
+  for both directions, pull to refresh). It opens straight at a row and reports the visible rows.
+  Rows are `FileCodeRow` columns of NSAttributedString. A code label is only as wide as its text,
+  because a UILabel's backing store covers its whole frame. Bump `version` to redraw the rows on
+  screen. Prefetching is off, so no stale cell survives a bump. Line numbers are hidden from AX.
+  The code label's AX label is its text and its value is "Line N", so sim-check can find
+  `export function greetingFor…`.
+- **Scroll benchmark:** in a build with the DEBUG condition, launch with `-fileViewerBench YES`
+  and open a file over 1000 lines. Two seconds later the list scrolls to the bottom at 6000 pt/s,
+  then logs `file-bench: …` (category `file-bench`) with frame times and the cost per cell. On the
+  shared simulator, a 20 001-line TypeScript file logged 3795 frames, every one 16.7 ms, with 0
+  hitches and 61 µs per cell, and colors kept up the whole way.
+- File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
+  starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
+
 ## Disk budget (parallel agents)
 
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
@@ -591,7 +613,7 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Browser tab (screens/BrowserTab, lib/browserInput)
 - [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
-- [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
+- [x] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [x] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
