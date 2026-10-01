@@ -23,16 +23,15 @@ cd ios && xcodegen
 
 ## Build and run in the simulator
 
-```sh
-cd ios
-xcodebuild -project Harness.xcodeproj -scheme Harness -sdk iphonesimulator \
-  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd build
+From the repo root (`bun run sim` is a root script, so it isn't found from `ios/`):
 
-# once: a simulator of your own (never reuse the "sim-check …" ones)
-xcrun simctl create harness-<KEY> com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro com.apple.CoreSimulator.SimRuntime.iOS-27-0
-xcrun simctl boot harness-<KEY>
-xcrun simctl install harness-<KEY> build/dd/Build/Products/Debug-iphonesimulator/Harness.app
-xcrun simctl launch harness-<KEY> com.markhuot.harness.dev
+```sh
+bun run sim disk   # exits 1 under 5 GiB free: block and ask instead of building
+(cd ios && xcodegen && xcodebuild -project Harness.xcodeproj -scheme Harness -sdk iphonesimulator \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd build)
+
+# on the shared simulator, under its lock (CLAUDE.md → Simulators)
+bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" ios/build/dd/Build/Products/Debug-iphonesimulator/Harness.app && xcrun simctl launch "$SIM_UDID" com.markhuot.harness.dev'
 ```
 
 Or open `Harness.xcodeproj` in Xcode and press Run.
@@ -114,25 +113,30 @@ the same as for the RN app. The bundle id is the same too, so the native build r
 on TestFlight and on devices. `--no-publish`, `--skip-ios`, `--skip-mac` and `--skip-testflight`
 work with either app. See CLAUDE.md → Releases for the whole process.
 
-## Dev loop (one simulator per ticket)
+## Dev loop (the shared simulator)
 
-`ios/Tools/dev-sim.ts` checks one screen on a simulator of the ticket's own, so parallel tickets
-never drive each other's (see ARCHITECTURE.md → Disk budget):
+`ios/Tools/dev-sim.ts` checks one screen on the shared simulator, `harness-shared` (see
+CLAUDE.md → Simulators and ARCHITECTURE.md → Disk budget):
 
 ```sh
-bun ios/Tools/dev-sim.ts --sim harness-<KEY> [--no-build] [--link harness://ticket/GREET-1?tab=details]… [--shot details] [--keep]
+bun ios/Tools/dev-sim.ts [--no-build] [--link harness://ticket/GREET-1?tab=details]… [--shot details] [--keep]
 ```
 
-It creates the simulator if it's missing (an iPhone 18 Pro on the newest installed iOS runtime;
-it never downloads one) and boots it. It starts a throwaway daemon (temp `HARNESS_HOME`, a free
+It boots `harness-shared` (an iPhone 18 Pro on iOS 27.0, created the first time it's needed; it
+never downloads a runtime). `--sim <name>` picks another simulator,
+which has to exist already. It starts a throwaway daemon (temp `HARNESS_HOME`, a free
 port, the dummy driver) and seeds the `GREET` project, a git repo with worktrees, with GREET-1 in
 review, GREET-2 in planning, GREET-3 blocked and GREET-4 done. It builds with
 `bun ios/Tools/build.ts sim` (skip that with `--no-build`, or install another build with
-`--app <path>`), refusing to build with less than 5 GiB free. Then it installs the app fresh
-(uninstalled first, keychain reset) and pairs it with the `harness://pair?…` link. Each `--link`
-opens in order after that, and `--shot NAME` saves `ios/build/screens/NAME-light.png` and
-`NAME-dark.png`. The run ends by stopping the daemon and deleting its temp home, unless `--keep`
-leaves it up (it prints the URL, token path and pid) until Ctrl-C.
+`--app <path>`), refusing to build with less than 5 GiB free. Then it takes the simulator's lock
+(printing "waiting for the harness-shared simulator…" while another agent holds it), installs the
+app fresh (uninstalled first, keychain reset) and pairs it with the `harness://pair?…` link. Each
+`--link` opens in order after that, and `--shot NAME` saves `ios/build/screens/NAME-light.png` and
+`NAME-dark.png`. The lock is held from the install to the last screenshot. Under
+`bun run sim with-lock -- bun ios/Tools/dev-sim.ts …` it's already held. The run ends by stopping
+the daemon and deleting its temp home, unless `--keep` leaves the daemon up (it prints the URL,
+token path and pid) until Ctrl-C. `--keep` lets go of the simulator lock first, so another agent
+may reinstall the app in the meantime.
 
 dev-sim checks the screen with [AXe](https://github.com/cameroncooke/AXe)
 (`brew install cameroncooke/axe/axe`; it refuses to run without it), as sim-check does. After
@@ -147,16 +151,14 @@ dev-sim and sim-check create:
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.
 
-sim-check can walk the native app too, on the same simulator:
+sim-check can walk the native app too, on the same simulator and under the same lock:
 
 ```sh
-cd mobile && bun scripts/sim-check.ts --native --udid=harness-<KEY> --only=connect
+cd mobile && bun scripts/sim-check.ts --native --only=connect
 ```
 
 `--native` builds with `build.ts sim`, installs
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and saves to
-`mobile/build/screens-native/`. `--udid` takes a simulator's name or UDID. It has to exist already
-(dev-sim creates it), and naming it keeps sim-check off its shared `sim-check N` simulators.
+`mobile/build/screens-native/`. `--udid` still names a specific existing simulator.
 
-When the ticket is done, delete the simulator with `xcrun simctl delete harness-<KEY>`, along with
-`ios/build` and `ios/HarnessKit/.build`.
+When the ticket is done, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.

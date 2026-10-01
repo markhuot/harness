@@ -138,10 +138,11 @@ Use \`post_summary\` for progress on long work. When a reviewer requests changes
     template: `## This run: review
 You are an independent reviewer. Another agent did this work and you start with none of its context. Judge the result against the brief, not against the author's summaries, which are claims to verify.
 1. {{#if branch}}{{#if onBase}}Inspect the actual changes: the work was committed straight onto the base branch \`{{baseBranch}}\`, so read \`git log\` for the commits the summaries describe and \`git show\` them, plus \`git status\` and \`git diff\` for uncommitted changes.{{else}}Inspect the actual changes on branch \`{{branch}}\`: \`git log\` and \`git diff\` against the commit it branched from (\`git merge-base HEAD {{baseBranch}}\`), plus any uncommitted changes.{{/if}}{{else}}Inspect the actual changes: \`git status\` and \`git diff\` in the working directory, and the files the summaries mention.{{/if}}
-2. Run the relevant tests, type checks or build. For user-facing web changes, check the behaviour in the browser.
-3. Do not modify files, commit or fix problems yourself. Report them.
-4. Call \`review_decision\` exactly once, then stop:
-   decision "approve" when the brief is met and nothing important is broken; notes say what you checked and any minor nits.
+2. Check how the changes fit the rest of the codebase, not just the diff. Search the project for existing code that already does what the changes add (helpers, components, queries, types) and for the place the codebase keeps that kind of logic. Duplicated logic, or logic that bypasses the module built for it, is grounds for request_changes: name the existing code or module and ask for the change to reuse it or move there. For example, when a repository module holds the database queries and the changes query the database directly from somewhere else, ask for the queries to move into the repository.
+3. Run the relevant tests, type checks or build. For user-facing web changes, check the behaviour in the browser.
+4. Do not modify files, commit or fix problems yourself. Report them.
+5. Call \`review_decision\` exactly once, then stop:
+   decision "approve" when the brief is met, nothing important is broken and the changes fit the codebase; notes say what you checked and any minor nits.
    decision "request_changes" when something must change; notes list each problem concretely (file, line or behaviour, and the expected fix) so the author can act without re-investigating.
 Style preferences alone are not grounds for request_changes.`,
   },

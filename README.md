@@ -52,17 +52,25 @@ plugin tabs), approvals, Inbox and settings. It shares its state logic with the 
   then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
   throwaway daemon, taps through opening a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
   and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
-  board + settings shots per color theme). It splits the work across its own simulators,
-  "sim-check 1" to "sim-check 3" (`--shards=N`), which it creates the first time. `--ipad`
-  saves the same screens from iPad simulators ("sim-check iPad 1", …) to
+  board + settings shots per color theme). It runs on the shared `harness-shared` simulator
+  (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
+  the work across extra "sim-check 2" … "sim-check N" simulators, created on iOS 27.0 the first
+  time. `--ipad` saves the same screens from an iPad simulator ("sim-check iPad 1") to
   `mobile/build/screens-ipad/`, without the tap checks. With
-  `--no-build` and those simulators booted, a run takes about a minute, and
+  `--no-build` and the simulator booted, a run takes a few minutes, and
   `mobile/build/screens/timings.json` shows where the time went. `ios/` is gitignored and outlives dependency changes, so
   `release:publish` regenerates it on every build, and sim-check does whenever it doesn't link
   every native package in `mobile/package.json` (`bun Tools/nativeDeps.ts check`). A stale `ios/` still builds, but the
   app then crashes on its first use of the missing module. Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
+- **Simulator:** `bun run sim` (`mobile/Tools/sim.ts`) manages the one simulator everyone shares.
+  `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
+  back to another runtime or downloads one), boots it and prints its UDID.
+  `with-lock -- <command>` waits for exclusive use, then runs the command with `SIM_UDID` set.
+  `status` shows who holds it, `shutdown` stops it once it's free, and `disk` fails below 5 GiB
+  free. Locks live in `~/.harness/tmp/sim-locks`; a lock whose process died is taken over. See
+  CLAUDE.md → Simulators for the rules agents follow.
 
 ### Native iOS app (ios/)
 
