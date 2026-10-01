@@ -29,7 +29,8 @@ struct TicketDetailDetailsTab: View {
                 TextField("", text: $description, prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)
                     .font(.system(size: 14.5))
                     .foregroundStyle(c.text)
-                    .lineLimit(5...)
+                    // A long plan scrolls inside the field instead of pushing the settings off screen.
+                    .lineLimit(5...10)
                     .lineSpacing(3)
                     .focused($editingBrief)
                     .disabled(!editable)

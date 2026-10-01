@@ -63,6 +63,8 @@ struct TicketDetailScreen: View {
             }
         }
         .background(c.bg)
+        // RN's ticket screen covers the tabs: the composer sits at the bottom edge.
+        .toolbar(.hidden, for: .tabBar)
         .fileLinkScope(ticketKey: ticket?.key ?? ticketKey)
         .pluginTabs(for: ticket, into: $pluginTabs)
         // Done tickets page in: an older one may drop out of the store on a refetch; keep it resolved.

@@ -1521,7 +1521,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       await check("composer answers a blocked ticket", async () => {
         await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));
         await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-        await axe("type", "Use Happy Cog", "--udid", udid);
+        // A message to a blocked ticket is a chat; the dummy picks the work back up only when told to.
+        await axe("type", "Use Happy Cog [dummy:unblock]", "--udid", udid);
         await tapWhere(udid, "Send");
         const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
         return `${t.key} → ${t.status}`;
