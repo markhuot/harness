@@ -386,9 +386,9 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:, fieldLabel:, placeholderColor:, onFocusChange:, fieldBox:)` (all after `text` optional) |
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
-Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect), and
-the BoardScreen placeholder's column chips and card labels, which keep sim-check's pairing step
-working until the Board ticket replaces it. The shared parameters a slot needs come from the
+Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
+board's decisions that don't draw (landing column, card menu and AX label, drop positions) are in
+HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from the
 environment (store, router, palette), not from extra initializer arguments.
 
 The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
@@ -473,6 +473,29 @@ What the hosting screens (Ticket detail, New session, Settings, Project settings
   GREET project works. `bun ios/Tools/build.ts sim` builds Release, which leaves it out, so build
   with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` added to that xcodebuild line.
 
+## Settings screens (Features/Settings, Prompts, Watchers)
+
+What Settings, Project settings, the watcher form and Prompts share (HARNESS-144):
+
+- **Decisions live in HarnessKit's `SettingsRules`** (tested): listen labels and the localhost
+  confirm, what a committed max-runs or base-branch field saves, driver status and login labels,
+  watcher row lines, the identifier draft, rename toast and Remove project copy.
+- **Rows.** `SettingsRow(label:hint:)` puts the hint under the label and the control, so a long
+  hint never squeezes a picker to "…" (TicketSettingsRow keeps the hint beside the label, which
+  only suits short hints). `SettingsButtonRow` is a tappable row; `SettingsSectionHeader` is a
+  header with a trailing icon button ("Add watcher", "Refresh drivers").
+- **No modifiers on a Form `Section`.** SwiftUI applies them to every row of the section, so
+  Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` / `page` and the screen
+  presents them, and it runs the network, drivers and prompt-catalog loads once.
+- **AXe and segmented Pickers.** AXe lists a segmented Picker as one unlabeled element, so a
+  segment sim-check taps or waits for ("Compare with built-in") is a labeled Button
+  (PromptSegmented). Lazy Forms leave off-screen rows out of the AX tree too; the Prompts list is a
+  plain stack because sim-check waits for a row below the fold.
+- **The prompt editor** is a UIKit bridge (`PromptTextEditor`): a growing UITextView with
+  autocorrection and smart punctuation off, whose selection `PromptEditorHandle` keeps (UTF-16, as
+  `Prompts.insertText` takes it) and which scrolls its enclosing scroll view to keep the caret
+  above the keyboard.
+
 ## Disk budget (parallel agents)
 
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
@@ -543,8 +566,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
 - [x] Saved servers + Keychain token storage (lib/storage, lib/servers)
 - [x] Connection banner + reconnect (screens/ConnectionBanner)
-- [ ] Board: columns, cards, child dimming/rollups, moves, paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
-- [ ] Search tab (app/(tabs)/search)
+- [x] Board: columns, cards, child dimming/rollups, moves (context menu, VoiceOver actions, drag and drop), paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
+- [x] Search tab (app/(tabs)/search)
 - [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
 - [x] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
@@ -559,10 +582,23 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
-- [ ] Watchers form (screens/WatcherForm, lib/watcherDraft)
-- [ ] Projects + project settings (screens/Projects, ProjectSettings)
-- [ ] Prompts list + editor (screens/Prompts, app/prompt/[id])
-- [ ] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
+- [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
+- [x] Projects sheet (screens/Projects)
+- [x] Project settings (screens/ProjectSettings)
+- [x] Prompts list + editor (screens/Prompts, app/prompt/[id])
+- [x] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
 - [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
 - [ ] sim-check passes against the native build
 - [ ] Release pipeline switched to ios/ (publish-install.sh, testflight.ts), mobile/ deleted
+
+## Manual checks for HARNESS-145
+
+Things AXe and sim-check can't drive, to try by hand on a device:
+
+- Board drag and drop on a real touch: a card dragged onto another card in the same column sits
+  above it, one dropped on a status chip or into another column moves there, and the move sticks
+  after a refresh.
+- An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
+  scrolls through on the way. A swipe from one column to the next plays exactly one.
+- `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
+  turn it off for its run (or HARNESS-145 asks the human).
