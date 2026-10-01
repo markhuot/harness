@@ -12,7 +12,8 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     #if DEBUG
-    /// `-debugScreen highlight` on the launch command line opens a debug screen directly.
+    /// `-debugScreen highlight` on the launch command line opens a debug screen directly
+    /// (`browser:<KEY>` and `plugin:<KEY>:<pluginId>:<tabId>`: BrowserPluginDebugScreen).
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
@@ -44,6 +45,8 @@ struct RootView: View {
         #if DEBUG
         if debugScreen == "highlight" {
             NavigationStack { HighlightPreviewView() }
+        } else if app.active != nil, let screen = BrowserPluginDebugScreen(debugScreen) {
+            NavigationStack { screen }
         } else {
             shell
         }
