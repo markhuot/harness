@@ -30,6 +30,7 @@ import { Empty, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { Markdown, scrollsSideways } from "../ui/Markdown";
 import { useStickToBottom } from "../ui/stickToBottom";
+import { useHeroScroll } from "../ui/heroCollapse";
 
 const timeOf = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -84,7 +85,7 @@ export function Transcript({
   }, [items, deltas, working]);
   const agentFor = (row: Row): Subagent | null => (onOpenSubagent && row.kind === "tool" ? (subagents?.find((a) => a.id === row.call.content.callId) ?? null) : null);
 
-  const stick = useStickToBottom<FlatList<Row>>();
+  const stick = useHeroScroll(useStickToBottom<FlatList<Row>>());
   const loading = !transcript?.loaded && !error;
 
   return (

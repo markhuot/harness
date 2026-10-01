@@ -12,6 +12,7 @@ import { MONO, RADIUS } from "../theme/tokens";
 import { Badge, Card, Spinner, toneColors, useNow } from "../ui/kit";
 import { Icon } from "../ui/Icon";
 import { Markdown } from "../ui/Markdown";
+import { useHeroScroll } from "../ui/heroCollapse";
 import { Transcript } from "./Transcript";
 
 export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
@@ -32,14 +33,14 @@ export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (id: str
   const list = subagentsOf(state, ticket.sessionId);
   const groups = useMemo(() => groupSubagents(list ?? []), [list]);
   const now = useNow(groups.running.length ? 1000 : 60_000);
-
+  const heroScroll = useHeroScroll();
 
   const sections = [
     { id: "running", label: "Running", items: groups.running },
     { id: "finished", label: "Finished", items: groups.finished },
   ].filter((s) => s.items.length);
   return (
-    <ScrollView contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 30 }}>
+    <ScrollView {...heroScroll} contentContainerStyle={{ padding: 14, gap: 16, paddingBottom: 30 }}>
       {sections.map((s) => (
         <View key={s.id} style={{ gap: 7 }}>
           <View style={{ flexDirection: "row", gap: 7, alignItems: "center", paddingHorizontal: 2 }}>

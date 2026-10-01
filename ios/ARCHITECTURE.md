@@ -386,18 +386,15 @@ environment (store, router, palette), not from extra initializer arguments.
 
 ## Disk budget (parallel agents)
 
-This Mac has only about 13 GiB free, and up to 5 tickets build at the same time. HARNESS-130
-already crashed once when the disk filled up. Every ticket must follow these rules:
+Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
+for this app they come down to:
 
-- Use exactly one simulator, named `harness-<KEY>` (e.g. `harness-HARNESS-131`), and delete it
-  with `xcrun simctl delete harness-<KEY>` when the work is done. Never touch the `sim-check …`
-  simulators.
-- Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else. Never
-  create a second DerivedData folder.
-- When you finish, delete `ios/build` and `ios/HarnessKit/.build`.
-- Run `df -h ~` before any `xcodebuild`. If less than 5 GiB is free, stop and post a summary
-  instead of building.
-- Don't download simulator runtimes. Use the iOS 27.0/27.1 runtimes that are already installed.
+- Test only on iOS 27.0. Never download a runtime or create a simulator.
+- Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim and
+  sim-check take the lock themselves.
+- Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.
+- Run `bun run sim disk` before any `xcodebuild`, and block and ask when it exits 1.
+- When you finish, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.
 
 ## Accessibility labels and sim-check (read this before porting a screen)
 
@@ -419,8 +416,8 @@ rule for every screen:
 - Every route in § App shell is reachable by the same `harness://` link as in RN, with the same
   semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
 
-`bun mobile/scripts/sim-check.ts --native --udid=harness-<KEY> --only=<screen>` checks one screen
-on your own simulator. `--only=connect` passes as of HARNESS-135; each feature ticket should make
+`bun mobile/scripts/sim-check.ts --native --only=<screen>` checks one screen on the shared
+simulator. `--only=connect` passes as of HARNESS-135; each feature ticket should make
 its own screens' `--only=` entries pass.
 
 ## Parity checklist
