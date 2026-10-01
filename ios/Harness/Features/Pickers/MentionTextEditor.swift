@@ -30,9 +30,19 @@ struct MentionTextEditor: View {
     var boxed = true
     var search: (@Sendable (String) async throws -> [FileMatch])?
     var searchCommands: (@Sendable (String) async throws -> [CommandMatch])?
+    /// The field's accessibility label when it isn't the placeholder (a composer whose placeholder
+    /// changes with the ticket's state keeps one label)
+    var fieldLabel: String?
+    /// The placeholder's color (default: the theme's muted text)
+    var placeholderColor: Color?
+    /// Called when the field gains or loses focus
+    var onFocusChange: ((Bool) -> Void)?
+    /// A box of the caller's own (the ticket composer's pill) instead of the default one; wins over `boxed`
+    var fieldBox: MentionFieldBox?
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
+    @FocusState private var focused: Bool
     @State private var caret = MentionCaret.none
     @State private var selection: TextSelection?
     @State private var items: [MentionItem] = []
@@ -49,14 +59,17 @@ struct MentionTextEditor: View {
     }
 
     private var field: some View {
-        TextField("", text: $text, selection: $selection, prompt: Text(placeholder).foregroundStyle(c.text3), axis: .vertical)
+        TextField("", text: $text, selection: $selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
             .font(.system(size: 16))
             .foregroundStyle(c.text)
             .lineLimit(1...maxLines)
             .frame(minHeight: minHeight, alignment: .topLeading)
-            .padding(boxed ? 12 : 0)
+            .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
             .background {
-                if boxed {
+                if let box = fieldBox {
+                    RoundedRectangle(cornerRadius: box.cornerRadius).fill(box.fill)
+                    RoundedRectangle(cornerRadius: box.cornerRadius).strokeBorder(box.border)
+                } else if boxed {
                     RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
                     RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
                 }
@@ -65,7 +78,9 @@ struct MentionTextEditor: View {
                 guard let range = Self.range(sel) else { return }
                 caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: text), end: PickerLogic.utf16Offset(range.upperBound, in: text))
             }
-            .accessibilityLabel(placeholder)
+            .focused($focused)
+            .onChange(of: focused) { _, now in onFocusChange?(now) }
+            .accessibilityLabel(fieldLabel ?? placeholder)
     }
 
     @ViewBuilder private func suggestions(_ shown: [MentionItem], target: MentionTarget?) -> some View {
@@ -141,6 +156,14 @@ struct MentionTextEditor: View {
         @unknown default: return nil
         }
     }
+}
+
+/// The field's box when the caller draws its own (MentionTextEditor `fieldBox`).
+struct MentionFieldBox {
+    var fill: Color
+    var border: Color
+    var cornerRadius: CGFloat
+    var padding: EdgeInsets
 }
 
 /// One row of the list: icon, name, then the folder (cut at its start) or the command's description.
