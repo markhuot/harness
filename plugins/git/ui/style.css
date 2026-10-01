@@ -272,6 +272,9 @@ code {
   overflow: auto;
   padding: 0 12px;
 }
+:root[data-host="desktop"] .diffs {
+  padding: 0; /* the Mac app's diffs run full bleed */
+}
 .files-collapsed .files {
   display: none; /* the diffs column takes the freed width */
 }

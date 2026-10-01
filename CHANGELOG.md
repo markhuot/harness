@@ -11,6 +11,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the Mac, the Changes tab's diffs and the Browser tab's page now run edge to edge, without the
+  small margin around them.
 - On iPhone and iPad, a ticket's header (its title, badges and buttons) now slides out of the way
   when you scroll down its Summaries, Transcript, Tickets, Agents or Details tab, leaving the tabs
   pinned at the top and more room to read. Scroll back up a little, tap the current tab, or tap the
