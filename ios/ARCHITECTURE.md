@@ -298,6 +298,13 @@ feature needs something new here, add to it without changing what's there.
   `await actions.run { … }` returns the value (nil after a failure).
 - **Toasts.** `ToastCenter.show(message, kind: .error | .info)`: at most 3 at the top, errors 6 s,
   info 2.6 s, tap to dismiss, selectable text. Sheets draw their own overlay too.
+- **Browser channel.** `store.subscribeBrowser(id)` / `unsubscribeBrowser(id)` /
+  `sendBrowserInput(id, input)` go out on the current socket in call order (one outbox per socket,
+  so a mouse down never overtakes its move). browser.frame/browser.state reach `store.onEvent`
+  listeners. A socket rebuilt on foregrounding has no subscriptions and its first connect doesn't
+  bump `epoch`, so it bumps `socketGeneration`: resubscribe on either (BrowserTabView keys its
+  `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
+  (browserState, browserNavigate, ticketTabs) use `store.client as? HarnessClient`.
 - **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab`, a path per tab, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
@@ -383,6 +390,14 @@ Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Feature
 the BoardScreen placeholder's column chips and card labels, which keep sim-check's pairing step
 working until the Board ticket replaces it. The shared parameters a slot needs come from the
 environment (store, router, palette), not from extra initializer arguments.
+
+The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
+(Ticket/PluginTabsLoader.swift, RN `usePluginTabs`: nil until loaded, [] on failure, refetched on
+workdir/branch/epoch) and hosts each in `PluginTabView`. Until it does, DEBUG builds open either
+tab on its own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<pluginId>:<tabId>`
+(BrowserPluginDebugScreen; the plugin one adds a probe of the bridge messages the page receives).
+dev-sim installs a Release build, so build with `SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG` to
+get them there.
 
 ## Content components (Features/Content)
 
@@ -489,8 +504,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
 - [ ] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
-- [ ] Browser tab (screens/BrowserTab, lib/browserInput)
-- [ ] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
+- [x] Browser tab (screens/BrowserTab, lib/browserInput)
+- [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
 - [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
