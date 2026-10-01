@@ -220,8 +220,15 @@ public final class DraftSync {
 
     /// Delete the saved draft (if any) and stop.
     public func discard() async throws {
-        if let ending { return try await ending.value }
-        if closed { return }
+        try await beginDiscard().value
+    }
+
+    /// `discard`, closed before it returns: the deletion runs in the returned task, and nothing
+    /// (a `close` from the screen going away) can save the draft in between.
+    @discardableResult
+    public func beginDiscard() -> Task<Void, any Error> {
+        if let ending { return ending }
+        if closed { return Task {} }
         closed = true
         clearTimer()
         let previous = chain
@@ -231,7 +238,7 @@ public final class DraftSync {
             try await self.api.remove(saved.key)
         }
         ending = task
-        try await task.value
+        return task
     }
 
     /// Save what's left, then launch it: start work now, or plan first.

@@ -80,11 +80,22 @@ private struct BranchSheet: View {
         ) {
             if loading { ProgressView() }
         } content: {
-            List {
-                ForEach(rows, id: \.listId) { row in
-                    rowView(row)
+            // A plain stack, not a lazy List: AXe sees only the rows a List has realized, and
+            // sim-check waits for one below the fold (release/v2 under a dozen harness/ branches).
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.listId) { i, row in
+                        if i > 0 { Rectangle().fill(c.border).frame(height: 1 / 3).padding(.leading, 41) }
+                        rowView(row)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .frame(minHeight: 50)
+                    }
                 }
+                .background(c.bgElev, in: .rect(cornerRadius: 26))
+                .padding(16)
             }
+            .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if rows.isEmpty && !loading {
                     Text("No branches match").font(.system(size: 15)).foregroundStyle(c.text3)
