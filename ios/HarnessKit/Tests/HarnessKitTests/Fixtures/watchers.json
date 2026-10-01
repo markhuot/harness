@@ -1,0 +1,2505 @@
+{
+  "defaultTriageChoice": {
+    "driver": null,
+    "model": null
+  },
+  "outputTitleCases": [
+    {
+      "name": "first non-blank line, whitespace collapsed",
+      "input": "\n\n   Build   failed on main \nsecond line",
+      "output": "Build failed on main"
+    },
+    {
+      "name": "long line cut with an ellipsis",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+    },
+    {
+      "name": "exactly the limit kept",
+      "input": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "output": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    },
+    {
+      "name": "one past the limit cut",
+      "input": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "output": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…"
+    },
+    {
+      "name": "trailing space at the cut trimmed",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbb",
+      "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+    },
+    {
+      "name": "skips an opening brace",
+      "input": "{\n  \"summary\": \"Fix login\"\n}",
+      "output": "\"summary\": \"Fix login\""
+    },
+    {
+      "name": "blank output",
+      "input": "  \n\t",
+      "output": "Watcher output"
+    },
+    {
+      "name": "empty output",
+      "input": "",
+      "output": "Watcher output"
+    },
+    {
+      "name": "only punctuation",
+      "input": "{\n}\n---\n",
+      "output": "Watcher output"
+    },
+    {
+      "name": "CRLF lines",
+      "input": "\r\n{\r\nDeploy done\r\nnext",
+      "output": "Deploy done"
+    },
+    {
+      "name": "lone CR is not a line break",
+      "input": "alpha\rbeta\ngamma",
+      "output": "alpha beta"
+    },
+    {
+      "name": "CR before CRLF",
+      "input": "a\r\r\nb",
+      "output": "a"
+    },
+    {
+      "name": "digits count as readable",
+      "input": "---\n  42  \nlater",
+      "output": "42"
+    },
+    {
+      "name": "fraction and roman numerals are numbers",
+      "input": "½\nx",
+      "output": "½"
+    },
+    {
+      "name": "letter number",
+      "input": "Ⅻ",
+      "output": "Ⅻ"
+    },
+    {
+      "name": "CJK letters",
+      "input": "-- \n中文 标题",
+      "output": "中文 标题"
+    },
+    {
+      "name": "emoji alone isn't readable",
+      "input": "🚀🚀\nlaunched",
+      "output": "launched"
+    },
+    {
+      "name": "lone combining mark isn't readable",
+      "input": "́\nnext",
+      "output": "next"
+    },
+    {
+      "name": "non-breaking and ideographic spaces collapse",
+      "input": "a  b　c",
+      "output": "a b c"
+    },
+    {
+      "name": "NEL is not whitespace in JS",
+      "input": "ab",
+      "output": "ab"
+    },
+    {
+      "name": "vertical tab and form feed collapse",
+      "input": "a\u000b\fb",
+      "output": "a b"
+    },
+    {
+      "name": "emoji at the limit fit",
+      "input": "a🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀b",
+      "output": "a🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀b"
+    },
+    {
+      "name": "emoji past the limit in code units",
+      "input": "a🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀",
+      "output": "a🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀…"
+    },
+    {
+      "name": "combining marks count as code units",
+      "input": "ééééééééééééééééééééééééééééééééééééééééé",
+      "output": "ééééééééééééééééééééééééééééééééééééééée…"
+    },
+    {
+      "name": "leading whitespace before the cut",
+      "input": "   zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "output": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…"
+    }
+  ],
+  "outputTitleMax": 80,
+  "replaceModelsCases": [
+    {
+      "name": "keep one, clear the rest",
+      "input": {
+        "current": {
+          "codex": "luna",
+          "claude-code": "sonnet"
+        },
+        "keep": {
+          "driver": "claude-code",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "codex": null,
+        "claude-code": "opus"
+      }
+    },
+    {
+      "name": "Default clears all",
+      "input": {
+        "current": {
+          "codex": "luna",
+          "claude-code": "sonnet"
+        },
+        "keep": {
+          "driver": null,
+          "model": null
+        }
+      },
+      "output": {
+        "codex": null,
+        "claude-code": null
+      }
+    },
+    {
+      "name": "no current map",
+      "input": {
+        "current": null,
+        "keep": {
+          "driver": "codex",
+          "model": null
+        }
+      },
+      "output": {
+        "codex": null
+      }
+    },
+    {
+      "name": "no current map, Default",
+      "input": {
+        "current": null,
+        "keep": {
+          "driver": null,
+          "model": null
+        }
+      },
+      "output": {}
+    },
+    {
+      "name": "kept driver's own default is an explicit null",
+      "input": {
+        "current": {
+          "codex": "luna"
+        },
+        "keep": {
+          "driver": "codex",
+          "model": null
+        }
+      },
+      "output": {
+        "codex": null
+      }
+    },
+    {
+      "name": "existing nulls stay null",
+      "input": {
+        "current": {
+          "codex": null
+        },
+        "keep": {
+          "driver": "claude-code",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "codex": null,
+        "claude-code": "opus"
+      }
+    },
+    {
+      "name": "empty driver is not kept",
+      "input": {
+        "current": {
+          "codex": "luna"
+        },
+        "keep": {
+          "driver": "",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "codex": null
+      }
+    }
+  ],
+  "settingsWatcherChoiceCases": [
+    {
+      "name": "nothing set: Default",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": null,
+        "watcherModels": {}
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "model for the default driver",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": null,
+        "watcherModels": {
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "watcher driver without a model",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": "codex",
+        "watcherModels": {}
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "watcher driver and model",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": "codex",
+        "watcherModels": {
+          "codex": "luna",
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "model for another driver only: Default",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": null,
+        "watcherModels": {
+          "codex": "luna"
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "no watcherModels field",
+      "input": {
+        "defaultDriver": "claude-code"
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "empty watcher driver inherits",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": "",
+        "watcherModels": {
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "null model entry",
+      "input": {
+        "defaultDriver": "claude-code",
+        "watcherDriver": null,
+        "watcherModels": {
+          "claude-code": null
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    }
+  ],
+  "settingsWatcherChoicePatchCases": [
+    {
+      "name": "pick replaces the old one",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "watcherModels": {
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "watcherDriver": "codex",
+        "watcherModels": {
+          "claude-code": null,
+          "codex": "luna"
+        }
+      }
+    },
+    {
+      "name": "Default clears",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "watcherModels": {
+          "codex": "luna"
+        }
+      },
+      "output": {
+        "watcherDriver": null,
+        "watcherModels": {
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "no stored map",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": null
+        }
+      },
+      "output": {
+        "watcherDriver": "codex",
+        "watcherModels": {
+          "codex": null
+        }
+      }
+    }
+  ],
+  "shellQuoteCases": [
+    {
+      "name": "plain",
+      "input": "plain",
+      "output": "plain"
+    },
+    {
+      "name": "path and flag characters",
+      "input": "~/Sites/a_b-c.d,e/f:g=h@i%j+k",
+      "output": "~/Sites/a_b-c.d,e/f:g=h@i%j+k"
+    },
+    {
+      "name": "--flag=value",
+      "input": "--project=PLAYR",
+      "output": "--project=PLAYR"
+    },
+    {
+      "name": "lone dash",
+      "input": "-",
+      "output": "-"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "''"
+    },
+    {
+      "name": "pipe",
+      "input": "a|b",
+      "output": "'a|b'"
+    },
+    {
+      "name": "dollar variable",
+      "input": "$HOME",
+      "output": "'$HOME'"
+    },
+    {
+      "name": "space",
+      "input": "FOO BAR",
+      "output": "'FOO BAR'"
+    },
+    {
+      "name": "tab",
+      "input": "a\tb",
+      "output": "'a\tb'"
+    },
+    {
+      "name": "newline",
+      "input": "a\nb",
+      "output": "'a\nb'"
+    },
+    {
+      "name": "single quote",
+      "input": "it's",
+      "output": "'it'\\''s'"
+    },
+    {
+      "name": "only a single quote",
+      "input": "'",
+      "output": "''\\'''"
+    },
+    {
+      "name": "two single quotes",
+      "input": "''",
+      "output": "''\\'''\\'''"
+    },
+    {
+      "name": "double quote",
+      "input": "say \"hi\"",
+      "output": "'say \"hi\"'"
+    },
+    {
+      "name": "glob",
+      "input": "*.ts",
+      "output": "'*.ts'"
+    },
+    {
+      "name": "bang",
+      "input": "wow!",
+      "output": "'wow!'"
+    },
+    {
+      "name": "semicolon",
+      "input": "a;b",
+      "output": "'a;b'"
+    },
+    {
+      "name": "backtick",
+      "input": "`id`",
+      "output": "'`id`'"
+    },
+    {
+      "name": "non-ASCII letter",
+      "input": "café",
+      "output": "'café'"
+    },
+    {
+      "name": "emoji",
+      "input": "🚀",
+      "output": "'🚀'"
+    },
+    {
+      "name": "combining mark",
+      "input": "é",
+      "output": "'é'"
+    },
+    {
+      "name": "quote with a combining mark",
+      "input": "it'́s",
+      "output": "'it'\\''́s'"
+    }
+  ],
+  "watcherChoiceBodyCases": [
+    {
+      "name": "pin a driver, clear the others",
+      "input": {
+        "choice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "current": {
+          "models": {
+            "codex": "luna",
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "models": {
+          "codex": null,
+          "claude-code": "opus"
+        }
+      }
+    },
+    {
+      "name": "Default clears them all",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "current": {
+          "models": {
+            "codex": "luna",
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "models": {
+          "codex": null,
+          "claude-code": null
+        }
+      }
+    },
+    {
+      "name": "no current watcher",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": null
+        },
+        "current": null
+      },
+      "output": {
+        "driver": "codex",
+        "models": {
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "watcher without models",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "current": {}
+      },
+      "output": {
+        "driver": "codex",
+        "models": {
+          "codex": "luna"
+        }
+      }
+    }
+  ],
+  "watcherChoiceCases": [
+    {
+      "name": "own driver and its model",
+      "input": {
+        "watcher": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "own driver without a model",
+      "input": {
+        "watcher": {
+          "driver": "codex",
+          "models": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "own driver, models missing",
+      "input": {
+        "watcher": {
+          "driver": "codex"
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "own driver, empty model",
+      "input": {
+        "watcher": {
+          "driver": "codex",
+          "models": {
+            "codex": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "tools-set model for the default driver",
+      "input": {
+        "watcher": {
+          "driver": null,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "opus"
+      }
+    },
+    {
+      "name": "model for another driver: Default",
+      "input": {
+        "watcher": {
+          "driver": null,
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "model for the settings watcher driver",
+      "input": {
+        "watcher": {
+          "driver": null,
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "codex"
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "no watcher: Default",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "codex"
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "no driver, no models: Default",
+      "input": {
+        "watcher": {
+          "driver": null
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "empty driver inherits",
+      "input": {
+        "watcher": {
+          "driver": "",
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "opus"
+      }
+    },
+    {
+      "name": "empty model for the default driver: Default",
+      "input": {
+        "watcher": {
+          "driver": null,
+          "models": {
+            "claude-code": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    }
+  ],
+  "watcherCommandLineCases": [
+    {
+      "name": "shell watcher used as is",
+      "input": {
+        "command": "while true; do curl -s x; sleep 60; done",
+        "args": []
+      },
+      "output": "while true; do curl -s x; sleep 60; done"
+    },
+    {
+      "name": "no args field",
+      "input": {
+        "command": "watch-jira --project=PLAYR --once | jq -c '.[]'"
+      },
+      "output": "watch-jira --project=PLAYR --once | jq -c '.[]'"
+    },
+    {
+      "name": "legacy args quoted only where needed",
+      "input": {
+        "command": "node",
+        "args": [
+          "~/Sites/Jira/watch-jira.js",
+          "--project",
+          "FOO BAR",
+          "it's"
+        ]
+      },
+      "output": "node ~/Sites/Jira/watch-jira.js --project 'FOO BAR' 'it'\\''s'"
+    },
+    {
+      "name": "legacy command with a space is quoted",
+      "input": {
+        "command": "/Applications/My Tool/bin/poll",
+        "args": [
+          "--json"
+        ]
+      },
+      "output": "'/Applications/My Tool/bin/poll' --json"
+    },
+    {
+      "name": "legacy empty arg",
+      "input": {
+        "command": "poll",
+        "args": [
+          ""
+        ]
+      },
+      "output": "poll ''"
+    },
+    {
+      "name": "legacy single arg",
+      "input": {
+        "command": "/usr/local/bin/poll",
+        "args": [
+          "--since=1h"
+        ]
+      },
+      "output": "/usr/local/bin/poll --since=1h"
+    },
+    {
+      "name": "shell command not re-quoted",
+      "input": {
+        "command": "echo 'it''s' | wc -l",
+        "args": []
+      },
+      "output": "echo 'it''s' | wc -l"
+    },
+    {
+      "name": "empty command without args",
+      "input": {
+        "command": "",
+        "args": []
+      },
+      "output": ""
+    },
+    {
+      "name": "empty command with args",
+      "input": {
+        "command": "",
+        "args": [
+          "x"
+        ]
+      },
+      "output": "'' x"
+    }
+  ],
+  "watcherDriverCases": [
+    {
+      "name": "watcher's driver wins",
+      "input": {
+        "watcher": {
+          "driver": "anthropic-api"
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "dummy",
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {}
+        }
+      },
+      "output": "anthropic-api"
+    },
+    {
+      "name": "settings watcher driver next",
+      "input": {
+        "watcher": {
+          "driver": null
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "dummy",
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {}
+        }
+      },
+      "output": "dummy"
+    },
+    {
+      "name": "default driver last",
+      "input": {
+        "watcher": {
+          "driver": null
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null,
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {}
+        }
+      },
+      "output": "claude-code"
+    },
+    {
+      "name": "no watcher",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code"
+        }
+      },
+      "output": "claude-code"
+    },
+    {
+      "name": "empty watcher driver inherits",
+      "input": {
+        "watcher": {
+          "driver": ""
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": "dummy",
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {}
+        }
+      },
+      "output": "dummy"
+    },
+    {
+      "name": "empty settings watcher driver inherits",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": ""
+        }
+      },
+      "output": "claude-code"
+    }
+  ],
+  "watcherEntityCases": [
+    {
+      "name": "shell watcher, full settings",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "anthropic-api": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "shell watcher, plain settings",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        }
+      },
+      "output": {
+        "commandLine": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "anthropic-api": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "shell watcher, no watcher driver settings",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "anthropic-api": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy watcher, full settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy watcher, plain settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "claude-code",
+        "model": null,
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "legacy watcher, no watcher driver settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "claude-code",
+        "model": "opus",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy with a model for the default driver watcher, full settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "claude-code": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy with a model for the default driver watcher, plain settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "claude-code",
+        "model": "opus",
+        "choice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "claude-code": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "legacy with a model for the default driver watcher, no watcher driver settings",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "claude-code",
+        "model": "opus",
+        "choice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "claude-code": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "none watcher, full settings",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": null,
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "none watcher, plain settings",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        }
+      },
+      "output": {
+        "commandLine": null,
+        "driver": "claude-code",
+        "model": null,
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "none watcher, no watcher driver settings",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "commandLine": null,
+        "driver": "claude-code",
+        "model": "opus",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    }
+  ],
+  "watcherModelCases": [
+    {
+      "name": "watcher's model wins",
+      "input": {
+        "driver": "claude-code",
+        "watcher": {
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null,
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "opus"
+    },
+    {
+      "name": "watcher default next",
+      "input": {
+        "driver": "claude-code",
+        "watcher": {
+          "models": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null,
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "sonnet"
+    },
+    {
+      "name": "global default last",
+      "input": {
+        "driver": "claude-code",
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null,
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {}
+        }
+      },
+      "output": "haiku"
+    },
+    {
+      "name": "nothing for this driver",
+      "input": {
+        "driver": "anthropic-api",
+        "watcher": {
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "watcherDriver": null,
+          "defaultModels": {
+            "claude-code": "haiku"
+          },
+          "watcherModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "watcher without models",
+      "input": {
+        "driver": "claude-code",
+        "watcher": {},
+        "settings": {
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        }
+      },
+      "output": "haiku"
+    },
+    {
+      "name": "null settings",
+      "input": {
+        "driver": "claude-code",
+        "watcher": {
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": null
+      },
+      "output": "opus"
+    },
+    {
+      "name": "null settings, no watcher",
+      "input": {
+        "driver": "claude-code",
+        "watcher": null,
+        "settings": null
+      },
+      "output": null
+    },
+    {
+      "name": "settings without maps",
+      "input": {
+        "driver": "claude-code",
+        "watcher": null,
+        "settings": {}
+      },
+      "output": null
+    },
+    {
+      "name": "empty watcher model inherits",
+      "input": {
+        "driver": "claude-code",
+        "watcher": {
+          "models": {
+            "claude-code": ""
+          }
+        },
+        "settings": {
+          "watcherModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "sonnet"
+    },
+    {
+      "name": "null watcher-default entry inherits",
+      "input": {
+        "driver": "claude-code",
+        "watcher": null,
+        "settings": {
+          "watcherModels": {
+            "claude-code": null
+          },
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        }
+      },
+      "output": "haiku"
+    },
+    {
+      "name": "empty global default is null",
+      "input": {
+        "driver": "claude-code",
+        "watcher": null,
+        "settings": {
+          "defaultModels": {
+            "claude-code": ""
+          }
+        }
+      },
+      "output": null
+    }
+  ],
+  "watcherPublicSettingsEntityCases": [
+    {
+      "name": "shell watcher, public settings 0",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        }
+      },
+      "output": {
+        "commandLine": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "anthropic-api": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy watcher, public settings 0",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy with a model for the default driver watcher, public settings 0",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "claude-code": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "none watcher, public settings 0",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        }
+      },
+      "output": {
+        "commandLine": null,
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": null,
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "shell watcher, public settings 1",
+      "input": {
+        "watcher": {
+          "id": "wat_1",
+          "name": "jira-sprint",
+          "command": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+          "args": [],
+          "prompt": "If this is assigned to me, dispatch it to NYTIMES; otherwise decline it.",
+          "cwd": "~/Sites/nytimes",
+          "env": {
+            "JIRA_TOKEN": "redacted"
+          },
+          "mode": "interval",
+          "intervalSec": 300,
+          "enabled": true,
+          "driver": "anthropic-api",
+          "models": {
+            "anthropic-api": "claude-haiku-4-5"
+          },
+          "lastRunAt": 1759190400000,
+          "lastError": "exit 1: 401 Unauthorized",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "live": {
+            "state": "waiting",
+            "since": 1759190400000,
+            "nextRunAt": 1759190460000,
+            "failures": 2
+          }
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        }
+      },
+      "output": {
+        "commandLine": "watch-jira --project=PLAYR --once | jq -c '.[]'",
+        "driver": "anthropic-api",
+        "model": "claude-haiku-4-5",
+        "choice": {
+          "driver": "anthropic-api",
+          "model": "claude-haiku-4-5"
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "anthropic-api": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "legacy watcher, public settings 1",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": null,
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "legacy with a model for the default driver watcher, public settings 1",
+      "input": {
+        "watcher": {
+          "id": "wat_2",
+          "name": "legacy",
+          "command": "/usr/local/bin/poll",
+          "args": [
+            "--json",
+            "--since=1h"
+          ],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "models": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        }
+      },
+      "output": {
+        "commandLine": "/usr/local/bin/poll --json --since=1h",
+        "driver": "anthropic-api",
+        "model": null,
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "claude-code": null,
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    },
+    {
+      "name": "none watcher, public settings 1",
+      "input": {
+        "watcher": null,
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        }
+      },
+      "output": {
+        "commandLine": null,
+        "driver": "anthropic-api",
+        "model": null,
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "body": {
+          "driver": "codex",
+          "models": {
+            "codex": "luna"
+          }
+        },
+        "patch": {
+          "watcherDriver": null,
+          "watcherModels": {}
+        }
+      }
+    }
+  ]
+}
