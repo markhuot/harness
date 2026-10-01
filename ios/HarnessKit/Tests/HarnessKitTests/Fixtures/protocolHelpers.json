@@ -1,0 +1,149 @@
+{
+  "constants": {
+    "DEFAULT_PORT": 7717,
+    "PERMISSION_MODES": [
+      "auto",
+      "ask",
+      "read_only"
+    ],
+    "CLASSIFIER_BACKENDS": [
+      "claude-cli",
+      "anthropic-api",
+      "off"
+    ],
+    "TICKET_STATUSES": [
+      "planning",
+      "in_progress",
+      "blocked",
+      "review",
+      "done"
+    ],
+    "COMPLETION_ACTIONS": [
+      "merge",
+      "pr",
+      "custom"
+    ],
+    "PROMPT_IDS": [
+      "system.intro",
+      "system.context",
+      "system.lifecycle",
+      "system.plan",
+      "system.work",
+      "system.review",
+      "system.complete_merge",
+      "system.complete_pr",
+      "system.complete_custom",
+      "system.conductor",
+      "system.chat",
+      "system.triage",
+      "system.children",
+      "system.branches",
+      "system.files",
+      "system.summaries",
+      "system.file_links",
+      "system.board",
+      "system.board_changes",
+      "system.config",
+      "system.approvals",
+      "system.browser",
+      "run.work_start",
+      "run.conductor_start",
+      "run.review",
+      "run.complete_merge",
+      "run.complete_pr",
+      "run.complete_custom",
+      "run.conductor_update",
+      "run.changes_requested",
+      "run.reopen",
+      "run.triage"
+    ],
+    "RENAMED_PROMPT_IDS": {
+      "system.complete": "system.complete_merge",
+      "run.complete": "run.complete_merge"
+    },
+    "LISTEN_MODES": [
+      "localhost",
+      "tailscale",
+      "any",
+      "custom"
+    ]
+  },
+  "isConductorCases": [
+    {
+      "name": "task without childCount (older service)",
+      "input": {
+        "kind": "task"
+      },
+      "output": false
+    },
+    {
+      "name": "task with no children",
+      "input": {
+        "kind": "task",
+        "childCount": 0
+      },
+      "output": false
+    },
+    {
+      "name": "task with one child",
+      "input": {
+        "kind": "task",
+        "childCount": 1
+      },
+      "output": true
+    },
+    {
+      "name": "task with many children",
+      "input": {
+        "kind": "task",
+        "childCount": 12
+      },
+      "output": true
+    },
+    {
+      "name": "conductor without childCount",
+      "input": {
+        "kind": "conductor"
+      },
+      "output": true
+    },
+    {
+      "name": "conductor with no children yet",
+      "input": {
+        "kind": "conductor",
+        "childCount": 0
+      },
+      "output": true
+    },
+    {
+      "name": "conductor with children",
+      "input": {
+        "kind": "conductor",
+        "childCount": 3
+      },
+      "output": true
+    }
+  ],
+  "reviewPassedCases": [
+    {
+      "name": "pending",
+      "input": "pending",
+      "output": false
+    },
+    {
+      "name": "approved",
+      "input": "approved",
+      "output": true
+    },
+    {
+      "name": "changes requested",
+      "input": "changes_requested",
+      "output": false
+    },
+    {
+      "name": "skipped",
+      "input": "skipped",
+      "output": true
+    }
+  ]
+}
