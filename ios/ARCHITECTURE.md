@@ -361,7 +361,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | BoardScreen | Board/BoardScreen.swift | Board + Search | `BoardScreen(mode: BoardMode)` (`.board`, `.search`) |
 | ProjectsSheet | Board/ProjectsSheet.swift | Projects | `ProjectsSheet(fromSearch: Bool)` |
 | TicketDetailScreen | Ticket/TicketDetailScreen.swift | Ticket detail | `TicketDetailScreen(key: String, initialTab: TicketTab?)` |
-| TranscriptView | Ticket/TranscriptView.swift | Transcript | `TranscriptView(sessionId: String, subagentId: String? = nil)` |
+| TranscriptView | Ticket/TranscriptView.swift | Transcript | `TranscriptView(sessionId: String, subagentId: String? = nil, emptyHint: String? = nil) { header }` (header optional) |
 | AgentsTabView | Ticket/AgentsTabView.swift | Agents | `AgentsTabView(ticket: Ticket)` |
 | SubagentView | Ticket/SubagentView.swift | Agents | `SubagentView(ticket: Ticket, subagentId: String)` |
 | BrowserTabView | Ticket/BrowserTabView.swift | Browser | `BrowserTabView(ticket: Ticket)` |
@@ -419,6 +419,30 @@ from it (Ticket/TicketDetailSupport.swift):
 - Testable branches (menus, the Complete sheet's rules, run rows, labels) are in HarnessKit's
   `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; sim-check closes one with
   "Dismiss context menu", where RN's action sheet has "Cancel".
+
+## Transcript, Agents and Inbox (Ticket/Transcript*, Ticket/Agents*, Inbox/)
+
+What HARNESS-140 settled:
+
+- **Decisions live in HarnessKit** (tested): `TranscriptLogic` (rows, the delta and "Working…"
+  rows, which entries draw nothing, the sub-agent a tool call started, tool state, permission
+  footer, the window), `InboxLogic` (watcher order, Retry now, triage badge and outcome, link
+  context) and `AgentsLogic` (sections, previews, marks, row labels).
+- **The transcript is a windowed plain `VStack`, not a `LazyVStack`.** A lazy stack re-estimates
+  the rows it hasn't measured as they scroll by, so its content height jumps by hundreds of points
+  mid-fling and the bottom can't be held. It draws the newest `TranscriptLogic.windowStep` (150)
+  rows; "Show earlier messages (N)" adds 150 more and scrolls back to the row the user was reading.
+  `groupTranscript` reruns only when the entries change (TranscriptItemsMemo), rows are Equatable
+  so a delta re-renders only the rows it touched, and MarkdownCache keeps parses across renders.
+- **Scroll metrics.** SwiftUI's `ScrollGeometry.containerSize` is the frame *less* the content
+  insets, so `ScrollMetrics(contentOffsetY:…)` adds the insets to the viewport as well as the
+  content. Under the composer's inset the end of the list used to read as 90-122 pt from the
+  bottom, and a fling's bounce back off the end unpinned it.
+- **Sub-agent links.** The tool row that started a sub-agent, an Agents row and the sub-agent
+  breadcrumb open tabs through `\.ticketDetailOpenTab`; outside a ticket screen (triage) there
+  are no links, as in RN.
+- **Not checked on screen:** thinking blocks (the dummy driver never emits one) and inline tool
+  output images.
 
 ## Content components (Features/Content)
 
@@ -604,18 +628,18 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Search tab (app/(tabs)/search)
 - [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
 - [x] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
-- [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
+- [x] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
 - [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
   viewer (ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments)
 - [x] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
 - [x] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
-- [ ] Agents tab / sub-agents (screens/AgentsTab)
+- [x] Agents tab / sub-agents (screens/AgentsTab)
 - [x] Browser tab (screens/BrowserTab, lib/browserInput)
 - [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
 - [x] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [x] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
-- [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
+- [x] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
 - [x] Projects sheet (screens/Projects)
 - [x] Project settings (screens/ProjectSettings)
@@ -641,3 +665,7 @@ Things AXe and sim-check can't drive, to try by hand on a device:
   or make the step label-based.
 - `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
   turn it off for its run (or HARNESS-145 asks the human).
+- Transcript rows the dummy driver can't produce: a thinking row expands and collapses, and a tool
+  result with an inline base64 image shows the image in the expanded row.
+- A long transcript (500+ entries) scrolls smoothly, and "Show earlier messages (N)" adds the older
+  rows while keeping the row you were reading in place.
