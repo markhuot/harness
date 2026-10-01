@@ -48,7 +48,10 @@ struct PluginTabView: View {
             }
         }
         .task(id: hostKey) { makeHost() }
-        .onChange(of: PluginThemeInfo(c.theme)) { _, info in host?.sendTheme(.full(info)) }
+        .onChange(of: PluginThemeInfo(c.theme)) { _, info in
+            host?.setBackground(UIColor(c.bg))
+            host?.sendTheme(.full(info))
+        }
         .onChange(of: ticket) { _, t in host?.sendTicket(t) }
     }
 
@@ -67,8 +70,6 @@ struct PluginTabView: View {
         h.setBackground(UIColor(c.bg))
         h.onNavigate = { key in router.push(.ticket(key: key, tab: nil)) }
         h.onOpenExternal = { url in openURL(url) }
-        h.sendTheme(theme)
-        h.sendTicket(ticket)
         host = h
     }
 }

@@ -79,8 +79,10 @@ final class PluginWebHost: NSObject {
         webView.underPageBackgroundColor = color
     }
 
-    /// The app theme changed: harness:theme.
+    /// The app theme changed: harness:theme. Unchanged themes aren't re-sent (iOS flips the
+    /// appearance while it snapshots a backgrounded app, and init already carried the first one).
     func sendTheme(_ t: PluginBridge.HostTheme) {
+        guard t != theme else { return }
         theme = t
         bridge?.sendTheme(t)
     }
