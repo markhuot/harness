@@ -1,8 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-/// FEATURE SLOT (Pickers ticket): a permission mode, nil = inherit (ui/selects.tsx
-/// PermissionPicker; Permissions.swift has the labels and the never-looser rule). Replace the body.
+/// A permission mode, nil = inherit (ui/selects.tsx PermissionPicker): "Default (<inherited>)",
+/// then each mode with its description as the subtitle.
 struct PermissionPicker: View {
     let value: PermissionMode?
     var inherited: PermissionMode?
@@ -10,6 +10,14 @@ struct PermissionPicker: View {
     let onChange: (PermissionMode?) -> Void
 
     var body: some View {
-        LabeledContent("Permissions", value: value?.rawValue ?? inherited.map { "Inherit (\($0.rawValue))" } ?? "Inherit")
+        SelectMenu(
+            value: value,
+            options: PickerLogic.permissionOptions(inherited: inherited),
+            label: PickerLogic.permissionLabel(value: value, inherited: inherited),
+            title: "Permission mode",
+            disabled: disabled,
+            accessibilityName: "Permission mode",
+            onChange: onChange
+        )
     }
 }
