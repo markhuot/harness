@@ -61,13 +61,29 @@ so adding a file never means editing project.yml or Package.swift.
   service must never make an older app throw.
 - Timestamps are epoch milliseconds as `Double`, as in JS (`Date(timeIntervalSince1970: ms / 1000)`
   at the edge).
-- PATCH bodies use `Patch<T>` (`.absent`, `.null`, `.value`), so "leave it alone" and "clear it"
-  stay distinct.
+- Field shapes (Protocol/Patch.swift):
+  - `?: T` → `T?`, omitted when nil.
+  - `T | null` → `@Nullable var x: T?`, which always encodes and writes `null` for nil.
+  - `?: T | null` → `Patch<T>` (`.absent`, `.null`, `.value`), where absent is omitted and null is
+    written. PATCH bodies use this, so "leave it alone" and "clear it" stay distinct.
+  - Maps with nullable values (`models`, `prompts`) are `[String: String?]`.
+- Open enums conform to `OpenEnum` (Protocol/OpenEnum.swift). They list `allKnown` in TS order, and
+  a test checks that against every member of the TS union.
+- JavaScript string semantics: TS regexes without `u`, `.length`, `trim()` and `toLowerCase()`
+  work on code units, so ports compare and split on `unicodeScalars` (not Characters), count
+  UTF-16 where TS uses `.length`, and use `JSCompat` (Logic/Themes/JSCompat.swift) for `trim`,
+  `\s`, `Math.round` and number formatting. Fixture cases with combining marks, NBSP/NEL and
+  emoji pin each of these.
 - Free-form JSON (`unknown` in TS) is `JSONValue`.
 - Errors from the service are `HarnessAPIError(status, message, data)`. `data` stays raw JSON, so
   a 404 from getTicket can be decoded as `RemoteKeyMatches`.
-- State types that views observe are `@Observable` classes on the main actor. The client is an
-  `actor`/`Sendable` and never touches UI state.
+- State types that views observe are `@Observable` classes on the main actor. `HarnessClient` is a
+  `final class: Sendable` with only immutable state, so URL helpers stay synchronous and requests
+  run in parallel. `HarnessSocket` is an actor that exposes `events`/`status` as `AsyncStream`s, and
+  its status fires on transitions only. Neither touches UI state.
+- Bundled resources use `.process("Resources")`. `.copy` keeps a nested `Resources/` folder,
+  which codesign rejects in an iOS resource bundle. Load them with
+  `Bundle.module.url(forResource:withExtension:)`, with no subdirectory.
 - Comments use `///` for API docs. Follow the TS source's comment density, and keep its doc
   comments when porting.
 - Tests use Swift Testing (`@Test`, `#expect`). A test must be able to fail: test branches,
@@ -123,12 +139,12 @@ its strings and keep them.
 Tick these off as later tickets land them. The RN source for each is in parentheses.
 
 - [x] Project skeleton, Info.plist parity, icon and launch screen (app.json)
-- [ ] Protocol types + round-trip drift guard (shared/src/protocol.ts)
-- [ ] HarnessClient REST + HarnessSocket WebSocket (shared/src/client.ts)
+- [x] Protocol types + round-trip drift guard (shared/src/protocol.ts)
+- [x] HarnessClient REST + HarnessSocket WebSocket (shared/src/client.ts)
 - [x] Pairing link (shared/src/pairing.ts)
-- [ ] Keys, file links, branches, permissions, watchers, command line, project colors (shared/src/*.ts)
-- [ ] Pair/manual entry parsing, saved servers, connection probe (mobile/src/lib/pair, servers, connection)
-- [ ] Themes registry, color math, project key colors (shared/src/themes)
+- [x] Keys, file links, branches, permissions, watchers, command line, project colors (shared/src/*.ts)
+- [x] Pair/manual entry parsing, saved servers, connection probe (mobile/src/lib/pair, servers, connection)
+- [x] Themes registry, color math, project key colors (shared/src/themes)
 - [ ] State: reducer, paging, models, format, drafts, conductor, markdown, branches (shared/src/state)
 - [ ] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
 - [ ] Saved servers + Keychain token storage (lib/storage, lib/servers)

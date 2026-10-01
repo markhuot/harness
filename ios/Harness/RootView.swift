@@ -8,7 +8,7 @@ struct RootView: View {
             ContentUnavailableView {
                 Label("Harness", systemImage: "rectangle.3.group")
             } description: {
-                Text("Native app scaffold. HarnessKit client: \(HarnessKit.clientName)")
+                Text("Native app scaffold. HarnessKit client: \(HarnessKit.clientName), \(Themes.all.count) bundled themes")
             }
             .navigationTitle("Harness")
         }
