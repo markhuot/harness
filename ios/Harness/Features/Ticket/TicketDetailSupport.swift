@@ -170,18 +170,3 @@ struct TicketDetailFlow: Layout {
         return size.width > width ? view.sizeThatFits(ProposedViewSize(width: width, height: nil)) : size
     }
 }
-
-/// The ticket screen's calls into the service and the router, for the detail's subviews.
-@MainActor
-struct TicketDetailContext {
-    let store: BoardStore
-    let router: Router
-
-    /// The REST client the mutations need (BoardClient only covers the board's reads).
-    var api: HarnessClient? { store.client as? HarnessClient }
-
-    /// Push a ticket (RN `useOpenTicket`).
-    func open(_ key: String, tab: TicketTab? = nil) {
-        router.push(.ticket(key: key, tab: tab))
-    }
-}

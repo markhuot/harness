@@ -227,10 +227,11 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
  * sits in the upper middle of the screen. Elements scrolled far out of view may be missing from
  * the tree, so it swipes a fixed distance until one shows up, then just far enough. One above the
  * screen (or under the header) is scrolled back down to.
+ *
+ * A ticket's hero hides while its tab scrolls forward and comes back on scrolling back, which moves
+ * the tab body another ~240pt. The swipes aim at 420 (forward) and 220 (back), so the element lands
+ * inside the 140–520 band whether or not the hero toggles.
  */
-// A ticket's hero hides while its tab scrolls forward and comes back on scrolling back, which moves
-// the tab body another ~240pt. The swipes aim at 420 (forward) and 220 (back), so the element lands
-// inside the 140–520 band whether or not the hero toggles.
 async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
   for (let i = 0; i < tries; i++) {
     const el = await findElement(udid, match);
