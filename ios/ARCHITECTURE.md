@@ -379,9 +379,9 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:)` |
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, onPatch: (UpdateTicketBody) -> Void)` |
 
-Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect), and
-the BoardScreen placeholder's column chips and card labels, which keep sim-check's pairing step
-working until the Board ticket replaces it. The shared parameters a slot needs come from the
+Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
+board's decisions that don't draw (landing column, card menu and AX label, drop positions) are in
+HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from the
 environment (store, router, palette), not from extra initializer arguments.
 
 ## Disk budget (parallel agents)
@@ -454,8 +454,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
 - [x] Saved servers + Keychain token storage (lib/storage, lib/servers)
 - [x] Connection banner + reconnect (screens/ConnectionBanner)
-- [ ] Board: columns, cards, child dimming/rollups, moves, paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
-- [ ] Search tab (app/(tabs)/search)
+- [x] Board: columns, cards, child dimming/rollups, moves (context menu, VoiceOver actions, drag and drop), paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
+- [x] Search tab (app/(tabs)/search)
 - [ ] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
 - [ ] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
 - [ ] Summaries + attachments viewer (ui/Attachments, lib/attachments)
@@ -468,7 +468,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [ ] Watchers form (screens/WatcherForm, lib/watcherDraft)
-- [ ] Projects + project settings (screens/Projects, ProjectSettings)
+- [x] Projects sheet (screens/Projects)
+- [ ] Project settings (screens/ProjectSettings)
 - [ ] Prompts list + editor (screens/Prompts, app/prompt/[id])
 - [ ] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
 - [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
