@@ -22,13 +22,16 @@ public enum Pairing {
 
     /// Parse a pairing link; nil when it isn't one or a value is missing / not http(s).
     public static func parsePairUrl(_ link: String) -> Link? {
-        let trimmed = link.trimmingJSWhitespace()
-        guard trimmed.hasPrefix("\(scheme)?") else { return nil }
+        // Unicode scalars, not Characters: JS compares code units, so "?" followed by a combining
+        // mark still starts the query there.
+        let trimmed = link.trimmingJSWhitespace().unicodeScalars
+        let head = "\(scheme)?".unicodeScalars
+        guard trimmed.starts(with: head) else { return nil }
         var params: [String: String] = [:]
-        for part in trimmed.dropFirst(scheme.count + 1).split(separator: "&", omittingEmptySubsequences: false) {
+        for part in trimmed.dropFirst(head.count).split(separator: "&", omittingEmptySubsequences: false) {
             guard let eq = part.firstIndex(of: "="), eq > part.startIndex else { continue }
-            guard let value = URIComponent.decode(String(part[part.index(after: eq)...])) else { return nil }
-            params[String(part[..<eq])] = value
+            guard let value = URIComponent.decode(String(String.UnicodeScalarView(part[part.index(after: eq)...]))) else { return nil }
+            params[String(String.UnicodeScalarView(part[..<eq]))] = value
         }
         guard let url = params["url"], !url.isEmpty, let token = params["token"], !token.isEmpty else { return nil }
         guard url.firstMatch(of: /^(?i)https?:\/\/[^\/]+/) != nil else { return nil }
@@ -39,6 +42,6 @@ public enum Pairing {
 extension String {
     /// `String.prototype.trim()`: strips whitespace and line terminators from both ends.
     func trimmingJSWhitespace() -> String {
-        trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}")))
+        JSCompat.trim(self)
     }
 }

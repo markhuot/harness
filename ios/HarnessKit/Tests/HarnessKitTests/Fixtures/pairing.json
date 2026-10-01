@@ -124,6 +124,27 @@
         "url": "http://h",
         "token": "a=b"
       }
+    },
+    {
+      "name": "combining mark after the question mark",
+      "input": "harness://pair?́&url=http%3A%2F%2Fh&token=t",
+      "output": {
+        "url": "http://h",
+        "token": "t"
+      }
+    },
+    {
+      "name": "NEL is not whitespace in JS",
+      "input": "harness://pair?url=http%3A%2F%2Fh&token=t",
+      "output": null
+    },
+    {
+      "name": "NBSP is whitespace in JS",
+      "input": " harness://pair?url=http%3A%2F%2Fh&token=t ",
+      "output": {
+        "url": "http://h",
+        "token": "t"
+      }
     }
   ]
 }

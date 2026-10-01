@@ -23,4 +23,7 @@ export const parsePairUrlCases = cases(parsePairUrl, {
   "part without equals is skipped": "harness://pair?junk&url=http%3A%2F%2Fh&token=t",
   "later duplicate wins": "harness://pair?url=http%3A%2F%2Fa&url=http%3A%2F%2Fb&token=t",
   "value containing equals": "harness://pair?url=http%3A%2F%2Fh&token=a=b",
+  "combining mark after the question mark": "harness://pair?́&url=http%3A%2F%2Fh&token=t",
+  "NEL is not whitespace in JS": "\u0085harness://pair?url=http%3A%2F%2Fh&token=t",
+  "NBSP is whitespace in JS": " harness://pair?url=http%3A%2F%2Fh&token=t ",
 });
