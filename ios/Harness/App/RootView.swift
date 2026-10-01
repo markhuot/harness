@@ -12,7 +12,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     #if DEBUG
-    /// `-debugScreen highlight` on the launch command line opens a debug screen directly.
+    /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly.
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
@@ -44,6 +44,8 @@ struct RootView: View {
         #if DEBUG
         if debugScreen == "highlight" {
             NavigationStack { HighlightPreviewView() }
+        } else if debugScreen == "pickers" {
+            NavigationStack { RequireStore { PickerGalleryView() } }
         } else {
             shell
         }
