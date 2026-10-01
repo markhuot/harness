@@ -1,0 +1,1294 @@
+{
+  "effectiveTabCases": [
+    {
+      "name": "summaries stays",
+      "input": {
+        "requested": "summaries",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "children on a plain ticket",
+      "input": {
+        "requested": "children",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "children on a conductor",
+      "input": {
+        "requested": "children",
+        "opts": {
+          "conductor": true,
+          "pluginTabs": null
+        }
+      },
+      "output": "children"
+    },
+    {
+      "name": "agents without sub-agents",
+      "input": {
+        "requested": "agents",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "agents before sub-agents are known",
+      "input": {
+        "requested": "agents",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null,
+          "subagents": null
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "agents with empty sub-agents",
+      "input": {
+        "requested": "agents",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null,
+          "subagents": []
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "agents with sub-agents",
+      "input": {
+        "requested": "agents",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null,
+          "subagents": [
+            {
+              "id": "a"
+            }
+          ]
+        }
+      },
+      "output": "agents"
+    },
+    {
+      "name": "known sub-agent",
+      "input": {
+        "requested": "agent:a",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null,
+          "subagents": [
+            {
+              "id": "a"
+            }
+          ]
+        }
+      },
+      "output": "agent:a"
+    },
+    {
+      "name": "unknown sub-agent falls back to the list",
+      "input": {
+        "requested": "agent:b",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null,
+          "subagents": [
+            {
+              "id": "a"
+            }
+          ]
+        }
+      },
+      "output": "agents"
+    },
+    {
+      "name": "sub-agent without sub-agents",
+      "input": {
+        "requested": "agent:a",
+        "opts": {
+          "conductor": true,
+          "pluginTabs": null,
+          "subagents": []
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "plugin tab before plugin tabs are known",
+      "input": {
+        "requested": "plugin:git:changes",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": null
+        }
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "plugin tab that applies",
+      "input": {
+        "requested": "plugin:git:changes",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": [
+            {
+              "pluginId": "git",
+              "id": "changes"
+            }
+          ]
+        }
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "plugin tab that doesn't apply",
+      "input": {
+        "requested": "plugin:git:log",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": [
+            {
+              "pluginId": "git",
+              "id": "changes"
+            }
+          ]
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "plugin tab with no plugin tabs",
+      "input": {
+        "requested": "plugin:git:changes",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": []
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "plugin id must match too",
+      "input": {
+        "requested": "plugin:other:changes",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": [
+            {
+              "pluginId": "git",
+              "id": "changes"
+            }
+          ]
+        }
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "malformed plugin tab is kept",
+      "input": {
+        "requested": "plugin:Git:changes",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": [
+            {
+              "pluginId": "git",
+              "id": "changes"
+            }
+          ]
+        }
+      },
+      "output": "plugin:Git:changes"
+    },
+    {
+      "name": "details stays",
+      "input": {
+        "requested": "details",
+        "opts": {
+          "conductor": true,
+          "pluginTabs": [],
+          "subagents": []
+        }
+      },
+      "output": "details"
+    }
+  ],
+  "isTicketTabCases": [
+    {
+      "name": "summaries",
+      "input": "summaries",
+      "output": true
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": true
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": true
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": true
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": true
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": true
+    },
+    {
+      "name": "capitalized built-in",
+      "input": "Summaries",
+      "output": false
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": true
+    },
+    {
+      "name": "plugin with digits, dash and underscore",
+      "input": "plugin:a1_b-c:t_2-x",
+      "output": true
+    },
+    {
+      "name": "plugin digit-led ids",
+      "input": "plugin:1:2",
+      "output": true
+    },
+    {
+      "name": "plugin upper-case id",
+      "input": "plugin:Git:changes",
+      "output": false
+    },
+    {
+      "name": "plugin dash-led id",
+      "input": "plugin:-git:changes",
+      "output": false
+    },
+    {
+      "name": "plugin underscore-led tab",
+      "input": "plugin:git:_x",
+      "output": false
+    },
+    {
+      "name": "plugin empty tab",
+      "input": "plugin:git:",
+      "output": false
+    },
+    {
+      "name": "plugin empty plugin",
+      "input": "plugin::changes",
+      "output": false
+    },
+    {
+      "name": "plugin three parts",
+      "input": "plugin:a:b:c",
+      "output": false
+    },
+    {
+      "name": "plugin trailing newline",
+      "input": "plugin:git:changes\n",
+      "output": false
+    },
+    {
+      "name": "plugin non-ASCII",
+      "input": "plugin:gït:changes",
+      "output": false
+    },
+    {
+      "name": "plugin only prefix",
+      "input": "plugin:",
+      "output": false
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_01ABC",
+      "output": true
+    },
+    {
+      "name": "agent with dash",
+      "input": "agent:a-b",
+      "output": true
+    },
+    {
+      "name": "agent empty id",
+      "input": "agent:",
+      "output": false
+    },
+    {
+      "name": "agent with colon",
+      "input": "agent:a:b",
+      "output": false
+    },
+    {
+      "name": "agent with dot",
+      "input": "agent:a.b",
+      "output": false
+    },
+    {
+      "name": "agent 128 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": true
+    },
+    {
+      "name": "agent 129 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": false
+    },
+    {
+      "name": "agent trailing newline",
+      "input": "agent:x\n",
+      "output": false
+    },
+    {
+      "name": "agent upper-case prefix",
+      "input": "Agent:x",
+      "output": false
+    },
+    {
+      "name": "agent non-ASCII",
+      "input": "agent:é",
+      "output": false
+    },
+    {
+      "name": "unknown tab",
+      "input": "files",
+      "output": false
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": false
+    }
+  ],
+  "nextTabCases": [
+    {
+      "name": "forward",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "transcript",
+        "delta": 1
+      },
+      "output": "details"
+    },
+    {
+      "name": "back",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "transcript",
+        "delta": -1
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "wraps forward",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "plugin:git:changes",
+        "delta": 1
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "wraps back",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "summaries",
+        "delta": -1
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "sub-agent steps forward from Agents",
+      "input": {
+        "tabs": [
+          "summaries",
+          "agents",
+          "details"
+        ],
+        "current": "agent:toolu_1",
+        "delta": 1
+      },
+      "output": "details"
+    },
+    {
+      "name": "sub-agent steps back from Agents",
+      "input": {
+        "tabs": [
+          "summaries",
+          "agents",
+          "details"
+        ],
+        "current": "agent:toolu_1",
+        "delta": -1
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "not in strip forward",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "children",
+        "delta": 1
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "not in strip back",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "children",
+        "delta": -1
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "not in strip two forward",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "children",
+        "delta": 2
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "not in strip two back",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "children",
+        "delta": -2
+      },
+      "output": "details"
+    },
+    {
+      "name": "no tabs",
+      "input": {
+        "tabs": [],
+        "current": "summaries",
+        "delta": 1
+      },
+      "output": null
+    },
+    {
+      "name": "zero delta",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "details",
+        "delta": 0
+      },
+      "output": "details"
+    },
+    {
+      "name": "zero delta not in strip",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "children",
+        "delta": 0
+      },
+      "output": "summaries"
+    },
+    {
+      "name": "big forward wraps around",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "summaries",
+        "delta": 9
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "big back wraps around",
+      "input": {
+        "tabs": [
+          "summaries",
+          "transcript",
+          "details",
+          "plugin:git:changes"
+        ],
+        "current": "summaries",
+        "delta": -9
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "one tab",
+      "input": {
+        "tabs": [
+          "details"
+        ],
+        "current": "details",
+        "delta": -1
+      },
+      "output": "details"
+    },
+    {
+      "name": "duplicate tab uses the first",
+      "input": {
+        "tabs": [
+          "a",
+          "b",
+          "a",
+          "c"
+        ],
+        "current": "a",
+        "delta": 1
+      },
+      "output": "b"
+    }
+  ],
+  "openingTabCases": [
+    {
+      "name": "not loaded",
+      "input": null,
+      "output": null
+    },
+    {
+      "name": "no summaries",
+      "input": [],
+      "output": "transcript"
+    },
+    {
+      "name": "some summaries",
+      "input": [
+        {
+          "id": "s1"
+        }
+      ],
+      "output": "summaries"
+    }
+  ],
+  "parsePluginTabCases": [
+    {
+      "name": "summaries",
+      "input": "summaries",
+      "output": null
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": null
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": null
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": null
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": null
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": null
+    },
+    {
+      "name": "capitalized built-in",
+      "input": "Summaries",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": {
+        "pluginId": "git",
+        "tabId": "changes"
+      }
+    },
+    {
+      "name": "plugin with digits, dash and underscore",
+      "input": "plugin:a1_b-c:t_2-x",
+      "output": {
+        "pluginId": "a1_b-c",
+        "tabId": "t_2-x"
+      }
+    },
+    {
+      "name": "plugin digit-led ids",
+      "input": "plugin:1:2",
+      "output": {
+        "pluginId": "1",
+        "tabId": "2"
+      }
+    },
+    {
+      "name": "plugin upper-case id",
+      "input": "plugin:Git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin dash-led id",
+      "input": "plugin:-git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin underscore-led tab",
+      "input": "plugin:git:_x",
+      "output": null
+    },
+    {
+      "name": "plugin empty tab",
+      "input": "plugin:git:",
+      "output": null
+    },
+    {
+      "name": "plugin empty plugin",
+      "input": "plugin::changes",
+      "output": null
+    },
+    {
+      "name": "plugin three parts",
+      "input": "plugin:a:b:c",
+      "output": null
+    },
+    {
+      "name": "plugin trailing newline",
+      "input": "plugin:git:changes\n",
+      "output": null
+    },
+    {
+      "name": "plugin non-ASCII",
+      "input": "plugin:gït:changes",
+      "output": null
+    },
+    {
+      "name": "plugin only prefix",
+      "input": "plugin:",
+      "output": null
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_01ABC",
+      "output": null
+    },
+    {
+      "name": "agent with dash",
+      "input": "agent:a-b",
+      "output": null
+    },
+    {
+      "name": "agent empty id",
+      "input": "agent:",
+      "output": null
+    },
+    {
+      "name": "agent with colon",
+      "input": "agent:a:b",
+      "output": null
+    },
+    {
+      "name": "agent with dot",
+      "input": "agent:a.b",
+      "output": null
+    },
+    {
+      "name": "agent 128 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": null
+    },
+    {
+      "name": "agent 129 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": null
+    },
+    {
+      "name": "agent trailing newline",
+      "input": "agent:x\n",
+      "output": null
+    },
+    {
+      "name": "agent upper-case prefix",
+      "input": "Agent:x",
+      "output": null
+    },
+    {
+      "name": "agent non-ASCII",
+      "input": "agent:é",
+      "output": null
+    },
+    {
+      "name": "unknown tab",
+      "input": "files",
+      "output": null
+    }
+  ],
+  "parseSubagentTabCases": [
+    {
+      "name": "summaries",
+      "input": "summaries",
+      "output": null
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": null
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": null
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": null
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": null
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": null
+    },
+    {
+      "name": "capitalized built-in",
+      "input": "Summaries",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin with digits, dash and underscore",
+      "input": "plugin:a1_b-c:t_2-x",
+      "output": null
+    },
+    {
+      "name": "plugin digit-led ids",
+      "input": "plugin:1:2",
+      "output": null
+    },
+    {
+      "name": "plugin upper-case id",
+      "input": "plugin:Git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin dash-led id",
+      "input": "plugin:-git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin underscore-led tab",
+      "input": "plugin:git:_x",
+      "output": null
+    },
+    {
+      "name": "plugin empty tab",
+      "input": "plugin:git:",
+      "output": null
+    },
+    {
+      "name": "plugin empty plugin",
+      "input": "plugin::changes",
+      "output": null
+    },
+    {
+      "name": "plugin three parts",
+      "input": "plugin:a:b:c",
+      "output": null
+    },
+    {
+      "name": "plugin trailing newline",
+      "input": "plugin:git:changes\n",
+      "output": null
+    },
+    {
+      "name": "plugin non-ASCII",
+      "input": "plugin:gït:changes",
+      "output": null
+    },
+    {
+      "name": "plugin only prefix",
+      "input": "plugin:",
+      "output": null
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_01ABC",
+      "output": "toolu_01ABC"
+    },
+    {
+      "name": "agent with dash",
+      "input": "agent:a-b",
+      "output": "a-b"
+    },
+    {
+      "name": "agent empty id",
+      "input": "agent:",
+      "output": null
+    },
+    {
+      "name": "agent with colon",
+      "input": "agent:a:b",
+      "output": null
+    },
+    {
+      "name": "agent with dot",
+      "input": "agent:a.b",
+      "output": null
+    },
+    {
+      "name": "agent 128 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "agent 129 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": null
+    },
+    {
+      "name": "agent trailing newline",
+      "input": "agent:x\n",
+      "output": null
+    },
+    {
+      "name": "agent upper-case prefix",
+      "input": "Agent:x",
+      "output": null
+    },
+    {
+      "name": "agent non-ASCII",
+      "input": "agent:é",
+      "output": null
+    },
+    {
+      "name": "unknown tab",
+      "input": "files",
+      "output": null
+    }
+  ],
+  "pluginTabRouteCases": [
+    {
+      "name": "plain",
+      "input": {
+        "pluginId": "git",
+        "tabId": "changes"
+      },
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "not validated",
+      "input": {
+        "pluginId": "A B",
+        "tabId": ":"
+      },
+      "output": "plugin:A B::"
+    }
+  ],
+  "showsAgentsTabCases": [
+    {
+      "name": "null",
+      "input": null,
+      "output": false
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": false
+    },
+    {
+      "name": "one",
+      "input": [
+        {
+          "id": "a"
+        }
+      ],
+      "output": true
+    }
+  ],
+  "subagentTabRouteCases": [
+    {
+      "name": "plain",
+      "input": "toolu_1",
+      "output": "agent:toolu_1"
+    },
+    {
+      "name": "not validated",
+      "input": "a b",
+      "output": "agent:a b"
+    }
+  ],
+  "tabLabel": {
+    "summaries": "Summaries",
+    "children": "Tickets",
+    "transcript": "Transcript",
+    "agents": "Agents",
+    "browser": "Browser",
+    "details": "Details"
+  },
+  "tabStripTabCases": [
+    {
+      "name": "summaries",
+      "input": "summaries",
+      "output": "summaries"
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": "children"
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": "transcript"
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": "agents"
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": "browser"
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": "details"
+    },
+    {
+      "name": "capitalized built-in",
+      "input": "Summaries",
+      "output": "Summaries"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "plugin with digits, dash and underscore",
+      "input": "plugin:a1_b-c:t_2-x",
+      "output": "plugin:a1_b-c:t_2-x"
+    },
+    {
+      "name": "plugin digit-led ids",
+      "input": "plugin:1:2",
+      "output": "plugin:1:2"
+    },
+    {
+      "name": "plugin upper-case id",
+      "input": "plugin:Git:changes",
+      "output": "plugin:Git:changes"
+    },
+    {
+      "name": "plugin dash-led id",
+      "input": "plugin:-git:changes",
+      "output": "plugin:-git:changes"
+    },
+    {
+      "name": "plugin underscore-led tab",
+      "input": "plugin:git:_x",
+      "output": "plugin:git:_x"
+    },
+    {
+      "name": "plugin empty tab",
+      "input": "plugin:git:",
+      "output": "plugin:git:"
+    },
+    {
+      "name": "plugin empty plugin",
+      "input": "plugin::changes",
+      "output": "plugin::changes"
+    },
+    {
+      "name": "plugin three parts",
+      "input": "plugin:a:b:c",
+      "output": "plugin:a:b:c"
+    },
+    {
+      "name": "plugin trailing newline",
+      "input": "plugin:git:changes\n",
+      "output": "plugin:git:changes\n"
+    },
+    {
+      "name": "plugin non-ASCII",
+      "input": "plugin:gït:changes",
+      "output": "plugin:gït:changes"
+    },
+    {
+      "name": "plugin only prefix",
+      "input": "plugin:",
+      "output": "plugin:"
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_01ABC",
+      "output": "agents"
+    },
+    {
+      "name": "agent with dash",
+      "input": "agent:a-b",
+      "output": "agents"
+    },
+    {
+      "name": "agent empty id",
+      "input": "agent:",
+      "output": "agent:"
+    },
+    {
+      "name": "agent with colon",
+      "input": "agent:a:b",
+      "output": "agent:a:b"
+    },
+    {
+      "name": "agent with dot",
+      "input": "agent:a.b",
+      "output": "agent:a.b"
+    },
+    {
+      "name": "agent 128 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "agents"
+    },
+    {
+      "name": "agent 129 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "agent trailing newline",
+      "input": "agent:x\n",
+      "output": "agent:x\n"
+    },
+    {
+      "name": "agent upper-case prefix",
+      "input": "Agent:x",
+      "output": "Agent:x"
+    },
+    {
+      "name": "agent non-ASCII",
+      "input": "agent:é",
+      "output": "agent:é"
+    },
+    {
+      "name": "unknown tab",
+      "input": "files",
+      "output": "files"
+    }
+  ],
+  "ticketTabs": [
+    "summaries",
+    "children",
+    "transcript",
+    "agents",
+    "browser",
+    "details"
+  ],
+  "visibleTabsCases": [
+    {
+      "name": "plain ticket",
+      "input": {
+        "conductor": false
+      },
+      "output": [
+        "summaries",
+        "transcript",
+        "browser",
+        "details"
+      ]
+    },
+    {
+      "name": "conductor with sub-agents and plugin tabs",
+      "input": {
+        "conductor": true,
+        "subagents": [
+          {
+            "id": "a"
+          }
+        ],
+        "pluginTabs": [
+          {
+            "pluginId": "git",
+            "id": "changes"
+          },
+          {
+            "pluginId": "x",
+            "id": "y"
+          }
+        ]
+      },
+      "output": [
+        "summaries",
+        "children",
+        "transcript",
+        "agents",
+        "browser",
+        "details",
+        "plugin:git:changes",
+        "plugin:x:y"
+      ]
+    },
+    {
+      "name": "empty sub-agents hide Agents",
+      "input": {
+        "conductor": false,
+        "subagents": []
+      },
+      "output": [
+        "summaries",
+        "transcript",
+        "browser",
+        "details"
+      ]
+    },
+    {
+      "name": "null sub-agents and plugin tabs",
+      "input": {
+        "conductor": false,
+        "subagents": null,
+        "pluginTabs": null
+      },
+      "output": [
+        "summaries",
+        "transcript",
+        "browser",
+        "details"
+      ]
+    },
+    {
+      "name": "conductor only",
+      "input": {
+        "conductor": true
+      },
+      "output": [
+        "summaries",
+        "children",
+        "transcript",
+        "browser",
+        "details"
+      ]
+    },
+    {
+      "name": "plugin tabs only",
+      "input": {
+        "conductor": false,
+        "pluginTabs": [
+          {
+            "pluginId": "git",
+            "id": "changes"
+          }
+        ]
+      },
+      "output": [
+        "summaries",
+        "transcript",
+        "browser",
+        "details",
+        "plugin:git:changes"
+      ]
+    }
+  ]
+}

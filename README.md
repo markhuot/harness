@@ -72,6 +72,12 @@ package (`cd ios/HarnessKit && swift test`), which holds the protocol types, cli
 checked against `shared/` through generated fixtures. See [ios/README.md](ios/README.md) and
 [ios/ARCHITECTURE.md](ios/ARCHITECTURE.md).
 
+`bun ios/Tools/build.ts` builds it: `sim` (an unsigned Release build for the simulator),
+`device --device <name>` (the Debug build, "Harness Dev", installed beside the RN app),
+`archive --build-number N` and `export --method dev|testflight`. Releases still ship the RN app.
+`release:publish --ios-app=native` builds the native app instead, with the same bundle id, checks
+and TestFlight upload, so switching the release over is one flag.
+
 ## Drivers
 
 | Driver | Auth | Notes |

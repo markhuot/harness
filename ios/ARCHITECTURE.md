@@ -29,7 +29,8 @@ ios/
     Tests/HarnessKitTests/
       Fixtures/          generated JSON from shared/fixtures (committed)
       Support/           Fixture loader, jsonEqual
-  Tools/                 bun tests for the ios/ config (config.test.ts)
+    Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
+  Tools/                 bun tests for the ios/ config (config.test.ts), build-highlighter.ts
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both
@@ -75,7 +76,28 @@ so adding a file never means editing project.yml or Package.swift.
   work on code units, so ports compare and split on `unicodeScalars` (not Characters), count
   UTF-16 where TS uses `.length`, and use `JSCompat` (Logic/Themes/JSCompat.swift) for `trim`,
   `\s`, `Math.round` and number formatting. Fixture cases with combining marks, NBSP/NEL and
-  emoji pin each of these.
+  emoji pin each of these. More of the same, found while porting the content helpers:
+  - Swift `String ==`, `<`, `hasPrefix`, `split` and String dictionary keys use canonical
+    equivalence and Characters (`"\r\n"` is one Character; é == e + U+0301). JS `===` and `<`
+    compare UTF-16 code units. Compare `utf16` (or scalars) wherever TS compares or sorts strings.
+  - `toLowerCase` applies Final_Sigma; Swift's `lowercased()` doesn't. Use `Mentions.JS.lowercase`
+    (Logic/Mentions.swift), which also has UTF-16 `slice`/`indexOf` helpers.
+  - Caret and range offsets stay UTF-16 in the Swift API (they match `NSRange`/UITextView). Swift
+    can't hold a lone surrogate, so a JS split inside a surrogate pair becomes U+FFFD; fixtures
+    either avoid it or export code units.
+  - Regexes: Markdown.swift keeps the TS patterns on NSRegularExpression (UTF-16, like JS) but
+    spells out JS meanings ICU doesn't share: `\s` as the ECMAScript whitespace set, `\d`/`\w`/`\b`
+    ASCII-only, `.` as `[^\n\r  ]`, a bare `$` as `\z` (ICU's `$` also matches before a
+    final newline), multiline `^` as a lookbehind on line terminators. `/i` without `u` folds
+    ASCII only.
+  - `Number(string)` has its own grammar (trims, empty → 0, `0x`/`0o`/`0b`, `.5`, `Infinity`);
+    `toFixed(1)` rounds ties up on the binary value where `%.1f` rounds to even. See
+    FileViewer.swift.
+  - `JSON.stringify` writes keys in insertion order (integer-like keys first). For byte-exact JSON
+    (PluginHost.buildInjection) the case file sorts keys and Swift writes them in the same order;
+    `PluginHost.jsonStringify` matches JSON.stringify's escaping (U+2028/2029, `/`, numbers).
+  - Lookups on plain TS object literals see `Object.prototype` (`codeLanguage("constructor")`,
+    `keyPress("toString")`). Swift ports don't reproduce that, and fixtures leave those inputs out.
 - Free-form JSON (`unknown` in TS) is `JSONValue`.
 - Errors from the service are `HarnessAPIError(status, message, data)`. `data` stays raw JSON, so
   a 404 from getTicket can be decoded as `RemoteKeyMatches`.
@@ -90,6 +112,10 @@ so adding a file never means editing project.yml or Package.swift.
   comments when porting.
 - Tests use Swift Testing (`@Test`, `#expect`). A test must be able to fail: test branches,
   boundaries and error paths, not literals against themselves.
+- All test files share one module, so test-only names clash across files (even `private` ones
+  inside `@Test` macro expansions). Nest fixture input structs inside the `@Suite` type (or an
+  extension of it), and put shared test helpers (like `sameScalars` in FileLinksTests.swift) in
+  Support/ instead of redeclaring them.
 
 ## Fixture pipeline (TS ↔ Swift parity)
 
@@ -126,7 +152,92 @@ Swift side has to follow.
 
 When porting a module: write the case file from the TS source and its `*.test.ts` (plus extra edge
 cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
-fixtures can't express (request sequences, timing).
+fixtures can't express (request sequences, timing). Stateful machines (TouchGesture, ResizeGate,
+PluginHostBridge, MentionCaret, stickStep) get both: direct ports of their TS tests, and fixture
+sequences (`{ events[], outputs[] }`) that the case file computes by driving the TS implementation.
+Timers become explicit timestamps or a `deadline` + `tick(now:)` API, so tests never wait.
+
+`Fixture.value` decodes through `JSONValue`/JSONDecoder. Don't switch it back to
+JSONSerialization: that silently drops a leading U+FEFF from strings (the "leading BOM" markdown
+case pins this).
+
+### Deliberate differences from TS
+
+Ports match TS on every fixture. Where Swift can't or shouldn't follow TS, the difference is listed
+here and in a doc comment:
+
+- `Prefs.normalize` drops unknown keys and turns non-string ids into nil (TS passes both through).
+  The prefs blob is local to each app, so nothing else reads the extra keys.
+- `Completion.approveLabel` returns nil for an unknown completion action (TS: undefined label).
+- `Related.remoteMatchesOf` decodes the 404 body as `[RelatedTicket]` and returns nil when it
+  doesn't fit (TS returns it unchecked).
+- `ResizeGate.take` rejects NaN, Infinity and sizes that overflow Int. `WheelCoalescer` disarms
+  its deadline on flush (the RN screen's stale `setTimeout` can fire the next batch early).
+- `PluginBridge.origin(of:)` stands in for `new URL().origin` without a full WHATWG parser (no
+  IPv4 shorthand, IDNA, or IPv6 re-compression).
+- `patchRows` drops one scalar where JS `slice(1)` drops one code unit; line numbers past
+  `Int.max` saturate.
+
+### Local stand-ins to dedupe
+
+These modules ran in parallel with the board-state port (HARNESS-131), so a few names live in two
+places until someone dedupes them:
+
+- `Approve.Option` stands in for `SelectOption` (lib/selectOptions.ts).
+- `Prefs.hideChildrenDefault` stands in for `HIDE_CHILDREN_DEFAULT` (state/conductor.ts).
+- `Related` uses a private `RelatedKeyed: TicketKeyed`, and `ProjectKey.TicketInfo` maps tickets
+  for the same reason: nothing declared `extension Ticket: TicketKeyed` yet.
+- `Completion.ProjectInfo/TicketInfo/ParentInfo` and `ProjectKey.ProjectInfo/TicketInfo` are
+  narrow input shapes. Overloads take `Ticket`/`Project` directly.
+- `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
+  promotes at 1024) behave differently in TS too.
+
+## Syntax highlighting (HarnessHighlight)
+
+Code is colored by the RN app's own `mobile/src/lib/highlight.ts` (Shiki core, its JavaScript regex
+engine, the same 34 languages and 19 themes) running in JavaScriptCore, so colors match the desktop
+and the Git tab exactly. The pieces:
+
+- **Bundle:** `bun ios/Tools/build-highlighter.ts` bundles `ios/Tools/highlighter/entry.ts`, which
+  imports highlight.ts, into one classic script (about 3.1 MB minified, 0.43 MB gzipped) that defines
+  the `HarnessHighlighter` global. Without code splitting, Bun keeps every grammar and theme as a
+  lazily evaluated module, so loading the script only parses it. The language and theme lists come
+  from highlight.ts (`LANGUAGE_IDS`, `SYNTAX_THEME_IDS`), so the two apps can't drift.
+- **Generated, not committed.** The app target's "Bundle highlighter" pre-build phase (project.yml)
+  runs the script on every build and writes `highlighter.js` into Harness.app. It needs `bun` and a
+  `bun install` at the repo root, and it rewrites the file only when its content changes. The phase
+  can't declare its real inputs (the whole Shiki tree), so `ENABLE_USER_SCRIPT_SANDBOXING` is off for
+  the app target. The tests build their own copy into `ios/build/highlighter/`
+  (Tests/.../Support/HighlighterScript.swift), or use `HARNESS_HIGHLIGHTER_JS`.
+- **`HarnessHighlight`** is a separate library in the HarnessKit package, so only code that
+  highlights links JavaScriptCore. `actor Highlighter` owns one `JSContext` on its own serial queue
+  (a custom executor) and loads the script on its first job. It provides `highlight`/`highlightDiff`
+  (nil means plain), a 200-entry LRU `HighlightCache` that `cached(…)` reads synchronously, the
+  60 000 UTF-16-unit limit, skipping of jobs whose task was cancelled before their turn, and
+  `timings`. `PlainLines` (plainLines/reuseLines) and `HighlightColors` (gitColors/diffTints) are
+  Swift ports. They're synchronous, so a view draws plain text in its first frame.
+  Plain diff lines come from HarnessKit's `Diff.parseDiff`, and `HighlightLineKind` is
+  `DiffLineKind`. Language ids are Shiki ids, so callers map fences and paths
+  (`Code.codeLanguage`, `Diff.langForPath`) first.
+- **App bridge:** `Harness/Highlight/HighlightedText.swift` turns lines into `AttributedString`
+  (SF Mono 12.5, Shiki fontStyle bits, diff sign and header colors). `Highlighter.app` is the shared
+  instance. The debug screen `HighlightPreviewView` opens with `-debugScreen highlight`
+  (`-debugAppearance dark|light` shows one theme).
+- **Diff tints are row backgrounds.** UI must draw diff add/del tints (`HighlightColors.diffTints`)
+  as full-width row backgrounds that span the code block's width, not text-width. The debug
+  screen's text-width tints are a shortcut and not the pattern to copy.
+- **Regex JIT.** JavaScriptCore's regex JIT mis-matches some patterns that Shiki's JS engine
+  generates: a trailing `// comment` in Swift or TypeScript comes out as an operator plus
+  identifiers. The regex interpreter matches Oniguruma. Apps on a device get no JIT. Before its first
+  JSContext, `Highlighter` sets `JSC_useRegExpJIT=false` so the simulator and the Mac behave the same
+  way, and the parity fixtures are generated in a child bun with `BUN_JSC_useRegExpJIT=false`
+  (ios/Tools/highlighter/runCorpus.ts). Bun itself has the bug, so `bun test` results for
+  highlight.ts aren't what a phone shows for those patterns.
+- **Parity:** `shared/fixtures/cases/highlight.ts` runs the corpus in `ios/Tools/highlighter/corpus.ts`
+  (11 languages, light and dark themes, diffs, CRLF, emoji, unknown language and theme, the size
+  boundary) through the real highlight.ts. `HighlighterTests` checks that the bundle returns the
+  same tokens and colors. `wellFormed()` moves a lone high surrogate left by diffLines'
+  `slice(0, 1)` sign split into the next span, since Swift strings can't hold it.
 
 **Reducer scenarios.** Stateful pure code (the reducer, paging, sub-agent state) is pinned with
 scenarios instead of single cases: `shared/fixtures/board.ts` runs real TS actions through
@@ -195,7 +306,23 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] State: reducer, paging, selectors, sub-agents, conductor, watcher status, format, models, drafts, branch rows (shared/src/state)
 - [x] Board state I/O: BoardStore connection policy, BoardLoader, DetailFetcher, DraftSync, ModelListCache (state/store.tsx, lib/boardLoader, details, draftSync)
 - [x] Board/form helpers: boardColumns, modelSheet, selectOptions, watcherDraft, newSession (mobile/src/lib)
-- [ ] State: markdown, code, tabs, projectKey, pluginBridge, stickToBottom, attachments (shared/src/state)
+- [x] Content helpers (HarnessKit/Logic, fixture parity), RN source in parentheses:
+  - Markdown blocks/inline/plainText (state/markdown), code fences + normalizePatch (state/code),
+    diff parsing (diff)
+  - Mentions, slash commands, mention caret (mentions, commands, lib/mentionCaret)
+  - Templates and prompts (templates, prompts)
+  - Completion and approve menus/requests (completion, lib/approve)
+  - Ticket tabs (state/tabs), project key rename preview (state/projectKey)
+  - Attachments (state/attachments, lib/attachments), stick to bottom (state + lib/stickToBottom,
+    plus a SwiftUI ScrollPhase → event mapping)
+  - Plugin host bridge + injection (state/pluginBridge, lib/pluginHost), browser touch/keyboard
+    input (lib/browserInput)
+  - Related tickets (lib/related), file viewer routes/windows/patch rows (lib/fileViewer)
+  - Prefs + v2 migration (lib/prefs), theme picker (lib/themePicker)
+  - Already covered elsewhere: icons (state/icons → Themes/Icons.swift), syntax highlighting
+    (lib/highlight, HARNESS-133). RN-only, not ported: lib/keyboard (works around
+    KeyboardAvoidingView's parent-relative frame; SwiftUI's keyboard avoidance doesn't need it),
+    lib/device and lib/storage (platform glue for the app target).
 - [ ] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
 - [ ] Saved servers + Keychain token storage (lib/storage, lib/servers)
 - [ ] Connection banner + reconnect (screens/ConnectionBanner)
@@ -208,7 +335,8 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [ ] Agents tab / sub-agents (screens/AgentsTab)
 - [ ] Browser tab (screens/BrowserTab, lib/browserInput)
 - [ ] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
-- [ ] File viewer + diffs + syntax highlighting (screens/FileViewer, lib/fileViewer, highlight)
+- [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
+- [ ] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [ ] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
 - [ ] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
 - [ ] Watchers form (screens/WatcherForm, lib/watcherDraft)

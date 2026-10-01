@@ -1,0 +1,2407 @@
+{
+  "brokenOverrideMessageCases": [
+    {
+      "name": "broken",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "On {{brnch}}",
+        "overrideError": "Unknown variable {{brnch}}"
+      },
+      "output": "Your customization isn't in effect: runs use the built-in prompt until you fix it or reset it. Unknown variable {{brnch}}"
+    },
+    {
+      "name": "no error",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": null,
+        "overrideError": null
+      },
+      "output": "Your customization isn't in effect: runs use the built-in prompt until you fix it or reset it."
+    },
+    {
+      "name": "error with trailing whitespace",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": null,
+        "overrideError": "  bad \n"
+      },
+      "output": "Your customization isn't in effect: runs use the built-in prompt until you fix it or reset it.   bad"
+    }
+  ],
+  "groupPromptsCases": [
+    {
+      "name": "system then run whatever the catalog order",
+      "input": [
+        {
+          "id": "run.review",
+          "group": "run",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        {
+          "id": "system.intro",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        }
+      ],
+      "output": [
+        {
+          "group": "system",
+          "title": "System prompt",
+          "description": "Sections of a run's system prompt. Harness picks which sections a run gets and puts them in order.",
+          "entries": [
+            {
+              "id": "system.intro",
+              "group": "system",
+              "label": "Work",
+              "description": "",
+              "variables": [
+                {
+                  "name": "branch",
+                  "description": ""
+                },
+                {
+                  "name": "worktree",
+                  "description": ""
+                }
+              ],
+              "builtin": "Work on {{branch}}.",
+              "override": null,
+              "overrideError": null
+            },
+            {
+              "id": "system.work",
+              "group": "system",
+              "label": "Work",
+              "description": "",
+              "variables": [
+                {
+                  "name": "branch",
+                  "description": ""
+                },
+                {
+                  "name": "worktree",
+                  "description": ""
+                }
+              ],
+              "builtin": "Work on {{branch}}.",
+              "override": null,
+              "overrideError": null
+            }
+          ]
+        },
+        {
+          "group": "run",
+          "title": "Run messages",
+          "description": "The message that starts a run.",
+          "entries": [
+            {
+              "id": "run.review",
+              "group": "run",
+              "label": "Work",
+              "description": "",
+              "variables": [
+                {
+                  "name": "branch",
+                  "description": ""
+                },
+                {
+                  "name": "worktree",
+                  "description": ""
+                }
+              ],
+              "builtin": "Work on {{branch}}.",
+              "override": null,
+              "overrideError": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "run only",
+      "input": [
+        {
+          "id": "run.review",
+          "group": "run",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        }
+      ],
+      "output": [
+        {
+          "group": "run",
+          "title": "Run messages",
+          "description": "The message that starts a run.",
+          "entries": [
+            {
+              "id": "run.review",
+              "group": "run",
+              "label": "Work",
+              "description": "",
+              "variables": [
+                {
+                  "name": "branch",
+                  "description": ""
+                },
+                {
+                  "name": "worktree",
+                  "description": ""
+                }
+              ],
+              "builtin": "Work on {{branch}}.",
+              "override": null,
+              "overrideError": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": []
+    },
+    {
+      "name": "unknown group is dropped",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "later",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        {
+          "id": "system.intro",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        }
+      ],
+      "output": [
+        {
+          "group": "system",
+          "title": "System prompt",
+          "description": "Sections of a run's system prompt. Harness picks which sections a run gets and puts them in order.",
+          "entries": [
+            {
+              "id": "system.intro",
+              "group": "system",
+              "label": "Work",
+              "description": "",
+              "variables": [
+                {
+                  "name": "branch",
+                  "description": ""
+                },
+                {
+                  "name": "worktree",
+                  "description": ""
+                }
+              ],
+              "builtin": "Work on {{branch}}.",
+              "override": null,
+              "overrideError": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "insertTextCases": [
+    {
+      "name": "replaces the selection",
+      "input": {
+        "text": "ab cd",
+        "start": 3,
+        "end": 5,
+        "insert": "{{x}}"
+      },
+      "output": {
+        "text": "ab {{x}}",
+        "caret": 8
+      }
+    },
+    {
+      "name": "inserts at a caret",
+      "input": {
+        "text": "ab",
+        "start": 1,
+        "end": 1,
+        "insert": "Z"
+      },
+      "output": {
+        "text": "aZb",
+        "caret": 2
+      }
+    },
+    {
+      "name": "clamps past the end",
+      "input": {
+        "text": "ab",
+        "start": 9,
+        "end": 12,
+        "insert": "Z"
+      },
+      "output": {
+        "text": "abZ",
+        "caret": 3
+      }
+    },
+    {
+      "name": "end before start",
+      "input": {
+        "text": "ab",
+        "start": 2,
+        "end": 0,
+        "insert": "Z"
+      },
+      "output": {
+        "text": "abZ",
+        "caret": 3
+      }
+    },
+    {
+      "name": "negative start",
+      "input": {
+        "text": "ab",
+        "start": -3,
+        "end": 1,
+        "insert": "Z"
+      },
+      "output": {
+        "text": "Zb",
+        "caret": 1
+      }
+    },
+    {
+      "name": "empty text",
+      "input": {
+        "text": "",
+        "start": 0,
+        "end": 0,
+        "insert": "{{x}}"
+      },
+      "output": {
+        "text": "{{x}}",
+        "caret": 5
+      }
+    },
+    {
+      "name": "empty insert deletes",
+      "input": {
+        "text": "abc",
+        "start": 1,
+        "end": 2,
+        "insert": ""
+      },
+      "output": {
+        "text": "ac",
+        "caret": 1
+      }
+    },
+    {
+      "name": "UTF-16 offsets after an emoji",
+      "input": {
+        "text": "😀ab",
+        "start": 2,
+        "end": 3,
+        "insert": "Z"
+      },
+      "output": {
+        "text": "😀Zb",
+        "caret": 3
+      }
+    },
+    {
+      "name": "emoji insert moves the caret by two",
+      "input": {
+        "text": "ab",
+        "start": 1,
+        "end": 1,
+        "insert": "😀"
+      },
+      "output": {
+        "text": "a😀b",
+        "caret": 3
+      }
+    },
+    {
+      "name": "combining mark before",
+      "input": {
+        "text": "éx",
+        "start": 2,
+        "end": 3,
+        "insert": "y"
+      },
+      "output": {
+        "text": "éy",
+        "caret": 3
+      }
+    }
+  ],
+  "lineDiffCases": [
+    {
+      "name": "change and add",
+      "input": {
+        "from": "one\ntwo\nthree\nfour",
+        "to": "one\n2\nthree\nfour\nfive"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "one"
+        },
+        {
+          "type": "del",
+          "text": "two"
+        },
+        {
+          "type": "add",
+          "text": "2"
+        },
+        {
+          "type": "same",
+          "text": "three"
+        },
+        {
+          "type": "same",
+          "text": "four"
+        },
+        {
+          "type": "add",
+          "text": "five"
+        }
+      ]
+    },
+    {
+      "name": "identical",
+      "input": {
+        "from": "a\nb",
+        "to": "a\nb"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "a"
+        },
+        {
+          "type": "same",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "name": "to empty",
+      "input": {
+        "from": "x",
+        "to": ""
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "x"
+        },
+        {
+          "type": "add",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "both empty",
+      "input": {
+        "from": "",
+        "to": ""
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "from empty",
+      "input": {
+        "from": "",
+        "to": "a\nb"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": ""
+        },
+        {
+          "type": "add",
+          "text": "a"
+        },
+        {
+          "type": "add",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "name": "CRLF lines differ from LF",
+      "input": {
+        "from": "a\r\nb",
+        "to": "a\nb"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "a\r"
+        },
+        {
+          "type": "add",
+          "text": "a"
+        },
+        {
+          "type": "same",
+          "text": "b"
+        }
+      ]
+    },
+    {
+      "name": "CRLF both sides",
+      "input": {
+        "from": "a\r\nb\r\n",
+        "to": "a\r\nc\r\n"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "a\r"
+        },
+        {
+          "type": "del",
+          "text": "b\r"
+        },
+        {
+          "type": "add",
+          "text": "c\r"
+        },
+        {
+          "type": "same",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "trailing newline added",
+      "input": {
+        "from": "a",
+        "to": "a\n"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "a"
+        },
+        {
+          "type": "add",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "name": "deletions before additions",
+      "input": {
+        "from": "a\nb\nc",
+        "to": "x\ny\nc"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "a"
+        },
+        {
+          "type": "del",
+          "text": "b"
+        },
+        {
+          "type": "add",
+          "text": "x"
+        },
+        {
+          "type": "add",
+          "text": "y"
+        },
+        {
+          "type": "same",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "name": "move ties prefer deleting first",
+      "input": {
+        "from": "a\nb",
+        "to": "b\na"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "a"
+        },
+        {
+          "type": "same",
+          "text": "b"
+        },
+        {
+          "type": "add",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "name": "repeated lines",
+      "input": {
+        "from": "x\nx\ny",
+        "to": "x\ny\nx"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "x"
+        },
+        {
+          "type": "del",
+          "text": "x"
+        },
+        {
+          "type": "same",
+          "text": "y"
+        },
+        {
+          "type": "add",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "canonically equivalent lines differ",
+      "input": {
+        "from": "café",
+        "to": "café"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "café"
+        },
+        {
+          "type": "add",
+          "text": "café"
+        }
+      ]
+    },
+    {
+      "name": "emoji lines",
+      "input": {
+        "from": "😀\nb",
+        "to": "😀\nc"
+      },
+      "output": [
+        {
+          "type": "same",
+          "text": "😀"
+        },
+        {
+          "type": "del",
+          "text": "b"
+        },
+        {
+          "type": "add",
+          "text": "c"
+        }
+      ]
+    },
+    {
+      "name": "only whitespace change",
+      "input": {
+        "from": "a \nb",
+        "to": "a\nb"
+      },
+      "output": [
+        {
+          "type": "del",
+          "text": "a "
+        },
+        {
+          "type": "add",
+          "text": "a"
+        },
+        {
+          "type": "same",
+          "text": "b"
+        }
+      ]
+    }
+  ],
+  "promptCountsCases": [
+    {
+      "name": "mixed",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        }
+      ],
+      "output": {
+        "customized": 2,
+        "broken": 1
+      }
+    },
+    {
+      "name": "error without override",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": "stale"
+        }
+      ],
+      "output": {
+        "customized": 0,
+        "broken": 0
+      }
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": {
+        "customized": 0,
+        "broken": 0
+      }
+    },
+    {
+      "name": "empty error",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "x",
+          "overrideError": ""
+        }
+      ],
+      "output": {
+        "customized": 1,
+        "broken": 0
+      }
+    }
+  ],
+  "promptDraftDirtyCases": [
+    {
+      "name": "fresh customize",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}."
+      },
+      "output": false
+    },
+    {
+      "name": "changed from built-in",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "Changed"
+      },
+      "output": true
+    },
+    {
+      "name": "custom untouched",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "Mine"
+      },
+      "output": false
+    },
+    {
+      "name": "custom back to built-in",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}."
+      },
+      "output": true
+    },
+    {
+      "name": "custom cleared",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": ""
+      },
+      "output": true
+    },
+    {
+      "name": "built-in cleared",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": ""
+      },
+      "output": false
+    },
+    {
+      "name": "decomposed built-in is a change",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "café",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "café"
+      },
+      "output": true
+    },
+    {
+      "name": "empty override stored, empty draft",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "",
+          "overrideError": null
+        },
+        "draft": ""
+      },
+      "output": true
+    }
+  ],
+  "promptDraftErrorCases": [
+    {
+      "name": "own variables",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "On {{branch}}{{#if worktree}} (worktree){{/if}}"
+      },
+      "output": null
+    },
+    {
+      "name": "unknown variable",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "On {{brnch}}"
+      },
+      "output": "Unknown variable {{brnch}}: the variables are {{branch}}, {{worktree}}"
+    },
+    {
+      "name": "unclosed",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "{{#if branch}}open"
+      },
+      "output": "Line 1: {{#if branch}} is never closed with {{/if}}"
+    },
+    {
+      "name": "empty",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": ""
+      },
+      "output": null
+    },
+    {
+      "name": "blank",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": " \n "
+      },
+      "output": null
+    },
+    {
+      "name": "NBSP only is blank",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": " "
+      },
+      "output": null
+    },
+    {
+      "name": "NEL only is not blank",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "{{x}}"
+      },
+      "output": "Unknown variable {{x}}: it has no variables"
+    },
+    {
+      "name": "no variables",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "{{x}}"
+      },
+      "output": "Unknown variable {{x}}: it has no variables"
+    }
+  ],
+  "promptErrorLineCases": [
+    {
+      "name": "broken untouched defers to the banner",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        },
+        "draft": "On {{brnch}}",
+        "serverError": null
+      },
+      "output": null
+    },
+    {
+      "name": "server error wins",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        },
+        "draft": "On {{brnch}}",
+        "serverError": "prompts.system.work: bad"
+      },
+      "output": "prompts.system.work: bad"
+    },
+    {
+      "name": "broken edited is checked",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        },
+        "draft": "On {{brnch}}!",
+        "serverError": null
+      },
+      "output": "Unknown variable {{brnch}}: the variables are {{branch}}, {{worktree}}"
+    },
+    {
+      "name": "broken fixed",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        },
+        "draft": "On {{branch}}",
+        "serverError": null
+      },
+      "output": null
+    },
+    {
+      "name": "read-only built-in",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": null,
+        "serverError": null
+      },
+      "output": null
+    },
+    {
+      "name": "customized untouched is checked",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "{{nope}}",
+          "overrideError": null
+        },
+        "draft": "{{nope}}",
+        "serverError": null
+      },
+      "output": "Unknown variable {{nope}}: the variables are {{branch}}, {{worktree}}"
+    },
+    {
+      "name": "empty server error falls through",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "{{nope}}",
+        "serverError": ""
+      },
+      "output": "Unknown variable {{nope}}: the variables are {{branch}}, {{worktree}}"
+    },
+    {
+      "name": "server error without a draft",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": null,
+        "serverError": "boom"
+      },
+      "output": "boom"
+    },
+    {
+      "name": "broken untouched only by exact code units",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "café {{x}}",
+          "overrideError": "bad"
+        },
+        "draft": "café {{x}}",
+        "serverError": null
+      },
+      "output": "Unknown variable {{x}}: the variables are {{branch}}, {{worktree}}"
+    },
+    {
+      "name": "blank draft is fine",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "  \n",
+        "serverError": null
+      },
+      "output": null
+    }
+  ],
+  "promptGroups": [
+    {
+      "group": "system",
+      "title": "System prompt",
+      "description": "Sections of a run's system prompt. Harness picks which sections a run gets and puts them in order."
+    },
+    {
+      "group": "run",
+      "title": "Run messages",
+      "description": "The message that starts a run."
+    }
+  ],
+  "promptOverrideForCases": [
+    {
+      "name": "blank",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": " \t"
+      },
+      "output": null
+    },
+    {
+      "name": "the built-in",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}."
+      },
+      "output": null
+    },
+    {
+      "name": "other",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "Other"
+      },
+      "output": "Other"
+    },
+    {
+      "name": "trailing newline is kept",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}.\n"
+      },
+      "output": "Work on {{branch}}.\n"
+    },
+    {
+      "name": "decomposed built-in is kept",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "café",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "café"
+      },
+      "output": "café"
+    }
+  ],
+  "promptSavePatchCases": [
+    {
+      "name": "other",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "Other"
+      },
+      "output": {
+        "prompts": {
+          "system.work": "Other"
+        }
+      }
+    },
+    {
+      "name": "reset",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": null
+      },
+      "output": {
+        "prompts": {
+          "system.work": null
+        }
+      }
+    },
+    {
+      "name": "empty",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": ""
+      },
+      "output": {
+        "prompts": {
+          "system.work": null
+        }
+      }
+    },
+    {
+      "name": "blank",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "  \n"
+      },
+      "output": {
+        "prompts": {
+          "system.work": null
+        }
+      }
+    },
+    {
+      "name": "the built-in",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}."
+      },
+      "output": {
+        "prompts": {
+          "system.work": null
+        }
+      }
+    },
+    {
+      "name": "whitespace difference is real",
+      "input": {
+        "entry": {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        "draft": "Work on {{branch}}.\n"
+      },
+      "output": {
+        "prompts": {
+          "system.work": "Work on {{branch}}.\n"
+        }
+      }
+    },
+    {
+      "name": "other id",
+      "input": {
+        "entry": {
+          "id": "run.review",
+          "group": "run",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "R"
+      },
+      "output": {
+        "prompts": {
+          "run.review": "R"
+        }
+      }
+    },
+    {
+      "name": "unknown id",
+      "input": {
+        "entry": {
+          "id": "later.thing",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        },
+        "draft": "R"
+      },
+      "output": {
+        "prompts": {
+          "later.thing": "R"
+        }
+      }
+    }
+  ],
+  "promptStartTextCases": [
+    {
+      "name": "builtin",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": null,
+        "overrideError": null
+      },
+      "output": "Work on {{branch}}."
+    },
+    {
+      "name": "customized",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "Mine",
+        "overrideError": null
+      },
+      "output": "Mine"
+    },
+    {
+      "name": "empty override",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "",
+        "overrideError": null
+      },
+      "output": ""
+    }
+  ],
+  "promptStateCases": [
+    {
+      "name": "builtin",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": null,
+        "overrideError": null
+      },
+      "output": "builtin"
+    },
+    {
+      "name": "customized",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "Mine",
+        "overrideError": null
+      },
+      "output": "customized"
+    },
+    {
+      "name": "broken",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "On {{brnch}}",
+        "overrideError": "Unknown variable {{brnch}}"
+      },
+      "output": "broken"
+    },
+    {
+      "name": "error without override",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": null,
+        "overrideError": "stale"
+      },
+      "output": "builtin"
+    },
+    {
+      "name": "empty error is customized",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "x",
+        "overrideError": ""
+      },
+      "output": "customized"
+    },
+    {
+      "name": "empty override is customized",
+      "input": {
+        "id": "system.work",
+        "group": "system",
+        "label": "Work",
+        "description": "",
+        "variables": [
+          {
+            "name": "branch",
+            "description": ""
+          },
+          {
+            "name": "worktree",
+            "description": ""
+          }
+        ],
+        "builtin": "Work on {{branch}}.",
+        "override": "",
+        "overrideError": null
+      },
+      "output": "customized"
+    }
+  ],
+  "promptStateLabels": {
+    "builtin": "Built-in",
+    "customized": "Customized",
+    "broken": "Not in use"
+  },
+  "promptsLoadErrorCases": [
+    {
+      "name": "404 is an older service",
+      "input": {
+        "api": {
+          "status": 404,
+          "message": "Not found"
+        }
+      },
+      "output": "This service doesn't support prompt overrides yet. Update Harness to customize prompts."
+    },
+    {
+      "name": "500 keeps its message",
+      "input": {
+        "api": {
+          "status": 500,
+          "message": "database is locked"
+        }
+      },
+      "output": "database is locked"
+    },
+    {
+      "name": "401 keeps its message",
+      "input": {
+        "api": {
+          "status": 401,
+          "message": "Unauthorized"
+        }
+      },
+      "output": "Unauthorized"
+    },
+    {
+      "name": "plain error",
+      "input": {
+        "message": "Network request failed"
+      },
+      "output": "Network request failed"
+    },
+    {
+      "name": "a thrown string",
+      "input": {
+        "thrown": "weird"
+      },
+      "output": "weird"
+    }
+  ],
+  "promptsSummaryCases": [
+    {
+      "name": "all built-in",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        }
+      ],
+      "output": "All built-in"
+    },
+    {
+      "name": "one customized",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": null,
+          "overrideError": null
+        }
+      ],
+      "output": "1 customized"
+    },
+    {
+      "name": "with broken",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "Mine",
+          "overrideError": null
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "x",
+          "overrideError": "bad"
+        }
+      ],
+      "output": "2 customized · 1 not in use"
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": "All built-in"
+    },
+    {
+      "name": "only broken",
+      "input": [
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        },
+        {
+          "id": "system.work",
+          "group": "system",
+          "label": "Work",
+          "description": "",
+          "variables": [
+            {
+              "name": "branch",
+              "description": ""
+            },
+            {
+              "name": "worktree",
+              "description": ""
+            }
+          ],
+          "builtin": "Work on {{branch}}.",
+          "override": "On {{brnch}}",
+          "overrideError": "Unknown variable {{brnch}}"
+        }
+      ],
+      "output": "2 customized · 2 not in use"
+    }
+  ]
+}

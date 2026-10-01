@@ -1,0 +1,1959 @@
+{
+  "bridgeCases": [
+    {
+      "name": "init on load and on every ready; onReady once",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "dark",
+        "steps": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "dark"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "dark"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          },
+          {
+            "accepted": true,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "dark"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "rejects other windows, origins, and junk",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "other"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "none"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "https://evil.example",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:9999",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "null",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801/",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "HTTP://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": null,
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": "harness:ready",
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": 3,
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": [],
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {},
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:bogus"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": 1
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "detach"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "attach"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openExternal and navigate are validated",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "https://github.com/x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "mailto:a@b.c"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "HTTPS://EXAMPLE.COM"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "Http://x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "MailTo:x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "http:/x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "https:"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": " https://x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "file:///etc/passwd"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "javascript:alert(1)"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "ftp://x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": "httpſ://x"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:openExternal",
+              "url": 3
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "OTHER-12"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "A_1-0"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "A-1\n"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "other-12"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "1A-2"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "A-"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "A-١"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "ÄB-1"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": "../settings"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate",
+              "ticketKey": 3
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:navigate"
+            },
+            "origin": "http://127.0.0.1:7801",
+            "source": "frame"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [],
+            "opened": [
+              "https://github.com/x"
+            ],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [],
+            "opened": [
+              "mailto:a@b.c"
+            ],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [],
+            "opened": [
+              "HTTPS://EXAMPLE.COM"
+            ],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [],
+            "opened": [
+              "Http://x"
+            ],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [],
+            "opened": [
+              "MailTo:x"
+            ],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [
+              "OTHER-12"
+            ],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [],
+            "navigated": [
+              "A_1-0"
+            ],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "theme and ticket pushes; tickets for other keys are dropped",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "sendTheme",
+            "theme": "dark"
+          },
+          {
+            "op": "sendTicket",
+            "ticket": {
+              "id": "tkt_31",
+              "key": "HELLO-1",
+              "projectId": "prj_8f2c1a",
+              "kind": "conductor",
+              "title": "Port the wire protocol to Swift",
+              "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+              "status": "blocked",
+              "sessionId": "ses_31",
+              "driver": "claude-code",
+              "parentId": "tkt_30",
+              "childCount": 3,
+              "dependsOn": [
+                "NYTIMES-29",
+                "NYTIMES-30"
+              ],
+              "autoStart": true,
+              "agentReview": "approved",
+              "humanReview": "changes_requested",
+              "externalRef": {
+                "source": "jira",
+                "key": "PLAYR-123",
+                "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+                "raw": {
+                  "id": "10423",
+                  "fields": {
+                    "summary": "Video player stalls on seek",
+                    "labels": [
+                      "bug",
+                      "p1"
+                    ],
+                    "points": 3,
+                    "flagged": false
+                  }
+                }
+              },
+              "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+              "branch": "harness/nytimes-31",
+              "requestedBranch": "feature/swift-protocol",
+              "baseBranch": "develop",
+              "useWorktree": true,
+              "skipAgentReview": true,
+              "completionAction": "pr",
+              "completionInstructions": "Squash before opening the PR",
+              "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+              "draft": false,
+              "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+              "busy": true,
+              "pendingApproval": {
+                "id": "apr_1",
+                "runId": "run_7",
+                "toolName": "Bash",
+                "input": {
+                  "command": "npm install left-pad",
+                  "timeout": 120000,
+                  "description": "Install deps"
+                },
+                "requestedAt": 1759190405000,
+                "reason": "Installs a package from the network",
+                "source": "classifier",
+                "summary": "npm install left-pad",
+                "onceOnly": false
+              },
+              "allowedTools": [
+                "Bash",
+                "WebFetch"
+              ],
+              "permissionMode": "read_only",
+              "model": "opus",
+              "position": 2.5,
+              "completedAt": 1759197600000,
+              "createdAt": 1759190400000,
+              "updatedAt": 1759194000000
+            }
+          },
+          {
+            "op": "sendTicket",
+            "ticket": {
+              "id": "tkt_2",
+              "key": "HELLO-2",
+              "projectId": "prj_00a1",
+              "kind": "task",
+              "title": "Fix the flaky test",
+              "description": "",
+              "status": "planning",
+              "sessionId": "ses_2",
+              "driver": "anthropic-api",
+              "parentId": null,
+              "dependsOn": [],
+              "autoStart": false,
+              "agentReview": "pending",
+              "humanReview": "pending",
+              "externalRef": null,
+              "workdir": null,
+              "branch": null,
+              "blockedReason": null,
+              "busy": false,
+              "pendingApproval": null,
+              "allowedTools": [],
+              "permissionMode": null,
+              "model": null,
+              "position": 0,
+              "createdAt": 1759190400000,
+              "updatedAt": 1759190400000
+            }
+          },
+          {
+            "op": "setTheme",
+            "theme": "dark"
+          },
+          {
+            "op": "load"
+          },
+          {
+            "op": "detach"
+          },
+          {
+            "op": "sendTheme",
+            "theme": "light"
+          },
+          {
+            "op": "sendTicket",
+            "ticket": {
+              "id": "tkt_31",
+              "key": "HELLO-1",
+              "projectId": "prj_8f2c1a",
+              "kind": "conductor",
+              "title": "Port the wire protocol to Swift",
+              "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+              "status": "blocked",
+              "sessionId": "ses_31",
+              "driver": "claude-code",
+              "parentId": "tkt_30",
+              "childCount": 3,
+              "dependsOn": [
+                "NYTIMES-29",
+                "NYTIMES-30"
+              ],
+              "autoStart": true,
+              "agentReview": "approved",
+              "humanReview": "changes_requested",
+              "externalRef": {
+                "source": "jira",
+                "key": "PLAYR-123",
+                "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+                "raw": {
+                  "id": "10423",
+                  "fields": {
+                    "summary": "Video player stalls on seek",
+                    "labels": [
+                      "bug",
+                      "p1"
+                    ],
+                    "points": 3,
+                    "flagged": false
+                  }
+                }
+              },
+              "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+              "branch": "harness/nytimes-31",
+              "requestedBranch": "feature/swift-protocol",
+              "baseBranch": "develop",
+              "useWorktree": true,
+              "skipAgentReview": true,
+              "completionAction": "pr",
+              "completionInstructions": "Squash before opening the PR",
+              "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+              "draft": false,
+              "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+              "busy": true,
+              "pendingApproval": {
+                "id": "apr_1",
+                "runId": "run_7",
+                "toolName": "Bash",
+                "input": {
+                  "command": "npm install left-pad",
+                  "timeout": 120000,
+                  "description": "Install deps"
+                },
+                "requestedAt": 1759190405000,
+                "reason": "Installs a package from the network",
+                "source": "classifier",
+                "summary": "npm install left-pad",
+                "onceOnly": false
+              },
+              "allowedTools": [
+                "Bash",
+                "WebFetch"
+              ],
+              "permissionMode": "read_only",
+              "model": "opus",
+              "position": 2.5,
+              "completedAt": 1759197600000,
+              "createdAt": 1759190400000,
+              "updatedAt": 1759194000000
+            }
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:theme",
+                  "theme": "dark"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:ticket",
+                  "ticket": {
+                    "id": "tkt_31",
+                    "key": "HELLO-1",
+                    "projectId": "prj_8f2c1a",
+                    "kind": "conductor",
+                    "title": "Port the wire protocol to Swift",
+                    "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+                    "status": "blocked",
+                    "sessionId": "ses_31",
+                    "driver": "claude-code",
+                    "parentId": "tkt_30",
+                    "childCount": 3,
+                    "dependsOn": [
+                      "NYTIMES-29",
+                      "NYTIMES-30"
+                    ],
+                    "autoStart": true,
+                    "agentReview": "approved",
+                    "humanReview": "changes_requested",
+                    "externalRef": {
+                      "source": "jira",
+                      "key": "PLAYR-123",
+                      "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+                      "raw": {
+                        "id": "10423",
+                        "fields": {
+                          "summary": "Video player stalls on seek",
+                          "labels": [
+                            "bug",
+                            "p1"
+                          ],
+                          "points": 3,
+                          "flagged": false
+                        }
+                      }
+                    },
+                    "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+                    "branch": "harness/nytimes-31",
+                    "requestedBranch": "feature/swift-protocol",
+                    "baseBranch": "develop",
+                    "useWorktree": true,
+                    "skipAgentReview": true,
+                    "completionAction": "pr",
+                    "completionInstructions": "Squash before opening the PR",
+                    "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+                    "draft": false,
+                    "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+                    "busy": true,
+                    "pendingApproval": {
+                      "id": "apr_1",
+                      "runId": "run_7",
+                      "toolName": "Bash",
+                      "input": {
+                        "command": "npm install left-pad",
+                        "timeout": 120000,
+                        "description": "Install deps"
+                      },
+                      "requestedAt": 1759190405000,
+                      "reason": "Installs a package from the network",
+                      "source": "classifier",
+                      "summary": "npm install left-pad",
+                      "onceOnly": false
+                    },
+                    "allowedTools": [
+                      "Bash",
+                      "WebFetch"
+                    ],
+                    "permissionMode": "read_only",
+                    "model": "opus",
+                    "position": 2.5,
+                    "completedAt": 1759197600000,
+                    "createdAt": 1759190400000,
+                    "updatedAt": 1759194000000
+                  }
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "dark"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "full themes add appearance, id, syntax theme and tokens",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": {
+          "themeId": "catppuccin-mocha"
+        },
+        "steps": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "sendTheme",
+            "theme": {
+              "themeId": "one-light"
+            }
+          },
+          {
+            "op": "sendTheme",
+            "theme": {
+              "themeId": "tokyo-night-day"
+            }
+          },
+          {
+            "op": "sendTheme",
+            "theme": "light"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "dark",
+                  "appearance": "dark",
+                  "themeId": "catppuccin-mocha",
+                  "themeName": "Catppuccin Mocha",
+                  "syntaxTheme": "catppuccin-mocha",
+                  "tokens": {
+                    "bg": "#181825",
+                    "bgSidebar": "#11111b",
+                    "bgElev": "#313244",
+                    "bgSunken": "#11111b",
+                    "bgColumn": "#1e1e2e",
+                    "bgHover": "rgba(205, 214, 244, 0.06)",
+                    "bgActive": "rgba(205, 214, 244, 0.1)",
+                    "border": "#45475a",
+                    "borderStrong": "#585b70",
+                    "text": "#cdd6f4",
+                    "text2": "#afb7d3",
+                    "text3": "#959bb5",
+                    "accent": "#cba6f7",
+                    "accentHover": "#d0aff8",
+                    "accentSoft": "rgba(203, 166, 247, 0.18)",
+                    "accentText": "#cfadf8",
+                    "onAccent": "#181825",
+                    "focus": "rgba(203, 166, 247, 0.45)",
+                    "selection": "rgba(203, 166, 247, 0.3)",
+                    "shadowSm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+                    "shadow": "0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25)",
+                    "shadowLg": "0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)",
+                    "overlay": "rgba(0, 0, 0, 0.5)",
+                    "planning": "#7f849c",
+                    "in_progress": "#f9e2af",
+                    "blocked": "#f38ba8",
+                    "review": "#f5c2e7",
+                    "done": "#94e2d5",
+                    "green": "#a6e3a1",
+                    "greenSoft": "rgba(166, 227, 161, 0.15)",
+                    "red": "#f497b1",
+                    "redSoft": "rgba(243, 139, 168, 0.15)",
+                    "redSolid": "#f38ba8",
+                    "onDanger": "#181825",
+                    "amber": "#fab387",
+                    "amberSoft": "rgba(250, 179, 135, 0.15)",
+                    "onAmber": "#181825",
+                    "violet": "#cba6f7",
+                    "violetSoft": "rgba(203, 166, 247, 0.15)",
+                    "diffAdd": "#a6e3a1",
+                    "diffAddSoft": "rgba(166, 227, 161, 0.15)",
+                    "diffDel": "#f497b1",
+                    "diffDelSoft": "rgba(243, 139, 168, 0.15)"
+                  }
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:theme",
+                  "theme": "light",
+                  "appearance": "light",
+                  "themeId": "one-light",
+                  "themeName": "One Light",
+                  "syntaxTheme": "one-light",
+                  "tokens": {
+                    "bg": "#fafafa",
+                    "bgSidebar": "#eaeaeb",
+                    "bgElev": "#ffffff",
+                    "bgSunken": "#f0f0f1",
+                    "bgColumn": "#f2f2f3",
+                    "bgHover": "rgba(56, 58, 66, 0.05)",
+                    "bgActive": "rgba(56, 58, 66, 0.085)",
+                    "border": "#dbdbdc",
+                    "borderStrong": "#c8c8ca",
+                    "text": "#383a42",
+                    "text2": "#4f515a",
+                    "text3": "#686970",
+                    "accent": "#3c71e3",
+                    "accentHover": "#3666cc",
+                    "accentSoft": "rgba(64, 120, 242, 0.12)",
+                    "accentText": "#3665cb",
+                    "onAccent": "#ffffff",
+                    "focus": "rgba(64, 120, 242, 0.35)",
+                    "selection": "rgba(64, 120, 242, 0.2)",
+                    "shadowSm": "0 1px 2px rgba(15, 17, 22, 0.06)",
+                    "shadow": "0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05)",
+                    "shadowLg": "0 8px 30px rgba(15, 17, 22, 0.14), 0 2px 6px rgba(15, 17, 22, 0.06)",
+                    "overlay": "rgba(20, 21, 26, 0.28)",
+                    "planning": "#8a8a90",
+                    "in_progress": "#b97f01",
+                    "blocked": "#e45649",
+                    "review": "#a626a4",
+                    "done": "#4d9b4c",
+                    "green": "#3b773a",
+                    "greenSoft": "rgba(80, 161, 79, 0.12)",
+                    "red": "#b24339",
+                    "redSoft": "rgba(228, 86, 73, 0.12)",
+                    "redSolid": "#c94c40",
+                    "onDanger": "#ffffff",
+                    "amber": "#8c6001",
+                    "amberSoft": "rgba(152, 104, 1, 0.12)",
+                    "onAmber": "#ffffff",
+                    "violet": "#a626a4",
+                    "violetSoft": "rgba(166, 38, 164, 0.12)",
+                    "diffAdd": "#3b773a",
+                    "diffAddSoft": "rgba(80, 161, 79, 0.12)",
+                    "diffDel": "#b24339",
+                    "diffDelSoft": "rgba(228, 86, 73, 0.12)"
+                  }
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:theme",
+                  "theme": "light",
+                  "appearance": "light",
+                  "themeId": "tokyo-night-day",
+                  "themeName": "Tokyo Night Day",
+                  "syntaxTheme": null,
+                  "tokens": {
+                    "bg": "#e1e2e7",
+                    "bgSidebar": "#d0d5e3",
+                    "bgElev": "#f3f3f5",
+                    "bgSunken": "#d0d5e3",
+                    "bgColumn": "#d9dce5",
+                    "bgHover": "rgba(55, 96, 191, 0.05)",
+                    "bgActive": "rgba(55, 96, 191, 0.085)",
+                    "border": "#c4c8da",
+                    "borderStrong": "#a8aecb",
+                    "text": "#1f366b",
+                    "text2": "#31477e",
+                    "text3": "#4c5a88",
+                    "accent": "#2a73d6",
+                    "accentHover": "#2668c1",
+                    "accentSoft": "rgba(46, 125, 233, 0.12)",
+                    "accentText": "#215aa8",
+                    "onAccent": "#ffffff",
+                    "focus": "rgba(46, 125, 233, 0.35)",
+                    "selection": "rgba(46, 125, 233, 0.2)",
+                    "shadowSm": "0 1px 2px rgba(15, 17, 22, 0.06)",
+                    "shadow": "0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05)",
+                    "shadowLg": "0 8px 30px rgba(15, 17, 22, 0.14), 0 2px 6px rgba(15, 17, 22, 0.06)",
+                    "overlay": "rgba(20, 21, 26, 0.28)",
+                    "planning": "#747b9f",
+                    "in_progress": "#b15c00",
+                    "blocked": "#eb2861",
+                    "review": "#9854f1",
+                    "done": "#587539",
+                    "green": "#4a6230",
+                    "greenSoft": "rgba(88, 117, 57, 0.12)",
+                    "red": "#ac1d47",
+                    "redSoft": "rgba(245, 42, 101, 0.12)",
+                    "redSolid": "#e1275d",
+                    "onDanger": "#ffffff",
+                    "amber": "#705632",
+                    "amberSoft": "rgba(140, 108, 62, 0.12)",
+                    "onAmber": "#ffffff",
+                    "violet": "#703eb2",
+                    "violetSoft": "rgba(152, 84, 241, 0.12)",
+                    "diffAdd": "#4a6230",
+                    "diffAddSoft": "rgba(88, 117, 57, 0.12)",
+                    "diffDel": "#ac1d47",
+                    "diffDelSoft": "rgba(245, 42, 101, 0.12)"
+                  }
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:theme",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "base URL without a trailing slash, default port, path",
+      "input": {
+        "baseUrl": "HTTPS://Mac.Local:443/harness/",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "https://mac.local",
+            "source": "frame"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "https://mac.local:443",
+            "source": "frame"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "https://mac.local",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "HTTPS://Mac.Local:443/harness",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "https://mac.local"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "HTTPS://Mac.Local:443/harness",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "https://mac.local"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          },
+          {
+            "accepted": false,
+            "posted": [],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "base URL with two trailing slashes keeps one",
+      "input": {
+        "baseUrl": "http://h:1//",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://h:1",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://h:1/",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://h:1"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "ipv6 base URL",
+      "input": {
+        "baseUrl": "http://[FD7A::1]:7717",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "load"
+          },
+          {
+            "op": "message",
+            "data": {
+              "type": "harness:ready"
+            },
+            "origin": "http://[fd7a::1]:7717",
+            "source": "frame"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://[fd7a::1]:7717",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://[FD7A::1]:7717",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://[fd7a::1]:7717"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          },
+          {
+            "accepted": true,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://[FD7A::1]:7717",
+                  "token": "secret",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://[fd7a::1]:7717"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "token with quotes and unicode",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7801/",
+        "token": "a\"b\\c\n é😀",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": [
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "output": {
+        "serviceOrigin": "http://127.0.0.1:7801",
+        "steps": [
+          {
+            "accepted": null,
+            "posted": [
+              {
+                "message": {
+                  "type": "harness:init",
+                  "baseUrl": "http://127.0.0.1:7801",
+                  "token": "a\"b\\c\n é😀",
+                  "ticketKey": "HELLO-1",
+                  "tabId": "changes",
+                  "theme": "light"
+                },
+                "targetOrigin": "http://127.0.0.1:7801"
+              }
+            ],
+            "navigated": [],
+            "opened": [],
+            "ready": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid base URL throws",
+      "input": {
+        "baseUrl": "not a url",
+        "token": "secret",
+        "ticketKey": "HELLO-1",
+        "tabId": "changes",
+        "theme": "light",
+        "steps": []
+      },
+      "output": null
+    }
+  ],
+  "originCases": [
+    {
+      "name": "plain",
+      "input": "http://127.0.0.1:7801/",
+      "output": "http://127.0.0.1:7801"
+    },
+    {
+      "name": "trailing path and query",
+      "input": "http://127.0.0.1:7801/plugins/git/ui/index.html?tab=changes#x",
+      "output": "http://127.0.0.1:7801"
+    },
+    {
+      "name": "default http port dropped",
+      "input": "http://example.com:80/",
+      "output": "http://example.com"
+    },
+    {
+      "name": "default https port dropped",
+      "input": "https://example.com:443",
+      "output": "https://example.com"
+    },
+    {
+      "name": "non-default port kept",
+      "input": "https://example.com:80",
+      "output": "https://example.com:80"
+    },
+    {
+      "name": "leading zero port",
+      "input": "http://example.com:0080",
+      "output": "http://example.com"
+    },
+    {
+      "name": "upper-case scheme and host",
+      "input": "HTTP://EXAMPLE.com",
+      "output": "http://example.com"
+    },
+    {
+      "name": "ipv6",
+      "input": "http://[FD7A::1]:7717/x",
+      "output": "http://[fd7a::1]:7717"
+    },
+    {
+      "name": "userinfo is not part of the origin",
+      "input": "http://user:pw@h:1/",
+      "output": "http://h:1"
+    },
+    {
+      "name": "ws",
+      "input": "ws://h:80/",
+      "output": "ws://h"
+    },
+    {
+      "name": "wss non-default",
+      "input": "wss://h:8443/",
+      "output": "wss://h:8443"
+    },
+    {
+      "name": "file is opaque",
+      "input": "file:///etc/passwd",
+      "output": "null"
+    },
+    {
+      "name": "mailto is opaque",
+      "input": "mailto:a@b.c",
+      "output": "null"
+    },
+    {
+      "name": "about:blank",
+      "input": "about:blank",
+      "output": "null"
+    },
+    {
+      "name": "not a url",
+      "input": "not a url",
+      "output": null
+    },
+    {
+      "name": "empty host",
+      "input": "http://",
+      "output": null
+    },
+    {
+      "name": "port out of range",
+      "input": "http://h:65536",
+      "output": null
+    },
+    {
+      "name": "max port",
+      "input": "http://h:65535",
+      "output": "http://h:65535"
+    },
+    {
+      "name": "tailscale",
+      "input": "http://100.64.1.2:7717",
+      "output": "http://100.64.1.2:7717"
+    },
+    {
+      "name": "surrounding spaces are stripped",
+      "input": "  http://h:1/  ",
+      "output": "http://h:1"
+    }
+  ],
+  "pluginUiUrlCases": [
+    {
+      "name": "the TS test",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7717/",
+        "pluginId": "git",
+        "tabId": "changes"
+      },
+      "output": "http://127.0.0.1:7717/plugins/git/ui/index.html?tab=changes"
+    },
+    {
+      "name": "no trailing slash",
+      "input": {
+        "baseUrl": "http://127.0.0.1:7717",
+        "pluginId": "git",
+        "tabId": "changes"
+      },
+      "output": "http://127.0.0.1:7717/plugins/git/ui/index.html?tab=changes"
+    },
+    {
+      "name": "only one slash stripped",
+      "input": {
+        "baseUrl": "http://h//",
+        "pluginId": "git",
+        "tabId": "x"
+      },
+      "output": "http://h//plugins/git/ui/index.html?tab=x"
+    },
+    {
+      "name": "ids are URI-encoded",
+      "input": {
+        "baseUrl": "http://h",
+        "pluginId": "my plugin/é",
+        "tabId": "a&b=c?d#e"
+      },
+      "output": "http://h/plugins/my%20plugin%2F%C3%A9/ui/index.html?tab=a%26b%3Dc%3Fd%23e"
+    },
+    {
+      "name": "unreserved marks are kept",
+      "input": {
+        "baseUrl": "http://h",
+        "pluginId": "a-_.!~*'()",
+        "tabId": "😀"
+      },
+      "output": "http://h/plugins/a-_.!~*'()/ui/index.html?tab=%F0%9F%98%80"
+    }
+  ],
+  "themeFieldsCases": [
+    {
+      "name": "light",
+      "input": "light",
+      "output": {
+        "theme": "light"
+      }
+    },
+    {
+      "name": "dark",
+      "input": "dark",
+      "output": {
+        "theme": "dark"
+      }
+    },
+    {
+      "name": "catppuccin-mocha",
+      "input": {
+        "themeId": "catppuccin-mocha"
+      },
+      "output": {
+        "theme": "dark",
+        "appearance": "dark",
+        "themeId": "catppuccin-mocha",
+        "themeName": "Catppuccin Mocha",
+        "syntaxTheme": "catppuccin-mocha",
+        "tokens": {
+          "bg": "#181825",
+          "bgSidebar": "#11111b",
+          "bgElev": "#313244",
+          "bgSunken": "#11111b",
+          "bgColumn": "#1e1e2e",
+          "bgHover": "rgba(205, 214, 244, 0.06)",
+          "bgActive": "rgba(205, 214, 244, 0.1)",
+          "border": "#45475a",
+          "borderStrong": "#585b70",
+          "text": "#cdd6f4",
+          "text2": "#afb7d3",
+          "text3": "#959bb5",
+          "accent": "#cba6f7",
+          "accentHover": "#d0aff8",
+          "accentSoft": "rgba(203, 166, 247, 0.18)",
+          "accentText": "#cfadf8",
+          "onAccent": "#181825",
+          "focus": "rgba(203, 166, 247, 0.45)",
+          "selection": "rgba(203, 166, 247, 0.3)",
+          "shadowSm": "0 1px 2px rgba(0, 0, 0, 0.3)",
+          "shadow": "0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25)",
+          "shadowLg": "0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3)",
+          "overlay": "rgba(0, 0, 0, 0.5)",
+          "planning": "#7f849c",
+          "in_progress": "#f9e2af",
+          "blocked": "#f38ba8",
+          "review": "#f5c2e7",
+          "done": "#94e2d5",
+          "green": "#a6e3a1",
+          "greenSoft": "rgba(166, 227, 161, 0.15)",
+          "red": "#f497b1",
+          "redSoft": "rgba(243, 139, 168, 0.15)",
+          "redSolid": "#f38ba8",
+          "onDanger": "#181825",
+          "amber": "#fab387",
+          "amberSoft": "rgba(250, 179, 135, 0.15)",
+          "onAmber": "#181825",
+          "violet": "#cba6f7",
+          "violetSoft": "rgba(203, 166, 247, 0.15)",
+          "diffAdd": "#a6e3a1",
+          "diffAddSoft": "rgba(166, 227, 161, 0.15)",
+          "diffDel": "#f497b1",
+          "diffDelSoft": "rgba(243, 139, 168, 0.15)"
+        }
+      }
+    },
+    {
+      "name": "null syntax theme",
+      "input": {
+        "themeId": "tokyo-night-day"
+      },
+      "output": {
+        "theme": "light",
+        "appearance": "light",
+        "themeId": "tokyo-night-day",
+        "themeName": "Tokyo Night Day",
+        "syntaxTheme": null,
+        "tokens": {
+          "bg": "#e1e2e7",
+          "bgSidebar": "#d0d5e3",
+          "bgElev": "#f3f3f5",
+          "bgSunken": "#d0d5e3",
+          "bgColumn": "#d9dce5",
+          "bgHover": "rgba(55, 96, 191, 0.05)",
+          "bgActive": "rgba(55, 96, 191, 0.085)",
+          "border": "#c4c8da",
+          "borderStrong": "#a8aecb",
+          "text": "#1f366b",
+          "text2": "#31477e",
+          "text3": "#4c5a88",
+          "accent": "#2a73d6",
+          "accentHover": "#2668c1",
+          "accentSoft": "rgba(46, 125, 233, 0.12)",
+          "accentText": "#215aa8",
+          "onAccent": "#ffffff",
+          "focus": "rgba(46, 125, 233, 0.35)",
+          "selection": "rgba(46, 125, 233, 0.2)",
+          "shadowSm": "0 1px 2px rgba(15, 17, 22, 0.06)",
+          "shadow": "0 1px 2px rgba(15, 17, 22, 0.05), 0 4px 12px rgba(15, 17, 22, 0.05)",
+          "shadowLg": "0 8px 30px rgba(15, 17, 22, 0.14), 0 2px 6px rgba(15, 17, 22, 0.06)",
+          "overlay": "rgba(20, 21, 26, 0.28)",
+          "planning": "#747b9f",
+          "in_progress": "#b15c00",
+          "blocked": "#eb2861",
+          "review": "#9854f1",
+          "done": "#587539",
+          "green": "#4a6230",
+          "greenSoft": "rgba(88, 117, 57, 0.12)",
+          "red": "#ac1d47",
+          "redSoft": "rgba(245, 42, 101, 0.12)",
+          "redSolid": "#e1275d",
+          "onDanger": "#ffffff",
+          "amber": "#705632",
+          "amberSoft": "rgba(140, 108, 62, 0.12)",
+          "onAmber": "#ffffff",
+          "violet": "#703eb2",
+          "violetSoft": "rgba(152, 84, 241, 0.12)",
+          "diffAdd": "#4a6230",
+          "diffAddSoft": "rgba(88, 117, 57, 0.12)",
+          "diffDel": "#ac1d47",
+          "diffDelSoft": "rgba(245, 42, 101, 0.12)"
+        }
+      }
+    }
+  ]
+}

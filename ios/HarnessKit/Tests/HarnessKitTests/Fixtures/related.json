@@ -1,0 +1,2752 @@
+{
+  "depOpensCases": [
+    {
+      "name": "a dependency that exists",
+      "input": {
+        "dep": {
+          "key": "MH-3",
+          "missing": false
+        },
+        "byRemoteKey": {
+          "JIRA-9": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "GONE-1": []
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "missing unset counts as present",
+      "input": {
+        "dep": {
+          "key": "MH-3"
+        },
+        "byRemoteKey": {
+          "JIRA-9": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "GONE-1": []
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "a missing remote ID with linked tickets, any case",
+      "input": {
+        "dep": {
+          "key": "jira-9",
+          "missing": true
+        },
+        "byRemoteKey": {
+          "JIRA-9": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "GONE-1": []
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "a remote ID with no tickets",
+      "input": {
+        "dep": {
+          "key": "GONE-1",
+          "missing": true
+        },
+        "byRemoteKey": {
+          "JIRA-9": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "GONE-1": []
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "an unknown key",
+      "input": {
+        "dep": {
+          "key": "NOPE-2",
+          "missing": true
+        },
+        "byRemoteKey": {
+          "JIRA-9": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "GONE-1": []
+        }
+      },
+      "output": false
+    }
+  ],
+  "relatedLabelCases": [
+    {
+      "name": "remote ID first, then the local key",
+      "input": {
+        "key": "MH-124",
+        "title": "MH-124",
+        "status": "done",
+        "projectId": "p",
+        "externalKey": "MH-62"
+      },
+      "output": "MH-62 · MH-124"
+    },
+    {
+      "name": "a legacy mirror shows once",
+      "input": {
+        "key": "JIRA-9",
+        "title": "JIRA-9",
+        "status": "done",
+        "projectId": "p",
+        "externalKey": "JIRA-9"
+      },
+      "output": "JIRA-9"
+    },
+    {
+      "name": "different case shows both",
+      "input": {
+        "key": "JIRA-9",
+        "title": "JIRA-9",
+        "status": "done",
+        "projectId": "p",
+        "externalKey": "jira-9"
+      },
+      "output": "jira-9 · JIRA-9"
+    },
+    {
+      "name": "empty remote ID shows the key",
+      "input": {
+        "key": "MH-1",
+        "title": "MH-1",
+        "status": "done",
+        "projectId": "p",
+        "externalKey": ""
+      },
+      "output": "MH-1"
+    }
+  ],
+  "relatedOfCases": [
+    {
+      "name": "a native key lists tickets linked to it, newest first",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-62-1",
+            "key": "MH-62",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-62",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400001,
+            "updatedAt": 1759190400001
+          },
+          {
+            "id": "id-MH-124-2",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400002,
+            "updatedAt": 1759190400002
+          },
+          {
+            "id": "id-MH-130-3",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-3",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "mh-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400003,
+            "updatedAt": 1759190400003
+          },
+          {
+            "id": "id-MH-131-4",
+            "key": "MH-131",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-131",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-4",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-99",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400004,
+            "updatedAt": 1759190400004
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-62-1",
+          "key": "MH-62",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-62",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-1",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400001,
+          "updatedAt": 1759190400001
+        },
+        "fetched": []
+      },
+      "output": [
+        {
+          "key": "MH-130",
+          "title": "MH-130",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "mh-62"
+        },
+        {
+          "key": "MH-124",
+          "title": "MH-124",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "a linked ticket lists the others on its remote ID, skipping drafts",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-5",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-5",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400005,
+            "updatedAt": 1759190400005
+          },
+          {
+            "id": "id-MH-130-6",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-6",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400006,
+            "updatedAt": 1759190400006
+          },
+          {
+            "id": "id-MH-131-7",
+            "key": "MH-131",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-131",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-7",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400007,
+            "updatedAt": 1759190400007,
+            "draft": true
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-5",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-5",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400005,
+          "updatedAt": 1759190400005
+        }
+      },
+      "output": [
+        {
+          "key": "MH-130",
+          "title": "MH-130",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "a fetched unloaded entry stays; a loaded one unlinked since drops",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-8",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-8",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400008,
+            "updatedAt": 1759190400008
+          },
+          {
+            "id": "id-MH-130-9",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-9",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400009,
+            "updatedAt": 1759190400009
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-8",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-8",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400008,
+          "updatedAt": 1759190400008
+        },
+        "fetched": [
+          {
+            "key": "MH-130",
+            "title": "MH-130",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          },
+          {
+            "key": "MH-12",
+            "title": "MH-12",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          },
+          {
+            "key": "MH-124",
+            "title": "MH-124",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-12",
+          "title": "MH-12",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "a loaded ticket's live fields replace the fetched ones",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-10",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-10",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400010,
+            "updatedAt": 1759190400010
+          },
+          {
+            "id": "id-MH-130-11",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "Stage 2",
+            "description": "",
+            "status": "review",
+            "sessionId": "ses-11",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400011,
+            "updatedAt": 1759190400011
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-10",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-10",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400010,
+          "updatedAt": 1759190400010
+        },
+        "fetched": [
+          {
+            "key": "MH-130",
+            "title": "old",
+            "status": "planning",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-130",
+          "title": "Stage 2",
+          "status": "review",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "loaded ones the fetch didn't know about come first",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-12",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-12",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400012,
+            "updatedAt": 1759190400012
+          },
+          {
+            "id": "id-MH-130-13",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-13",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400013,
+            "updatedAt": 1759190400013
+          },
+          {
+            "id": "id-MH-140-14",
+            "key": "MH-140",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-140",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-14",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400014,
+            "updatedAt": 1759190400014
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-12",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-12",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400012,
+          "updatedAt": 1759190400012
+        },
+        "fetched": [
+          {
+            "key": "MH-12",
+            "title": "MH-12",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          },
+          {
+            "key": "MH-130",
+            "title": "MH-130",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-140",
+          "title": "MH-140",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        },
+        {
+          "key": "MH-12",
+          "title": "MH-12",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        },
+        {
+          "key": "MH-130",
+          "title": "MH-130",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "equal createdAt keeps insertion order (stable sort)",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-15",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-15",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400015,
+            "updatedAt": 1759190400015
+          },
+          {
+            "id": "id-MH-130-16",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-16",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400000,
+            "updatedAt": 1759190400016
+          },
+          {
+            "id": "id-MH-140-17",
+            "key": "MH-140",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-140",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-17",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400000,
+            "updatedAt": 1759190400017
+          },
+          {
+            "id": "id-MH-150-18",
+            "key": "MH-150",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-150",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-18",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400000,
+            "updatedAt": 1759190400018
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-15",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-15",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400015,
+          "updatedAt": 1759190400015
+        }
+      },
+      "output": [
+        {
+          "key": "MH-130",
+          "title": "MH-130",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        },
+        {
+          "key": "MH-140",
+          "title": "MH-140",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        },
+        {
+          "key": "MH-150",
+          "title": "MH-150",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "no fetch and nothing loaded",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-19",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-19",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400019,
+            "updatedAt": 1759190400019
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-19",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-19",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400019,
+          "updatedAt": 1759190400019
+        }
+      },
+      "output": []
+    },
+    {
+      "name": "self in the fetched list, any case, is skipped",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-19",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-19",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400019,
+            "updatedAt": 1759190400019
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-19",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-19",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400019,
+          "updatedAt": 1759190400019
+        },
+        "fetched": [
+          {
+            "key": "mh-124",
+            "title": "mh-124",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          },
+          {
+            "key": "MH-1",
+            "title": "MH-1",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-1",
+          "title": "MH-1",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "duplicate fetched keys: the first wins",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-19",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-19",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400019,
+            "updatedAt": 1759190400019
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-19",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-19",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400019,
+          "updatedAt": 1759190400019
+        },
+        "fetched": [
+          {
+            "key": "MH-1",
+            "title": "first",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          },
+          {
+            "key": "mh-1",
+            "title": "second",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-1",
+          "title": "first",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "a fetched entry for a loaded draft drops",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-124-20",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-20",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400020,
+            "updatedAt": 1759190400020
+          },
+          {
+            "id": "id-MH-130-21",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-21",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400021,
+            "updatedAt": 1759190400021,
+            "draft": true
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-20",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-20",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400020,
+          "updatedAt": 1759190400020
+        },
+        "fetched": [
+          {
+            "key": "MH-130",
+            "title": "MH-130",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": []
+    },
+    {
+      "name": "an empty remote ID links nothing",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-62-22",
+            "key": "MH-62",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-62",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-22",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400022,
+            "updatedAt": 1759190400022
+          },
+          {
+            "id": "id-MH-124-23",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-23",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400023,
+            "updatedAt": 1759190400023
+          },
+          {
+            "id": "id-MH-125-24",
+            "key": "MH-125",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-125",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-24",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400024,
+            "updatedAt": 1759190400024
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-62-22",
+          "key": "MH-62",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-62",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-22",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400022,
+          "updatedAt": 1759190400022
+        }
+      },
+      "output": [
+        {
+          "key": "MH-124",
+          "title": "MH-124",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "a ticket whose key matches self case-insensitively is self",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-mh-62-25",
+            "key": "mh-62",
+            "projectId": "p",
+            "kind": "task",
+            "title": "mh-62",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-25",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400025,
+            "updatedAt": 1759190400025
+          },
+          {
+            "id": "id-MH-124-26",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-26",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400026,
+            "updatedAt": 1759190400026
+          },
+          {
+            "id": "id-MH-62-27",
+            "key": "MH-62",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-62",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-27",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400027,
+            "updatedAt": 1759190400027
+          }
+        ],
+        "ticket": {
+          "id": "id-mh-62-25",
+          "key": "mh-62",
+          "projectId": "p",
+          "kind": "task",
+          "title": "mh-62",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-25",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400025,
+          "updatedAt": 1759190400025
+        }
+      },
+      "output": [
+        {
+          "key": "MH-124",
+          "title": "MH-124",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    },
+    {
+      "name": "duplicate loaded keys: the later one decides",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-130-28",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "older copy",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-28",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400028,
+            "updatedAt": 1759190400028
+          },
+          {
+            "id": "id-MH-124-29",
+            "key": "MH-124",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-124",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-29",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400029,
+            "updatedAt": 1759190400029
+          },
+          {
+            "id": "id-mh-130-30",
+            "key": "mh-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "newer copy",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-30",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400030,
+            "updatedAt": 1759190400030
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-29",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-29",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400029,
+          "updatedAt": 1759190400029
+        },
+        "fetched": [
+          {
+            "key": "MH-130",
+            "title": "MH-130",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": []
+    },
+    {
+      "name": "precomposed and decomposed keys are different keys",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-É-1-31",
+            "key": "É-1",
+            "projectId": "p",
+            "kind": "task",
+            "title": "É-1",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-31",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "X-1",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400031,
+            "updatedAt": 1759190400031
+          },
+          {
+            "id": "id-É-2-32",
+            "key": "É-2",
+            "projectId": "p",
+            "kind": "task",
+            "title": "É-2",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-32",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "X-1",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400032,
+            "updatedAt": 1759190400032
+          }
+        ],
+        "ticket": {
+          "id": "id-É-1-31",
+          "key": "É-1",
+          "projectId": "p",
+          "kind": "task",
+          "title": "É-1",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-31",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "X-1",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400031,
+          "updatedAt": 1759190400031
+        },
+        "fetched": [
+          {
+            "key": "É-1",
+            "title": "É-1",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "X-1"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "É-2",
+          "title": "É-2",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "X-1"
+        },
+        {
+          "key": "É-1",
+          "title": "É-1",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "X-1"
+        }
+      ]
+    },
+    {
+      "name": "toUpperCase maps ß to SS",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-straße-1-33",
+            "key": "straße-1",
+            "projectId": "p",
+            "kind": "task",
+            "title": "straße-1",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-33",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400033,
+            "updatedAt": 1759190400033
+          },
+          {
+            "id": "id-MH-2-34",
+            "key": "MH-2",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-2",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-34",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "STRASSE-1",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400034,
+            "updatedAt": 1759190400034
+          }
+        ],
+        "ticket": {
+          "id": "id-straße-1-33",
+          "key": "straße-1",
+          "projectId": "p",
+          "kind": "task",
+          "title": "straße-1",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-33",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400033,
+          "updatedAt": 1759190400033
+        }
+      },
+      "output": [
+        {
+          "key": "MH-2",
+          "title": "MH-2",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "STRASSE-1"
+        }
+      ]
+    },
+    {
+      "name": "a ticket not in the loaded map",
+      "input": {
+        "tickets": [
+          {
+            "id": "id-MH-130-36",
+            "key": "MH-130",
+            "projectId": "p",
+            "kind": "task",
+            "title": "MH-130",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "ses-36",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": {
+              "source": "jira",
+              "key": "MH-62",
+              "url": null,
+              "raw": null
+            },
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "permissionMode": null,
+            "model": null,
+            "position": 0,
+            "createdAt": 1759190400036,
+            "updatedAt": 1759190400036
+          }
+        ],
+        "ticket": {
+          "id": "id-MH-124-35",
+          "key": "MH-124",
+          "projectId": "p",
+          "kind": "task",
+          "title": "MH-124",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "ses-35",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": {
+            "source": "jira",
+            "key": "MH-62",
+            "url": null,
+            "raw": null
+          },
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400035,
+          "updatedAt": 1759190400035
+        },
+        "fetched": [
+          {
+            "key": "MH-1",
+            "title": "MH-1",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "MH-62"
+          }
+        ]
+      },
+      "output": [
+        {
+          "key": "MH-130",
+          "title": "MH-130",
+          "status": "in_progress",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        },
+        {
+          "key": "MH-1",
+          "title": "MH-1",
+          "status": "done",
+          "projectId": "p",
+          "externalKey": "MH-62"
+        }
+      ]
+    }
+  ],
+  "remoteIdPatchCases": [
+    {
+      "name": "link, trimmed and upper-cased",
+      "input": {
+        "current": null,
+        "input": {
+          "key": " mh-62 ",
+          "url": ""
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-62",
+          "url": null
+        }
+      }
+    },
+    {
+      "name": "unchanged",
+      "input": {
+        "current": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        },
+        "input": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "unchanged, current key in lower case",
+      "input": {
+        "current": {
+          "key": "mh-62",
+          "url": null
+        },
+        "input": {
+          "key": "MH-62",
+          "url": "  "
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "drop the URL",
+      "input": {
+        "current": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        },
+        "input": {
+          "key": "MH-62",
+          "url": ""
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-62",
+          "url": null
+        }
+      }
+    },
+    {
+      "name": "relink",
+      "input": {
+        "current": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        },
+        "input": {
+          "key": "MH-63",
+          "url": "https://jira/MH-62"
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-63",
+          "url": "https://jira/MH-62"
+        }
+      }
+    },
+    {
+      "name": "unlink",
+      "input": {
+        "current": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        },
+        "input": {
+          "key": "",
+          "url": ""
+        }
+      },
+      "output": {
+        "externalRef": null
+      }
+    },
+    {
+      "name": "nothing to unlink",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "",
+          "url": ""
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "whitespace-only key unlinks",
+      "input": {
+        "current": {
+          "key": "MH-62",
+          "url": "https://jira/MH-62"
+        },
+        "input": {
+          "key": "  ",
+          "url": ""
+        }
+      },
+      "output": {
+        "externalRef": null
+      }
+    },
+    {
+      "name": "a URL without a key",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "",
+          "url": "https://x"
+        }
+      },
+      "output": {
+        "error": "Add the remote ID the link points to"
+      }
+    },
+    {
+      "name": "not a key",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "not a key",
+          "url": ""
+        }
+      },
+      "output": {
+        "error": "Not a ticket key: NOT A KEY"
+      }
+    },
+    {
+      "name": "not a URL",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "jira/MH-62"
+        }
+      },
+      "output": {
+        "error": "The link must start with http:// or https://"
+      }
+    },
+    {
+      "name": "upper-case scheme",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "HTTPS://Jira/MH-62"
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-62",
+          "url": "HTTPS://Jira/MH-62"
+        }
+      }
+    },
+    {
+      "name": "plain http",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": " http://j/1 "
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-62",
+          "url": "http://j/1"
+        }
+      }
+    },
+    {
+      "name": "a scheme with nothing after it",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "https://"
+        }
+      },
+      "output": {
+        "error": "The link must start with http:// or https://"
+      }
+    },
+    {
+      "name": "a space inside the URL",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "https://a b"
+        }
+      },
+      "output": {
+        "error": "The link must start with http:// or https://"
+      }
+    },
+    {
+      "name": "an NBSP inside the URL",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "https://a b"
+        }
+      },
+      "output": {
+        "error": "The link must start with http:// or https://"
+      }
+    },
+    {
+      "name": "a NEL inside the URL is not whitespace",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "https://ab"
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "MH-62",
+          "url": "https://ab"
+        }
+      }
+    },
+    {
+      "name": "ftp is refused",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "MH-62",
+          "url": "ftp://a"
+        }
+      },
+      "output": {
+        "error": "The link must start with http:// or https://"
+      }
+    },
+    {
+      "name": "ß upper-cases to SS",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "straße-1",
+          "url": ""
+        }
+      },
+      "output": {
+        "externalRef": {
+          "key": "STRASSE-1",
+          "url": null
+        }
+      }
+    },
+    {
+      "name": "key error before URL error",
+      "input": {
+        "current": null,
+        "input": {
+          "key": "nope",
+          "url": "jira"
+        }
+      },
+      "output": {
+        "error": "Not a ticket key: NOPE"
+      }
+    }
+  ],
+  "remoteMatchesOfCases": [
+    {
+      "name": "a 404 with matches",
+      "input": {
+        "status": 404,
+        "message": "Unknown ticket",
+        "data": {
+          "requested": "JIRA-9",
+          "relatedTickets": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ]
+        }
+      },
+      "output": {
+        "requested": "JIRA-9",
+        "relatedTickets": [
+          {
+            "key": "MH-124",
+            "title": "MH-124",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "JIRA-9"
+          }
+        ]
+      }
+    },
+    {
+      "name": "extra fields are dropped",
+      "input": {
+        "status": 404,
+        "message": "Unknown ticket",
+        "data": {
+          "requested": "JIRA-9",
+          "relatedTickets": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ],
+          "extra": 1
+        }
+      },
+      "output": {
+        "requested": "JIRA-9",
+        "relatedTickets": [
+          {
+            "key": "MH-124",
+            "title": "MH-124",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "JIRA-9"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a 404 without data",
+      "input": {
+        "status": 404,
+        "message": "Unknown ticket"
+      },
+      "output": null
+    },
+    {
+      "name": "a 404 with null data",
+      "input": {
+        "status": 404,
+        "message": "Unknown ticket",
+        "data": null
+      },
+      "output": null
+    },
+    {
+      "name": "no related tickets",
+      "input": {
+        "status": 404,
+        "message": "Unknown ticket",
+        "data": {
+          "requested": "JIRA-9",
+          "relatedTickets": []
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "requested isn't a string",
+      "input": {
+        "status": 404,
+        "message": "x",
+        "data": {
+          "requested": 9,
+          "relatedTickets": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ]
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "relatedTickets isn't an array",
+      "input": {
+        "status": 404,
+        "message": "x",
+        "data": {
+          "requested": "JIRA-9",
+          "relatedTickets": {
+            "0": {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "data is a string",
+      "input": {
+        "status": 404,
+        "message": "x",
+        "data": "JIRA-9"
+      },
+      "output": null
+    },
+    {
+      "name": "data is an array",
+      "input": {
+        "status": 404,
+        "message": "x",
+        "data": [
+          {
+            "key": "MH-124",
+            "title": "MH-124",
+            "status": "done",
+            "projectId": "p",
+            "externalKey": "JIRA-9"
+          }
+        ]
+      },
+      "output": null
+    },
+    {
+      "name": "a 500 with matches",
+      "input": {
+        "status": 500,
+        "message": "boom",
+        "data": {
+          "requested": "JIRA-9",
+          "relatedTickets": [
+            {
+              "key": "MH-124",
+              "title": "MH-124",
+              "status": "done",
+              "projectId": "p",
+              "externalKey": "JIRA-9"
+            }
+          ]
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "not a service error",
+      "input": {
+        "plain": "offline"
+      },
+      "output": null
+    }
+  ]
+}
