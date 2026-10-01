@@ -23,7 +23,9 @@ struct ThemesResource: Decodable, Sendable {
     /// The bundled resource. It's generated and checked by tests, so a failure here is a build bug.
     static let bundled: ThemesResource = {
         do {
-            guard let url = Bundle.module.url(forResource: "themes", withExtension: "json", subdirectory: "Resources") else {
+            // `.process("Resources")` flattens the folder into the bundle root. (`.copy` would keep a
+            // top-level Resources/ directory, which codesign rejects in a shallow iOS bundle.)
+            guard let url = Bundle.module.url(forResource: "themes", withExtension: "json") else {
                 throw CocoaError(.fileNoSuchFile)
             }
             return try decode(Data(contentsOf: url))

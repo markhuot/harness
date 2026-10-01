@@ -13,7 +13,7 @@ let package = Package(
         .target(
             name: "HarnessKit",
             path: "Sources/HarnessKit",
-            resources: [.copy("Resources")]
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "HarnessKitTests",
