@@ -74,7 +74,7 @@ export const showsAgentsTabCases = cases(showsAgentsTab, {
 });
 
 export const openingTabCases = cases(openingTab, {
-  "not loaded": undefined,
+  "not loaded": null as unknown as undefined,
   "no summaries": [],
   "some summaries": [{ id: "s1" }],
 });
