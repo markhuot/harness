@@ -41,3 +41,92 @@ describe("daemon", () => {
     expect(existsSync(serviceJson)).toBe(false);
   }, 20_000);
 });
+
+describe("daemon run by the app (HARNESS_SUPERVISOR_PID)", () => {
+  function freePort() {
+    const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+    const port = probe.port!;
+    probe.stop(true);
+    return port;
+  }
+  async function waitHealthy(port: number) {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/health`);
+        if (res.ok) return;
+      } catch {}
+      await Bun.sleep(50);
+    }
+    throw new Error("daemon never became healthy");
+  }
+  function spawnDaemon(home: string, port: number, supervisor: string) {
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "daemon.ts")], {
+      env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_SUPERVISOR_PID: supervisor },
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    onTempCleanup(async () => {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+      await proc.exited;
+    });
+    return proc;
+  }
+  const restart = (home: string, port: number) =>
+    fetch(`http://127.0.0.1:${port}/service/restart`, { method: "POST", headers: { authorization: `Bearer ${readFileSync(join(home, "token"), "utf8").trim()}` } });
+
+  test("restarts itself on request when its parent is the supervisor", async () => {
+    const home = tempHome("harness-daemon-");
+    const port = freePort();
+    const proc = spawnDaemon(home, port, String(process.pid));
+    await waitHealthy(port);
+    expect((await restart(home, port)).status).toBe(200);
+    expect(await proc.exited).toBe(0);
+  }, 20_000);
+
+  test("a supervisor pid that isn't its parent doesn't count (agents inherit the variable)", async () => {
+    const home = tempHome("harness-daemon-");
+    const port = freePort();
+    const proc = spawnDaemon(home, port, "1");
+    await waitHealthy(port);
+    expect((await restart(home, port)).status).toBe(409);
+    proc.kill("SIGTERM");
+    expect(await proc.exited).toBe(0);
+  }, 20_000);
+
+  test("shuts down when the app that started it dies", async () => {
+    const home = tempHome("harness-daemon-");
+    const port = freePort();
+    // A stand-in app: starts the daemon as its child, prints its pid, then waits to be killed.
+    const app = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `const p = Bun.spawn([process.execPath, ${JSON.stringify(join(import.meta.dir, "daemon.ts"))}], { env: { ...process.env, HARNESS_SUPERVISOR_PID: String(process.pid) }, stdout: "ignore", stderr: "ignore" });
+         console.log(p.pid); setInterval(() => {}, 1000);`,
+      ],
+      { env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port) }, stdout: "pipe", stderr: "ignore" },
+    );
+    const reader = (app.stdout as ReadableStream<Uint8Array>).getReader();
+    const daemonPid = Number(new TextDecoder().decode((await reader.read()).value).trim());
+    onTempCleanup(() => {
+      try {
+        process.kill(daemonPid, "SIGKILL");
+      } catch {}
+    });
+    await waitHealthy(port);
+    app.kill("SIGKILL"); // no chance to stop its child
+    await app.exited;
+    const isAlive = () => {
+      try {
+        process.kill(daemonPid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const deadline = Date.now() + 15_000;
+    while (isAlive() && Date.now() < deadline) await Bun.sleep(100);
+    expect(isAlive()).toBe(false);
+  }, 25_000);
+});

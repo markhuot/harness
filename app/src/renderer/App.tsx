@@ -116,13 +116,12 @@ function ErrorScreen({ error, onRetry, retrying }: { error: ConnectionError; onR
         </div>
         <h2>{error.error}</h2>
         <p className="dim">
-          Harness runs your agents in a background service, and the app couldn't connect to it. Agents that are already
-          running aren't affected.
+          Harness runs your agents in a background service, and the app couldn't start it or connect to it.
         </p>
         {error.output && <pre className="error-output selectable">{error.output}</pre>}
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <span className="muted grow" style={{ fontSize: 12 }}>
-            Check with <code>harness service status</code>
+            The service log is <code>~/.harness/logs/service.log</code>
           </span>
           <button className="btn btn-primary" onClick={onRetry} disabled={retrying}>
             {retrying ? <span className="spinner" style={{ borderTopColor: "var(--on-accent)" }} /> : <Icon name="refresh" />}

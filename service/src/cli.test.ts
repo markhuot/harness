@@ -8,8 +8,8 @@ import { DummyDriver } from "./drivers/dummy";
 import { stubBrowser, tempHome } from "./testing/fakes";
 
 const baseOpts = {
-  bunPath: "/Users/me/.bun/bin/bun",
-  daemonPath: "/repo/service/src/daemon.ts",
+  program: ["/Users/me/.bun/bin/bun", "/repo/service/src/daemon.ts"],
+  pathDirs: ["/Users/me/.bun/bin"],
   home: "/Users/me/.harness",
   port: 7717,
   logPath: "/Users/me/.harness/logs/service.log",
@@ -30,6 +30,14 @@ describe("buildPlist", () => {
     expect(xml).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
     expect(xml).toMatch(/<key>StandardOutPath<\/key>\s*<string>\/Users\/me\/\.harness\/logs\/service\.log<\/string>/);
     expect(xml).toMatch(/<key>HARNESS_PORT<\/key>\s*<string>7717<\/string>/);
+  });
+
+  test("runs the app's compiled executable in daemon mode, without its directory on PATH", () => {
+    const exe = "/Applications/Harness.app/Contents/MacOS/harness-service";
+    const xml = buildPlist({ ...baseOpts, program: [exe, "daemon"], pathDirs: [] });
+    expect(xml).toMatch(/<key>ProgramArguments<\/key>\s*<array>\s*<string>\/Applications\/Harness\.app\/Contents\/MacOS\/harness-service<\/string>\s*<string>daemon<\/string>\s*<\/array>/);
+    const path = /<key>PATH<\/key>\s*<string>([^<]+)<\/string>/.exec(xml)![1]!.split(":");
+    expect(path).not.toContain("/Applications/Harness.app/Contents/MacOS");
   });
 
   test("escapes XML metacharacters in paths", () => {
@@ -79,8 +87,8 @@ function deps(over: Partial<CliDeps>): CliDeps {
     exec: fakeLaunchctl().exec,
     uid: 501,
     userHome: tempHome("harness-user-"),
-    bunPath: "/bin/bun",
-    daemonPath: "/repo/daemon.ts",
+    program: ["/bin/bun", "/repo/daemon.ts"],
+    pathDirs: ["/bin"],
     out: (s) => out.push(s),
     err: (s) => out.push(s),
     fetch: globalThis.fetch,
@@ -118,7 +126,7 @@ describe("Cli service commands", () => {
     expect((await cli.install()).changed).toBe(false);
     expect(la.verbs()).toEqual(["print", "bootstrap", "print"]);
 
-    const moved = new Cli({ ...d, daemonPath: "/elsewhere/daemon.ts" });
+    const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
     expect((await moved.install()).changed).toBe(true);
     expect(la.verbs().slice(3)).toEqual(["print", "bootout", "bootstrap"]);
     expect(readFileSync(cli.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");

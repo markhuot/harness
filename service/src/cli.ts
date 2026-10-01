@@ -10,13 +10,16 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { HarnessClient, keyLabel, type Ticket } from "@harness/shared";
 import { ensureHome, ensureToken, harnessPaths, readServiceJson, readToken, resolveHome, resolvePort } from "./config";
+import { COMPILED, daemonProgram } from "./runtime";
 
 export const LAUNCHD_LABEL = "com.markhuot.harness";
 
 export interface PlistOptions {
   label?: string;
-  bunPath: string;
-  daemonPath: string;
+  /** The command that runs the daemon (runtime.ts daemonProgram) */
+  program: string[];
+  /** Extra PATH entries ahead of the defaults: bun's directory when the daemon runs under bun */
+  pathDirs?: string[];
   home: string;
   port: number;
   logPath: string;
@@ -25,11 +28,11 @@ export interface PlistOptions {
   dummyDriver?: boolean;
 }
 
-export function launchdPath(userHome: string, bunPath: string): string {
+export function launchdPath(userHome: string, extra: string[] = []): string {
   const dirs = [
     join(userHome, ".local/bin"),
     join(userHome, ".bun/bin"),
-    dirname(bunPath),
+    ...extra,
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/usr/bin",
@@ -45,7 +48,7 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** Pure: the launchd agent plist for the service. */
 export function buildPlist(o: PlistOptions): string {
   const env: Record<string, string> = {
-    PATH: launchdPath(o.userHome, o.bunPath),
+    PATH: launchdPath(o.userHome, o.pathDirs),
     HOME: o.userHome,
     HARNESS_HOME: o.home,
     HARNESS_PORT: String(o.port),
@@ -62,8 +65,7 @@ export function buildPlist(o: PlistOptions): string {
     <string>${esc(o.label ?? LAUNCHD_LABEL)}</string>
     <key>ProgramArguments</key>
     <array>
-      <string>${esc(o.bunPath)}</string>
-      <string>${esc(o.daemonPath)}</string>
+${o.program.map((a) => `      <string>${esc(a)}</string>`).join("\n")}
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -106,8 +108,10 @@ export interface CliDeps {
   exec: Exec;
   uid: number;
   userHome: string;
-  bunPath: string;
-  daemonPath: string;
+  /** The command that runs the daemon (runtime.ts daemonProgram) */
+  program: string[];
+  /** Extra PATH entries for the daemon (bun's directory in a checkout) */
+  pathDirs: string[];
   out: (s: string) => void;
   err: (s: string) => void;
   fetch: typeof fetch;
@@ -122,8 +126,10 @@ export function defaultDeps(): CliDeps {
     exec: realExec,
     uid: process.getuid?.() ?? 501,
     userHome: homedir(),
-    bunPath: process.execPath,
-    daemonPath: resolve(import.meta.dir, "daemon.ts"),
+    program: daemonProgram(),
+    // The executable's directory is Harness.app/Contents/MacOS, whose Harness would shadow a
+    // `harness` command on a case-insensitive disk; only a checkout's bun goes on PATH.
+    pathDirs: COMPILED ? [] : [dirname(process.execPath)],
     out: (s) => console.log(s),
     err: (s) => console.error(s),
     fetch: globalThis.fetch,
@@ -154,8 +160,8 @@ export class Cli {
   plist(): string {
     const paths = harnessPaths(this.home);
     return buildPlist({
-      bunPath: this.d.bunPath,
-      daemonPath: this.d.daemonPath,
+      program: this.d.program,
+      pathDirs: this.d.pathDirs,
       home: this.home,
       port: this.port,
       logPath: paths.logPath,

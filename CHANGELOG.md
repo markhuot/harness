@@ -9,8 +9,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Mac app now includes the service that runs your agents, so you can download it and open it
+  on any Apple silicon Mac. You no longer need Bun or a copy of the Harness source.
+- Settings → Service on the Mac has a **Start at login** button. Click **Install** and macOS starts
+  the service when you log in, and agents keep running after you quit Harness. **Remove** puts the
+  service back inside the app.
+
 ### Changed
 
+- On the Mac, the service now runs inside the app by default, so quitting Harness stops it. If
+  agents are running, Harness asks before quitting. If you'd already set up the service to run in
+  the background, nothing changes: Settings → Service shows Start at login as on.
 - On the Mac, the Changes tab's diffs and the Browser tab's page now run edge to edge, without the
   small margin around them.
 - The agent reviewer now looks past the diff at the rest of the codebase, and requests changes

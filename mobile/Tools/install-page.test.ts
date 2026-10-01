@@ -31,6 +31,10 @@ test("page: itms-services link to the manifest on the site, Mac download, sizes,
   expect(p).toContain("Privacy &amp; Security");
   expect(p).toContain("Open Anyway");
   expect(p).not.toContain("right-click"); // right-click → Open no longer bypasses Gatekeeper on macOS 15+
+  // The app carries its own service: nobody is sent to install Bun or build from the repo.
+  expect(p).not.toContain("bun.sh");
+  expect(p).not.toContain("install-app");
+  expect(p).toContain("Settings &rarr; Service");
   const notarized = page(info({ notarized: true }));
   expect(notarized).not.toContain("Open Anyway");
   expect(notarized).toContain("signed and notarized");

@@ -8,15 +8,24 @@ The architecture, ticket lifecycle, tool list and HTTP API are in [DESIGN.md](DE
 
 ## Quick start
 
+The published Mac app (the install page) needs nothing else: it carries the service as a compiled
+executable. To build from the repo:
+
 ```sh
 bun install
-bun service/src/cli.ts service ensure     # install + start the launchd service (127.0.0.1:7717)
 cd app && bun run install-app             # build Harness.app into ~/Applications
 open ~/Applications/Harness.app
 ```
 
-The app starts the service itself if it isn't running, so after the first install you only
-need to open the app. Quitting the app leaves the service and its agents running.
+`install-app` builds an app that runs the service from this checkout with bun, so a merge into
+it restarts the service onto the new code. `bun run install-app:bundled` installs the
+self-contained app the release ships instead (`bun run package` builds it).
+
+The app starts the service itself. By default it runs as the app's child process, so quitting
+the app stops it and its agents. **Settings → Service → Start at login** installs a launchd agent
+instead (`~/Library/LaunchAgents/com.markhuot.harness.plist`, the same as
+`bun service/src/cli.ts service ensure`): macOS starts the service at login and it keeps running
+after you quit. The app follows whichever is set up: with the plist installed it uses launchd.
 
 Service management:
 

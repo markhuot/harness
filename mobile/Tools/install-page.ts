@@ -30,13 +30,8 @@ const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 export const CONTACT = "mark@markhuot.com";
 
-/**
- * The packaged app starts the service from the checkout and bun baked into resources/harness.json
- * at build time (app/scripts/build.ts), so the published zip only starts on a Mac with Harness at
- * that path. Drop this note (and point Getting started at the zip) once the app carries its own service.
- */
-export const MAC_SOURCE_NOTE =
-  "For now, build the Mac app from the repo (step 2 of Getting started). The download starts its service from the folder it was built in on Mark's Mac, so it won't run on other Macs yet.";
+/** The Mac app carries its own service (service/scripts/compile.ts), so the download is all it takes. */
+export const MAC_SERVICE_NOTE = "The app includes the service that runs your agents, so you don't need Bun or a copy of the Harness source.";
 
 export function manifest(r: ReleaseInfo): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -400,7 +395,7 @@ function macSection(r: ReleaseInfo): string {
     : "The download is signed with Mark's Developer ID but not notarized yet, so macOS blocks the first launch. Open it once, then go to System Settings → Privacy & Security and click Open Anyway.";
   return `    <section>
       <h2>Mac (Apple silicon)</h2>
-      <p>${esc(MAC_SOURCE_NOTE)}</p>
+      <p>${esc(MAC_SERVICE_NOTE)}</p>
       <a class="install secondary" href="${esc(r.mac.url)}">Download for Mac</a>
       <p class="alt">${esc(openNote)}</p>
       ${`<div class="meta">Version ${esc(r.mac.version)} &middot; ${mb(r.mac.bytes)} &middot; ${esc(r.date)}</div>`}
@@ -433,9 +428,9 @@ ${features.map(tile).join("\n")}
       <h2>Getting started</h2>
       <ol class="steps">
         <li><strong>Get the Mac ready.</strong>
-          <p>Harness runs on an Apple silicon Mac with <a href="https://git-scm.com">git</a> and <a href="https://bun.sh">Bun</a>. Agents run through the <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code CLI</a>, signed in to your Claude team plan with <code>claude auth login</code> (an Anthropic API key in Settings works too). To use the iPhone app, install <a href="https://tailscale.com/download">Tailscale</a> on the Mac.</p></li>
+          <p>Harness runs on an Apple silicon Mac with <a href="https://git-scm.com">git</a>. Agents run through the <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code CLI</a>, signed in to your Claude team plan with <code>claude auth login</code> (an Anthropic API key in Settings works too). To use the iPhone app, install <a href="https://tailscale.com/download">Tailscale</a> on the Mac.</p></li>
         <li><strong>Install the Mac app.</strong>
-          <p>For now the app runs its background service from a copy of the Harness source, so build it from the repo. In Terminal, run <code>git clone https://github.com/markhuot/harness</code>, then <code>bun install</code> in that folder, then <code>cd app &amp;&amp; bun run install-app</code>. That puts Harness in the Applications folder in your home folder. The app starts the service the first time it opens, and the service keeps agents running after you quit the app.</p></li>
+          <p>Download Harness for Mac (below), unzip it, and drag Harness into your Applications folder. When you open it, it starts the background service that runs your agents. By default the service stops when you quit the app, so to keep agents running after you quit, open Settings &rarr; Service and click <strong>Install</strong> next to Start at login. macOS then starts the service whenever you log in.</p></li>
         <li><strong>Add a project.</strong>
           <p>Click <strong>+</strong> next to Projects in the sidebar and pick a folder you work in. A git repository works best, since each ticket then gets its own worktree and branch.</p></li>
         <li><strong>Make a ticket.</strong>

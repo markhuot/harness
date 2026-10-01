@@ -3,8 +3,23 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessClient, type HarnessEvent } from "@harness/shared";
 import { createHarness, type Harness } from "./app";
-import { CodeWatch, REPO_ROOT, sourceFingerprint } from "./code-watch";
+import { CodeWatch, executableFingerprint, REPO_ROOT, sourceFingerprint } from "./code-watch";
 import { FakeDriver, stubBrowser, tempHome } from "./testing/fakes";
+
+describe("executableFingerprint", () => {
+  test("changes when the executable is replaced, and holds while it's missing", () => {
+    const dir = tempHome("harness-exe-");
+    const exe = join(dir, "harness-service");
+    writeFileSync(exe, "build one");
+    const fp = executableFingerprint(exe);
+    const first = fp();
+    expect(fp()).toBe(first);
+    rmSync(exe); // a new Harness.app on its way in
+    expect(fp()).toBe(first);
+    writeFileSync(exe, "build two, longer");
+    expect(fp()).not.toBe(first);
+  });
+});
 
 function tree() {
   const root = tempHome("harness-src-");
