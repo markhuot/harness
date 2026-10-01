@@ -1,0 +1,3550 @@
+{
+  "gestureCases": [
+    {
+      "name": "tap within slop",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 203,
+            "y": 201,
+            "at": 40
+          },
+          {
+            "t": "end",
+            "x": 203,
+            "y": 201,
+            "at": 90
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 650,
+              "y": 403
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 650,
+              "y": 403,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 650,
+              "y": 403,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "movement just under slop is still a tap",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 207.99,
+            "y": 200,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 207.99,
+            "y": 200,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 666,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 666,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 666,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "movement exactly at slop pans",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 208,
+            "y": 200,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 208,
+            "y": 200,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 666,
+              "y": 400,
+              "deltaX": -26,
+              "deltaY": 0
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "diagonal slop uses the hypotenuse",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 205.6,
+            "y": 205.6,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 205.6,
+            "y": 205.6,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 658,
+              "y": 418
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 658,
+              "y": 418,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 658,
+              "y": 418,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "double tap at exactly the interval",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 300
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 370
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "second tap just past the interval is a new click",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 300
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 371
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "double tap at exactly the distance",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 124,
+            "y": 100,
+            "at": 100
+          },
+          {
+            "t": "end",
+            "x": 124,
+            "y": 100,
+            "at": 150
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 397,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 397,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 397,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "second tap just past the distance",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 124.01,
+            "y": 100,
+            "at": 100
+          },
+          {
+            "t": "end",
+            "x": 124.01,
+            "y": 100,
+            "at": 150
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 397,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 397,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 397,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "triple tap, and a fourth stays at 3",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 102,
+            "y": 100,
+            "at": 100
+          },
+          {
+            "t": "end",
+            "x": 102,
+            "y": 100,
+            "at": 150
+          },
+          {
+            "t": "begin",
+            "x": 104,
+            "y": 100,
+            "at": 200
+          },
+          {
+            "t": "end",
+            "x": 104,
+            "y": 100,
+            "at": 250
+          },
+          {
+            "t": "begin",
+            "x": 104,
+            "y": 100,
+            "at": 300
+          },
+          {
+            "t": "end",
+            "x": 104,
+            "y": 100,
+            "at": 350
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 326,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 326,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 326,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 333,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 333,
+              "y": 80,
+              "button": "left",
+              "clickCount": 3
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 333,
+              "y": 80,
+              "button": "left",
+              "clickCount": 3
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 333,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 333,
+              "y": 80,
+              "button": "left",
+              "clickCount": 3
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 333,
+              "y": 80,
+              "button": "left",
+              "clickCount": 3
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "a tap after a slow one restarts the count",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 100
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 150
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 1000
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 1050
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 1100
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 1150
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "a letterbox tap does not reset the click count",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 20,
+            "at": 60
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 20,
+            "at": 110
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 120
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 170
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "a pan between taps keeps the earlier tap",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 60
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 150,
+            "at": 70
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 150,
+            "at": 80
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 150
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 200
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 320,
+              "y": 240,
+              "deltaX": 0,
+              "deltaY": 160
+            }
+          ],
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 2
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "pan",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "letterbox tap",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 20,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 200,
+            "y": 20,
+            "at": 30
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "tap that ends in the letterbox",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 80,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 74,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 200,
+            "y": 74,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "pan up, right, then end",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 300,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 280,
+            "at": 30
+          },
+          {
+            "t": "move",
+            "x": 210,
+            "y": 280,
+            "at": 60
+          },
+          {
+            "t": "end",
+            "x": 210,
+            "y": 280,
+            "at": 90
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 656,
+              "deltaX": 0,
+              "deltaY": 64
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 672,
+              "y": 656,
+              "deltaX": -32,
+              "deltaY": 0
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "pan leaves the frame",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 90,
+            "at": 20
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 40,
+            "at": 40
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 30,
+            "at": 50
+          },
+          {
+            "t": "end",
+            "x": 200,
+            "y": 30,
+            "at": 60
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 48,
+              "deltaX": 0,
+              "deltaY": 32
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 48,
+              "deltaX": 0,
+              "deltaY": 160
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 48,
+              "deltaX": 0,
+              "deltaY": 32
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "pan starting in the letterbox only scrolls once inside",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 20,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 50,
+            "at": 10
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 100,
+            "at": 20
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 120,
+            "at": 30
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 80,
+              "deltaX": 0,
+              "deltaY": -160
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 144,
+              "deltaX": 0,
+              "deltaY": -64
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan",
+          "pan"
+        ]
+      }
+    },
+    {
+      "name": "pan with no movement since the last point sends nothing",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 180,
+            "at": 10
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 180,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 336,
+              "deltaX": 0,
+              "deltaY": 64
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan"
+        ]
+      }
+    },
+    {
+      "name": "pan rounds halves toward +infinity",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 800,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 190,
+            "at": 10
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 190.25,
+            "at": 20
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 189.75,
+            "at": 30
+          },
+          {
+            "t": "move",
+            "x": 198.75,
+            "y": 189.75,
+            "at": 40
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 191.25,
+            "at": 50
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 400,
+              "y": 380,
+              "deltaX": 0,
+              "deltaY": 20
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 400,
+              "y": 381,
+              "deltaX": 0,
+              "deltaY": 0
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 400,
+              "y": 380,
+              "deltaX": 0,
+              "deltaY": 1
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 398,
+              "y": 380,
+              "deltaX": 3,
+              "deltaY": 0
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 400,
+              "y": 383,
+              "deltaX": -2,
+              "deltaY": -3
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan",
+          "pan",
+          "pan",
+          "pan"
+        ]
+      }
+    },
+    {
+      "name": "sub-pixel pan still sends a zero wheel",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 190,
+            "at": 10
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 190.1,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 368,
+              "deltaX": 0,
+              "deltaY": 32
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 640,
+              "y": 368,
+              "deltaX": 0,
+              "deltaY": 0
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan"
+        ]
+      }
+    },
+    {
+      "name": "hold just under long-press pans",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 449
+          },
+          {
+            "t": "end",
+            "x": 130,
+            "y": 200,
+            "at": 500
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 416,
+              "y": 400,
+              "deltaX": -96,
+              "deltaY": 0
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "hold exactly long-press drags",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 450
+          },
+          {
+            "t": "move",
+            "x": 150,
+            "y": 200,
+            "at": 500
+          },
+          {
+            "t": "end",
+            "x": 150,
+            "y": 200,
+            "at": 600
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 480,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 480,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "drag",
+          "drag",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "hold inside slop, then move: drag",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 101,
+            "y": 200,
+            "at": 500
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 600
+          },
+          {
+            "t": "end",
+            "x": 150,
+            "y": 200,
+            "at": 700
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 480,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pending",
+          "drag",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "drag outside the frame holds the last page point",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 600
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 20,
+            "at": 650
+          },
+          {
+            "t": "end",
+            "x": 130,
+            "y": 10,
+            "at": 700
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 416,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "drag",
+          "drag",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "long press starting in the letterbox pans instead",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 20,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 100,
+            "at": 600
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 120,
+            "at": 650
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 120,
+            "at": 700
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 320,
+              "y": 80,
+              "deltaX": 0,
+              "deltaY": -256
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 320,
+              "y": 144,
+              "deltaX": 0,
+              "deltaY": -64
+            }
+          ],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "drag never fires a click afterwards",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 600
+          },
+          {
+            "t": "end",
+            "x": 130,
+            "y": 200,
+            "at": 700
+          },
+          {
+            "t": "begin",
+            "x": 130,
+            "y": 200,
+            "at": 750
+          },
+          {
+            "t": "end",
+            "x": 130,
+            "y": 200,
+            "at": 800
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 416,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 416,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 416,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "drag",
+          "idle",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "cancel mid-drag releases",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 600
+          },
+          {
+            "t": "cancel"
+          },
+          {
+            "t": "move",
+            "x": 1,
+            "y": 1,
+            "at": 700
+          },
+          {
+            "t": "end",
+            "x": 1,
+            "y": 1,
+            "at": 710
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 416,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 416,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "drag",
+          "idle",
+          "idle",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "cancel mid-pan and while pending send nothing",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 1000
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 150,
+            "at": 1010
+          },
+          {
+            "t": "cancel"
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 2000
+          },
+          {
+            "t": "cancel"
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 200,
+            "at": 2010
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 320,
+              "y": 240,
+              "deltaX": 0,
+              "deltaY": 160
+            }
+          ],
+          [],
+          [],
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "idle",
+          "pending",
+          "idle",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "cancel when idle",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "cancel"
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          []
+        ],
+        "states": [
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "move and end without begin",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "move",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 200,
+            "at": 10
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          []
+        ],
+        "states": [
+          "idle",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "begin again without end restarts",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 150,
+            "at": 10
+          },
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 20
+          },
+          {
+            "t": "end",
+            "x": 200,
+            "y": 200,
+            "at": 30
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 320,
+              "y": 240,
+              "deltaX": 0,
+              "deltaY": 160
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 640,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 640,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 640,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "pending",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "no frame yet: nothing is sent",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": null,
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 0
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 50
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 100
+          },
+          {
+            "t": "move",
+            "x": 100,
+            "y": 150,
+            "at": 110
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 150,
+            "at": 120
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 200
+          },
+          {
+            "t": "move",
+            "x": 130,
+            "y": 200,
+            "at": 700
+          },
+          {
+            "t": "end",
+            "x": 130,
+            "y": 200,
+            "at": 800
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "idle",
+          "pending",
+          "pan",
+          "idle",
+          "pending",
+          "pan",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "custom options",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "options": {
+          "slop": 2,
+          "longPressMs": 100,
+          "doubleTapMs": 50,
+          "doubleTapSlop": 4
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 102,
+            "y": 200,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 102,
+            "y": 200,
+            "at": 20
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 100,
+            "at": 100
+          },
+          {
+            "t": "end",
+            "x": 100,
+            "y": 100,
+            "at": 150
+          },
+          {
+            "t": "begin",
+            "x": 103,
+            "y": 100,
+            "at": 190
+          },
+          {
+            "t": "end",
+            "x": 103,
+            "y": 100,
+            "at": 240
+          },
+          {
+            "t": "begin",
+            "x": 103,
+            "y": 100,
+            "at": 300
+          },
+          {
+            "t": "end",
+            "x": 103,
+            "y": 100,
+            "at": 350
+          },
+          {
+            "t": "begin",
+            "x": 100,
+            "y": 200,
+            "at": 400
+          },
+          {
+            "t": "move",
+            "x": 110,
+            "y": 200,
+            "at": 500
+          },
+          {
+            "t": "end",
+            "x": 110,
+            "y": 200,
+            "at": 510
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "wheel",
+              "x": 326,
+              "y": 400,
+              "deltaX": -6,
+              "deltaY": 0
+            }
+          ],
+          [],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 320,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 330,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 330,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 330,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 330,
+              "y": 80
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 330,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 330,
+              "y": 80,
+              "button": "left",
+              "clickCount": 1
+            }
+          ],
+          [],
+          [
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 320,
+              "y": 400
+            },
+            {
+              "type": "mouse",
+              "action": "down",
+              "x": 320,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            },
+            {
+              "type": "mouse",
+              "action": "move",
+              "x": 352,
+              "y": 400
+            }
+          ],
+          [
+            {
+              "type": "mouse",
+              "action": "up",
+              "x": 352,
+              "y": 400,
+              "button": "left",
+              "clickCount": 1
+            }
+          ]
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "idle",
+          "pending",
+          "drag",
+          "idle"
+        ]
+      }
+    },
+    {
+      "name": "zero slop: any movement pans",
+      "input": {
+        "stage": {
+          "w": 400,
+          "h": 400
+        },
+        "page": {
+          "width": 1280,
+          "height": 800
+        },
+        "options": {
+          "slop": 0
+        },
+        "events": [
+          {
+            "t": "begin",
+            "x": 200,
+            "y": 200,
+            "at": 0
+          },
+          {
+            "t": "move",
+            "x": 200,
+            "y": 200,
+            "at": 10
+          },
+          {
+            "t": "end",
+            "x": 200,
+            "y": 200,
+            "at": 20
+          }
+        ]
+      },
+      "output": {
+        "outputs": [
+          [],
+          [],
+          []
+        ],
+        "states": [
+          "pending",
+          "pan",
+          "idle"
+        ]
+      }
+    }
+  ],
+  "keyPressCases": [
+    {
+      "name": "Enter",
+      "input": "Enter",
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Enter",
+          "code": "Enter"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Enter",
+          "code": "Enter"
+        }
+      ]
+    },
+    {
+      "name": "Backspace",
+      "input": "Backspace",
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        }
+      ]
+    },
+    {
+      "name": "Tab",
+      "input": "Tab",
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Tab",
+          "code": "Tab"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Tab",
+          "code": "Tab"
+        }
+      ]
+    },
+    {
+      "name": "Escape",
+      "input": "Escape",
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Escape",
+          "code": "Escape"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Escape",
+          "code": "Escape"
+        }
+      ]
+    },
+    {
+      "name": "lower-case enter",
+      "input": "enter",
+      "output": []
+    },
+    {
+      "name": "printable",
+      "input": "a",
+      "output": []
+    },
+    {
+      "name": "space",
+      "input": " ",
+      "output": []
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": []
+    },
+    {
+      "name": "ArrowLeft is not named",
+      "input": "ArrowLeft",
+      "output": []
+    }
+  ],
+  "resizeGateCases": [
+    {
+      "name": "the TS test sequence",
+      "input": [
+        {
+          "op": "take",
+          "width": 390,
+          "height": 600
+        },
+        {
+          "op": "confirm"
+        },
+        {
+          "op": "confirm"
+        },
+        {
+          "op": "take",
+          "width": 390.4,
+          "height": 600.2
+        },
+        {
+          "op": "take",
+          "width": 390,
+          "height": 600
+        },
+        {
+          "op": "take",
+          "width": 0,
+          "height": 600
+        },
+        {
+          "op": "take",
+          "width": 390,
+          "height": 520
+        },
+        {
+          "op": "reset"
+        },
+        {
+          "op": "take",
+          "width": 390,
+          "height": 520
+        },
+        {
+          "op": "confirm"
+        },
+        {
+          "op": "take",
+          "width": 390,
+          "height": 520
+        }
+      ],
+      "output": [
+        null,
+        true,
+        false,
+        {
+          "type": "resize",
+          "width": 390,
+          "height": 600
+        },
+        null,
+        null,
+        {
+          "type": "resize",
+          "width": 390,
+          "height": 520
+        },
+        null,
+        null,
+        true,
+        {
+          "type": "resize",
+          "width": 390,
+          "height": 520
+        }
+      ]
+    },
+    {
+      "name": "rounding halves and sub-half sizes",
+      "input": [
+        {
+          "op": "confirm"
+        },
+        {
+          "op": "take",
+          "width": 0.4,
+          "height": 600
+        },
+        {
+          "op": "take",
+          "width": 0.5,
+          "height": 600
+        },
+        {
+          "op": "take",
+          "width": 389.5,
+          "height": 599.49
+        },
+        {
+          "op": "take",
+          "width": 390.49,
+          "height": 599.4
+        },
+        {
+          "op": "take",
+          "width": 390,
+          "height": -1
+        },
+        {
+          "op": "take",
+          "width": 600,
+          "height": 390
+        }
+      ],
+      "output": [
+        true,
+        null,
+        {
+          "type": "resize",
+          "width": 1,
+          "height": 600
+        },
+        {
+          "type": "resize",
+          "width": 390,
+          "height": 599
+        },
+        null,
+        null,
+        {
+          "type": "resize",
+          "width": 600,
+          "height": 390
+        }
+      ]
+    },
+    {
+      "name": "a size rejected as empty does not clear the last one sent",
+      "input": [
+        {
+          "op": "confirm"
+        },
+        {
+          "op": "take",
+          "width": 300,
+          "height": 300
+        },
+        {
+          "op": "take",
+          "width": 0,
+          "height": 0
+        },
+        {
+          "op": "take",
+          "width": 300,
+          "height": 300
+        }
+      ],
+      "output": [
+        true,
+        {
+          "type": "resize",
+          "width": 300,
+          "height": 300
+        },
+        null,
+        null
+      ]
+    }
+  ],
+  "textChangeInputsCases": [
+    {
+      "name": "autocorrect plus space",
+      "input": {
+        "prev": "teh",
+        "next": "the "
+      },
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "text",
+          "text": "he "
+        }
+      ]
+    },
+    {
+      "name": "unchanged",
+      "input": {
+        "prev": "a",
+        "next": "a"
+      },
+      "output": []
+    },
+    {
+      "name": "typing",
+      "input": {
+        "prev": "",
+        "next": "hi"
+      },
+      "output": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "name": "three deletes",
+      "input": {
+        "prev": "abc",
+        "next": ""
+      },
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        }
+      ]
+    },
+    {
+      "name": "newline is text, not Enter",
+      "input": {
+        "prev": "a",
+        "next": "a\n"
+      },
+      "output": [
+        {
+          "type": "text",
+          "text": "\n"
+        }
+      ]
+    },
+    {
+      "name": "emoji delete is two Backspaces",
+      "input": {
+        "prev": "😀",
+        "next": ""
+      },
+      "output": [
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "down",
+          "key": "Backspace",
+          "code": "Backspace"
+        },
+        {
+          "type": "key",
+          "action": "up",
+          "key": "Backspace",
+          "code": "Backspace"
+        }
+      ]
+    }
+  ],
+  "textDeltaCases": [
+    {
+      "name": "first character",
+      "input": {
+        "prev": "",
+        "next": "a"
+      },
+      "output": {
+        "deletes": 0,
+        "insert": "a"
+      }
+    },
+    {
+      "name": "append",
+      "input": {
+        "prev": "hel",
+        "next": "hello"
+      },
+      "output": {
+        "deletes": 0,
+        "insert": "lo"
+      }
+    },
+    {
+      "name": "delete",
+      "input": {
+        "prev": "hello",
+        "next": "hel"
+      },
+      "output": {
+        "deletes": 2,
+        "insert": ""
+      }
+    },
+    {
+      "name": "autocorrect replacement",
+      "input": {
+        "prev": "teh",
+        "next": "the"
+      },
+      "output": {
+        "deletes": 2,
+        "insert": "he"
+      }
+    },
+    {
+      "name": "unchanged",
+      "input": {
+        "prev": "x",
+        "next": "x"
+      },
+      "output": {
+        "deletes": 0,
+        "insert": ""
+      }
+    },
+    {
+      "name": "clear",
+      "input": {
+        "prev": "abc",
+        "next": ""
+      },
+      "output": {
+        "deletes": 3,
+        "insert": ""
+      }
+    },
+    {
+      "name": "both empty",
+      "input": {
+        "prev": "",
+        "next": ""
+      },
+      "output": {
+        "deletes": 0,
+        "insert": ""
+      }
+    },
+    {
+      "name": "emoji appended",
+      "input": {
+        "prev": "hi",
+        "next": "hi😀"
+      },
+      "output": {
+        "deletes": 0,
+        "insert": "😀"
+      }
+    },
+    {
+      "name": "emoji deleted counts two code units",
+      "input": {
+        "prev": "hi😀",
+        "next": "hi"
+      },
+      "output": {
+        "deletes": 2,
+        "insert": ""
+      }
+    },
+    {
+      "name": "combining mark added",
+      "input": {
+        "prev": "e",
+        "next": "é"
+      },
+      "output": {
+        "deletes": 1,
+        "insert": "é"
+      }
+    },
+    {
+      "name": "precomposed to decomposed",
+      "input": {
+        "prev": "é",
+        "next": "é"
+      },
+      "output": {
+        "deletes": 0,
+        "insert": ""
+      }
+    },
+    {
+      "name": "middle edit",
+      "input": {
+        "prev": "abcdef",
+        "next": "abXYef"
+      },
+      "output": {
+        "deletes": 4,
+        "insert": "XYef"
+      }
+    }
+  ],
+  "textDeltaSplitSurrogateCases": [
+    {
+      "name": "emoji swapped for one with the same high surrogate",
+      "input": {
+        "prev": "a😀",
+        "next": "a😃"
+      },
+      "output": {
+        "deletes": 1,
+        "insertCodeUnits": [
+          56835
+        ]
+      }
+    },
+    {
+      "name": "emoji swapped for one with another high surrogate",
+      "input": {
+        "prev": "a😀",
+        "next": "a🦊"
+      },
+      "output": {
+        "deletes": 2,
+        "insertCodeUnits": [
+          55358,
+          56714
+        ]
+      }
+    }
+  ]
+}
