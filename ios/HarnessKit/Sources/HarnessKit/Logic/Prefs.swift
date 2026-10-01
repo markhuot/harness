@@ -39,14 +39,10 @@ public struct Prefs: Codable, Sendable, Equatable {
         self.version = version
     }
 
-    /// `HIDE_CHILDREN_DEFAULT` from shared/src/state/conductor.ts. Local stand-in: dedupe with the
-    /// board-state port (HARNESS-131) once both land.
-    public static let hideChildrenDefault = true
-
     /// DEFAULT_PREFS
     public static let defaults = Prefs(
         theme: .system, lightTheme: Themes.defaultLightTheme, darkTheme: Themes.defaultDarkTheme,
-        hideChildren: hideChildrenDefault, lastProject: nil, boardProject: nil, activeServer: nil, version: 2
+        hideChildren: Conductor.hideChildrenDefault, lastProject: nil, boardProject: nil, activeServer: nil, version: 2
     )
 
     /// Stored prefs (possibly from an older build, or hand-damaged) → valid prefs. Only a JSON object

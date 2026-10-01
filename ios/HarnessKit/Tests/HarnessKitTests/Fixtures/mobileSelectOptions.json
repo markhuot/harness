@@ -1,0 +1,167 @@
+{
+  "selectedLabelCases": [
+    {
+      "name": "empty value is a real option",
+      "input": {
+        "options": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "a",
+            "label": "Alpha",
+            "subtitle": "The first"
+          },
+          {
+            "value": "b",
+            "label": "Beta",
+            "disabled": true
+          },
+          {
+            "value": "a",
+            "label": "Alpha again"
+          }
+        ],
+        "value": "",
+        "fallback": "Choose…"
+      },
+      "output": "Default"
+    },
+    {
+      "name": "unlisted value falls back",
+      "input": {
+        "options": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "a",
+            "label": "Alpha",
+            "subtitle": "The first"
+          },
+          {
+            "value": "b",
+            "label": "Beta",
+            "disabled": true
+          },
+          {
+            "value": "a",
+            "label": "Alpha again"
+          }
+        ],
+        "value": "gone",
+        "fallback": "gone-driver"
+      },
+      "output": "gone-driver"
+    },
+    {
+      "name": "first match wins",
+      "input": {
+        "options": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "a",
+            "label": "Alpha",
+            "subtitle": "The first"
+          },
+          {
+            "value": "b",
+            "label": "Beta",
+            "disabled": true
+          },
+          {
+            "value": "a",
+            "label": "Alpha again"
+          }
+        ],
+        "value": "a",
+        "fallback": "x"
+      },
+      "output": "Alpha"
+    },
+    {
+      "name": "disabled options still label",
+      "input": {
+        "options": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "a",
+            "label": "Alpha",
+            "subtitle": "The first"
+          },
+          {
+            "value": "b",
+            "label": "Beta",
+            "disabled": true
+          },
+          {
+            "value": "a",
+            "label": "Alpha again"
+          }
+        ],
+        "value": "b",
+        "fallback": "x"
+      },
+      "output": "Beta"
+    },
+    {
+      "name": "no options",
+      "input": {
+        "options": [],
+        "value": "",
+        "fallback": "Nothing"
+      },
+      "output": "Nothing"
+    },
+    {
+      "name": "empty label is kept",
+      "input": {
+        "options": [
+          {
+            "value": "z",
+            "label": ""
+          }
+        ],
+        "value": "z",
+        "fallback": "fallback"
+      },
+      "output": ""
+    },
+    {
+      "name": "value match is exact (case)",
+      "input": {
+        "options": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "a",
+            "label": "Alpha",
+            "subtitle": "The first"
+          },
+          {
+            "value": "b",
+            "label": "Beta",
+            "disabled": true
+          },
+          {
+            "value": "a",
+            "label": "Alpha again"
+          }
+        ],
+        "value": "A",
+        "fallback": "miss"
+      },
+      "output": "miss"
+    }
+  ]
+}

@@ -22,7 +22,9 @@ ios/
       Protocol/          Codable ports of shared/src/protocol.ts
       Client/            HarnessClient (REST), HarnessSocket (WebSocket), HTTPTransport seam
       Logic/             pure helpers ported from shared/ and mobile/src/lib
-      State/             @Observable app state (stores, reducers)
+      State/             board state: BoardState + reducer, paging, selectors, the shared/src/state
+                         and mobile/src/lib ports around it, and the @MainActor stores (BoardStore,
+                         BoardLoader, DetailFetcher, DraftSync, ModelListCache)
       Resources/         generated JSON bundled with the package (themes.json)
     Tests/HarnessKitTests/
       Fixtures/          generated JSON from shared/fixtures (committed)
@@ -181,12 +183,15 @@ here and in a doc comment:
 These modules ran in parallel with the board-state port (HARNESS-131), so a few names live in two
 places until someone dedupes them:
 
-- `Approve.Option` stands in for `SelectOption` (lib/selectOptions.ts).
-- `Prefs.hideChildrenDefault` stands in for `HIDE_CHILDREN_DEFAULT` (state/conductor.ts).
-- `Related` uses a private `RelatedKeyed: TicketKeyed`, and `ProjectKey.TicketInfo` maps tickets
-  for the same reason: nothing declared `extension Ticket: TicketKeyed` yet.
+- `Approve.Option` stays: it isn't a straight swap for `SelectOption` (State/SelectOptions.swift).
+  It's `SelectOption<CompletionAction>`, so `value` is a typed `CompletionAction`, and `label` is
+  optional because TS leaves it undefined for an action this build doesn't know (the
+  "unknown action has no label" fixture pins that). `SelectOption` is the plain-string form with a
+  required label. Folding them together means making `SelectOption` generic with an optional
+  label, which changes its other callers.
 - `Completion.ProjectInfo/TicketInfo/ParentInfo` and `ProjectKey.ProjectInfo/TicketInfo` are
-  narrow input shapes. Overloads take `Ticket`/`Project` directly.
+  narrow input shapes (the fixture cases decode partial entities into them). Overloads take
+  `Ticket`/`Project` directly. `Ticket` and `RelatedTicket` conform to `TicketKeyed` (Keys.swift).
 - `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
   promotes at 1024) behave differently in TS too.
 
@@ -237,6 +242,33 @@ and the Git tab exactly. The pieces:
   same tokens and colors. `wellFormed()` moves a lone high surrogate left by diffLines'
   `slice(0, 1)` sign split into the next span, since Swift strings can't hold it.
 
+**Reducer scenarios.** Stateful pure code (the reducer, paging, sub-agent state) is pinned with
+scenarios instead of single cases: `shared/fixtures/board.ts` runs real TS actions through
+`reducer` and records, after each step, the outputs of selector *probes* (tickets projected to
+ids) and, on the last step or when asked, the whole serialized State. `BoardScenarioTests`
+decodes the actions as `BoardAction`, replays them on `BoardState`, runs the same probes and
+compares JSON. A new selector needs a probe on both sides (`everyProbeIsImplemented` checks the
+lists match). Keep scenario data small: the 120-ticket paging tests are scaled down to 12.
+
+## Board state conventions
+
+- `BoardState`, `BoardAction` and `BoardSnapshot` are the TS `State`, `Action` and `Snapshot`.
+  They're renamed so app code importing both HarnessKit and SwiftUI never has to disambiguate
+  `@State`. Actions are Codable in the TS shape (`{ "type": "donePage.request", … }`).
+- Entity maps are Swift dictionaries, which have no insertion order. Selectors that sort in TS
+  sort the same way here. Where TS leaves equal sort keys in insertion order, Swift breaks the tie
+  by id. Selectors whose TS order is insertion order (`unresolvedKeys`,
+  `conductorsNeedingChildren`, `ticketsForProject`) come back sorted. Fixtures avoid exact ties.
+- Stateful types (BoardStore, BoardLoader, DetailFetcher, DraftSync, ModelListCache) are
+  `@MainActor` classes. They take the service through protocols (`LoaderClient`, `DetailClient`,
+  `BoardClient`, `DraftAPI`, and `EventSource` for the socket; HarnessClient and HarnessSocket
+  conform), and their debounces, retries and polls go through the `Timers` seam
+  (State/Timers.swift; `ManualTimers` in tests). Methods that start a request do their
+  bookkeeping synchronously, as the TS does before its first `await`, and return the `Task`.
+- BoardStore is UI-framework-free. The app shell owns one per paired service, calls `start()`,
+  forwards scene phases (`sceneDidEnterBackground()`, `sceneBecameActive()`), and reads
+  `state`, `epoch`, `authError` and `loadError` through Observation.
+
 ## Disk budget (parallel agents)
 
 This Mac has only about 13 GiB free, and up to 5 tickets build at the same time. HARNESS-130
@@ -274,7 +306,9 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Keys, file links, branches, permissions, watchers, command line, project colors (shared/src/*.ts)
 - [x] Pair/manual entry parsing, saved servers, connection probe (mobile/src/lib/pair, servers, connection)
 - [x] Themes registry, color math, project key colors (shared/src/themes)
-- [ ] State: reducer, paging, models, format, drafts, conductor, branches (shared/src/state)
+- [x] State: reducer, paging, selectors, sub-agents, conductor, watcher status, format, models, drafts, branch rows (shared/src/state)
+- [x] Board state I/O: BoardStore connection policy, BoardLoader, DetailFetcher, DraftSync, ModelListCache (state/store.tsx, lib/boardLoader, details, draftSync)
+- [x] Board/form helpers: boardColumns, modelSheet, selectOptions, watcherDraft, newSession (mobile/src/lib)
 - [x] Content helpers (HarnessKit/Logic, fixture parity), RN source in parentheses:
   - Markdown blocks/inline/plainText (state/markdown), code fences + normalizePatch (state/code),
     diff parsing (diff)

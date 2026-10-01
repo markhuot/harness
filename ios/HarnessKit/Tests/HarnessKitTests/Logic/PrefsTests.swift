@@ -20,7 +20,7 @@ struct PrefsTests {
     @Test func defaultsMatchTS() throws {
         let d = try Fixture.value("prefs", "defaults", as: Defaults.self)
         #expect(d.DEFAULT_PREFS == Prefs.defaults)
-        #expect(d.HIDE_CHILDREN_DEFAULT == Prefs.hideChildrenDefault)
+        #expect(d.HIDE_CHILDREN_DEFAULT == Conductor.hideChildrenDefault)
     }
 
     @Test(arguments: Fixture.cases("prefs", "normalizePrefsCases", input: JSONValue.self, output: JSONValue.self))

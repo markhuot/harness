@@ -13,6 +13,15 @@ public protocol TicketKeyed {
     var externalRefKey: String? { get }
 }
 
+extension Ticket: TicketKeyed {
+    public var externalRefKey: String? { externalRef?.key }
+}
+
+/// A related ticket always carries a remote ID: `externalKey`.
+extension RelatedTicket: TicketKeyed {
+    public var externalRefKey: String? { externalKey }
+}
+
 public enum Keys {
     public struct TicketKey: Codable, Equatable, Sendable {
         public var prefix: String

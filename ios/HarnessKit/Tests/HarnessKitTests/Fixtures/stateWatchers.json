@@ -1,0 +1,834 @@
+{
+  "untilTimeCases": [
+    {
+      "name": "past is now",
+      "input": {
+        "ts": 1799999999000,
+        "now": 1800000000000
+      },
+      "output": "now"
+    },
+    {
+      "name": "exactly due",
+      "input": {
+        "ts": 1800000000000,
+        "now": 1800000000000
+      },
+      "output": "now"
+    },
+    {
+      "name": "499ms rounds to 0: now",
+      "input": {
+        "ts": 1800000000499,
+        "now": 1800000000000
+      },
+      "output": "now"
+    },
+    {
+      "name": "500ms rounds to 1s",
+      "input": {
+        "ts": 1800000000500,
+        "now": 1800000000000
+      },
+      "output": "in 1s"
+    },
+    {
+      "name": "1s",
+      "input": {
+        "ts": 1800000001000,
+        "now": 1800000000000
+      },
+      "output": "in 1s"
+    },
+    {
+      "name": "59s",
+      "input": {
+        "ts": 1800000059000,
+        "now": 1800000000000
+      },
+      "output": "in 59s"
+    },
+    {
+      "name": "59.4s stays seconds",
+      "input": {
+        "ts": 1800000059400,
+        "now": 1800000000000
+      },
+      "output": "in 59s"
+    },
+    {
+      "name": "59.5s rounds to 60s: 1m",
+      "input": {
+        "ts": 1800000059500,
+        "now": 1800000000000
+      },
+      "output": "in 1m"
+    },
+    {
+      "name": "60s",
+      "input": {
+        "ts": 1800000060000,
+        "now": 1800000000000
+      },
+      "output": "in 1m"
+    },
+    {
+      "name": "89s rounds to 1m",
+      "input": {
+        "ts": 1800000089000,
+        "now": 1800000000000
+      },
+      "output": "in 1m"
+    },
+    {
+      "name": "90s rounds to 2m",
+      "input": {
+        "ts": 1800000090000,
+        "now": 1800000000000
+      },
+      "output": "in 2m"
+    },
+    {
+      "name": "59m",
+      "input": {
+        "ts": 1800003540000,
+        "now": 1800000000000
+      },
+      "output": "in 59m"
+    },
+    {
+      "name": "59m29s stays minutes",
+      "input": {
+        "ts": 1800003569000,
+        "now": 1800000000000
+      },
+      "output": "in 59m"
+    },
+    {
+      "name": "59m30s rounds to 1h",
+      "input": {
+        "ts": 1800003570000,
+        "now": 1800000000000
+      },
+      "output": "in 1h"
+    },
+    {
+      "name": "5h",
+      "input": {
+        "ts": 1800018000000,
+        "now": 1800000000000
+      },
+      "output": "in 5h"
+    },
+    {
+      "name": "23h29m stays hours",
+      "input": {
+        "ts": 1800084540000,
+        "now": 1800000000000
+      },
+      "output": "in 23h"
+    },
+    {
+      "name": "23h30m rounds to 1d",
+      "input": {
+        "ts": 1800084600000,
+        "now": 1800000000000
+      },
+      "output": "in 1d"
+    },
+    {
+      "name": "3d",
+      "input": {
+        "ts": 1800259200000,
+        "now": 1800000000000
+      },
+      "output": "in 3d"
+    },
+    {
+      "name": "400d",
+      "input": {
+        "ts": 1834560000000,
+        "now": 1800000000000
+      },
+      "output": "in 400d"
+    }
+  ],
+  "watcherStatusCases": [
+    {
+      "name": "running hides an earlier error",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "old",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "running",
+            "since": 1799999820000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Running",
+        "tone": "green",
+        "detail": "started 3m ago",
+        "error": null
+      }
+    },
+    {
+      "name": "running just started",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "running",
+            "since": 1799999998000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Running",
+        "tone": "green",
+        "detail": "started just now",
+        "error": null
+      }
+    },
+    {
+      "name": "failure waiting out backoff",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "Command exited with code 1: auth rejected",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000120000,
+            "failures": 1
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed",
+        "tone": "red",
+        "detail": "retrying in 2m",
+        "error": "Command exited with code 1: auth rejected"
+      }
+    },
+    {
+      "name": "repeated failures counted",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000030000,
+            "failures": 4
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed 4× in a row",
+        "tone": "red",
+        "detail": "retrying in 30s",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "two failures counted",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000030000,
+            "failures": 2
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed 2× in a row",
+        "tone": "red",
+        "detail": "retrying in 30s",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "failure with zero failures count is plain Failed",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000030000,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed",
+        "tone": "red",
+        "detail": "retrying in 30s",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "failure without a next run is restarting",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": null,
+            "failures": 3
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed 3× in a row",
+        "tone": "red",
+        "detail": "restarting",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "failure with nextRunAt 0 is restarting (falsy)",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 0,
+            "failures": 1
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed",
+        "tone": "red",
+        "detail": "restarting",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "failure retry already due",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1799999995000,
+            "failures": 1
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed",
+        "tone": "red",
+        "detail": "retrying now",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "waiting for the next interval run",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "interval",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000045000,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Waiting",
+        "tone": "neutral",
+        "detail": "next run in 45s",
+        "error": null
+      }
+    },
+    {
+      "name": "waiting without a next run is starting",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Waiting",
+        "tone": "neutral",
+        "detail": "starting",
+        "error": null
+      }
+    },
+    {
+      "name": "empty error string is no error",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "waiting",
+            "since": 1800000000000,
+            "nextRunAt": 1800000045000,
+            "failures": 2
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Waiting",
+        "tone": "neutral",
+        "detail": "next run in 45s",
+        "error": null
+      }
+    },
+    {
+      "name": "paused hides its error",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "stopped",
+            "since": 1800000000000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Paused",
+        "tone": "neutral",
+        "detail": "last run 5m ago",
+        "error": null
+      }
+    },
+    {
+      "name": "paused never ran",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": false,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Paused",
+        "tone": "neutral",
+        "detail": "last run never",
+        "error": null
+      }
+    },
+    {
+      "name": "stopped keeps its error",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "boom",
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "stopped",
+            "since": 1799999940000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Stopped",
+        "tone": "red",
+        "detail": "stopped 1m ago",
+        "error": "boom"
+      }
+    },
+    {
+      "name": "stopped without error is neutral",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "stopped",
+            "since": 1799992800000,
+            "nextRunAt": null,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Stopped",
+        "tone": "neutral",
+        "detail": "stopped 2h ago",
+        "error": null
+      }
+    },
+    {
+      "name": "no live state, failed",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": "ENOENT",
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Failed",
+        "tone": "red",
+        "detail": "last run 5m ago",
+        "error": "ENOENT"
+      }
+    },
+    {
+      "name": "no live state, enabled",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Enabled",
+        "tone": "neutral",
+        "detail": "last run 5m ago",
+        "error": null
+      }
+    },
+    {
+      "name": "no live state, never ran",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": null,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Enabled",
+        "tone": "neutral",
+        "detail": "last run never",
+        "error": null
+      }
+    },
+    {
+      "name": "unknown live state falls through to waiting",
+      "input": {
+        "watcher": {
+          "id": "w1",
+          "name": "jira-sprint",
+          "command": "watch-jira --follow",
+          "args": [],
+          "prompt": "",
+          "cwd": null,
+          "env": {},
+          "mode": "loop",
+          "intervalSec": 60,
+          "enabled": true,
+          "driver": null,
+          "lastRunAt": 1799999700000,
+          "lastError": null,
+          "createdAt": 0,
+          "updatedAt": 0,
+          "live": {
+            "state": "sleeping",
+            "since": 1800000000000,
+            "nextRunAt": 1800000010000,
+            "failures": 0
+          }
+        },
+        "now": 1800000000000
+      },
+      "output": {
+        "label": "Waiting",
+        "tone": "neutral",
+        "detail": "next run in 10s",
+        "error": null
+      }
+    }
+  ]
+}

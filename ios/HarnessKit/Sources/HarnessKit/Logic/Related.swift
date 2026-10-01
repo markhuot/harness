@@ -103,7 +103,7 @@ public enum Related {
 
     /// "MH-62 · MH-124" for a related ticket (it always carries a remote ID).
     public static func relatedLabel(_ r: RelatedTicket) -> String {
-        Keys.keyLabel(RelatedKeyed(key: r.key, externalRefKey: r.externalKey))
+        Keys.keyLabel(r)
     }
 
     /// The RemoteKeyMatches a ticket lookup's 404 carries, when the key asked for is only a remote ID.
@@ -168,10 +168,5 @@ public enum Related {
         let sep = Array("://".unicodeScalars)
         guard s.count > i + sep.count, Array(s[i ..< i + sep.count]) == sep else { return false }
         return s[(i + sep.count)...].allSatisfy { !JSCompat.isWhitespace($0) }
-    }
-
-    private struct RelatedKeyed: TicketKeyed {
-        let key: String
-        let externalRefKey: String?
     }
 }
