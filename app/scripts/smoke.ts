@@ -1339,7 +1339,9 @@ try {
     await js(`document.querySelector("[data-pane-id=t1] .detail-body").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
     const refocused = await until("focus follows a click", () => js<string>("location.hash").then((h) => h === "#/board/all/ticket/NYTIMES-4" && h)).catch(() => "");
     check("clicking in a pane focuses it (and the hash follows)", !!refocused && (await exists("[data-pane-id=t1].focused")));
-    await js(`document.querySelector("[data-pane-id=t2] [data-testid=pane-zoom]").click()`);
+    // Focus it first, as a real click does: NYTIMES-3 is blocked, so its composer took the focus
+    // when the pane opened, and Escape there only leaves the text box.
+    await js(`(() => { const b = document.querySelector("[data-pane-id=t2] [data-testid=pane-zoom]"); b.focus(); b.click(); })()`);
     await until("zoomed", () => exists(".pane.zoomed"));
     check(
       "Maximize fills the workspace and hides the other panes and dividers",
