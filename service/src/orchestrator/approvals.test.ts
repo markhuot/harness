@@ -23,7 +23,7 @@ const kinds = (h: ReturnType<typeof setup>, sessionId: string) => h.store.runs.l
 describe("tool permission approvals", () => {
   test("unapproved call blocks the ticket with a pending approval and never auto-submits", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"npm install"}' });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: 'go /tool Bash {"command":"npm install"}' });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
@@ -32,7 +32,7 @@ describe("tool permission approvals", () => {
     expect(cur.pendingApproval!.runId).toBe(h.store.runs.listBySession(t.sessionId)[0]!.id);
     expect(h.driver.approvals).toEqual([{ name: "Bash", behavior: "deny" }]);
     expect(kinds(h, t.sessionId)).toEqual(["work"]); // no review: not auto-submitted
-    expect(h.orch.summaries(t.key).some((s) => s.author === "system" && s.body.startsWith("Permission needed: Bash"))).toBe(true);
+    expect(h.orch.activity(t.key).some((a) => a.kind === "permission" && a.author === "system" && a.body.startsWith("Permission needed: Bash"))).toBe(true);
     expect(h.events.some((e) => e.kind === "ticket.upserted" && e.ticket.pendingApproval?.toolName === "Bash")).toBe(true);
     const denial = h.store.transcript.list(t.sessionId).find((e) => e.content.type === "text" && e.content.text.startsWith("Denied:"));
     expect((denial!.content as { text: string }).text).toBe(`Denied: ${APPROVAL_PENDING_MESSAGE}`);
@@ -40,7 +40,7 @@ describe("tool permission approvals", () => {
 
   test("allow_once grants exactly that call once (deep-equal input), then resumes work", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"ls","timeout":5}' });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: 'go /tool Bash {"command":"ls","timeout":5}' });
     await h.orch.idle();
     const resumed = await h.orch.answerApproval(t.key, { decision: "allow_once" });
     expect(resumed.status).toBe("in_progress");
@@ -60,7 +60,7 @@ describe("tool permission approvals", () => {
 
   test("allow_tool allows every later call of that tool on the ticket", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool WebFetch {"url":"https://a.test"}' });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: 'go /tool WebFetch {"url":"https://a.test"}' });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "allow_tool" });
     await h.orch.idle();
@@ -78,7 +78,7 @@ describe("tool permission approvals", () => {
 
   test("deny (explicit or via a human message) resumes work with the reason", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"curl evil"}' });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: 'go /tool Bash {"command":"curl evil"}' });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "deny", message: "No network access." });
     await h.orch.idle();
@@ -87,7 +87,7 @@ describe("tool permission approvals", () => {
     );
     await expect(h.orch.answerApproval(t.key, { decision: "deny" })).rejects.toMatchObject({ status: 409 });
 
-    const u = await h.orch.createTicket({ projectId: h.project.id, prompt: 'go /tool Bash {"command":"make"}' });
+    const u = await h.orch.createTicket({ projectId: h.project.id, spec: 'go /tool Bash {"command":"make"}' });
     await h.orch.idle();
     const replied = await h.orch.sendMessage(u.key, "use the Makefile target instead");
     expect(replied.status).toBe("in_progress");
@@ -104,7 +104,7 @@ describe("tool permission approvals", () => {
     h.driver.script = async function* (req) {
       if (req.kind === "plan") results.push(await req.toolContext.ops.requestApproval(req.toolContext, "Bash", { command: "ls" }));
     };
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     expect(results).toEqual([
       { behavior: "deny", message: "No human is available to approve tools during a plan run; proceed without it and mention it in your notes." },
@@ -115,7 +115,7 @@ describe("tool permission approvals", () => {
 
   test("a complete run needing approval resumes as a complete run", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.driver.script = async function* (req) {
       if (req.kind !== "complete") return;
@@ -150,7 +150,7 @@ describe("plan mode", () => {
       if (req.kind === "plan") answer = await req.toolContext.ops.requestApproval(req.toolContext, "ExitPlanMode", { plan: "1. Do it" });
     };
     const h = setup(driver);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     expect(answer).toEqual({ behavior: "deny", message: PLAN_APPROVAL_MESSAGE });
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", pendingApproval: null });
@@ -162,7 +162,7 @@ describe("agent review ping-pong cap", () => {
     const driver = new FakeDriver();
     driver.rejectsLeft = 10;
     const h = setup(driver);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
@@ -181,7 +181,7 @@ describe("agent review ping-pong cap", () => {
     const driver = new FakeDriver();
     driver.rejectsLeft = 2;
     const h = setup(driver);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     expect(h.store.tickets.reviewRejections(t.id)).toBe(2);
     h.orch.humanReview(t.key, { decision: "approve" });
@@ -192,7 +192,7 @@ describe("agent review ping-pong cap", () => {
 describe("work run ending with a question", () => {
   test("blocks with the question instead of auto-submitting", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "choose /ask" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "choose /ask" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
@@ -238,7 +238,7 @@ describe("migrations and events", () => {
 
   test("deleting a ticket emits session.deleted", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     await h.orch.deleteTicket(t.key);
     expect(h.events.some((e) => e.kind === "session.deleted" && e.id === t.sessionId)).toBe(true);
