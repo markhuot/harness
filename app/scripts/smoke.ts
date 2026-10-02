@@ -865,7 +865,7 @@ try {
     const repainted = await until("new tab frame", () => js<boolean>(canvasPainted), 8000).catch(() => false);
     check("the new tab's frames are drawn", repainted);
     await screenshot("/tmp/harness-192-mac-browser-tabs.png");
-    await js(`document.querySelector(".browser-tab-select[data-tab-id="${opened?.[0]?.id ?? 1}"]").click()`);
+    await js(`document.querySelector('.browser-tab-select[data-tab-id="${opened?.[0]?.id ?? 1}"]').click()`);
     const back = await until("switched back", async () => {
       const c = await chips();
       const url = await js<string>(`document.querySelector(".browser-url-input").value`);
@@ -876,6 +876,8 @@ try {
     const closed = await until("strip gone", async () => !(await exists(".browser-tabs"))).catch(() => false);
     check("closing a tab down to one hides the strip", closed);
     check("closeTab sent with the tab's id", inputs.some((l) => l.includes('"type":"closeTab"')));
+    // New tab focused the URL field; let go of it so later keyboard checks reach the app.
+    await js(`document.activeElement?.blur()`);
   }
 
   // 6b. Project settings: right-click → settings, rename the identifier, live preview + validation.

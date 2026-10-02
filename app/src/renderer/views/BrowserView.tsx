@@ -375,7 +375,10 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     clearFrame();
     viewTab.current = tab.id;
     expectState(confirmsSwitch(tab.id));
-    // Show the tab's url and title right away; its browser.state (and last frame) follow.
+    // Show the tab's url and title right away (over an edit in progress, which was the other
+    // tab's); its browser.state and last frame follow.
+    editingUrl.current = false;
+    setUrlDraft(tab.url);
     setState((s) => s && { ...s, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading });
     socket.subscribeBrowser(sessionId, tab.id);
   };
