@@ -156,7 +156,8 @@ private struct AttachmentViewerHeader: View {
                     Text(current.name)
                         .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
-                    Text((attachments.count > 1 ? "\(index + 1) of \(attachments.count) · " : "") + Attachments.formatSize(Double(current.size)))
+                    // Markdown attachments come without a size (0): only the position, then.
+                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", current.size > 0 ? Attachments.formatSize(Double(current.size)) : ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }
