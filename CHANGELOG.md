@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261002.2236](https://github.com/markhuot/harness/releases/tag/app-20261002.2236) - 2026-10-02
+
 ### Added
 
 - A ticket's browser can have several tabs. Agents can open pages in new tabs and work in each
