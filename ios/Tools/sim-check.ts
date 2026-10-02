@@ -1200,9 +1200,9 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     moved(udid);
     // The draft is saved while it's typed; wait for it to launch.
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key && !x.draft), 10000);
-    if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    if (t.spec !== "Summarize @README.md") throw new Error(`spec is ${JSON.stringify(t.spec)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
-    return `${t.key}: ${t.description}`;
+    return `${t.key}: ${t.spec}`;
   });
 
   await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
@@ -1241,7 +1241,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await tapWhere(udid, "Start session");
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
-    if (t.description !== "/code-walk this branch") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    if (t.spec !== "/code-walk this branch") throw new Error(`spec is ${JSON.stringify(t.spec)}`);
     const sent = await until(
       "the agent's prompt",
       async () =>
@@ -1254,7 +1254,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
       15000,
     );
     if (!sent.startsWith("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
-    return `${t.key}: ${t.description}`;
+    return `${t.key}: ${t.spec}`;
   });
 }
 

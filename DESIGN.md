@@ -1388,6 +1388,20 @@ the human is reading the ticket's record rather than the transcript.
 **Tabs.** A ticket opens on the Spec tab (`openingTab()`), followed by Activity (`TICKET_TABS`).
 Old links and saved routes with `summaries` open the Spec, the default view that replaced the Summaries tab (`RENAMED_TABS`, `ticketTabFrom`).
 
+On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
+- The Spec tab's history bar shows one revision ("Rev 7 of 7 · Agent · 3m ago · *note*"), with ←/→
+  and a slider. It follows the newest revision until the user steps back, and pins there until
+  they return to the newest (`state/specHistory.ts`). Bodies and diffs load lazily from
+  `/spec/revisions/:rev[?diff=]`; **Show changes** draws the diff from the previous revision in
+  the same `@pierre/diffs` viewer as chat diffs. The baseline revision is tagged "Approved plan".
+- The Activity tab is a timeline styled per kind (`state/activity.ts`): `blocked` is an attention
+  card, review decisions show their round and short commit, messages and answers are bubbles.
+- The composer sends `log` from `composerLog(tab)` and says where the message goes.
+- The Details spec editor sends `baseRevision`; a 409 offers Reload (take the current spec) or
+  Overwrite (resend against the new revision).
+- `bun run spec-activity` (in `app/`) drives all of this against the real service and the dummy
+  driver and saves screenshots to `app/out/screenshots/spec-activity`.
+
 ### Spec revisions and attachments
 
 A ticket's **spec** is its living markdown document, what a human reads to know where the work
