@@ -235,9 +235,10 @@ export class FakeDriver implements Driver {
         if (thrown) throw new Error(thrown[1]!);
         if (p.includes("/nosubmit")) return;
         await ops.postSummary(ctx, "Did the work.");
-        if (p.includes("/skipreview")) {
+        const skips = { ...(p.includes("/skipreview") && { skipAgentReview: true }), ...(p.includes("/skiphuman") && { skipHumanReview: true }) };
+        if (Object.keys(skips).length) {
           try {
-            await ops.submitForReview(ctx, "All done.", undefined, true);
+            await ops.submitForReview(ctx, "All done.", undefined, skips);
           } catch (err) {
             yield { type: "text", text: `Refused: ${(err as Error).message}` };
           }
@@ -331,7 +332,8 @@ export class FakeDriver implements Driver {
           const keys: string[] = [];
           for (const s of specs) {
             const skipAgentReview = s.title.includes("[skip-review]") || undefined;
-            const t = await ops.createTicket(ctx, { title: s.title, description: s.title, dependsOn: s.deps.map((i) => keys[i]!), skipAgentReview });
+            const skipHumanReview = s.title.includes("[skip-human]") || undefined;
+            const t = await ops.createTicket(ctx, { title: s.title, description: s.title, dependsOn: s.deps.map((i) => keys[i]!), skipAgentReview, skipHumanReview });
             keys.push(t.key);
           }
           yield { type: "state", state: { turns, created: true } };

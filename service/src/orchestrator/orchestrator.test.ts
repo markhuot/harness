@@ -608,6 +608,128 @@ describe("skipping the agent review", () => {
   });
 });
 
+describe("skipping the human review", () => {
+  test("a ticket created with skipHumanReview lands as soon as its agent review approves it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button", skipHumanReview: true });
+    expect(t.skipHumanReview).toBe(true);
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "approved", "approved"]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("Human review: skipped");
+    expect(statuses(h, t.sessionId)).not.toContain("Human review: approved");
+  });
+
+  test("the human can still send it back while the agent review runs", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]", skipHumanReview: true });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "pending", humanReview: "approved" });
+    // The human can still step in and send it back before it lands.
+    const back = h.orch.humanReview(t.key, { decision: "request_changes", notes: "not yet" });
+    expect([back.status, back.humanReview]).toEqual(["in_progress", "pending"]);
+    h.driver.release();
+    // The reworked submit skips the human review again, so it lands once the next review passes.
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    h.driver.release();
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+  });
+
+  test("with both reviews skipped the ticket lands as soon as it's submitted", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true, skipHumanReview: true });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "skipped", "approved"]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "complete:succeeded"]);
+    expect(statuses(h, t.sessionId)).toEqual(expect.arrayContaining(["Agent review: skipped", "Human review: skipped", "Both reviews approved: completing automatically"]));
+  });
+
+  test("the agent can skip the human review with submit_for_review skip_human_review", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skiphuman" });
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.skipHumanReview]).toEqual(["done", true]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+    expect(statuses(h, t.sessionId)).toContain("The agent turned off the human review for this ticket");
+  });
+
+  test("an agent can't skip both reviews, nor the human review of a ticket that skips its agent review", async () => {
+    const h = setup();
+    const both = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skipreview /skiphuman" });
+    const noBot = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skiphuman", skipAgentReview: true });
+    await h.orch.idle();
+    const refusals = (t: Ticket) =>
+      h.store.transcript
+        .list(t.sessionId)
+        .filter((e) => e.content.type === "text")
+        .map((e) => (e.content as { text: string }).text)
+        .filter((x) => x.startsWith("Refused:"));
+    // The refused submit stored nothing; the run's end auto-submitted it for the usual reviews.
+    let cur = h.orch.ticketDetail(both.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview, cur.skipAgentReview, cur.skipHumanReview]).toEqual(["review", "approved", "pending", false, false]);
+    expect(refusals(both)).toEqual([expect.stringContaining("can't skip both")]);
+    cur = h.orch.ticketDetail(noBot.key).ticket;
+    expect([cur.status, cur.agentReview, cur.humanReview, cur.skipHumanReview]).toEqual(["review", "skipped", "pending", false]);
+    expect(refusals(noBot)).toEqual([expect.stringContaining(`${noBot.key} skips its agent review`)]);
+  });
+
+  test("turning skipHumanReview on while the ticket waits on the human lands it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+    await h.orch.updateTicket(t.key, { skipHumanReview: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+  });
+
+  test("turning it off while the agent review runs puts the human review back to pending", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    let cur = await h.orch.updateTicket(t.key, { skipHumanReview: true });
+    expect([cur.agentReview, cur.humanReview]).toEqual(["pending", "approved"]);
+    cur = await h.orch.updateTicket(t.key, { skipHumanReview: false });
+    expect([cur.agentReview, cur.humanReview]).toEqual(["pending", "pending"]);
+    h.driver.release();
+    await h.orch.idle();
+    // The agent review passed, and the ticket waits on the human like any other.
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+    expect(statuses(h, t.sessionId)).toContain("Human review: waiting on a human again");
+  });
+
+  test("a project without human review leaves the switch nothing to do", async () => {
+    const h = setup({ requireHumanReview: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipHumanReview: true });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(statuses(h, t.sessionId)).not.toContain("Human review: skipped");
+  });
+
+  test("skipHumanReview must be a boolean", async () => {
+    const h = setup();
+    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipHumanReview: 1 as never })).rejects.toThrow(/skipHumanReview must be true or false/);
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await expect(h.orch.updateTicket(t.key, { skipHumanReview: "on" as never })).rejects.toThrow(/skipHumanReview must be true or false/);
+  });
+
+  test("a conductor's child that skips the human review lands without the conductor's approval", async () => {
+    const h = setup();
+    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "- Ship the fix [skip-human]", kind: "conductor" });
+    await h.orch.idle();
+    const [child] = h.store.tickets.list({ parentId: parent.id });
+    expect(child!.skipHumanReview).toBe(true);
+    expect(child!.status).toBe("done");
+    expect(runKinds(h, child!)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+    expect(statuses(h, child!.sessionId)).not.toContain("Conductor review: approved");
+  });
+});
+
 describe("messages that leave the ticket where it is (chat runs)", () => {
   test("in review: the agent answers with its work tools, and the ticket keeps its status and reviews", async () => {
     const h = setup({ realTools: true });

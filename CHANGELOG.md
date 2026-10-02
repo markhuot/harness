@@ -15,6 +15,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   show up on the ticket's Agents & tasks tab with their state. Click or tap one to watch its
   output live while it runs; the output stays there after it finishes. In the transcript, the
   command that started it has an Open output link.
+- Tickets have a **Skip human review** switch next to Skip agent review, in New session's Options
+  and on a ticket's Details tab (Mac, iPhone and iPad). With it on, the ticket lands as soon as the
+  agent review approves it. With both switches on, it lands as soon as the agent submits it. You
+  can still send a ticket back while it's in Review. Agents can turn it on when you ask them to
+  (for example "merge it once the review passes"), but they can never skip both reviews.
 
 ### Changed
 

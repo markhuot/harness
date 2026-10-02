@@ -118,6 +118,10 @@ you answer.
   don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
   only on you. The agent can also skip its own review when you ask it to, or when it only
   answered a question, as long as the project requires your review.
+- Tick **Skip human review** for tickets you don't need to look at yourself. The ticket lands as
+  soon as the agent review approves it, the way the Approve button's default would land it. With
+  both switches on, it lands as soon as it's submitted. Agents can turn it on when you ask them to,
+  but an agent can't skip both reviews: one of them always checks the work.
 - The **Approve** button picks how the work lands: **Approve and merge** (merge the ticket's
   branch into its base branch), **Approve and open PR** (push the branch and open a GitHub pull
   request, which ends the ticket), **Approve and…** (your own instructions for the agent), or

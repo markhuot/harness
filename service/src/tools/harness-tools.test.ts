@@ -30,8 +30,8 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "skip_agent_review", "start", "title", "use_worktree"]);
-    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "skip_agent_review", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "skip_agent_review", "skip_human_review", "start", "title", "use_worktree"]);
+    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "skip_agent_review", "skip_human_review", "title"]);
     expect(props("update_branch")).toEqual(["base_branch", "branch"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
@@ -43,7 +43,7 @@ describe("tool catalogue", () => {
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
-    expect(props("submit_for_review")).toEqual(["attachments", "skip_agent_review", "summary"]);
+    expect(props("submit_for_review")).toEqual(["attachments", "skip_agent_review", "skip_human_review", "summary"]);
     expect(props("complete_ticket")).toEqual(["action", "instructions", "key"]);
     expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
     expect(props("record_pull_request")).toEqual(["url"]);
@@ -68,11 +68,17 @@ describe("ticket tools → HarnessOps", () => {
     await tool("submit_for_review").execute({ summary: "done", attachments: ["c.png"] }, fakeContext({ ops }));
     expect(ops.calls).toEqual([
       { method: "postSummary", args: ["shots", ["a.png", "b.mp4"]] },
-      { method: "submitForReview", args: ["done", ["c.png"]] },
+      { method: "submitForReview", args: ["done", ["c.png"], { skipAgentReview: undefined, skipHumanReview: undefined }] },
     ]);
     const bad = await tool("post_summary").execute({ summary: "x", attachments: "a.png" } as any, fakeContext({ ops }));
     expect(bad.isError).toBe(true);
     expect(ops.calls).toHaveLength(2);
+  });
+
+  test("submit_for_review passes both review skips through", async () => {
+    const ops = fakeOps();
+    await tool("submit_for_review").execute({ summary: "done", skip_agent_review: false, skip_human_review: true }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([{ method: "submitForReview", args: ["done", undefined, { skipAgentReview: false, skipHumanReview: true }] }]);
   });
 
   test("update_plan passes the optional title through", async () => {

@@ -133,6 +133,33 @@ describe("guard rails", () => {
     expect([skipped.skipAgentReview, skipped.agentReview]).toEqual([true, "skipped"]);
   });
 
+  test("skip_human_review: agents set it only while the agent review still runs, and not mid-review", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const c = h.ctx("work", me);
+    const r = await executeTool([createTicketTool], "create_ticket", { title: "Land it", description: "Merge once reviewed", skip_human_review: true }, c);
+    expect(r.isError).toBeFalsy();
+    const created = h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
+    expect([created.skipHumanReview, created.skipAgentReview]).toEqual([true, false]);
+    expect(text(r)).toContain('"skipHumanReview": true');
+
+    // One review has to check the work: never both from an agent, in one call or across two.
+    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", skipAgentReview: true, skipHumanReview: true })).rejects.toThrow("can't skip both");
+    await expect(h.orch.ops.updateTicket(c, created.key, { skipAgentReview: true })).rejects.toThrow(`${created.key} skips its human review`);
+    const noBot = await h.make("no bot");
+    await h.orch.ops.updateTicket(c, noBot.key, { skipAgentReview: true });
+    await expect(h.orch.ops.updateTicket(c, noBot.key, { skipHumanReview: true })).rejects.toThrow(`${noBot.key} skips its agent review`);
+    expect(h.get(noBot).skipHumanReview).toBe(false);
+    // Swapping which review is skipped in one call is fine: the other one still runs.
+    const swapped = await h.orch.ops.updateTicket(c, noBot.key, { skipAgentReview: false, skipHumanReview: true });
+    expect([swapped.skipAgentReview, swapped.skipHumanReview]).toEqual([false, true]);
+    // Turning a skip off is always allowed.
+    expect((await h.orch.ops.updateTicket(c, created.key, { skipHumanReview: false })).skipHumanReview).toBe(false);
+
+    const inReview = await h.make("in review", { status: "review" });
+    await expect(h.orch.ops.updateTicket(c, inReview.key, { skipHumanReview: true })).rejects.toThrow(`${inReview.key} is in review; its reviewers decide`);
+  });
+
   test("plan, review, complete and triage runs can't change the board, even calling ops directly", async () => {
     const h = await setup();
     const me = await h.make("me");

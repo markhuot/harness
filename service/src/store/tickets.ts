@@ -35,6 +35,7 @@ interface TicketRow {
   base_branch: string | null;
   requested_branch: string | null;
   skip_agent_review: number;
+  skip_human_review?: number;
   completion_action?: string | null;
   completion_instructions?: string | null;
   pull_request_url?: string | null;
@@ -104,6 +105,7 @@ export interface NewTicket {
   baseBranch?: string | null;
   requestedBranch?: string | null;
   skipAgentReview?: boolean;
+  skipHumanReview?: boolean;
   /** A draft (Ticket.draft): never runs until submitted */
   draft?: boolean;
 }
@@ -129,6 +131,7 @@ export type TicketPatch = Partial<{
   baseBranch: string | null;
   requestedBranch: string | null;
   skipAgentReview: boolean;
+  skipHumanReview: boolean;
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
   pullRequestUrl: string | null;
@@ -157,6 +160,7 @@ const COLUMNS: Record<string, string> = {
   baseBranch: "base_branch",
   requestedBranch: "requested_branch",
   skipAgentReview: "skip_agent_review",
+  skipHumanReview: "skip_human_review",
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
   pullRequestUrl: "pull_request_url",
@@ -215,6 +219,7 @@ export class TicketRepo {
       model: r.model ?? null,
       useWorktree: r.use_worktree === null || r.use_worktree === undefined ? null : bool(r.use_worktree),
       skipAgentReview: bool(r.skip_agent_review ?? 0),
+      skipHumanReview: bool(r.skip_human_review ?? 0),
       completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
       completionInstructions: r.completion_instructions ?? null,
       pullRequestUrl: r.pull_request_url ?? null,
@@ -458,9 +463,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, draft, created_at, updated_at)
+           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $draft, $t, $t)`,
+           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $t, $t)`,
       )
       .run({
         id,
@@ -483,6 +488,7 @@ export class TicketRepo {
         baseBranch: input.baseBranch ?? null,
         requestedBranch: input.requestedBranch ?? null,
         skipAgentReview: int(input.skipAgentReview ?? false),
+        skipHumanReview: int(input.skipHumanReview ?? false),
         draft: int(input.draft ?? false),
         t,
       });

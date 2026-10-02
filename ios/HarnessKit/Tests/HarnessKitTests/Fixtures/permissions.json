@@ -227,6 +227,7 @@
           "baseBranch": "develop",
           "useWorktree": true,
           "skipAgentReview": true,
+          "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
           "pullRequestUrl": "https://github.com/nytimes/app/pull/812",

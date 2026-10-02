@@ -594,6 +594,15 @@ try {
     check("Space toggles the switch and saves Skip agent review on the draft", flipped && !!saved, `${flipped} ${saved}`);
     await space();
     await until("skipAgentReview cleared", async () => (await api<{ ticket: DT & { skipAgentReview?: boolean } }>("GET", `/tickets/${printDraft.key}`)).ticket.skipAgentReview === false || null).catch(() => null);
+    // The next switch over is Skip human review.
+    const humanSw = `${inPane(printId, sw)}`;
+    await tab(false);
+    const onHuman = await js<boolean>(`(() => { const a = document.activeElement; return !!a?.matches('${humanSw}') && a.closest("label")?.textContent?.includes("Skip human review"); })()`);
+    await space();
+    const humanSaved = await until("skipHumanReview saved", async () => (await api<{ ticket: DT & { skipHumanReview?: boolean } }>("GET", `/tickets/${printDraft.key}`)).ticket.skipHumanReview === true || null).catch(() => false);
+    check("Tab moves on to the Skip human review switch, and Space saves it on the draft", onHuman && !!humanSaved, `${onHuman} ${humanSaved}`);
+    await space();
+    await until("skipHumanReview cleared", async () => (await api<{ ticket: DT & { skipHumanReview?: boolean } }>("GET", `/tickets/${printDraft.key}`)).ticket.skipHumanReview === false || null).catch(() => null);
   }
   const comboClose = () => js(`document.querySelector(".model-combo") && window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
   /** Open the combined Model combobox inside `scope` and list its rows ("# Driver" for headings). */
@@ -624,7 +633,7 @@ try {
   check("Options picks PATCH the draft", !!patched, JSON.stringify({ d: patched.driver, m: patched.model, p: patched.permissionMode }));
   const settingsRows = (scope: string) => js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings] > dt`)})].map(d => d.textContent)`);
   const draftRows = await settingsRows(inPane(printId, ".draft-options"));
-  check("the draft's Options rows", draftRows.join(",") === "Model,Permissions,Agent review,Branch,Base branch,Depends on", draftRows.join(","));
+  check("the draft's Options rows", draftRows.join(",") === "Model,Permissions,Agent review,Human review,Branch,Base branch,Depends on", draftRows.join(","));
   await js(`document.querySelector('${inPane(printId, "[data-testid=draft-options]")}').click()`);
   const summaryText = await until("Options summary", () => js<string>(`document.querySelector('${inPane(printId, "[data-testid=draft-options-summary]")}')?.textContent ?? ""`).then((t) => t.includes("Read only") && t));
   check("collapsed Options sums up what differs from the defaults", summaryText === "Dummy Slow · Read only", summaryText);
@@ -691,7 +700,7 @@ try {
   const coHint = await js<string>(`document.querySelector('${inPane(coId, "[data-testid=branch-hint]")}')?.textContent ?? ""`);
   check("…and the hint says it works in the project directory", coHint.includes("with no worktree"), coHint);
   const coRows = await settingsRows(inPane(coId, ".draft-options"));
-  check("without a worktree there's no Base branch row", coRows.join(",") === "Model,Permissions,Agent review,Branch,Depends on", coRows.join(","));
+  check("without a worktree there's no Base branch row", coRows.join(",") === "Model,Permissions,Agent review,Human review,Branch,Depends on", coRows.join(","));
   // Moving a saved draft to another project re-keys it; its pane follows the new key.
   await pickProjectKey("HARNESS", coId);
   const moved = await until("draft moved", async () => (await draftList()).find((t) => t.title.includes("right in the checkout") && t.key.startsWith("HARNESS-")));

@@ -70,7 +70,7 @@ export const unblock = defineTool<{ note?: string }>({
   },
 });
 
-export const submitForReview = defineTool<{ summary: string; attachments?: string[]; skip_agent_review?: boolean }>({
+export const submitForReview = defineTool<{ summary: string; attachments?: string[]; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
     "Call this when the work is complete. Moves the ticket to Review and posts your summary. The summary should say what you changed, how you verified it (tests, commands run), and anything the reviewer should look at closely. When the work has a visible result (a UI change, rendered output, a browser flow), attach screenshots or a short screen recording that show it. Make no further changes after calling it.",
@@ -81,13 +81,18 @@ export const submitForReview = defineTool<{ summary: string; attachments?: strin
       skip_agent_review: {
         type: "boolean",
         description:
-          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). Refused when the project doesn't require a human review. Omit it to keep the ticket's setting.",
+          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). Refused when the project doesn't require a human review, or when the ticket skips its human review. Omit it to keep the ticket's setting.",
+      },
+      skip_human_review: {
+        type: "boolean",
+        description:
+          "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (for example \"merge it once the review passes\" or \"no need for me to look\"). Refused when the ticket skips its agent review: one review has to check the work. Omit it to keep the ticket's setting.",
       },
     },
     ["summary"],
   ),
-  async run({ summary, attachments, skip_agent_review }, ctx) {
-    await ctx.ops.submitForReview(ctx, summary, attachments, skip_agent_review);
+  async run({ summary, attachments, skip_agent_review, skip_human_review }, ctx) {
+    await ctx.ops.submitForReview(ctx, summary, attachments, { skipAgentReview: skip_agent_review, skipHumanReview: skip_human_review });
     return "Ticket moved to review. Stop here.";
   },
 });

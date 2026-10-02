@@ -42,6 +42,7 @@ export function blankDraftTicket(project: DraftProject, settings: DraftSettings 
     baseBranch: null,
     useWorktree: null,
     skipAgentReview: false,
+    skipHumanReview: false,
     draft: true,
     blockedReason: null,
     busy: false,
@@ -75,6 +76,7 @@ export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
   if (patch.baseBranch !== undefined) next.baseBranch = blankToNull(patch.baseBranch);
   if (patch.branch !== undefined) next.requestedBranch = blankToNull(patch.branch);
   if (patch.skipAgentReview !== undefined) next.skipAgentReview = patch.skipAgentReview;
+  if (patch.skipHumanReview !== undefined) next.skipHumanReview = patch.skipHumanReview;
   if (patch.dependsOn !== undefined) next.dependsOn = [...patch.dependsOn];
   if (patch.position !== undefined) next.position = patch.position;
   if (patch.kind !== undefined) next.kind = patch.kind;
@@ -103,6 +105,7 @@ export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined
     !t.requestedBranch &&
     !t.baseBranch &&
     !t.skipAgentReview &&
+    !t.skipHumanReview &&
     t.dependsOn.length === 0
   );
 }
@@ -125,6 +128,7 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     useWorktree: project.isGit === false ? null : (t.useWorktree ?? null),
     ...(worktree ? { branch: t.requestedBranch ?? null, baseBranch: t.baseBranch ?? null } : {}),
     ...(t.skipAgentReview ? { skipAgentReview: true } : {}),
+    ...(t.skipHumanReview ? { skipHumanReview: true } : {}),
     ...(t.dependsOn.length ? { dependsOn: t.dependsOn } : {}),
   };
 }
@@ -148,6 +152,7 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
   if ((next.requestedBranch ?? null) !== (prev.requestedBranch ?? null)) p.branch = next.requestedBranch ?? null;
   if ((next.baseBranch ?? null) !== (prev.baseBranch ?? null)) p.baseBranch = next.baseBranch ?? null;
   if (!!next.skipAgentReview !== !!prev.skipAgentReview) p.skipAgentReview = !!next.skipAgentReview;
+  if (!!next.skipHumanReview !== !!prev.skipHumanReview) p.skipHumanReview = !!next.skipHumanReview;
   if (!sameList(next.dependsOn, prev.dependsOn)) p.dependsOn = next.dependsOn;
   return Object.keys(p).length ? p : null;
 }
@@ -275,6 +280,7 @@ export function newSessionOptionsSummary(t: Ticket, project: DraftProject, setti
     if (worktree && t.baseBranch) out.push(`into ${t.baseBranch}`);
   }
   if (t.skipAgentReview) out.push("Skip agent review");
+  if (t.skipHumanReview) out.push("Skip human review");
   if (t.dependsOn.length) out.push(`After ${t.dependsOn.join(", ")}`);
   return out;
 }

@@ -447,6 +447,7 @@ interface SeedTicket {
   agentReview?: Ticket["agentReview"];
   humanReview?: Ticket["humanReview"];
   skipAgentReview?: boolean;
+  skipHumanReview?: boolean;
   blockedReason?: string;
   pendingApproval?: Ticket["pendingApproval"];
   allowedTools?: string[];
@@ -486,6 +487,7 @@ function seedTicket(s: SeedTicket): Ticket {
     agentReview: s.agentReview ?? "pending",
     humanReview: s.humanReview ?? "pending",
     skipAgentReview: s.skipAgentReview ?? false,
+    skipHumanReview: s.skipHumanReview ?? false,
     externalRef: s.externalRef ?? null,
     workdir: worktree ? `/Users/markhuot/.harness/worktrees/${key}` : s.project.path,
     branch: worktree ? `harness/${key.toLowerCase()}` : null,
@@ -1177,14 +1179,19 @@ function setStatus(t: Ticket, status: TicketStatus) {
   appendEntry(t.sessionId, null, "system", { type: "status", text: `Moved to ${status.replace("_", " ")}` });
 }
 
-/** Mirrors Orchestrator.submit: a ticket with skipAgentReview gets agentReview "skipped" and no review run. */
+/**
+ * Mirrors Orchestrator.submit: a ticket with skipAgentReview gets agentReview "skipped" and no
+ * review run; one with skipHumanReview gets humanReview "approved", so it lands once the agent
+ * review passes.
+ */
 function submitForReview(t: Ticket) {
   setStatus(t, "review");
   t.agentReview = t.skipAgentReview ? "skipped" : "pending";
   const project = projects.get(t.projectId);
-  t.humanReview = project?.requireHumanReview === false ? "approved" : "pending";
+  t.humanReview = project?.requireHumanReview === false || t.skipHumanReview ? "approved" : "pending";
   addSummary(t.sessionId, t.id, "agent", `Work finished for **${t.title}**. Ready for review.`);
   upsertTicket(t);
+  if (t.skipHumanReview && project?.requireHumanReview !== false) appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
   if (t.skipAgentReview) {
     appendEntry(t.sessionId, null, "system", { type: "status", text: "Agent review: skipped" });
     noteReady(t);
@@ -1216,10 +1223,23 @@ function applySkipAgentReview(t: Ticket) {
   }
 }
 
-/** Mirrors Orchestrator.noteReady: both reviews passed → complete run (conductor children wait). */
+/** Mirrors Orchestrator.applySkipHumanReview: in review, the flag approves a pending human review or puts its approval back to pending. */
+function applySkipHumanReview(t: Ticket) {
+  if (t.status !== "review" || projects.get(t.projectId)?.requireHumanReview === false) return;
+  if (t.skipHumanReview && t.humanReview === "pending") {
+    t.humanReview = "approved";
+    appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
+    noteReady(t);
+  } else if (!t.skipHumanReview && t.humanReview === "approved" && activeRun(t.sessionId)?.kind !== "complete") {
+    t.humanReview = "pending";
+    appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: waiting on a human again" });
+  }
+}
+
+/** Mirrors Orchestrator.noteReady: both reviews passed → complete run (conductor children wait, unless they skip the human review). */
 function noteReady(t: Ticket) {
   if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
-  if (t.parentId) return;
+  if (t.parentId && !t.skipHumanReview) return;
   completeRun(t);
 }
 
@@ -1275,6 +1295,7 @@ function createTicket(body: Record<string, any>): Ticket {
     agentReview: "pending",
     humanReview: "pending",
     skipAgentReview: body.skipAgentReview === true,
+    skipHumanReview: body.skipHumanReview === true,
     externalRef: body.externalRef ?? null,
     workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
     branch: start && worktree ? body.branch || `harness/${key.toLowerCase()}` : null,
@@ -1504,6 +1525,10 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (typeof body.skipAgentReview === "boolean" && body.skipAgentReview !== !!t.skipAgentReview) {
           t.skipAgentReview = body.skipAgentReview;
           applySkipAgentReview(t);
+        }
+        if (typeof body.skipHumanReview === "boolean" && body.skipHumanReview !== !!t.skipHumanReview) {
+          t.skipHumanReview = body.skipHumanReview;
+          applySkipHumanReview(t);
         }
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;

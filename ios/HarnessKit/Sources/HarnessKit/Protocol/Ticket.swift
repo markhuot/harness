@@ -53,6 +53,11 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// the human (or its conductor). Set when the ticket is created, from the ticket card, or by the
     /// ticket's own agent (`submit_for_review` skip_agent_review). Optional so older payloads type-check.
     public var skipAgentReview: Bool?
+    /// Submitting counts the human review as approved: the ticket lands as soon as its agent review
+    /// passes, or right away when that's skipped too. Set when the ticket is created, from the ticket
+    /// card, or by an agent (`submit_for_review` / `create_ticket` / `update_ticket`
+    /// skip_human_review). Optional so older payloads type-check.
+    public var skipHumanReview: Bool?
     /// The completion action picked when the ticket was approved (or completed), kept until the
     /// completion runs: a human approval can come before the agent review finishes. null → the
     /// project's default. Optional so older payloads type-check.
@@ -94,7 +99,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         dependsOn: [String] = [], autoStart: Bool = false, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
-        useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil,
+        useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
         pullRequestUrl: Patch<String> = .absent, draft: Bool? = nil, blockedReason: String? = nil, busy: Bool = false,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
@@ -123,6 +128,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.baseBranch = baseBranch
         self.useWorktree = useWorktree
         self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.completionAction = completionAction
         self.completionInstructions = completionInstructions
         self.pullRequestUrl = pullRequestUrl

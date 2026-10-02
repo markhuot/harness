@@ -158,7 +158,8 @@ function contextSection(info: PromptInfo, o: PromptOverrides | null | undefined)
 
 function childLine(t: Ticket): string {
   const deps = t.dependsOn.length ? `, depends on ${t.dependsOn.join(", ")}` : "";
-  const reviews = t.status === "review" ? `, agent review ${t.agentReview}, your review ${t.humanReview}` : t.skipAgentReview ? ", skips the agent review" : "";
+  const skips = [t.skipAgentReview && "the agent review", t.skipHumanReview && "your review"].filter(Boolean).join(" and ");
+  const reviews = t.status === "review" ? `, agent review ${t.agentReview}, your review ${t.humanReview}` : skips ? `, skips ${skips}` : "";
   const blocked = t.status === "blocked" && t.blockedReason ? `, asks: ${quote(t.blockedReason)}` : "";
   return `* ${ticketLabel(t)}: ${t.status}${reviews}${deps}${blocked}`;
 }
@@ -179,7 +180,13 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt(
         "system.work",
-        { branch: v.branch, onBase: v.onBase, skipAgentReview: !!ticket?.skipAgentReview, canSkipReview: project?.requireHumanReview !== false },
+        {
+          branch: v.branch,
+          onBase: v.onBase,
+          skipAgentReview: !!ticket?.skipAgentReview,
+          skipHumanReview: !!ticket?.skipHumanReview,
+          canSkipReview: project?.requireHumanReview !== false && !ticket?.skipHumanReview,
+        },
         o,
       );
     }

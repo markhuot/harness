@@ -72,8 +72,14 @@ describe("db", () => {
       db.exec(`PRAGMA user_version = ${v + 1}`);
     }
     db.exec(`INSERT INTO projects (id, key, name, path, next_seq, auto_complete, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0, 0)`);
-    const before = new Store(db);
-    const mk = (key: string, patch: Parameters<typeof before.tickets.update>[1]) => before.tickets.update(ticketFor(before, "p1", key).id, patch)!;
+    // Raw rows: the store's inserts name columns later migrations add.
+    const mk = (key: string, p: { status: string; agentReview?: string; humanReview?: string }) => {
+      db.query(
+        `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, auto_start, agent_review, human_review, position, created_at, updated_at)
+         VALUES ($key, $key, 'p1', 'task', $key, '', $status, $key, 'dummy', 0, $agent, $human, 0, 0, 0)`,
+      ).run({ key, status: p.status, agent: p.agentReview ?? "pending", human: p.humanReview ?? "pending" });
+      return { id: key };
+    };
     const ready = mk("OLD-1", { status: "review", agentReview: "approved", humanReview: "approved" });
     const skipped = mk("OLD-2", { status: "review", agentReview: "skipped", humanReview: "approved" });
     const waitingOnAgent = mk("OLD-3", { status: "review", agentReview: "pending", humanReview: "approved" });

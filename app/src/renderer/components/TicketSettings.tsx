@@ -26,7 +26,7 @@ import {
   ticketSettingsRows,
 } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { skipReviewHint } from "../state/newSession";
+import { skipHumanReviewHint, skipReviewHint } from "../state/newSession";
 import { DriverModelSelect } from "./ModelSelect";
 import { PermissionModeSelect } from "./PermissionModeSelect";
 import { BranchSelect } from "./BranchSelect";
@@ -133,6 +133,10 @@ export function TicketSettings({
       <dt>Agent review</dt>
       <dd title={editable ? skipReviewHint(ticket) : undefined}>
         <Switch checked={!!ticket.skipAgentReview} disabled={!editable} onChange={(v) => onPatch({ skipAgentReview: v })} label="Skip agent review" />
+      </dd>
+      <dt>Human review</dt>
+      <dd title={editable ? skipHumanReviewHint(ticket, project) : undefined}>
+        <Switch checked={!!ticket.skipHumanReview} disabled={!editable} onChange={(v) => onPatch({ skipHumanReview: v })} label="Skip human review" />
       </dd>
       {rows.branch.show && project && (
         <>

@@ -204,7 +204,7 @@ plan`; the `mcp__harness` allow rule keeps `update_plan` and `post_summary` runn
 | Human message in review or done | status and reviews unchanged; human summary with the message; a **chat** run that's going takes it in, otherwise enqueue one. When the chat leaves the ticket where it is, its last text is posted as an agent summary |
 | Human message with `move: true` in review | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
 | Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is posts its answer and neither auto-submits nor blocks. A failed chat adds a "Run failed" summary and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
-| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
+| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review or the ticket has `skipHumanReview`, see "Skipping the human review"), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author). A trailing question blocks with it instead |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
@@ -251,8 +251,36 @@ Who sets it:
   agents").
 
 Agents can only turn it on where someone else still reviews the work: for a project that requires
-a human review (`requireHumanReview`). Otherwise the agent review is the only check, and the call
-fails with an error saying a human can turn it off on the ticket. Humans can set it anywhere.
+a human review (`requireHumanReview`), on a ticket that doesn't skip its human review. Otherwise
+the agent review is the only check, and the call fails with an error saying a human can turn it
+off on the ticket. Humans can set it anywhere.
+
+### Skipping the human review
+
+`Ticket.skipHumanReview` (migration 23, default false) is the other half: the ticket lands without
+waiting on anyone once its agent review passes. Submitting such a ticket sets `humanReview =
+"approved"` (status "Human review: skipped"), the same state a project with human review off gives
+every ticket, so the agent review's approval makes it ready and `noteReady` starts the complete
+run with the stored completion choice, else the project default. With `skipAgentReview` as well,
+the ticket completes as soon as it's submitted. A conductor's child that skips it lands on its own
+too (its conductor is the reviewer it skips) instead of waiting on `complete_ticket`. The human
+can still request changes while the ticket is in review, and a request for changes (or a block
+from review) resets the human review to `pending`; the next submit approves it again.
+
+A change while the ticket is in review applies at once (a project without human review ignores
+the flag): turned on with the human review `pending`, it's approved and the ticket completes if
+its agent review passed; turned off with it `approved` and no complete run queued or running, it
+goes back to `pending` (status "Human review: waiting on a human again"). There's no telling that
+approval apart from a human's own, so turning the switch off always asks for an approval.
+
+Who sets it: the human with `CreateTicketBody.skipHumanReview` / `UpdateTicketBody.skipHumanReview`
+(the "Skip human review" switch under Agent review in New session's Options and the ticket's
+Details, Mac and iPhone); the ticket's own agent with `submit_for_review { skip_human_review }`,
+when the human asked for the work to land without their review (the work prompt says so, and
+says when the ticket already skips it); other agents with `create_ticket` / `update_ticket`
+`skip_human_review`. Agents can only turn it on while the agent review still runs: a call that
+would leave a ticket skipping both reviews (`skipAgentReview` already set, or both in one call) is
+refused, so nothing lands on an agent's say-so with nobody checking. Humans can set both.
 
 ### Drafts
 
@@ -287,7 +315,7 @@ against them.
 
 **One settings UI.** A ticket's Details tab and a draft's Options render the same component
 (`app/src/renderer/components/TicketSettings.tsx` on the desktop, `ios/Harness/Features/Pickers/TicketSettingsForm.swift` on the phone)
-with the rows Model, Permissions, Agent review, Branch, Base branch and Depends on.
+with the rows Model, Permissions, Agent review, Human review, Branch, Base branch and Depends on.
 `ticketSettingsRows` decides which rows show and which can change, and the two screens differ
 only in what their `onPatch` does (an immediate PATCH in Details, the local state and debounced
 save in a draft). In a draft the Branch row also decides the worktree: the branch the project
@@ -556,11 +584,11 @@ Harness tools (always exposed, via MCP for claude-code):
 | `update_plan` | plan | `{ plan, title? }` |
 | `block` | work, chat (not a conductor ticket's) | `{ question }` |
 | `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
-| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review? }`: `skip_agent_review` sets the ticket's `skipAgentReview` first (true is refused when the project doesn't require a human review; see "Skipping the agent review") |
+| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review?, skip_human_review? }`: `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too, and `skip_agent_review` also when the project doesn't require a human review; see "Skipping the agent review" and "Skipping the human review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` sets `skipAgentReview`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review? }`. `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
@@ -621,10 +649,11 @@ hits them too:
   `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
   message sends it back to in progress, unless the caller is that ticket's parent conductor.
 - **No skipping the only review.** `create_ticket` / `update_ticket` with `skip_agent_review: true`
-  are refused for a project without human review, like the ticket's own `submit_for_review`
-  ("Skipping the agent review"). `update_ticket` `skip_agent_review` on a ticket in review is
-  refused unless the caller is its parent conductor (its reviewer): it would end or start the
-  review under way.
+  are refused for a project without human review, and either skip is refused when the ticket
+  would end up skipping both reviews, like the ticket's own `submit_for_review` ("Skipping the
+  agent review", "Skipping the human review"). `update_ticket` `skip_agent_review` /
+  `skip_human_review` on a ticket in review is refused unless the caller is its parent conductor
+  (its reviewer): it would end, start or approve the review under way.
 - **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
   (closing one that isn't needed). Anything that ran goes through review and a complete run.
 - **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a

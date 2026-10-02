@@ -194,6 +194,13 @@ export interface Ticket {
    */
   skipAgentReview?: boolean;
   /**
+   * Submitting counts the human review as approved: the ticket lands as soon as its agent review
+   * passes, or right away when that's skipped too. Set when the ticket is created, from the ticket
+   * card, or by an agent (`submit_for_review` / `create_ticket` / `update_ticket`
+   * skip_human_review). Optional so older payloads type-check.
+   */
+  skipHumanReview?: boolean;
+  /**
    * The completion action picked when the ticket was approved (or completed), kept until the
    * completion runs: a human approval can come before the agent review finishes. null → the
    * project's default. Optional so older payloads type-check.
@@ -881,6 +888,8 @@ export interface CreateTicketBody {
   baseBranch?: string | null;
   /** Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false. */
   skipAgentReview?: boolean;
+  /** Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default false. */
+  skipHumanReview?: boolean;
   dependsOn?: string[];
   autoStart?: boolean;
   parentId?: string | null;
@@ -919,6 +928,12 @@ export interface UpdateTicketBody {
    * review (a queued review run is dropped); turning it off while the review is "skipped" starts one.
    */
   skipAgentReview?: boolean;
+  /**
+   * Ticket.skipHumanReview. Turning it on while the ticket waits on its human review approves it
+   * (the ticket lands once its agent review passes); turning it off while a review it approved
+   * hasn't started landing puts the human review back to pending.
+   */
+  skipHumanReview?: boolean;
   dependsOn?: string[];
   position?: number;
   /** Link the ticket to a remote ID by hand (source "manual"), or null to unlink it */

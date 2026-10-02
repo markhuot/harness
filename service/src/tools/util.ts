@@ -182,6 +182,7 @@ export function ticketView(t: Ticket) {
     agentReview: t.agentReview,
     humanReview: t.humanReview,
     skipAgentReview: !!t.skipAgentReview,
+    skipHumanReview: !!t.skipHumanReview,
     dependsOn: t.dependsOn,
     autoStart: t.autoStart,
     busy: t.busy,

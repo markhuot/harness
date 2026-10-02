@@ -46,7 +46,7 @@ export const blankDraftTicketCases = cases(
 
 type PatchInput = { ticket: Ticket; patch: UpdateTicketBody };
 const withModel = { ...blank(), model: "opus" };
-const full = { ...blank(), model: "opus", permissionMode: "ask" as PermissionMode, baseBranch: "develop", requestedBranch: "feat", useWorktree: true, skipAgentReview: true, dependsOn: ["WEB-1"] };
+const full = { ...blank(), model: "opus", permissionMode: "ask" as PermissionMode, baseBranch: "develop", requestedBranch: "feat", useWorktree: true, skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1"] };
 export const applyTicketPatchCases = cases(({ ticket, patch }: PatchInput) => applyTicketPatch(ticket, patch), {
   "a driver change clears the model": { ticket: withModel, patch: { driver: "codex" } },
   "a driver change keeps a model that comes with it": { ticket: withModel, patch: { driver: "codex", model: "luna" } },
@@ -59,8 +59,8 @@ export const applyTicketPatchCases = cases(({ ticket, patch }: PatchInput) => ap
   "NEL isn't trimmed": { ticket: blank(), patch: { branch: "\u0085" } },
   "null clears every nullable field": { ticket: full, patch: { model: null, permissionMode: null, baseBranch: null, branch: null, useWorktree: null } },
   "absent leaves every field alone": { ticket: full, patch: {} },
-  "explicit values": { ticket: blank(), patch: { title: "T", description: "D", permissionMode: "read_only", skipAgentReview: true, dependsOn: ["WEB-1", "WEB-2"], position: 3.5, useWorktree: true } },
-  "false and empty values still apply": { ticket: full, patch: { skipAgentReview: false, dependsOn: [], title: "", description: "" } },
+  "explicit values": { ticket: blank(), patch: { title: "T", description: "D", permissionMode: "read_only", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1", "WEB-2"], position: 3.5, useWorktree: true } },
+  "false and empty values still apply": { ticket: full, patch: { skipAgentReview: false, skipHumanReview: false, dependsOn: [], title: "", description: "" } },
   "status isn't applied locally": { ticket: blank(), patch: { status: "done" } },
 });
 
@@ -91,6 +91,7 @@ export const draftIsEmptyCases = cases(({ ticket, project, settings }: EmptyInpu
   "empty requested branch": emptyCase({ requestedBranch: "" }),
   "base branch": emptyCase({ baseBranch: "develop" }),
   "skip review": emptyCase({ skipAgentReview: true }),
+  "skip human review": emptyCase({ skipHumanReview: true }),
   dependencies: emptyCase({ dependsOn: ["WEB-1"] }),
   "no project: the settings' driver": emptyCase({}, null),
   "no project or settings: any driver is an override": emptyCase({}, null, null),
@@ -106,6 +107,7 @@ export const draftCreateBodyCases = cases(({ ticket, project }: CreateInput) => 
   "a project without worktrees: no branch keys": { ticket: { ...blank(), requestedBranch: "feat" }, project: project({ useWorktrees: false }) },
   "opting into a worktree sends the branch": { ticket: { ...blank(), useWorktree: true, requestedBranch: "feat" }, project: project({ useWorktrees: false }) },
   "skip review and dependencies only when set": { ticket: { ...blank(), skipAgentReview: true, dependsOn: ["WEB-1"] }, project: project() },
+  "skip human review only when set": { ticket: { ...blank(), skipHumanReview: true }, project: project() },
   "an empty driver is left out": { ticket: { ...blank(), driver: "" }, project: project() },
   "model, permission mode and kind": { ticket: { ...blank(), model: "sonnet", permissionMode: "read_only" as PermissionMode, kind: "conductor" as TicketKind }, project: project() },
 });
@@ -131,6 +133,8 @@ export const draftPatchCases = cases(({ prev, next }: DiffInput) => draftPatch(p
   "a missing requestedBranch equals null": { prev: (({ requestedBranch: _r, baseBranch: _b, ...rest }) => rest)(prev) as Ticket, next: prev },
   "skipAgentReview missing equals false": { prev: (({ skipAgentReview: _s, ...rest }) => rest)(prev) as Ticket, next: prev },
   "skipAgentReview off": diff({ skipAgentReview: false }, { ...prev, skipAgentReview: true }),
+  "skipHumanReview missing equals false": { prev: (({ skipHumanReview: _s, ...rest }) => rest)(prev) as Ticket, next: prev },
+  "skipHumanReview on": diff({ skipHumanReview: true }),
   "a new project and kind": diff({ projectId: "p2", kind: "conductor" }),
   "the title isn't sent": diff({ title: "New title" }),
   "NFD description differs from NFC": { prev: { ...prev, description: nfc }, next: { ...prev, description: nfd } },
@@ -237,7 +241,7 @@ const labels = { models: { "claude-code:sonnet": "Sonnet 5" }, checkoutName: "ma
 export const newSessionOptionsSummaryCases = cases(summary, {
   "defaults: nothing": { ticket: blank(), project: project(), settings, ...labels },
   "each override, in row order": {
-    ticket: { ...blank(), model: "sonnet", permissionMode: "read_only", requestedBranch: "feat", baseBranch: "develop", skipAgentReview: true, dependsOn: ["WEB-1"] },
+    ticket: { ...blank(), model: "sonnet", permissionMode: "read_only", requestedBranch: "feat", baseBranch: "develop", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1"] },
     project: project(),
     settings,
     ...labels,

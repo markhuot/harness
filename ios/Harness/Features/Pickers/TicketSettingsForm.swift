@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// A ticket's settings rows, the same for a launched ticket (the Details
-/// tab) and a draft (New session's Options): Model, Permissions, Skip agent review, Branch (with the
+/// tab) and a draft (New session's Options): Model, Permissions, Skip agent review, Skip human review, Branch (with the
 /// hint under it), Base branch, Remote ID (launched tickets) and Depends on. Which rows show and
 /// which can change come from Drafts.ticketSettingsRows; every change goes out as one
 /// UpdateTicketBody through `onPatch` (a PATCH for a launched ticket, applyTicketPatch on a draft's
@@ -145,6 +145,12 @@ private struct TicketSettingsRows: View {
         }
         TicketSettingsRow(label: "Skip agent review", hint: rows.editable ? NewSession.skipReviewHint(ticket) : nil) {
             Toggle("Skip agent review", isOn: Binding(get: { ticket.skipAgentReview == true }, set: { onPatch(UpdateTicketBody(skipAgentReview: $0)) }))
+                .labelsHidden()
+                .tint(c.accent)
+                .disabled(!rows.editable)
+        }
+        TicketSettingsRow(label: "Skip human review", hint: rows.editable ? NewSession.skipHumanReviewHint(ticket, project: project) : nil) {
+            Toggle("Skip human review", isOn: Binding(get: { ticket.skipHumanReview == true }, set: { onPatch(UpdateTicketBody(skipHumanReview: $0)) }))
                 .labelsHidden()
                 .tint(c.accent)
                 .disabled(!rows.editable)

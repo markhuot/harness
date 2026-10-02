@@ -23,7 +23,13 @@ const branchProp = {
 
 const skipAgentReviewProp = {
   type: "boolean",
-  description: "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Only for a project that requires a human review.",
+  description: "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Only for a project that requires a human review, and not with skip_human_review.",
+};
+
+const skipHumanReviewProp = {
+  type: "boolean",
+  description:
+    "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it. Only when the human asked for it, and not with skip_agent_review: one review has to check the work.",
 };
 
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
@@ -46,6 +52,7 @@ export const createTicket = defineTool<{
   base_branch?: string;
   branch?: string;
   skip_agent_review?: boolean;
+  skip_human_review?: boolean;
 }>({
   name: "create_ticket",
   description:
@@ -73,6 +80,7 @@ export const createTicket = defineTool<{
       base_branch: baseBranchProp,
       branch: branchProp,
       skip_agent_review: skipAgentReviewProp,
+      skip_human_review: skipHumanReviewProp,
     },
     ["title", "description"],
   ),
@@ -92,6 +100,7 @@ export const createTicket = defineTool<{
       baseBranch: baseBranchInput(input.base_branch),
       branch: branchInput(input.branch),
       skipAgentReview: input.skip_agent_review,
+      skipHumanReview: input.skip_human_review,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },
@@ -108,10 +117,11 @@ export const updateTicket = defineTool<{
   base_branch?: string;
   branch?: string;
   skip_agent_review?: boolean;
+  skip_human_review?: boolean;
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, or whether it skips the agent review. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -124,6 +134,7 @@ export const updateTicket = defineTool<{
       base_branch: baseBranchProp,
       branch: branchProp,
       skip_agent_review: skipAgentReviewProp,
+      skip_human_review: skipHumanReviewProp,
     },
     ["key"],
   ),
@@ -138,6 +149,7 @@ export const updateTicket = defineTool<{
       baseBranch: baseBranchInput(input.base_branch),
       branch: branchInput(input.branch),
       skipAgentReview: input.skip_agent_review,
+      skipHumanReview: input.skip_human_review,
     });
     return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, permissionMode: ticket.permissionMode })}`;
   },
