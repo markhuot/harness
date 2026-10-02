@@ -26,6 +26,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   approved.
 - Agents can show screenshots and recordings right in the spec. The images are kept with the
   ticket until you delete it.
+- On iPhone and iPad, a ticket opens on its **Spec** tab, with a history bar above the spec that
+  reads "Rev 7 of 7 · Agent · 3m ago" and the revision's note. Step back and forward with ‹ and ›
+  or drag the slider to see how the spec read at any revision, and turn on **Show changes** to see
+  what that revision changed. The revision you approved is tagged "Approved plan". While you're on
+  the newest revision, new ones show as they land, and stepping back holds your place until you
+  tap **Latest**.
+- iPhone and iPad have an **Activity** tab, a timeline of the ticket's notes, submits, review
+  decisions (with the round and the commit reviewed), approvals and failures. A question from the
+  agent is its own card, and your messages and the agent's answers read as a conversation.
 
 ### Changed
 
@@ -44,6 +53,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A message to a ticket's agent goes into Activity, with the agent's answer, only when you send
   it from the Spec or Activity tab. From any other tab it goes to the agent and the transcript
   only.
+- On iPhone and iPad, the message box says where your message will show: "In Activity" on the
+  Spec and Activity tabs, "Transcript only" everywhere else.
+- On iPhone and iPad, the Details tab edits the ticket's **Spec** (it used to say Brief, or Plan /
+  brief). If the agent changes the spec while you're editing, saving asks whether to reload the
+  new spec or overwrite it with yours, so neither edit is lost without you knowing. Old links to
+  a ticket's Summaries tab open its Spec.
 - Saved changes to the Summaries prompt in Settings → Prompts are dropped, since the new Spec and
   Activity prompt replaces it. If another saved prompt still mentions `update_plan` or
   `post_summary`, the service log says so at startup.
@@ -71,6 +86,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   details and settings no longer mention the source either.
 - Agents no longer attach screenshots to individual summaries. They put them in the spec instead,
   and screenshots from older summaries show in those entries in Activity.
+- The row of attachment thumbnails under each summary on iPhone and iPad is gone. Images show
+  inline in the spec and in Activity, and still open full screen when you tap them.
 
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 

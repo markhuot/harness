@@ -98,12 +98,12 @@ public enum TicketDetailLogic {
     /// from the Spec and Activity tabs only (Tabs.logsMessages).
     public static func composerLogs(_ tab: TicketTab) -> Bool { Tabs.logsMessages(tab) }
 
-    /// The composer's placeholder: what a message does in the ticket's state, and where it shows
-    /// ("Answer the agent (shows in Activity)", "Send a follow-up (transcript only)").
+    /// The composer's placeholder: where the message shows, first so a narrow field never cuts it
+    /// off, then what a message does in the ticket's state ("In Activity · Answer the agent…",
+    /// "Transcript only · Send a follow-up…").
     public static func composerPlaceholder(_ t: Ticket, tab: TicketTab) -> String {
-        var base = Format.composerPlaceholder[t.status] ?? "Message the agent…"
-        if base.hasSuffix("…") { base.removeLast() }
-        return "\(base) (\(composerLogs(tab) ? "shows in Activity" : "transcript only"))"
+        let base = Format.composerPlaceholder[t.status] ?? "Message the agent…"
+        return "\(composerLogs(tab) ? "In Activity" : "Transcript only") · \(base)"
     }
 
     /// "1 ticket waiting on you" / "3 tickets waiting on you".

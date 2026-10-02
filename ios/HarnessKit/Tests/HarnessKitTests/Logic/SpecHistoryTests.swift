@@ -177,11 +177,11 @@ struct ComposerLogTests {
     }
 
     @Test func placeholderSaysWhereTheMessageShows() {
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .spec) == "Answer the agent (shows in Activity)")
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .transcript) == "Answer the agent (transcript only)")
+        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .spec) == "In Activity · Answer the agent…")
+        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .transcript) == "Transcript only · Answer the agent…")
         var review = Self.ticket
         review.status = .review
-        #expect(TicketDetailLogic.composerPlaceholder(review, tab: .activity) == "Ask about the work, or ask for a change (shows in Activity)")
+        #expect(TicketDetailLogic.composerPlaceholder(review, tab: .activity) == "In Activity · Ask about the work, or ask for a change…")
     }
 }
 

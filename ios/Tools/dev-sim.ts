@@ -339,7 +339,7 @@ async function seed(d: Daemon): Promise<Seeded> {
   await git(repo, "add", "-A");
   await git(repo, "commit", "-qm", "Initial commit");
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" });
-  const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: true, ...extra });
+  const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, spec: prompt, driver: "dummy", start: true, ...extra });
   const ticket = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
   const settle = (t: Ticket, pred: (t: Ticket) => boolean) => until(`${t.key} settles`, async () => ((x) => (pred(x) ? x : null))(await ticket(t.key)), 60000);
 

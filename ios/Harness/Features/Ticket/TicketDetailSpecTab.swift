@@ -159,13 +159,25 @@ private struct SpecHistoryBar: View {
                     } else {
                         Spacer(minLength: 0)
                     }
-                    Toggle(isOn: $showChanges) {
-                        Text("Show changes").font(.scaled(size: 13)).foregroundStyle(rev > 1 ? c.text2 : c.text3)
+                    let on = showChanges && rev > 1
+                    Button {
+                        haptic(.select)
+                        showChanges.toggle()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Icon(on ? "check" : "branch", size: 11, weight: .semibold)
+                            Text("Show changes").font(.scaled(size: 13, weight: .medium))
+                        }
+                        .foregroundStyle(rev <= 1 ? c.text3 : on ? c.onAccent : c.text2)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(on ? c.accent : c.bgActive, in: .capsule)
+                        .contentShape(.capsule)
                     }
-                    .toggleStyle(.switch)
-                    .tint(c.accent)
+                    .buttonStyle(.plain)
                     .fixedSize()
                     .disabled(rev <= 1)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                     .accessibilityHint(rev <= 1 ? "The first revision has nothing to compare with" : "Compares this revision with the one before it")
                 }
             }
