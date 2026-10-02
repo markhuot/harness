@@ -121,14 +121,15 @@ public enum TicketKind: OpenEnum {
 /// prompts: "merge" merges the branch into its base branch locally, "pr" pushes it and opens a
 /// GitHub pull request with gh, "custom" follows the approver's own instructions.
 public enum CompletionAction: OpenEnum {
-    case merge, pr, custom
+    case merge, pr, cleanup, custom
     case unknown(String)
     /// COMPLETION_ACTIONS
-    public static let allKnown: [Self] = [.merge, .pr, .custom]
+    public static let allKnown: [Self] = [.merge, .pr, .cleanup, .custom]
     public var rawValue: String {
         switch self {
         case .merge: "merge"
         case .pr: "pr"
+        case .cleanup: "cleanup"
         case .custom: "custom"
         case let .unknown(r): r
         }
@@ -292,19 +293,19 @@ public enum WatcherLiveState: OpenEnum {
 /// starts a run. GET /prompts describes each one.
 public enum PromptId: OpenEnum {
     case systemIntro, systemContext, systemLifecycle, systemPlan, systemWork, systemReview
-    case systemCompleteMerge, systemCompletePr, systemCompleteCustom, systemConductor, systemChat
+    case systemCompleteMerge, systemCompletePr, systemCompleteCleanup, systemCompleteCustom, systemConductor, systemChat
     case systemTriage, systemChildren, systemBranches, systemFiles, systemSummaries, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
-    case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCustom
+    case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
     case runConductorUpdate, runChangesRequested, runReopen, runTriage
     case unknown(String)
     /// PROMPT_IDS, in order
     public static let allKnown: [Self] = [
         .systemIntro, .systemContext, .systemLifecycle, .systemPlan, .systemWork, .systemReview,
-        .systemCompleteMerge, .systemCompletePr, .systemCompleteCustom, .systemConductor, .systemChat,
+        .systemCompleteMerge, .systemCompletePr, .systemCompleteCleanup, .systemCompleteCustom, .systemConductor, .systemChat,
         .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemSummaries, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
-        .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCustom,
+        .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
         .runConductorUpdate, .runChangesRequested, .runReopen, .runTriage,
     ]
     public var rawValue: String {
@@ -317,6 +318,7 @@ public enum PromptId: OpenEnum {
         case .systemReview: "system.review"
         case .systemCompleteMerge: "system.complete_merge"
         case .systemCompletePr: "system.complete_pr"
+        case .systemCompleteCleanup: "system.complete_cleanup"
         case .systemCompleteCustom: "system.complete_custom"
         case .systemConductor: "system.conductor"
         case .systemChat: "system.chat"
@@ -336,6 +338,7 @@ public enum PromptId: OpenEnum {
         case .runReview: "run.review"
         case .runCompleteMerge: "run.complete_merge"
         case .runCompletePr: "run.complete_pr"
+        case .runCompleteCleanup: "run.complete_cleanup"
         case .runCompleteCustom: "run.complete_custom"
         case .runConductorUpdate: "run.conductor_update"
         case .runChangesRequested: "run.changes_requested"

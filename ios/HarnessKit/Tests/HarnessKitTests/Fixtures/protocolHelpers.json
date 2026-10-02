@@ -21,6 +21,7 @@
     "COMPLETION_ACTIONS": [
       "merge",
       "pr",
+      "cleanup",
       "custom"
     ],
     "PROMPT_IDS": [
@@ -32,6 +33,7 @@
       "system.review",
       "system.complete_merge",
       "system.complete_pr",
+      "system.complete_cleanup",
       "system.complete_custom",
       "system.conductor",
       "system.chat",
@@ -51,6 +53,7 @@
       "run.review",
       "run.complete_merge",
       "run.complete_pr",
+      "run.complete_cleanup",
       "run.complete_custom",
       "run.conductor_update",
       "run.changes_requested",

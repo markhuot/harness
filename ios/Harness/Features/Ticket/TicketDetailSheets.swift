@@ -180,7 +180,7 @@ struct TicketDetailCompleteSheet: View {
         let state = store.state
         let project = state.projects[ticket.projectId]
         let parent = ticket.parentId.flatMap { state.tickets[$0] }
-        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent)
+        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: state.settings?.baseBranch)
         let choose = TicketDetailLogic.completeSheetChooses(ready: BoardState.isReady(ticket), autoComplete: project?.autoComplete ?? false, opts: opts)
         let action = choice ?? TicketDetailLogic.completeSheetInitial(initialAction, opts: opts)
         let explicit = choose || initialAction != nil

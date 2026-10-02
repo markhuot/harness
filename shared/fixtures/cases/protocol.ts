@@ -34,7 +34,7 @@ const project: P.Project = {
   permissionMode: "ask",
   baseBranch: "develop",
   completionAction: "pr",
-  completionActions: ["merge", "pr", "custom"],
+  completionActions: ["merge", "pr", "cleanup", "custom"],
   pullRequestHost: "github.com",
   color: "blue",
   createdAt: T0,
@@ -194,6 +194,7 @@ export const Ticket: P.Ticket[] = [
   },
   { ...plainTicket, id: "tkt_4", key: "SCRATCH-4", status: "in_progress", useWorktree: false, completionAction: "merge" },
   { ...plainTicket, id: "tkt_5", key: "SCRATCH-5", status: "review", completionAction: "custom" },
+  { ...plainTicket, id: "tkt_6", key: "SCRATCH-6", status: "done", completionAction: "cleanup" },
 ];
 
 export const TicketPage: P.TicketPage[] = [

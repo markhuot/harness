@@ -34,15 +34,18 @@ public enum Completion {
         public var completionAction: CompletionAction?
         public var pullRequestUrl: String?
         public var baseBranch: String?
+        /// The ticket's own branch (its worktree's)
+        public var branch: String?
 
-        public init(completionAction: CompletionAction? = nil, pullRequestUrl: String? = nil, baseBranch: String? = nil) {
+        public init(completionAction: CompletionAction? = nil, pullRequestUrl: String? = nil, baseBranch: String? = nil, branch: String? = nil) {
             self.completionAction = completionAction
             self.pullRequestUrl = pullRequestUrl
             self.baseBranch = baseBranch
+            self.branch = branch
         }
 
         public init(_ ticket: Ticket) {
-            self.init(completionAction: ticket.completionAction.optional, pullRequestUrl: ticket.pullRequestUrl.optional, baseBranch: ticket.baseBranch.optional)
+            self.init(completionAction: ticket.completionAction.optional, pullRequestUrl: ticket.pullRequestUrl.optional, baseBranch: ticket.baseBranch.optional, branch: ticket.branch)
         }
     }
 
@@ -90,13 +93,13 @@ public enum Completion {
         }
     }
 
-    /// The actions a project offers from what its checkout supports: custom only outside git; merge and
-    /// custom in a git repo; pr as well when a pull request can be opened (`pullRequestHost`). Uses the
-    /// service's list when it sent one.
+    /// The actions a project offers from what its checkout supports: custom only outside git; merge,
+    /// cleanup and custom in a git repo; pr as well when a pull request can be opened
+    /// (`pullRequestHost`). Uses the service's list when it sent one.
     public static func offeredCompletionActions(_ project: ProjectInfo?) -> [CompletionAction] {
         if let list = project?.completionActions { return list }
         if project?.isGit == false { return [.custom] }
-        return nonEmpty(project?.pullRequestHost) != nil ? [.merge, .pr, .custom] : [.merge, .custom]
+        return nonEmpty(project?.pullRequestHost) != nil ? [.merge, .pr, .cleanup, .custom] : [.merge, .cleanup, .custom]
     }
 
     /// Whether a string from a request is a completion action at all.
@@ -114,15 +117,29 @@ public enum Completion {
         return offered.contains(.merge) ? .merge : offered.first ?? .custom
     }
 
-    /// What approving `ticket` can do. A child whose parent has a branch only merges into it. Otherwise
-    /// the project's offered actions, preselecting the ticket's earlier choice, then pr when the ticket
-    /// already opened a pull request (so a re-approval updates it), then the project default.
-    public static func completionOptions(_ ticket: TicketInfo?, _ project: ProjectInfo?, parent: ParentInfo? = nil) -> Options {
+    /// Whether the ticket works on its base branch itself (`branch` is the effective base, as on a
+    /// ticket made to push to an existing pull request's branch): there's nothing to merge or open a
+    /// pull request from.
+    public static func worksOnBase(_ ticket: TicketInfo?, base: String?) -> Bool {
+        guard let branch = nonEmpty(ticket?.branch), let base = nonEmpty(base) else { return false }
+        return branch.utf16.elementsEqual(base.utf16)
+    }
+
+    /// What approving `ticket` can do. A child whose parent has a branch only merges into it.
+    /// Otherwise the project's offered actions; cleanup always among them, since even a worktree with no
+    /// commits (the work was a database or config change outside git) is worth removing. A ticket on
+    /// its base branch (`base`, the effective base branch, when the caller knows it) has nothing to
+    /// merge or open a pull request from, so those two drop out. Preselects the ticket's earlier
+    /// choice, then pr when the ticket already opened a pull request (so a re-approval updates it),
+    /// then the project default, then the first action left.
+    public static func completionOptions(_ ticket: TicketInfo?, _ project: ProjectInfo?, parent: ParentInfo? = nil, base: String? = nil) -> Options {
         if let branch = Branches.parentLandingBranch(ticketBaseBranch: ticket?.baseBranch, parentBranch: parent?.branch, parentStatus: parent?.status) {
             return Options(actions: [.merge], defaultAction: .merge, parentBranch: branch)
         }
-        let actions = offeredCompletionActions(project)
-        var defaultAction = projectCompletionDefault(project)
+        let onBase = worksOnBase(ticket, base: base)
+        let actions = offeredCompletionActions(project).filter { !(onBase && ($0 == .merge || $0 == .pr)) }
+        let projectDefault = projectCompletionDefault(project)
+        var defaultAction = actions.contains(projectDefault) ? projectDefault : actions.first ?? .custom
         if let earlier = ticket?.completionAction, !earlier.rawValue.isEmpty, actions.contains(earlier) {
             defaultAction = earlier
         } else if nonEmpty(ticket?.pullRequestUrl) != nil, actions.contains(.pr) {
@@ -131,26 +148,33 @@ public enum Completion {
         return Options(actions: actions, defaultAction: defaultAction, parentBranch: nil)
     }
 
-    /// `completionOptions` for protocol entities.
-    public static func completionOptions(ticket: Ticket?, project: Project?, parent: Ticket? = nil) -> Options {
-        completionOptions(ticket.map(TicketInfo.init), project.map(ProjectInfo.init), parent: parent.map(ParentInfo.init))
+    /// `completionOptions` for protocol entities. `settingsBaseBranch` (PublicSettings.baseBranch)
+    /// resolves the ticket's effective base branch, so a ticket on its base branch offers no merge or
+    /// pull request.
+    public static func completionOptions(ticket: Ticket?, project: Project?, parent: Ticket? = nil, settingsBaseBranch: String? = nil) -> Options {
+        let base = ticket.map { Branches.resolveBaseBranch(ticket: $0, project: project, settingsBaseBranch: settingsBaseBranch, parent: parent).branch }
+        return completionOptions(ticket.map(TicketInfo.init), project.map(ProjectInfo.init), parent: parent.map(ParentInfo.init), base: base)
     }
 
     /// The action a completion uses: `requested` when given (nil plus the reason when the ticket
     /// doesn't offer it), else the preselected one.
-    public static func resolveCompletionAction(_ requested: CompletionAction?, _ ticket: TicketInfo?, _ project: ProjectInfo?, parent: ParentInfo? = nil) -> Resolution {
-        let opts = completionOptions(ticket, project, parent: parent)
+    public static func resolveCompletionAction(_ requested: CompletionAction?, _ ticket: TicketInfo?, _ project: ProjectInfo?, parent: ParentInfo? = nil, base: String? = nil) -> Resolution {
+        let opts = completionOptions(ticket, project, parent: parent, base: base)
         guard let requested, !requested.rawValue.isEmpty else { return Resolution(action: opts.defaultAction, error: nil) }
         if opts.actions.contains(requested) { return Resolution(action: requested, error: nil) }
-        return Resolution(action: nil, error: completionRefusal(requested, opts))
+        return Resolution(action: nil, error: completionRefusal(requested, opts, ticket, project, base: base))
     }
 
-    private static func completionRefusal(_ action: CompletionAction, _ opts: Options) -> String {
+    private static func completionRefusal(_ action: CompletionAction, _ opts: Options, _ ticket: TicketInfo?, _ project: ProjectInfo?, base: String?) -> String {
         if let branch = opts.parentBranch, !branch.isEmpty {
             return "this ticket merges into its parent's branch \(branch), so it can't complete with \"\(action.rawValue)\""
         }
+        if offeredCompletionActions(project).contains(action), worksOnBase(ticket, base: base) {
+            let what = action == .pr ? "open a pull request from" : "merge"
+            return "this ticket works on its base branch \(base ?? ""), so there is nothing to \(what): complete it with \"cleanup\" or \"custom\""
+        }
         if action == .pr { return "\"pr\" needs a git remote on a host gh is logged into (run gh auth login)" }
-        if action == .merge { return "\"merge\" needs a git repository" }
+        if action == .merge || action == .cleanup { return "\"\(action.rawValue)\" needs a git repository" }
         return "\"\(action.rawValue)\" isn't offered here (offered: \(opts.actions.map(\.rawValue).joined(separator: ", ")))"
     }
 
@@ -158,6 +182,7 @@ public enum Completion {
     public static let completionActionLabels: [CompletionAction: String] = [
         .merge: "Approve and merge",
         .pr: "Approve and open PR",
+        .cleanup: "Approve and clean up",
         .custom: "Approve and…",
     ]
 
@@ -169,20 +194,29 @@ public enum Completion {
     /// The last, separate choice: approve and mark done without a completion run.
     public static let approveNoActionLabel = "Approve and take no action"
 
-    /// The Approve button's primary label for the preselected action: "Approve and merge into
-    /// harness/web-1" for a child on its parent's branch, a plain "Approve" when custom is the only
-    /// choice (no git: a light wrap-up), else the action's label (nil for an unknown action).
+    /// The Approve button's primary label for the preselected action: a plain "Approve" when custom is
+    /// the choice (no git: a light wrap-up), else the action's label (nil for an unknown action).
     public static func approveLabel(_ opts: Options) -> String? {
-        if let branch = nonEmpty(opts.parentBranch) { return "Approve and merge into \(branch)" }
         if opts.defaultAction == .custom { return "Approve" }
         return label(for: opts.defaultAction)
     }
 
-    /// The Approve menu's choices, in order (merge, pr, then custom as "Approve and…", which asks for
-    /// instructions). Empty for a child on its parent's branch: it only merges. "Approve and take no
-    /// action" always follows them, after a separator.
-    public static func approveMenuActions(_ opts: Options) -> [CompletionAction] {
-        nonEmpty(opts.parentBranch) != nil ? [] : opts.actions
+    /// The conductor that approves and lands a ticket in the human's place: its parent, until the
+    /// parent is done (a done parent runs no more, so the human takes its children back). The apps
+    /// disable the Approve and Complete buttons for such a ticket, with `conductorManagedReason`.
+    public static func managingConductor(parentId: String?, parentKey: String?, parentStatus: TicketStatus?) -> String? {
+        guard nonEmpty(parentId) != nil, let key = parentKey, parentStatus != .done else { return nil }
+        return key
+    }
+
+    /// `managingConductor` for protocol entities: the parent ticket, or nil.
+    public static func managingConductor(ticket: Ticket?, parent: Ticket?) -> Ticket? {
+        managingConductor(parentId: ticket?.parentId, parentKey: parent?.key, parentStatus: parent?.status) != nil ? parent : nil
+    }
+
+    /// Why the Approve and Complete buttons are disabled on a conductor-managed ticket.
+    public static func conductorManagedReason(conductorKey: String) -> String {
+        "Conductor managed: \(conductorKey) approves and lands this ticket"
     }
 
     private static func nonEmpty(_ s: String?) -> String? {

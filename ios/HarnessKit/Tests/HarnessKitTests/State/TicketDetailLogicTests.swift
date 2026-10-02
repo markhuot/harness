@@ -44,6 +44,10 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.completeButtonLabel(ready: false, busy: true) == "Complete (needs both agent and human approval)")
         #expect(TicketDetailLogic.completeButtonLabel(ready: true, busy: true) == "Complete (an agent run is in progress)")
         #expect(TicketDetailLogic.completeButtonLabel(ready: true, busy: false) == "Complete")
+        let reason = Completion.conductorManagedReason(conductorKey: "WEB-1")
+        #expect(TicketDetailLogic.completeButtonLabel(ready: false, busy: true, managedReason: reason) == "Complete (Conductor managed: WEB-1 approves and lands this ticket)")
+        #expect(TicketDetailLogic.approveButtonLabel("Approve and merge", managedReason: reason) == "Approve and merge (Conductor managed: WEB-1 approves and lands this ticket)")
+        #expect(TicketDetailLogic.approveButtonLabel("Approve and merge", managedReason: nil) == "Approve and merge")
     }
 
     @Test("the Complete sheet offers a choice only when nothing else decides")
@@ -56,9 +60,6 @@ struct TicketDetailLogicTests {
         #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: true, opts: three))
         #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: one))
         #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: child))
-        // An empty parent branch is no parent branch.
-        let empty = Completion.Options(actions: [.merge, .custom], defaultAction: .merge, parentBranch: "")
-        #expect(TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: empty))
     }
 
     @Test("the Complete sheet starts on the menu's action only when the ticket offers it")
@@ -69,13 +70,13 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.completeSheetInitial(nil, opts: opts) == .merge)
     }
 
-    @Test("the Complete sheet's text names the parent branch over the action")
+    @Test("the Complete sheet's text says what the chosen action does")
     func completeText() {
         let opts = Completion.Options(actions: [.merge, .pr, .custom], defaultAction: .merge)
         #expect(TicketDetailLogic.completeSheetText(.pr, opts: opts) == "The agent finalizes the work: pushes the branch and opens a pull request, cleans up, and marks the ticket done.")
         #expect(TicketDetailLogic.completeSheetText(.custom, opts: opts).contains("follows your instructions"))
-        let child = Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/web-1")
-        #expect(TicketDetailLogic.completeSheetText(.custom, opts: child).contains("merges the branch into harness/web-1"))
+        #expect(TicketDetailLogic.completeSheetText(.cleanup, opts: opts).contains("removes the worktree and the harness branch"))
+        #expect(TicketDetailLogic.completeSheetText(.merge, opts: opts).contains("merges the worktree branch"))
     }
 
     @Test("a custom completion that was chosen needs instructions; whitespace isn't any")
@@ -94,10 +95,8 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.approveCustomInitial(Self.ticket(.review, completionAction: .value(.custom))) == "")
     }
 
-    @Test("menus' parent-branch message and the Complete menu toast")
+    @Test("the Complete menu toast and the agent review button")
     func menuText() {
-        #expect(TicketDetailLogic.parentBranchMessage(Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "b")) == "It merges into b, its parent's branch.")
-        #expect(TicketDetailLogic.parentBranchMessage(Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "")) == nil)
         #expect(TicketDetailLogic.completeMenuToast(.none, label: "GREET-1") == "GREET-1 marked done")
         #expect(TicketDetailLogic.completeMenuToast(.action(.merge), label: "GREET-1") == "Completion run queued")
         #expect(TicketDetailLogic.agentReviewButton(.skipped) == "Run agent review")

@@ -2,19 +2,21 @@
 import {
   APPROVE_NO_ACTION_LABEL,
   approveLabel,
-  approveMenuActions,
   COMPLETION_ACTION_LABELS,
   completionOptions,
+  conductorManagedReason,
   isCompletionAction,
+  managingConductor,
   offeredCompletionActions,
   projectCompletionDefault,
   resolveCompletionAction,
+  worksOnBase,
 } from "../../src/completion";
 import type { CompletionAction } from "../../src/protocol";
 import { cases } from "../case";
 
 type ProjectIn = { isGit?: boolean; completionAction?: CompletionAction; completionActions?: CompletionAction[]; pullRequestHost?: string | null } | null;
-type TicketIn = { completionAction?: CompletionAction | null; pullRequestUrl?: string | null; baseBranch?: string | null } | null;
+type TicketIn = { completionAction?: CompletionAction | null; pullRequestUrl?: string | null; baseBranch?: string | null; branch?: string | null } | null;
 type ParentIn = { branch?: string | null; status?: string } | null;
 
 const git = { isGit: true, pullRequestHost: null } as const;
@@ -41,6 +43,7 @@ export const offeredCompletionActionsCases = cases(offeredCompletionActions, pro
 export const isCompletionActionCases = cases(isCompletionAction, {
   merge: "merge",
   pr: "pr",
+  cleanup: "cleanup",
   custom: "custom",
   "unknown string": "deploy",
   "upper case": "MERGE",
@@ -66,6 +69,8 @@ interface OptionsIn {
   ticket: TicketIn;
   project: ProjectIn;
   parent?: ParentIn;
+  /** The effective base branch, when the caller knows it */
+  base?: string | null;
 }
 
 const optionInputs: Record<string, OptionsIn> = {
@@ -89,19 +94,55 @@ const optionInputs: Record<string, OptionsIn> = {
   "earlier unknown action not offered": { ticket: { completionAction: deploy }, project: git },
   "only an unknown action offered": { ticket: null, project: { completionActions: [deploy] } },
   "the service sent an empty list": { ticket: null, project: { ...gh, completionActions: [] } },
+  "on its base branch: no merge or pr": { ticket: { branch: "feature/pr-head" }, project: { ...gh, completionAction: "merge" }, base: "feature/pr-head" },
+  "on its base branch, project default pr: first action left": { ticket: { branch: "feature/pr-head" }, project: { ...gh, completionAction: "pr" }, base: "feature/pr-head" },
+  "on its base branch with an earlier merge": { ticket: { branch: "x", completionAction: "merge" }, project: git, base: "x" },
+  "on its base branch outside git": { ticket: { branch: "x" }, project: plain, base: "x" },
+  "a different base branch changes nothing": { ticket: { branch: "harness/web-2" }, project: gh, base: "main" },
+  "an empty branch is never on base": { ticket: { branch: "" }, project: gh, base: "" },
+  "no base known": { ticket: { branch: "x" }, project: gh, base: null },
+  "a child on its parent's branch ignores base": { ticket: { branch: "harness/web-1" }, project: gh, parent: { branch: "harness/web-1" }, base: "harness/web-1" },
+  "earlier cleanup sticks": { ticket: { completionAction: "cleanup", pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
+  "on base, only merge and pr offered": { ticket: { branch: "x" }, project: { ...gh, completionActions: ["merge", "pr"] }, base: "x" },
 };
 
-export const completionOptionsCases = cases(({ ticket, project, parent }: OptionsIn) => completionOptions(ticket, project, parent), optionInputs);
+export const completionOptionsCases = cases(({ ticket, project, parent, base }: OptionsIn) => completionOptions(ticket, project, parent, base), optionInputs);
 
-export const approveLabelCases = cases(({ ticket, project, parent }: OptionsIn) => approveLabel(completionOptions(ticket, project, parent)), optionInputs);
+export const approveLabelCases = cases(({ ticket, project, parent, base }: OptionsIn) => approveLabel(completionOptions(ticket, project, parent, base)), optionInputs);
 
-export const approveMenuActionsCases = cases(({ ticket, project, parent }: OptionsIn) => approveMenuActions(completionOptions(ticket, project, parent)), optionInputs);
+export const worksOnBaseCases = cases(({ ticket, base }: { ticket: TicketIn; base?: string | null }) => worksOnBase(ticket, base), {
+  "same branch": { ticket: { branch: "feature/x" }, base: "feature/x" },
+  "different branch": { ticket: { branch: "harness/web-1" }, base: "main" },
+  "no ticket": { ticket: null, base: "main" },
+  "no branch": { ticket: {}, base: "main" },
+  "null branch": { ticket: { branch: null }, base: null },
+  "empty both": { ticket: { branch: "" }, base: "" },
+  "no base": { ticket: { branch: "main" }, base: null },
+  "case matters": { ticket: { branch: "Main" }, base: "main" },
+});
+
+type ConductorIn = { key: string; status?: string };
+export const managingConductorCases = cases(({ ticket, parent }: { ticket: { parentId?: string | null } | null; parent: ConductorIn | null }) => managingConductor(ticket, parent), {
+  "a child of a running conductor": { ticket: { parentId: "t1" }, parent: { key: "WEB-1", status: "in_progress" } },
+  "a child of a conductor in review": { ticket: { parentId: "t1" }, parent: { key: "WEB-1", status: "review" } },
+  "a done parent hands the child back": { ticket: { parentId: "t1" }, parent: { key: "WEB-1", status: "done" } },
+  "a parent with no status still manages": { ticket: { parentId: "t1" }, parent: { key: "WEB-1" } },
+  "no parent id": { ticket: { parentId: null }, parent: { key: "WEB-1", status: "in_progress" } },
+  "empty parent id": { ticket: { parentId: "" }, parent: { key: "WEB-1", status: "in_progress" } },
+  "parent not loaded": { ticket: { parentId: "t1" }, parent: null },
+  "no ticket": { ticket: null, parent: { key: "WEB-1", status: "in_progress" } },
+});
+
+export const conductorManagedReasonCases = cases(conductorManagedReason, {
+  plain: { key: "WEB-1" },
+  "a remote key": { key: "JIRA-62" },
+});
 
 interface ResolveIn extends OptionsIn {
   requested: CompletionAction | null;
 }
 
-export const resolveCompletionActionCases = cases(({ requested, ticket, project, parent }: ResolveIn) => resolveCompletionAction(requested, ticket, project, parent), {
+export const resolveCompletionActionCases = cases(({ requested, ticket, project, parent, base }: ResolveIn) => resolveCompletionAction(requested, ticket, project, parent, base), {
   "nothing requested: the preselected one": { requested: null, ticket: null, project: { ...gh, completionAction: "pr" } },
   "empty request: the preselected one": { requested: "" as CompletionAction, ticket: null, project: git },
   "an offered action passes": { requested: "custom", ticket: null, project: git },
@@ -113,6 +154,13 @@ export const resolveCompletionActionCases = cases(({ requested, ticket, project,
   "custom not offered by the service's list": { requested: "custom", ticket: null, project: { ...gh, completionActions: ["merge", "pr"] } },
   "an unknown action": { requested: deploy, ticket: null, project: gh },
   "an unknown action the service offers": { requested: deploy, ticket: null, project: { completionActions: [deploy] } },
+  "cleanup in git": { requested: "cleanup", ticket: null, project: git },
+  "cleanup outside git": { requested: "cleanup", ticket: null, project: plain },
+  "merge on its base branch": { requested: "merge", ticket: { branch: "x" }, project: gh, base: "x" },
+  "pr on its base branch": { requested: "pr", ticket: { branch: "x" }, project: gh, base: "x" },
+  "pr on its base branch without a PR host": { requested: "pr", ticket: { branch: "x" }, project: git, base: "x" },
+  "cleanup on its base branch": { requested: "cleanup", ticket: { branch: "x" }, project: gh, base: "x" },
+  "nothing requested on its base branch": { requested: null, ticket: { branch: "x" }, project: gh, base: "x" },
 } as Record<string, ResolveIn>);
 
 export const labels = { COMPLETION_ACTION_LABELS, APPROVE_NO_ACTION_LABEL };

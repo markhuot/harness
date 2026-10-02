@@ -29,6 +29,8 @@ const opts: Record<string, CompletionOptions> = {
   "open PR preselects pr": completionOptions({ pullRequestUrl: "https://github.com/o/r/pull/1" }, gh),
   "service list with an unknown action": completionOptions({}, { completionActions: ["merge", deploy, "custom"] }),
   "service sent an empty list": completionOptions({}, { ...gh, completionActions: [] }),
+  "on its base branch": completionOptions({ branch: "feature/pr-head" }, gh, null, "feature/pr-head"),
+  "earlier cleanup": completionOptions({ completionAction: "cleanup" }, gh),
 };
 
 export const approveMenuChoicesCases = cases(approveMenuChoices, opts);
@@ -41,6 +43,7 @@ export const approveRequestCases = cases(({ choice, instructions }: { choice: Ap
   "custom trims NBSP but not NEL": { choice: "custom", instructions: " deploy\u0085 " },
   "merge never carries instructions": { choice: "merge", instructions: "stray" },
   "pr never carries instructions": { choice: "pr", instructions: "stray" },
+  "cleanup never carries instructions": { choice: "cleanup", instructions: "stray" },
   "an unknown action passes through": { choice: deploy, instructions: "x" },
 });
 
@@ -71,6 +74,7 @@ export const completeMenuRequestCases = cases(completeMenuRequest, {
   none: "none",
   merge: "merge",
   pr: "pr",
+  cleanup: "cleanup",
   custom: "custom",
   unknown: deploy,
 } as Record<string, ApproveChoice>);
@@ -82,13 +86,11 @@ export const approveToastCases = cases(({ choice, key }: { choice: ApproveChoice
 });
 
 export const completionActionOptionsCases = cases(
-  ({ actions, parentBranch }: { actions: CompletionAction[]; parentBranch?: string | null }) => completionActionOptions(actions, parentBranch),
+  ({ actions }: { actions: CompletionAction[] }) => completionActionOptions(actions),
   {
-    "names the parent's branch on merge": { actions: ["merge"], parentBranch: "harness/web-1" },
-    "every action, no parent": { actions: ["merge", "pr", "custom"] },
-    "explicit null parent": { actions: ["merge", "custom"], parentBranch: null },
-    "empty parent branch is falsy": { actions: ["merge"], parentBranch: "" },
-    "only merge names the branch": { actions: ["pr", "custom", "merge"], parentBranch: "harness/web-1" },
+    "merge alone": { actions: ["merge"] },
+    "every action": { actions: ["merge", "pr", "cleanup", "custom"] },
+    "order is kept": { actions: ["pr", "custom", "merge"] },
     "unknown action has no label": { actions: [deploy, "merge"] },
     "no actions": { actions: [] },
   },

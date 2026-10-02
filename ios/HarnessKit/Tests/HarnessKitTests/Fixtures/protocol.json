@@ -470,6 +470,7 @@
         "completionActions": [
           "merge",
           "pr",
+          "cleanup",
           "custom"
         ],
         "pullRequestHost": "github.com",
@@ -1213,6 +1214,7 @@
       "completionActions": [
         "merge",
         "pr",
+        "cleanup",
         "custom"
       ],
       "pullRequestHost": "github.com",
@@ -2038,6 +2040,35 @@
       "createdAt": 1759190400000,
       "updatedAt": 1759190400000,
       "completionAction": "custom"
+    },
+    {
+      "id": "tkt_6",
+      "key": "SCRATCH-6",
+      "projectId": "prj_00a1",
+      "kind": "task",
+      "title": "Fix the flaky test",
+      "description": "",
+      "status": "done",
+      "sessionId": "ses_2",
+      "driver": "anthropic-api",
+      "parentId": null,
+      "dependsOn": [],
+      "autoStart": false,
+      "agentReview": "pending",
+      "humanReview": "pending",
+      "externalRef": null,
+      "workdir": null,
+      "branch": null,
+      "blockedReason": null,
+      "busy": false,
+      "pendingApproval": null,
+      "allowedTools": [],
+      "permissionMode": null,
+      "model": null,
+      "position": 0,
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "completionAction": "cleanup"
     }
   ],
   "TicketDetail": [
@@ -3013,6 +3044,7 @@
     "CompletionAction": [
       "merge",
       "pr",
+      "cleanup",
       "custom"
     ],
     "SessionKind": [
@@ -3080,6 +3112,7 @@
       "system.review",
       "system.complete_merge",
       "system.complete_pr",
+      "system.complete_cleanup",
       "system.complete_custom",
       "system.conductor",
       "system.chat",
@@ -3099,6 +3132,7 @@
       "run.review",
       "run.complete_merge",
       "run.complete_pr",
+      "run.complete_cleanup",
       "run.complete_custom",
       "run.conductor_update",
       "run.changes_requested",

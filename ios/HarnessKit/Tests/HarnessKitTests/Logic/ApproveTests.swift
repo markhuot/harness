@@ -33,7 +33,6 @@ struct ApproveTests {
 
     struct OptionsInput: Decodable, Sendable {
         let actions: [CompletionAction]
-        let parentBranch: String?
     }
 
     struct BodyInput: Decodable, Sendable {
@@ -82,7 +81,7 @@ struct ApproveTests {
 
     @Test(arguments: Fixture.cases("approve", "completionActionOptionsCases", input: OptionsInput.self, output: JSONValue.self))
     func completionActionOptions(_ c: Fixture.Case<OptionsInput, JSONValue>) throws {
-        #expect(try Self.json(Approve.completionActionOptions(c.input.actions, parentBranch: c.input.parentBranch)) == c.output)
+        #expect(try Self.json(Approve.completionActionOptions(c.input.actions)) == c.output)
     }
 
     @Test(arguments: Fixture.cases("approve", "completeBodyCases", input: BodyInput.self, output: JSONValue.self))
