@@ -129,13 +129,13 @@ export function approveLabel(opts: CompletionOptions): string {
 /**
  * The conductor that approves and lands `ticket` in the human's place: its parent, until the parent
  * is done (a done parent runs no more, so the human takes its children back). The apps disable the
- * Approve and Complete buttons for such a ticket, with `conductorManagedReason` as the tooltip.
+ * Approve button for such a ticket, with `conductorManagedReason` as the tooltip.
  */
 export function managingConductor<P extends { key: string; status?: string }>(ticket: { parentId?: string | null } | null | undefined, parent: P | null | undefined): P | null {
   return ticket?.parentId && parent && parent.status !== "done" ? parent : null;
 }
 
-/** Why the Approve and Complete buttons are disabled on a conductor-managed ticket. */
+/** Why the Approve button is disabled on a conductor-managed ticket. */
 export function conductorManagedReason(conductor: { key: string }): string {
   return `Conductor managed: ${conductor.key} approves and lands this ticket`;
 }

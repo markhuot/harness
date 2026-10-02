@@ -203,7 +203,7 @@ public enum Completion {
 
     /// The conductor that approves and lands a ticket in the human's place: its parent, until the
     /// parent is done (a done parent runs no more, so the human takes its children back). The apps
-    /// disable the Approve and Complete buttons for such a ticket, with `conductorManagedReason`.
+    /// disable the Approve button for such a ticket, with `conductorManagedReason`.
     public static func managingConductor(parentId: String?, parentKey: String?, parentStatus: TicketStatus?) -> String? {
         guard nonEmpty(parentId) != nil, let key = parentKey, parentStatus != .done else { return nil }
         return key
@@ -214,7 +214,7 @@ public enum Completion {
         managingConductor(parentId: ticket?.parentId, parentKey: parent?.key, parentStatus: parent?.status) != nil ? parent : nil
     }
 
-    /// Why the Approve and Complete buttons are disabled on a conductor-managed ticket.
+    /// Why the Approve button is disabled on a conductor-managed ticket.
     public static func conductorManagedReason(conductorKey: String) -> String {
         "Conductor managed: \(conductorKey) approves and lands this ticket"
     }

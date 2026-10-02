@@ -112,7 +112,7 @@ export const searchTickets = defineTool<{ query: string; project_key?: string; l
 export const listProjects = defineTool<Record<string, never>>({
   name: "list_projects",
   description:
-    "List the local projects with their ticket key prefix, name, directory and settings (default driver and models, worktrees, human review, auto-complete, permission mode, base branch, what approving does by default and which completion actions it offers, and the host pull requests open on; null means the settings default).",
+    "List the local projects with their ticket key prefix, name, directory and settings (default driver and models, worktrees, human review, permission mode, base branch, what approving does by default and which completion actions it offers, and the host pull requests open on; null means the settings default).",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const projects = await ctx.ops.listProjects(ctx);

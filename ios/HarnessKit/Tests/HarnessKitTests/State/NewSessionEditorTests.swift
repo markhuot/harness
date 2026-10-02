@@ -10,7 +10,7 @@ import Testing
 @Suite("NewSessionEditor")
 struct NewSessionEditorTests {
     static func project(_ id: String, key: String, name: String, nextSeq: Int, driver: String? = nil) -> Project {
-        Project(id: id, key: key, name: name, path: "/\(name)", nextSeq: nextSeq, defaultDriver: driver, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, autoComplete: false, baseBranch: .null, createdAt: 0, updatedAt: 0)
+        Project(id: id, key: key, name: name, path: "/\(name)", nextSeq: nextSeq, defaultDriver: driver, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, baseBranch: .null, createdAt: 0, updatedAt: 0)
     }
 
     static let settings = PublicSettings(defaultDriver: "claude-code", maxConcurrentRuns: 2, permissionMode: .auto, classifier: .off, anthropicApiKeySet: false)

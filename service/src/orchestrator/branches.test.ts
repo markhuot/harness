@@ -19,7 +19,7 @@ for (const [k, v] of Object.entries(ENV)) process.env[k] = v;
 setDefaultTimeout(30_000);
 
 /** A harness with a git repo (main + one commit) as project REPO. */
-async function setup(opts: { init?: string; baseBranch?: string | null; useWorktrees?: boolean; autoComplete?: boolean } = {}) {
+async function setup(opts: { init?: string; baseBranch?: string | null; useWorktrees?: boolean } = {}) {
   const h = makeOrchestrator({ tools: toolsForRun });
   const repo = join(h.home, "repo");
   mkdirSync(repo);
@@ -31,7 +31,7 @@ async function setup(opts: { init?: string; baseBranch?: string | null; useWorkt
   const gitIn = async (dir: string, ...args: string[]) => (await runGit(args, dir)).stdout;
   await git("init", "-q", "-b", opts.init ?? "main");
   await git("commit", "-q", "--allow-empty", "-m", "init");
-  const project = h.orch.createProject({ path: repo, key: "repo", baseBranch: opts.baseBranch, useWorktrees: opts.useWorktrees, autoComplete: opts.autoComplete });
+  const project = h.orch.createProject({ path: repo, key: "repo", baseBranch: opts.baseBranch, useWorktrees: opts.useWorktrees });
   const get = (t: Ticket) => h.store.tickets.get(t.id)!;
   const ctx = (kind: RunKind, t: Ticket): ToolContext =>
     fakeContext({ runKind: kind, ticket: get(t), session: fakeSession({ id: t.sessionId, key: t.key, ticketId: t.id }), ops: h.orch.ops });
@@ -111,14 +111,14 @@ describe("completion after a restart (nothing cached about the repo's branches)"
   // What a fresh service process knows: nothing about which branches the repo has.
   const forget = (h: Awaited<ReturnType<typeof setup>>) => (h.orch as unknown as { baseFallback: Map<string, string> }).baseFallback.clear();
 
-  for (const how of ["Complete button", "auto-complete"] as const) {
+  for (const how of ["Complete button", "approval"] as const) {
     test(`${how}: the complete run's prompt names the fallback base, same as its system prompt`, async () => {
-      const h = await setup({ init: "master", autoComplete: how === "auto-complete" });
+      const h = await setup({ init: "master" });
       const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
       await h.orch.idle();
       forget(h);
-      h.orch.humanReview(t.key, { decision: "approve" });
       if (how === "Complete button") await h.orch.completeTicket(t.key);
+      else h.orch.humanReview(t.key, { decision: "approve" });
       await h.orch.idle();
       const complete = h.driver.calls.find((c) => c.kind === "complete")!;
       expect(complete.prompt).toContain("into the base branch `master`");
@@ -129,10 +129,9 @@ describe("completion after a restart (nothing cached about the repo's branches)"
   }
 
   test("while the complete run is being prepared the ticket counts as completing", async () => {
-    const h = await setup({ init: "master", autoComplete: false });
+    const h = await setup({ init: "master" });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
-    h.orch.humanReview(t.key, { decision: "approve" });
     const pending = h.orch.completeTicket(t.key);
     await expect(h.orch.completeTicket(t.key)).rejects.toThrow(/already completing/);
     await expect(h.orch.sendMessage(t.key, "one more thing")).rejects.toThrow(/is completing/);
@@ -240,7 +239,7 @@ describe("update_branch", () => {
     await h.orch.idle();
     const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect(realpathSync(last.cwd)).toBe(realpathSync(herdr));
-    h.orch.humanReview(t.key, { decision: "approve" }); // the project auto-completes
+    h.orch.humanReview(t.key, { decision: "approve" }); // approving completes
     await h.orch.idle();
     const complete = h.driver.calls.find((c) => c.kind === "complete")!;
     expect(complete.systemPrompt).toContain("Merge `medl-1223-ai-app` into the base branch `main`");
@@ -250,7 +249,7 @@ describe("update_branch", () => {
   });
 
   test("once that worktree is gone, starting again puts the leftover harness worktree on the ticket's branch", async () => {
-    const h = await setup({ autoComplete: false });
+    const h = await setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /block which branch?" });
     await h.orch.idle();
     const harnessDir = h.get(t).workdir!;
@@ -266,7 +265,7 @@ describe("update_branch", () => {
   });
 
   test("when the ticket's branch can't go back into the leftover harness worktree, the ticket blocks saying why", async () => {
-    const h = await setup({ autoComplete: false });
+    const h = await setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /block which branch?" });
     await h.orch.idle();
     const harnessDir = h.get(t).workdir!;

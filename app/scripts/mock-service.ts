@@ -401,7 +401,6 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     useWorktrees: true,
     isGit,
     requireHumanReview,
-    autoComplete: true,
     permissionMode: null,
     color,
     completionAction: "merge",
@@ -1217,10 +1216,10 @@ function applySkipAgentReview(t: Ticket) {
   }
 }
 
-/** Mirrors Orchestrator.noteReady: both reviews passed + project autoComplete → complete run. */
+/** Mirrors Orchestrator.noteReady: both reviews passed → complete run (conductor children wait). */
 function noteReady(t: Ticket) {
   if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
-  if (!projects.get(t.projectId)?.autoComplete || t.parentId) return;
+  if (t.parentId) return;
   completeRun(t);
 }
 
@@ -1378,7 +1377,6 @@ async function route(req: Request, url: URL): Promise<Response> {
         useWorktrees: body.useWorktrees ?? true,
         isGit: true,
         requireHumanReview: body.requireHumanReview ?? true,
-        autoComplete: body.autoComplete ?? true,
         permissionMode: body.permissionMode ?? null,
         color: normalizeProjectColor(body.color ?? null) ?? null,
         completionAction: "merge",
@@ -1618,6 +1616,11 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "cancel": {
           const r = activeRun(t.sessionId);
           if (r) finishRun(r, "cancelled");
+          // Mirrors Orchestrator.completionStopped: a stopped completion puts the approval back.
+          if (r?.kind === "complete" && t.status === "review" && t.humanReview === "approved") {
+            t.humanReview = "pending";
+            appendEntry(t.sessionId, r.id, "system", { type: "status", text: "Completion cancelled: approve again to land it" });
+          }
           t.busy = false;
           upsertTicket(t);
           return ok(t);

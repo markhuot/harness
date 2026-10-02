@@ -1,7 +1,7 @@
 import Foundation
 
-// The Approve button and its menu, and the Complete sheet's action choice: which request each
-// choice sends. The choices themselves come from `Completion.completionOptions`.
+// The Approve button and its menu: which request each choice sends. The choices themselves come
+// from `Completion.completionOptions`. There's no Complete step: approving lands the work.
 //
 // Labels for an action this build doesn't know are nil (`COMPLETION_ACTION_LABELS` has no entry,
 // so the JSON row has no label), and a choice with such a label stays nil rather than failing.
@@ -114,36 +114,12 @@ public enum Approve {
         primaryApproveRequest(opts, completionAction: ticket.completionAction.optional, completionInstructions: ticket.completionInstructions.optional)
     }
 
-    /// "Approve and merge" → "Complete and merge", for the Complete button's menu.
-    private static func asComplete(_ label: String?) -> String? {
-        guard let label else { return nil }
-        guard label.unicodeScalars.starts(with: "Approve".unicodeScalars) else { return label }
-        return "Complete" + String(String.UnicodeScalarView(label.unicodeScalars.dropFirst(7)))
-    }
-
-    /// The Complete button's menu, once the human review is approved: the offered actions while the
-    /// ticket is ready to complete (`canRun`: both reviews passed, no run in progress), then "Complete and
-    /// take no action", which is always there: it's how an approved ticket waiting on its agent review,
-    /// or on a project that doesn't complete on its own, gets done without an agent run.
-    public static func completeMenuChoices(_ opts: Completion.Options, canRun: Bool) -> [MenuChoice] {
-        let actions = canRun ? opts.actions.map { MenuChoice(value: .action($0), label: asComplete(Completion.label(for: $0))) } : []
-        return actions + [MenuChoice(value: .none, label: asComplete(Completion.approveNoActionLabel))]
-    }
-
-    /// What a Complete menu row sends: an action completes with it; "none" marks the ticket done without a run.
-    public static func completeMenuRequest(_ choice: Choice) -> CompleteBody {
-        switch choice {
-        case .none: CompleteBody(skipAgent: true)
-        case let .action(a): CompleteBody(action: a)
-        }
-    }
-
     /// Toast after an approval.
     public static func approveToast(_ choice: Choice, key: String) -> String {
         choice == .none ? "\(key) approved and marked done" : "Approved"
     }
 
-    /// Short names for a completion action, in the project's "When approved" select and the Complete sheet.
+    /// Short names for a completion action, in the project's "When approved" select.
     public static let completionActionNames: [CompletionAction: String] = [
         .merge: "Merge",
         .pr: "Open PR",
@@ -154,13 +130,5 @@ public enum Approve {
     /// Options for a select of completion actions.
     public static func completionActionOptions(_ actions: [CompletionAction]) -> [Option] {
         actions.map { Option(value: $0, label: completionActionNames[$0]) }
-    }
-
-    /// The Complete sheet's request. `choose` is whether the sheet offered the action choice (both reviews
-    /// passed and the project doesn't complete on its own); otherwise the service keeps the choice made at
-    /// approval.
-    public static func completeBody(choose: Bool, action: CompletionAction, instructions: String) -> CompleteBody {
-        let text = JSCompat.trim(instructions)
-        return CompleteBody(action: choose ? action : nil, instructions: text.isEmpty ? nil : text)
     }
 }

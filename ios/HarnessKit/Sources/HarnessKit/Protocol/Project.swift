@@ -21,10 +21,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     public var isGit: Bool?
     /// When false, the human review step is skipped (agent review alone gates completion)
     public var requireHumanReview: Bool
-    /// When true, a top-level ticket starts its complete run (merge + clean up) as soon as both
-    /// reviews approve, instead of waiting for a human to press Complete. Conductor children are
-    /// left to their conductor.
-    public var autoComplete: Bool
     /// Permission mode for this project's tickets (null → settings.permissionMode)
     @Nullable public var permissionMode: PermissionMode?
     /// Branch this project's tickets merge into when they complete, and new ticket branches start
@@ -33,7 +29,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     public var baseBranch: Patch<String>
     /// What approving one of this project's tickets does by default (DESIGN.md "Completion"): the
     /// choice preselected on the Approve button, and the action used when nobody picks one (no human
-    /// review, a conductor completing a child, auto-complete). When the project stops offering it
+    /// review, a conductor completing a child). When the project stops offering it
     /// (see `completionActions`), the effective default falls back to merge, then custom; resolve with
     /// `completionOptions`. Optional only so older payloads type-check.
     public var completionAction: CompletionAction?
@@ -54,7 +50,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: String, key: String, name: String, path: String, nextSeq: Int, defaultDriver: String? = nil,
         defaultModels: [String: String] = [:], useWorktrees: Bool, isGit: Bool? = nil, requireHumanReview: Bool,
-        autoComplete: Bool, permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
+        permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil, completionActions: [CompletionAction]? = nil,
         pullRequestHost: Patch<String> = .absent, color: String? = nil, createdAt: Timestamp, updatedAt: Timestamp
     ) {
@@ -68,7 +64,6 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.useWorktrees = useWorktrees
         self.isGit = isGit
         self.requireHumanReview = requireHumanReview
-        self.autoComplete = autoComplete
         self.permissionMode = permissionMode
         self.baseBranch = baseBranch
         self.completionAction = completionAction

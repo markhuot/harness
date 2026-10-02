@@ -15,7 +15,6 @@ interface ProjectRow {
   default_driver: string | null;
   use_worktrees: number;
   require_human_review: number;
-  auto_complete?: number;
   permission_mode?: string | null;
   color?: string | null;
   base_branch?: string | null;
@@ -59,7 +58,6 @@ const toProject = (r: ProjectRow): Project => {
     useWorktrees: bool(r.use_worktrees),
     isGit,
     requireHumanReview: bool(r.require_human_review),
-    autoComplete: r.auto_complete === undefined ? true : bool(r.auto_complete),
     permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
     color: r.color ?? null,
     baseBranch: r.base_branch ?? null,
@@ -96,7 +94,6 @@ export interface NewProject {
   defaultDriver?: string | null;
   useWorktrees?: boolean;
   requireHumanReview?: boolean;
-  autoComplete?: boolean;
   color?: string | null;
   baseBranch?: string | null;
   completionAction?: CompletionAction;
@@ -142,8 +139,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, auto_complete, color, base_branch, completion_action, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $autoComplete, $color, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, require_human_review, color, base_branch, completion_action, default_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $requireHumanReview, $color, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
         )
         .run({
           id,
@@ -153,7 +150,6 @@ export class ProjectRepo {
           defaultDriver: input.defaultDriver ?? null,
           useWorktrees: int(input.useWorktrees ?? true),
           requireHumanReview: int(input.requireHumanReview ?? true),
-          autoComplete: int(input.autoComplete ?? true),
           color: input.color ?? null,
           baseBranch: input.baseBranch ?? null,
           completionAction: input.completionAction ?? "merge",
@@ -171,7 +167,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, auto_complete = $autoComplete, color = $color, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, require_human_review = $requireHumanReview, color = $color, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -181,7 +177,6 @@ export class ProjectRepo {
         defaultDriver: patch.defaultDriver !== undefined ? patch.defaultDriver : existing.defaultDriver,
         useWorktrees: int(patch.useWorktrees ?? existing.useWorktrees),
         requireHumanReview: int(patch.requireHumanReview ?? existing.requireHumanReview),
-        autoComplete: int(patch.autoComplete ?? existing.autoComplete),
         color: patch.color !== undefined ? patch.color : existing.color,
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",

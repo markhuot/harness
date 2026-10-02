@@ -674,7 +674,7 @@ async function seed() {
   const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
   // A quick ask that skips the agent review: in review with the muted "skipped" mark.
   const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
-  // Another one, approved by the human while the project doesn't complete on its own: waiting on Complete.
+  // Another quick ask, which the review checks approve: approving alone lands it.
   const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
   // A New session saved as a draft: a dashed card in Planning that reopens in the editor, never run.
   const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
@@ -1794,22 +1794,15 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
         return `${t.key} human=${t.humanReview} → ${t.status}`;
       });
-      await check("Complete menu → Complete and take no action finishes a human-approved ticket without a run", async () => {
-        // With auto-complete off, the approval leaves it in review, ready, waiting on Complete.
-        await api("PATCH", `/projects/${s.other.id}`, { autoComplete: false });
-        try {
-          await api("POST", `/tickets/${s.waiting.key}/review`, { decision: "approve" });
-          await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("More ways to complete"));
-          await tapWhere(udid, "More ways to complete");
-          await until("complete menu", async () => (await labels(udid)).includes("Complete and take no action"), 5000).then(() => Bun.sleep(400));
-          await tapWhere(udid, "Complete and take no action");
-          const t = await settle(s.waiting.key, (x) => x.status === "done", 15000);
-          const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
-          if (runs.some((r) => r.kind === "complete")) throw new Error("a completion run started");
-          return `${t.key} → ${t.status}, no completion run`;
-        } finally {
-          await api("PATCH", `/projects/${s.other.id}`, { autoComplete: true });
-        }
+      await check("approving lands the ticket by itself, and the ticket screen has no Complete", async () => {
+        await api("POST", `/tickets/${s.waiting.key}/review`, { decision: "approve" });
+        const t = await settle(s.waiting.key, (x) => x.status === "done", 15000);
+        const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
+        if (!runs.some((r) => r.kind === "complete" && r.status === "succeeded")) throw new Error("no completion run landed it");
+        await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("Re-open"));
+        const stray = (await labels(udid)).filter((l) => l.startsWith("Complete") || l === "More ways to complete");
+        if (stray.length) throw new Error(`still offers ${stray.join(", ")}`);
+        return `${t.key} → ${t.status} after one approval`;
       });
       await check("approval card: Allow once resumes the agent", async () => {
         await goto(udid, `harness://ticket/${k(s.approval)}`, (l) => l.includes("Allow once"));

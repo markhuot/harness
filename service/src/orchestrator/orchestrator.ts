@@ -52,6 +52,7 @@ import {
   isConductor,
   isTicketKey,
   normalizeProjectColor,
+  managingConductor,
   offeredCompletionActions,
   outputTitle,
   parentLandingBranch,
@@ -510,6 +511,7 @@ export class Orchestrator {
     this.bus.emit({ kind: "run.upserted", run: r });
     for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
     this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
+    if (run.kind === "complete") this.completionStopped(run.sessionId, "interrupted");
     const session = this.store.sessions.get(run.sessionId);
     if (session?.kind === "triage" && session.triageStatus === "triaging") {
       this.store.sessions.update(session.id, { triageStatus: "failed", outcome: `Interrupted: ${reason}` });
@@ -675,7 +677,6 @@ export class Orchestrator {
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
-      autoComplete: body.autoComplete,
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
@@ -1694,6 +1695,7 @@ export class Orchestrator {
         const r = this.store.runs.finish(job.runId, "cancelled", null);
         this.bus.emit({ kind: "run.upserted", run: r });
         this.appendStatus(sessionId, job.runId, `Run cancelled (${job.kind})`);
+        if (job.kind === "complete") this.completionStopped(sessionId, "cancelled");
       }
     }
     const running = this.queue.runningFor(sessionId);
@@ -2529,7 +2531,6 @@ export class Orchestrator {
       defaultModels: p.defaultModels,
       useWorktrees: p.useWorktrees,
       requireHumanReview: p.requireHumanReview,
-      autoComplete: p.autoComplete,
       permissionMode: p.permissionMode,
       color: p.color,
       baseBranch: p.baseBranch ?? null,
@@ -3126,9 +3127,40 @@ export class Orchestrator {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
       }
       if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
-      if (to === "done") this.kickScheduler();
+      if (to === "done") {
+        this.kickScheduler();
+        this.releaseReadyChildren(t);
+      }
     }
     return t;
+  }
+
+  /** A child its conductor still approves and lands (`managingConductor`: the parent isn't done). */
+  private managedChild(t: Ticket): boolean {
+    return !!managingConductor(t, t.parentId ? this.store.tickets.get(t.parentId) : null);
+  }
+
+  /**
+   * A conductor went done with children it had approved but not completed. They're the human's now,
+   * and nothing would land them, so their approval goes back to pending: approving lands them.
+   */
+  private releaseReadyChildren(conductor: Ticket) {
+    for (const c of this.store.tickets.list({ parentId: conductor.id })) {
+      if (c.status !== "review" || !reviewPassed(c.agentReview) || c.humanReview !== "approved" || this.completing(c)) continue;
+      this.transition(c, "review", { humanReview: "pending" }, `${conductor.key} is done: approve to land this ticket`);
+    }
+  }
+
+  /**
+   * A complete run stopped without landing anything (cancelled, or cut off by a restart). The
+   * approval goes back to pending, so the Approve button offers its choices again and approving
+   * lands the work: nothing else starts a completion for a ticket that's already approved.
+   */
+  private completionStopped(sessionId: string, why: string) {
+    const ticketId = this.store.sessions.get(sessionId)?.ticketId;
+    const t = ticketId ? this.store.tickets.get(ticketId) : null;
+    if (!t || t.status !== "review" || t.humanReview !== "approved") return;
+    this.transition(t, "review", { humanReview: "pending" }, `Completion ${why}: approve again to land it`);
   }
 
   private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
@@ -3158,13 +3190,14 @@ export class Orchestrator {
   }
 
   /**
-   * Both reviews approved: say so, and with the project's autoComplete on start the complete run
-   * right away. Conductor children wait for their conductor's complete_ticket instead.
+   * Both reviews approved: start the complete run right away, with the action chosen at approval
+   * (else the project default). Conductor children wait for their conductor's complete_ticket
+   * instead.
    */
   private noteReady(t: Ticket) {
     if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
-    const project = this.store.projects.get(t.projectId);
-    if (!project?.autoComplete || t.parentId || this.completing(t)) {
+    // A child whose conductor is done is the human's again, and lands like any other ticket.
+    if (this.managedChild(t) || this.completing(t)) {
       this.appendStatus(t.sessionId, null, "Ready to complete");
       return;
     }
@@ -3558,7 +3591,10 @@ export class Orchestrator {
     }
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (!ticket) return;
-    if (run.status === "cancelled") return;
+    if (run.status === "cancelled") {
+      if (run.kind === "complete") this.completionStopped(run.sessionId, "cancelled");
+      return;
+    }
     if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
     if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
@@ -3592,7 +3628,7 @@ export class Orchestrator {
         if (ticket.status === "done") break;
         if (ticket.completionAction === "pr" && !active.pullRequest) {
           // The PR completion's whole result is the pull request: without one, the work hasn't landed.
-          const reason = "Completion ended without opening a pull request. Check the last summary for what went wrong (gh login, push access), then complete the ticket again.";
+          const reason = "Completion ended without opening a pull request. Check the last summary for what went wrong (gh login, push access), then message the agent; once it's back in review, approve it again.";
           this.addSummary(ticket.sessionId, ticket.id, "system", reason);
           this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: no pull request");
           break;

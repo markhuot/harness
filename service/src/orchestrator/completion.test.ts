@@ -41,7 +41,7 @@ afterAll(() => {
   clearPullRequestTargets();
 });
 
-async function setup(opts: { remote?: string | null; git?: boolean; autoComplete?: boolean } = {}) {
+async function setup(opts: { remote?: string | null; git?: boolean } = {}) {
   const h = makeOrchestrator();
   const repo = join(h.home, "repo");
   mkdirSync(repo);
@@ -56,7 +56,7 @@ async function setup(opts: { remote?: string | null; git?: boolean; autoComplete
     if (opts.remote !== null) await git("remote", "add", "origin", opts.remote ?? "git@github.com:acme/web.git");
   }
   clearPullRequestTargets();
-  const project = h.orch.createProject({ path: repo, key: "web", autoComplete: opts.autoComplete ?? false });
+  const project = h.orch.createProject({ path: repo, key: "web" });
   const get = (t: Ticket) => h.store.tickets.get(t.id)!;
   /** A ticket worked, agent-reviewed and waiting on the human. */
   const inReview = async (prompt = "x") => {
@@ -117,7 +117,6 @@ describe("what a project offers", () => {
     expect(h.orch.listProjects()[0]!.completionActions).toEqual(["merge", "cleanup", "custom"]);
     const t = await h.inReview();
     h.orch.humanReview(t.key, { decision: "approve" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     expect(h.get(t).completionAction).toBe("merge");
     expect(h.completes()[0]!.systemPrompt).toContain("## This run: completion\n");
@@ -127,7 +126,7 @@ describe("what a project offers", () => {
 
 describe("choosing at approval", () => {
   test("the choice made before the agent review finishes is kept and runs once the ticket is ready", async () => {
-    const h = await setup({ autoComplete: true });
+    const h = await setup();
     // Hold the agent review so the human approves first.
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
     await h.orch.idle().catch(() => {});
@@ -149,7 +148,6 @@ describe("choosing at approval", () => {
     const t = await h.inReview();
     expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "pr" }), 400, /gh is logged into/);
     expect(h.get(t)).toMatchObject({ humanReview: "pending", completionAction: null });
-    h.orch.humanReview(t.key, { decision: "approve" });
     await expect(h.orch.completeTicket(t.key, { action: "pr" })).rejects.toThrow(/gh is logged into/);
     expect(h.completes()).toHaveLength(0);
   });
@@ -158,7 +156,6 @@ describe("choosing at approval", () => {
     const h = await setup();
     const t = await h.inReview();
     h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Cherry-pick onto release-2.4" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     const run = h.completes()[0]!;
     expect(run.systemPrompt).toContain("## This run: completion (the approver's instructions)");
@@ -169,10 +166,14 @@ describe("choosing at approval", () => {
 
   test("a new action without instructions drops the earlier action's instructions", async () => {
     const h = await setup();
-    const t = await h.inReview();
+    // Hold the agent review so the approval waits, then Complete with another action.
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    while (h.driver.holding === 0) await Bun.sleep(1);
     h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Tag it" });
     await h.orch.completeTicket(t.key, { action: "merge" });
+    h.driver.release();
     await h.orch.idle();
+    expect(h.completes()).toHaveLength(1);
     expect(h.get(t)).toMatchObject({ completionAction: "merge", completionInstructions: null });
     expect(h.completes()[0]!.prompt).not.toContain("Tag it");
   });
@@ -183,7 +184,6 @@ describe("pull request completions", () => {
     const h = await setup();
     const t = await h.inReview();
     h.orch.humanReview(t.key, { decision: "approve", action: "pr", instructions: "[no-pr]" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     expect(h.get(t).status).toBe("blocked");
     expect(h.get(t).blockedReason).toContain("without opening a pull request");
@@ -208,7 +208,6 @@ describe("pull request completions", () => {
     const u = h.get(t);
     h.store.tickets.update(u.id, { status: "review", agentReview: "approved" });
     h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     expect(refused).toContain("only for completion runs that open a pull request");
     expect(h.get(t).pullRequestUrl).toBeNull();
@@ -239,7 +238,6 @@ describe("cleanup completions", () => {
     expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "pr" }), 400, /nothing to open a pull request from/);
     cleansUp(h, null);
     h.orch.humanReview(t.key, { decision: "approve" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     const run = h.completes()[0]!;
     expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup" });
@@ -255,7 +253,6 @@ describe("cleanup completions", () => {
     const t = await h.inReview();
     // The fake complete run removes nothing, as an agent that found unpushed commits would.
     h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
-    await h.orch.completeTicket(t.key);
     await h.orch.idle();
     expect(h.completes()[0]!.systemPrompt).toContain("log --oneline harness/web-1 --not --remotes main`");
     expect(h.get(t).status).toBe("blocked");
@@ -293,7 +290,7 @@ describe("cleanup completions", () => {
 
 describe("Approve and take no action", () => {
   test("in review: done and approved with no completion run, the worktree and branch left alone", async () => {
-    const h = await setup({ autoComplete: true });
+    const h = await setup();
     // The agent review is still running when the human takes no action.
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
     for (let i = 0; i < 100 && h.driver.holding === 0; i++) await Bun.sleep(20);
