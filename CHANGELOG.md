@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A ticket no longer gets stuck after its agent submits it for review or blocks while a
+  background task, such as a log monitor, is still running. Before, the ticket sat in Review
+  looking busy, its agent review never started, and messages you sent it were queued with no
+  run to reach. Now Harness stops the leftover agent process and its background tasks about 15
+  seconds after the run ends, and the ticket's timeline says what was stopped.
+
 ## [app-20261002.2236](https://github.com/markhuot/harness/releases/tag/app-20261002.2236) - 2026-10-02
 
 ### Added

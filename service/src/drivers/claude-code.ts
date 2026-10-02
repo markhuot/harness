@@ -5,6 +5,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:f
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
+import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
 
@@ -33,7 +34,16 @@ export interface ClaudeCodeDriverOptions {
    * as long as they run (a monitor or an import can take days); a human can stop the run.
    */
   backgroundWaitMs?: number;
+  /**
+   * How long the CLI gets to exit once the harness closed its stdin (default 15s). Claude Code
+   * stays up while a background task it started runs (a Monitor's `tail -f`, say), which held a
+   * submitted run open with its agent review waiting (HARNESS-204). After this the CLI and every
+   * process under it are stopped.
+   */
+  exitGraceMs?: number;
 }
+
+const DEFAULT_EXIT_GRACE_MS = 15_000;
 
 /**
  * Harness tools that finish a run. A turn that called one ends even if background tasks are
@@ -838,10 +848,13 @@ export class ClaudeCodeDriver implements Driver {
       stderr: "pipe",
       env: claudeRunEnv(this.env),
     });
-    const onAbort = () => {
-      proc.kill("SIGTERM");
-      setTimeout(() => proc.kill("SIGKILL"), 3000).unref?.();
+    // The CLI and everything it started: its background shells lead process groups of their own.
+    const stopTree = () => {
+      const pids = [proc.pid, ...descendantPids(proc.pid)];
+      signalAll(pids, "SIGTERM");
+      setTimeout(() => signalAll(pids, "SIGKILL"), 3000).unref?.();
     };
+    const onAbort = stopTree;
     req.signal.addEventListener("abort", onAbort, { once: true });
 
     let stderr = "";
@@ -860,11 +873,16 @@ export class ClaudeCodeDriver implements Driver {
     }, realCwd(req.cwd));
 
     // stdin stays open while the turn runs. Closing it lets the CLI exit after the current
-    // turn and kills any background task still running.
+    // turn, though a background task can keep it up (claude 2.1.287 waits on a Monitor), so
+    // closing also starts the exit grace period.
     const waitMs = this.opts.backgroundWaitMs;
     let stdinOpen = true;
     let waitTimer: ReturnType<typeof setTimeout> | null = null;
     let waitedOut = false;
+    const exitGraceMs = this.opts.exitGraceMs ?? DEFAULT_EXIT_GRACE_MS;
+    let exitTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Background tasks still running when the CLI had to be stopped after its run ended */
+    let heldOpenBy: string[] | null = null;
     const writeUser = (content: string, uuid: string) => {
       try {
         proc.stdin.write(JSON.stringify({ type: "user", uuid, message: { role: "user", content } }) + "\n");
@@ -891,6 +909,12 @@ export class ClaudeCodeDriver implements Driver {
       } catch {
         /* child already gone */
       }
+      // EOF should end the CLI, but a background task it still runs keeps it up indefinitely.
+      exitTimer = setTimeout(() => {
+        heldOpenBy = [...parser.runningTasks.values()];
+        stopTree();
+      }, exitGraceMs);
+      exitTimer.unref?.();
     };
     const promptId = crypto.randomUUID();
     let promptTaken = false;
@@ -961,6 +985,13 @@ export class ClaudeCodeDriver implements Driver {
       const resumeFailed = resume && !parser.sawInit && (NO_CONVERSATION.test(stderr) || parser.result?.errors.some((e) => NO_CONVERSATION.test(e)));
       if (resumeFailed) return "retry-fresh";
       for (const ev of buffered.splice(0)) yield ev;
+      if (heldOpenBy) {
+        const tasks: string[] = heldOpenBy;
+        yield {
+          type: "status",
+          text: `Claude Code was still running ${formatWait(exitGraceMs)} after the run ended${tasks.length ? ` (kept up by ${tasks.join("; ")})` : ""}, so it and its background tasks were stopped.`,
+        };
+      }
 
       if (parser.result?.isError) {
         const message = parser.result.message || `claude exited with code ${exitCode}`;
@@ -980,6 +1011,7 @@ export class ClaudeCodeDriver implements Driver {
     } finally {
       unsubscribe?.();
       closeStdin();
+      if (exitTimer) clearTimeout(exitTimer);
       req.signal.removeEventListener("abort", onAbort);
       if (proc.exitCode === null) proc.kill("SIGTERM");
     }
