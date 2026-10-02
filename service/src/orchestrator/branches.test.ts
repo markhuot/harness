@@ -114,6 +114,7 @@ describe("completion after a restart (nothing cached about the repo's branches)"
   for (const how of ["Complete button", "approval"] as const) {
     test(`${how}: the complete run's prompt names the fallback base, same as its system prompt`, async () => {
       const h = await setup({ init: "master" });
+      h.driver.commitsWork = true;
       const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
       await h.orch.idle();
       forget(h);
@@ -234,7 +235,9 @@ describe("update_branch", () => {
     expect(existsSync(before.workdir!)).toBe(true);
     expect(await h.git("branch", "--list", "harness/repo-1")).toContain("harness/repo-1");
 
-    // The next run works in the new worktree, and completion leaves what the harness didn't create.
+    // The next run works in the new worktree (and commits there), and completion leaves what the
+    // harness didn't create.
+    h.driver.commitsWork = true;
     await h.orch.sendMessage(t.key, "carry on", { move: true });
     await h.orch.idle();
     const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;

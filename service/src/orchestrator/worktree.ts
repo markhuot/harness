@@ -162,6 +162,21 @@ export async function switchBranch(workdir: string, branch: string): Promise<{ c
 }
 
 /**
+ * Whether a ticket's worktree has anything to land on `base`: uncommitted changes (untracked files
+ * included), or commits on `branch` that `base` doesn't have. null when git can't say (the worktree
+ * is gone, a branch is missing, it isn't a repo), so the apps keep every Approve choice.
+ */
+export async function hasChangesToLand(workdir: string, branch: string, base: string): Promise<boolean | null> {
+  if (!existsSync(workdir)) return null;
+  const status = await git(["status", "--porcelain"], workdir);
+  if (status.code !== 0) return null;
+  if (status.stdout) return true;
+  if (!(await branchExists(workdir, branch)) || !(await branchExists(workdir, base))) return null;
+  const r = await git(["rev-list", "--count", `refs/heads/${branch}`, `^refs/heads/${base}`], workdir);
+  return r.code === 0 ? Number(r.stdout) > 0 : null;
+}
+
+/**
  * How many of the ticket's commits on `from` aren't on `into` (0 when either is missing). With
  * `base`, commits the base branch already has don't count: they arrive with the merge anyway.
  */

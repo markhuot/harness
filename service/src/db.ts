@@ -473,6 +473,12 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN skip_human_review INTEGER NOT NULL DEFAULT 0;
   `,
+  // 24: tickets.has_changes: whether the ticket's worktree has anything to land (uncommitted
+  //     changes, or commits its base branch doesn't have), checked with git when it moves to review
+  //     and when it's opened. NULL until checked. 0 hides Approve and merge / open PR.
+  `
+  ALTER TABLE tickets ADD COLUMN has_changes INTEGER;
+  `,
 ];
 
 /**

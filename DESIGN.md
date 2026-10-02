@@ -447,16 +447,26 @@ it's approved (`POST /review`, `review_ticket`) or completed (`POST /complete`,
 action without instructions drops the old instructions. `completionOptions` (shared) decides what
 a ticket may do and what's preselected: a child on its parent's branch only merges; otherwise the
 offered actions (`cleanup` always among them in git, even for a worktree with no commits, when
-the work was a change outside git), less `merge` and `pr` for a ticket whose branch is its
-effective base branch (`worksOnBase`: there's nothing to merge or
-open a pull request from; triage makes such tickets with `dispatch_ticket { branch, base_branch }`
-for work on an existing pull request's branch). It preselects the ticket's earlier choice, then
-`pr` for a ticket that already has a `pullRequestUrl` (a re-approval updates the same pull
-request), then the project default, then the first action left (so a ticket on its base branch
-preselects `cleanup`). The apps pass the base branch they resolve (`resolveBaseBranch`); the
+the work was a change outside git), less `merge` and `pr` when there's nothing to merge or open a
+pull request from (`nothingToLand`): the ticket's branch is its effective base branch
+(`worksOnBase`; triage makes such tickets with `dispatch_ticket { branch, base_branch }` for work
+on an existing pull request's branch), it has no branch of its own (`hasNoBranch`: `branch` is
+null, it ran in the project checkout), or its worktree has no changes (`Ticket.hasChanges` false).
+It preselects the ticket's earlier choice, then `pr` for a ticket that already has a
+`pullRequestUrl` (a re-approval updates the same pull request), then the project default, then the
+first action left (so such a ticket preselects `cleanup`). The apps pass the base branch they resolve (`resolveBaseBranch`); the
 service passes its own, which can also fall back to the main checkout's branch. An action the
 ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
 ticket, so the run's system prompt and first message agree.
+
+**Changes to land.** `Ticket.hasChanges` (column `has_changes`, migration 24) says whether the
+ticket's worktree has anything to land: uncommitted changes (untracked files too), or commits on
+its branch that the effective base branch doesn't have (`hasChangesToLand`). The service checks
+with git, in the background, whenever the ticket moves to review, whenever GET /tickets/:key opens
+it in review (so a commit made by hand shows up), and before `enqueueComplete` resolves the action.
+A change is broadcast as `ticket.upserted`. It stays null for a ticket without a worktree of its
+own, before the first check, and when git can't say (the worktree is gone, a branch is missing),
+and null changes nothing.
 
 **Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
 `pr` one) sets `Ticket.pullRequestUrl`, which the apps link to. A `pr` complete run that ends

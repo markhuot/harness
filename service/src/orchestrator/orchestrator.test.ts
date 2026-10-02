@@ -1565,6 +1565,7 @@ describe("worktrees", () => {
 
   test("re-opening a done ticket whose worktree and branch were removed recreates them", async () => {
     const h = setup();
+    h.driver.commitsWork = true;
     const repo = join(h.home, "repo");
     mkdirSync(repo);
     const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
@@ -1659,6 +1660,7 @@ describe("worktrees", () => {
 
   test("a message to a done ticket with a removed worktree recreates it too", async () => {
     const h = setup();
+    h.driver.commitsWork = true;
     const repo = join(h.home, "repo");
     mkdirSync(repo);
     const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
