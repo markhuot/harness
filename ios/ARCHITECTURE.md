@@ -415,9 +415,34 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
-board's decisions that don't draw (landing column, card menu and AX label, drop positions) are in
-HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from the
-environment (store, router, palette), not from extra initializer arguments.
+board's decisions that don't draw (landing column, card menu and AX label, drop positions, column
+sizing, when Done tops itself up) are in HarnessKit's `BoardScreenRules`. The shared parameters a
+slot needs come from the environment (store, router, palette), not from extra initializer arguments.
+
+The board has two layouts, picked by `horizontalSizeClass` (never `userInterfaceIdiom`, so an iPad
+in narrow Split View or a small Stage Manager window gets the phone's):
+
+- **Pager** (compact): `BoardStatusStrip` over a paging horizontal `ScrollView`, one
+  `BoardColumnView` per page, the landing column and the swipe haptic.
+- **Columns** (regular, iPad): every column at once, as on the Mac. Each is a `BoardColumnFrame`
+  (rounded `bgColumn` panel, header with dot, label and count) around the same `BoardColumnView`,
+  so cards, paging footers, empty states and pull to refresh are shared. There is no strip: the
+  headers read "Planning, 3" like the chips (sim-check's `onBoard`, dev-sim's `screenState` and
+  AXe taps rely on it), and a tap on one scrolls its column into view. Widths come from
+  `BoardScreenRules.columnSizing` (equal shares of the window, 216…400pt, the Mac's 216 minimum):
+  five fit an 11-inch iPad in landscape, and anything narrower keeps the minimum and scrolls
+  sideways without paging. The board starts at Planning (no landing column). Which columns are
+  on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
+  autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
+  Drops: on a card, above it; on a header or the space under a column's cards, at its end
+  (`dropMove` with no card to go before). The empty-space drop sits on `BoardColumnView`, not the
+  panel, because the column's scroll view keeps drops from reaching the panel behind it.
+
+simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
+only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
+`UISupportedInterfaceOrientations~ipad` set to landscape only (never commit that), and rotate the
+screenshots with `sips -r 270`. AXe taps land in the wrong place in that build, so only use it for
+screens that don't tap.
 
 The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
 (Ticket/PluginTabsLoader.swift: nil until loaded, [] on failure, refetched on
@@ -667,7 +692,7 @@ native-pattern difference, not a missing feature.
 | Connect: Scan, saved Macs, manual entry, Keychain footer, "Token rejected", pairing sheet | screens/Connect, app/connect, app/pair | Features/Connect/ConnectScreen | done |
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
-| Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done |
+| Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
 | Board header: title, sidebar (Projects); bottom bar: Filter (Show child tickets), search field, + New session | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
