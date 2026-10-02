@@ -86,6 +86,7 @@ import type {
   HarnessOps,
   InboxItem,
   ProjectView,
+  ReviewSkips,
   UpdateTicketInput,
   ToolContext,
   ToolDefinition,
@@ -1014,6 +1015,7 @@ export class Orchestrator {
     const baseBranch = validateBranchName("baseBranch", body.baseBranch);
     const requestedBranch = validateBranchName("branch", body.branch);
     const skipAgentReview = validBoolean("skipAgentReview", body.skipAgentReview) ?? false;
+    const skipHumanReview = validBoolean("skipHumanReview", body.skipHumanReview) ?? false;
     if (requestedBranch && !(useWorktree ?? project.useWorktrees)) {
       throw badRequest(`branch ${requestedBranch} needs a worktree, but this ticket would run in the project checkout (useWorktree is off)`);
     }
@@ -1061,6 +1063,7 @@ export class Orchestrator {
         baseBranch,
         requestedBranch,
         skipAgentReview,
+        skipHumanReview,
         draft,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
@@ -1202,6 +1205,8 @@ export class Orchestrator {
     }
     const skip = validBoolean("skipAgentReview", body.skipAgentReview);
     if (skip !== undefined && skip !== !!ticket.skipAgentReview) patch.skipAgentReview = skip;
+    const skipHuman = validBoolean("skipHumanReview", body.skipHumanReview);
+    if (skipHuman !== undefined && skipHuman !== !!ticket.skipHumanReview) patch.skipHumanReview = skipHuman;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket, body.externalRef) : undefined;
     if (moveTo) ticket = this.moveDraft(ticket, moveTo);
@@ -1218,6 +1223,7 @@ export class Orchestrator {
       this.touchSession(ticket.sessionId);
     }
     if (patch.skipAgentReview !== undefined) ticket = await this.applySkipAgentReview(ticket);
+    if (patch.skipHumanReview !== undefined) ticket = this.applySkipHumanReview(ticket);
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
         case "in_progress":
@@ -1654,6 +1660,29 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
+  /**
+   * After skipHumanReview changed: a ticket in review follows the flag right away. On: a pending
+   * human review counts as approved, so the ticket lands now if its agent review passed. Off: an
+   * approval that isn't landing yet goes back to pending (there's no telling it apart from a
+   * human's own approval, so turning the switch off asks for one either way).
+   */
+  private applySkipHumanReview(ticket: Ticket): Ticket {
+    if (ticket.status !== "review") return ticket;
+    const project = this.store.projects.get(ticket.projectId);
+    if (project && !project.requireHumanReview) return ticket;
+    if (ticket.skipHumanReview && ticket.humanReview === "pending") {
+      const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, "Human review: skipped");
+      this.noteReady(t);
+    } else if (!ticket.skipHumanReview && ticket.humanReview === "approved" && !this.completing(ticket)) {
+      const t = this.store.tickets.update(ticket.id, { humanReview: "pending" })!;
+      this.touchSession(t.sessionId);
+      this.appendStatus(t.sessionId, null, "Human review: waiting on a human again");
+    }
+    return this.store.tickets.get(ticket.id)!;
+  }
+
   /** Drop the session's queued review runs and stop a running one. */
   private async cancelReviewRuns(sessionId: string) {
     for (const job of this.queue.pendingFor(sessionId)) {
@@ -1965,7 +1994,8 @@ export class Orchestrator {
     if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (the composer's "Re-open and move to in progress" switch) to change it again.`);
   }
 
-  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void> {
+  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skips: ReviewSkips = {}): Promise<void> {
+    const { skipAgentReview, skipHumanReview } = skips;
     let t = this.ctxTicket(ctx);
     this.lifecycleFrom(t, "submit_for_review");
     // A parent in review (or done) would strand its children: their reviews and merges are its job.
@@ -1975,13 +2005,17 @@ export class Orchestrator {
         `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
       );
     }
-    if (skipAgentReview === true) this.assertAgentMaySkipReview(t);
+    this.assertAgentMaySkipReview(t, skips);
     const prepared = prepareAttachments(attachments, ctx.cwd);
     // Submitted again from review (a chat changed the work): the reviews start over.
     if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
     if (skipAgentReview !== undefined && skipAgentReview !== !!t.skipAgentReview) {
       t = this.store.tickets.update(t.id, { skipAgentReview })!;
       this.appendStatus(t.sessionId, ctx.runId, skipAgentReview ? "The agent turned off the agent review for this ticket" : "The agent turned the agent review back on");
+    }
+    if (skipHumanReview !== undefined && skipHumanReview !== !!t.skipHumanReview) {
+      t = this.store.tickets.update(t.id, { skipHumanReview })!;
+      this.appendStatus(t.sessionId, ctx.runId, skipHumanReview ? "The agent turned off the human review for this ticket" : "The agent turned the human review back on");
     }
     this.submit(t, summary?.trim() || "Work submitted for review.", "agent", storeAttachments(this.paths.attachmentsDir, prepared));
     const a = this.ctxActive(ctx);
@@ -1990,15 +2024,32 @@ export class Orchestrator {
   }
 
   /**
-   * An agent may skip an agent review (its own ticket's, or one it creates or edits) only when a
-   * human or conductor still reviews the ticket: with the project's human review off, the agent
-   * review is the only check left.
+   * An agent may skip one of a ticket's reviews (its own ticket's, or one it creates or edits) only
+   * while the other still happens, so nothing lands on an agent's say-so with nobody checking. The
+   * agent review needs a human (or conductor) review behind it: the project requires one and the
+   * ticket doesn't skip it. The human review needs the agent review. `next` is what the call sets;
+   * only turning a skip on is checked. Humans can set both anywhere.
    */
-  private assertAgentMaySkipReview(t: Ticket) {
+  private assertAgentMaySkipReview(t: Pick<Ticket, "projectId" | "skipAgentReview" | "skipHumanReview"> & { key?: string }, next: ReviewSkips) {
+    if (!next.skipAgentReview && !next.skipHumanReview) return;
     const project = this.store.projects.get(t.projectId);
-    if (project && !project.requireHumanReview) {
+    const who = t.key ? `${t.key}` : "The new ticket";
+    const agentSkipped = next.skipAgentReview ?? !!t.skipAgentReview;
+    const humanSkipped = next.skipHumanReview ?? !!t.skipHumanReview;
+    if (next.skipAgentReview && project && !project.requireHumanReview) {
       throw new Error(
-        `${t.key}'s project (${project.key}) doesn't require a human review, so the agent review is the only review it gets and an agent can't skip it. A human can turn it off on the ticket.`,
+        t.key
+          ? `${t.key}'s project (${project.key}) doesn't require a human review, so the agent review is the only review it gets and an agent can't skip it. A human can turn it off on the ticket.`
+          : `${project.key} doesn't require a human review, so the agent review is the only review its tickets get and an agent can't skip it.`,
+      );
+    }
+    if (agentSkipped && humanSkipped) {
+      throw new Error(
+        next.skipAgentReview && next.skipHumanReview
+          ? `An agent can't skip both of a ticket's reviews: one of them has to check the work before it lands. A human can turn both off on the ticket.`
+          : next.skipAgentReview
+            ? `${who} skips its human review, so the agent review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`
+            : `${who} skips its agent review, so the human review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`,
       );
     }
   }
@@ -2242,9 +2293,7 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
-    if (input.skipAgentReview && !project.requireHumanReview) {
-      throw new Error(`${project.key} doesn't require a human review, so the agent review is the only review its tickets get and an agent can't skip it.`);
-    }
+    this.assertAgentMaySkipReview({ projectId: project.id }, { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview });
     if (input.child ?? own.kind === "conductor") {
       // Children run on the parent's driver/model unless it picks another. Any ticket can take
       // children; having one makes it act as a conductor (isConductor).
@@ -2265,6 +2314,7 @@ export class Orchestrator {
           branch: input.branch,
           baseBranch: input.baseBranch,
           skipAgentReview: input.skipAgentReview,
+          skipHumanReview: input.skipHumanReview,
         }),
       );
     }
@@ -2284,6 +2334,7 @@ export class Orchestrator {
         branch: input.branch,
         baseBranch: input.baseBranch,
         skipAgentReview: input.skipAgentReview,
+        skipHumanReview: input.skipHumanReview,
       }),
     );
   }
@@ -2305,13 +2356,14 @@ export class Orchestrator {
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
-    if (input.skipAgentReview !== undefined) {
-      // Turning it on in review would end the review under way; that's the reviewers' call.
+    if (input.skipAgentReview !== undefined || input.skipHumanReview !== undefined) {
+      // Turning one on in review would end the review under way; that's the reviewers' call.
       if (target.status === "review" && target.parentId !== actor.id) {
-        throw new Error(`${target.key} is in review; its reviewers decide whether its agent review runs.`);
+        throw new Error(`${target.key} is in review; its reviewers decide whether its reviews run.`);
       }
-      if (input.skipAgentReview) this.assertAgentMaySkipReview(target);
-      body.skipAgentReview = input.skipAgentReview;
+      this.assertAgentMaySkipReview(target, { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview });
+      if (input.skipAgentReview !== undefined) body.skipAgentReview = input.skipAgentReview;
+      if (input.skipHumanReview !== undefined) body.skipHumanReview = input.skipHumanReview;
     }
     if (input.permissionMode !== undefined) {
       // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
@@ -3165,14 +3217,14 @@ export class Orchestrator {
 
   private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
     const project = this.store.projects.get(ticket.projectId);
-    const humanReview = project && !project.requireHumanReview ? "approved" : "pending";
+    const humanSkipped = !!ticket.skipHumanReview && !!project?.requireHumanReview;
+    const humanReview = (project && !project.requireHumanReview) || ticket.skipHumanReview ? "approved" : "pending";
     const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
     this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
     const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", summary);
-    if (agentReview === "skipped") {
-      this.appendStatus(t.sessionId, null, "Agent review: skipped");
-      this.noteReady(t);
-    }
+    if (agentReview === "skipped") this.appendStatus(t.sessionId, null, "Agent review: skipped");
+    if (humanSkipped) this.appendStatus(t.sessionId, null, "Human review: skipped");
+    if (agentReview === "skipped") this.noteReady(t);
   }
 
   private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor"): Ticket {
@@ -3192,12 +3244,12 @@ export class Orchestrator {
   /**
    * Both reviews approved: start the complete run right away, with the action chosen at approval
    * (else the project default). Conductor children wait for their conductor's complete_ticket
-   * instead.
+   * instead, unless they skip the human review: then nobody approves them, so they land too.
    */
   private noteReady(t: Ticket) {
     if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
     // A child whose conductor is done is the human's again, and lands like any other ticket.
-    if (this.managedChild(t) || this.completing(t)) {
+    if ((this.managedChild(t) && !t.skipHumanReview) || this.completing(t)) {
       this.appendStatus(t.sessionId, null, "Ready to complete");
       return;
     }
@@ -3688,7 +3740,7 @@ export class Orchestrator {
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
       unblock: (c, n) => this.unblock(c, n),
-      submitForReview: (c, s, a, skip) => this.submitForReview(c, s, a, skip),
+      submitForReview: (c, s, a, skips) => this.submitForReview(c, s, a, skips),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---

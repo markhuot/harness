@@ -454,6 +454,12 @@ export const MIGRATIONS: string[] = [
     WHERE status = 'review' AND human_review = 'approved' AND agent_review IN ('approved', 'skipped')
       AND (parent_id IS NULL OR parent_id IN (SELECT id FROM tickets WHERE status = 'done'));
   `,
+  // 22: tickets.skip_human_review: submitting counts the human review as approved, so the ticket
+  //     lands as soon as its agent review passes, or right away when that's skipped too (DESIGN.md
+  //     "Skipping a review").
+  `
+  ALTER TABLE tickets ADD COLUMN skip_human_review INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /**

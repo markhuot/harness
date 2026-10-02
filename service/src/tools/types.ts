@@ -136,6 +136,8 @@ export interface CreateTicketInput {
   baseBranch?: string | null;
   /** Skip the agent review when it's submitted; refused for a project without human review. */
   skipAgentReview?: boolean;
+  /** Skip the human review (it lands once the agent review passes); refused alongside skipAgentReview. */
+  skipHumanReview?: boolean;
 }
 
 export interface UpdateTicketInput {
@@ -151,6 +153,17 @@ export interface UpdateTicketInput {
   branch?: string | null;
   /** Ticket.skipAgentReview; true is refused for a project without human review. */
   skipAgentReview?: boolean;
+  /** Ticket.skipHumanReview; true is refused when the ticket skips its agent review. */
+  skipHumanReview?: boolean;
+}
+
+/**
+ * Review skips an agent sets (submit_for_review, create_ticket, update_ticket). Turning one on is
+ * refused when the other review is skipped too: one of them has to check the work.
+ */
+export interface ReviewSkips {
+  skipAgentReview?: boolean;
+  skipHumanReview?: boolean;
 }
 
 /** Everything a tool may need about the run it is executing inside. */
@@ -190,8 +203,8 @@ export interface HarnessOps {
   /** A human's message resolved the block: blocked → in progress, and the run carries on with the work. */
   unblock(ctx: ToolContext, note?: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
-  /** skipAgentReview sets the ticket's skipAgentReview first (true is refused without a human review). */
-  submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skipAgentReview?: boolean): Promise<void>;
+  /** The skips are stored on the ticket first (turning one on is refused when the other review is skipped too). */
+  submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skips?: ReviewSkips): Promise<void>;
   /**
    * Work and conductor runs: re-point the run's own ticket to `branch` (into the worktree that has
    * it checked out, or by switching the ticket's worktree to it) and/or set its base branch

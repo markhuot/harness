@@ -27,7 +27,7 @@ describe("prompt registry", () => {
 });
 
 describe("renderPrompt precedence", () => {
-  const vars = { branch: "harness/x", onBase: false, skipAgentReview: false, canSkipReview: true };
+  const vars = { branch: "harness/x", onBase: false, skipAgentReview: false, skipHumanReview: false, canSkipReview: true };
 
   test("an override replaces the built-in and gets the same variables", () => {
     expect(renderPrompt("system.work", vars, { "system.work": "  ## Work\nOn {{branch}}.\n" })).toBe("## Work\nOn harness/x.");
@@ -132,7 +132,7 @@ describe("settings.prompts", () => {
     expect(status(() => validateSettingsPatch({ prompts: { "system.wrok": "x" } }))).toEqual([400, "Unknown prompt: system.wrok (GET /prompts lists them)"]);
     expect(status(() => validateSettingsPatch({ prompts: { "system.work": "On {{brnch}}" } }))).toEqual([
       400,
-      "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}, {{onBase}}, {{skipAgentReview}}, {{canSkipReview}}",
+      "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}, {{onBase}}, {{skipAgentReview}}, {{skipHumanReview}}, {{canSkipReview}}",
     ]);
     expect(status(() => validateSettingsPatch({ prompts: { "system.work": "{{#if branch}}x" } }))).toEqual([
       400,
@@ -200,7 +200,7 @@ describe("overrides reach runs", () => {
     expect(catalog.map((e) => e.id)).toEqual([...PROMPT_IDS]);
     const entry = catalog.find((e) => e.id === "system.work")!;
     expect(entry).toMatchObject({ group: "system", override: expect.stringContaining("Custom rules"), overrideError: null, builtin: PROMPTS["system.work"].template });
-    expect(entry.variables.map((v) => v.name)).toEqual(["branch", "onBase", "skipAgentReview", "canSkipReview"]);
+    expect(entry.variables.map((v) => v.name)).toEqual(["branch", "onBase", "skipAgentReview", "skipHumanReview", "canSkipReview"]);
     expect(entry.variables[0]).toEqual({ name: "branch", description: PROMPTS["system.work"].variables.branch! });
     expect(catalog.find((e) => e.id === "system.plan")).toMatchObject({ override: null, overrideError: null });
 
@@ -217,7 +217,7 @@ describe("overrides reach runs", () => {
     h.store.settings.set({ prompts: { "system.work": "On {{gone}}" } });
     expect(h.orch.promptCatalog().find((e) => e.id === "system.work")).toMatchObject({
       override: "On {{gone}}",
-      overrideError: "Unknown variable {{gone}}: the variables are {{branch}}, {{onBase}}, {{skipAgentReview}}, {{canSkipReview}}",
+      overrideError: "Unknown variable {{gone}}: the variables are {{branch}}, {{onBase}}, {{skipAgentReview}}, {{skipHumanReview}}, {{canSkipReview}}",
     });
   });
 });
