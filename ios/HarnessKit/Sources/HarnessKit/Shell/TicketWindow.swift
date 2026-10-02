@@ -2,8 +2,9 @@ import Foundation
 
 /// A ticket window's identity (iPad): the ticket it opened on and its tab. The app's ticket
 /// WindowGroup is keyed by it, so SwiftUI saves it with the scene and a relaunch reopens the window
-/// on the same ticket. Dragging the slide-over panel out carries it as an NSUserActivity
-/// (`activityType`, `userInfo`), which the new window reads back with `init(userInfo:)`.
+/// on the same ticket. Tapping a ticket on iPad opens its window with a scene activation request
+/// that carries it as an NSUserActivity (`activityType`, `userInfo`), which the new window reads
+/// back with `init(userInfo:)`.
 public struct TicketWindowValue: Codable, Hashable, Sendable {
     public var key: String
     public var tab: TicketTab?
@@ -21,7 +22,7 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
 
     public var route: Route { .ticket(key: key, tab: tab) }
 
-    /// The NSUserActivity type a dragged-out panel carries (listed in NSUserActivityTypes).
+    /// The NSUserActivity type a ticket window's activation request carries (listed in NSUserActivityTypes).
     public static let activityType = "com.markhuot.harness.ticket"
     /// The activity's targetContentIdentifier, which the ticket WindowGroup's handlesExternalEvents
     /// matches. It's no substring of a harness:// link, so links never open a ticket window.
@@ -39,5 +40,13 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
         guard let key = (userInfo?["key"] as? String)?.trimmingCharacters(in: .whitespaces), !key.isEmpty else { return nil }
         let tab = (userInfo?["tab"] as? String).flatMap { ChangesTab.isTicketTab($0) ? ChangesTab.normalize(TicketTab($0)) : nil }
         self.init(key: key, tab: tab)
+    }
+
+    /// As saved in the scene's storage (TicketWindowRoot), and back; nil for anything else.
+    public var json: String { (try? JSONEncoder().encode(self)).flatMap { String(data: $0, encoding: .utf8) } ?? "" }
+
+    public init?(json: String) {
+        guard let data = json.data(using: .utf8), let v = try? JSONDecoder().decode(Self.self, from: data), !v.key.isEmpty else { return nil }
+        self = v
     }
 }

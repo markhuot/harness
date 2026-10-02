@@ -6,15 +6,16 @@ import Observation
 /// and deep links go through `open`.
 ///
 /// A router has one of two scopes:
-/// - `.main`, the window with the sections. At regular width (`opensTicketsInPanel`, the iPad) a
-///   ticket route opens in the slide-over `panel` instead of being pushed.
-/// - `.ticket`, a ticket's own stack: the slide-over panel (its `host` is the main router) or a
-///   ticket window. `root` is the ticket it shows; pushes land on its stack (`path(.board)`).
+/// - `.main`, the window with the sections. With `opensTicketsInWindows` (iPad at regular width) a
+///   ticket route doesn't push: it goes to `onOpenTicket`, which opens (or brings forward) that
+///   ticket's own window.
+/// - `.ticket`, a ticket window's: `root` is the ticket it shows, pushes land on its stack
+///   (`path(.board)`), and section links go to `onSectionLink` (a main window).
 ///
 /// Link semantics (ios/Tools/sim-check.ts relies on them): a tab link pops
-/// everything above the tabs, modals and the panel included; a ticket (or any pushed) link pushes
-/// a fresh screen, so opening the same ticket twice stacks two, except that in panel mode it
-/// replaces the panel. Sheets replace each other; the scanner covers whatever is up.
+/// everything above the tabs, modals included; a ticket (or any pushed) link pushes a fresh screen,
+/// so opening the same ticket twice stacks two. Sheets replace each other; the scanner covers
+/// whatever is up.
 @MainActor
 @Observable
 public final class Router {
@@ -26,20 +27,17 @@ public final class Router {
     public var sheet: SheetRoute?
     public var cover: CoverRoute?
 
-    /// Main scope: the slide-over's own router, nil while it's closed.
-    public private(set) var panel: Router?
-    /// Main scope: ticket routes open in `panel` instead of pushing (regular width). The shell sets it.
-    public private(set) var opensTicketsInPanel = false
+    /// Main scope: ticket routes go to `onOpenTicket` instead of pushing. The shell sets it.
+    public private(set) var opensTicketsInWindows = false
+    /// Main scope, with `opensTicketsInWindows`: opens a ticket route in a window of its own.
+    @ObservationIgnored public var onOpenTicket: ((Route) -> Void)?
 
     /// Ticket scope: the ticket it shows under its stack.
     public private(set) var root: Route?
-    /// Ticket scope, as the panel: the main router. Sheets, covers and section links go there, and
-    /// closing the panel clears it there.
-    public private(set) weak var host: Router?
-    /// Ticket scope, as a window: where a section link (`.tab`) goes, since the window has none.
+    /// Ticket scope: where a section link (`.tab`) goes, since a ticket window has no sections.
     @ObservationIgnored public var onSectionLink: ((DeepLink) -> Void)?
-    /// Ticket scope, as a window: set when its ticket went away (deleted, or a draft that moved to
-    /// New session), for the window to close itself.
+    /// Ticket scope: set when its ticket went away (deleted, or a draft that moved to New
+    /// session), for the window to close itself.
     public private(set) var closeRequested = false
 
     public init(selectedTab: AppTab = .board) {
@@ -47,12 +45,11 @@ public final class Router {
         self.selectedTab = selectedTab
     }
 
-    /// A ticket's stack: `root` is the ticket route, `host` the main router when it's the panel.
-    public init(ticket root: Route, host: Router? = nil) {
+    /// A ticket window's stack; `root` is the ticket route.
+    public init(ticket root: Route) {
         scope = .ticket
         selectedTab = .board
         self.root = root
-        self.host = host
     }
 
     /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
@@ -62,13 +59,12 @@ public final class Router {
         switch link {
         case let .tab(tab, themes):
             dismissModals()
-            panel = nil
             selectedTab = tab
             paths[tab] = []
             return themes
         case let .push(route):
-            dismissModals()
-            if !opensInPanel(route) { panel = nil }
+            // A ticket that opens in its own window leaves this one as it is.
+            if !opensInWindow(route) { dismissModals() }
             push(route)
         case let .sheet(s):
             cover = nil
@@ -82,20 +78,16 @@ public final class Router {
     private func openInTicket(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         switch link {
         case let .tab(_, themes):
-            if let host { return host.open(link) }
             onSectionLink?(link)
             return themes
         case let .push(route):
             dismissModals()
             push(route)
-        case .sheet, .cover:
-            if let host { return host.open(link) }
-            if case let .sheet(s) = link {
-                cover = nil
-                sheet = s
-            } else if case let .cover(c) = link {
-                cover = c
-            }
+        case let .sheet(s):
+            cover = nil
+            sheet = s
+        case let .cover(c):
+            cover = c
         }
         return nil
     }
@@ -108,10 +100,10 @@ public final class Router {
         return true
     }
 
-    /// Push on the selected tab's stack, or (panel mode) open a ticket in the panel.
+    /// Push on the selected tab's stack, or (`opensTicketsInWindows`) open a ticket in its window.
     public func push(_ route: Route) {
-        if opensInPanel(route) {
-            showInPanel(route)
+        if opensInWindow(route) {
+            onOpenTicket?(route)
         } else {
             paths[selectedTab, default: []].append(route)
         }
@@ -128,10 +120,6 @@ public final class Router {
     public func present(_ cover: CoverRoute) { open(.cover(cover)) }
 
     public func dismissModals() {
-        if let host {
-            host.dismissModals()
-            return
-        }
         cover = nil
         sheet = nil
     }
@@ -139,43 +127,26 @@ public final class Router {
     /// After pairing (RN `router.dismissAll(); router.replace("/board")`).
     public func showBoard() { open(.tab(.board)) }
 
-    // MARK: The slide-over panel (main scope)
+    // MARK: Ticket windows
 
-    private func opensInPanel(_ route: Route) -> Bool {
-        guard scope == .main, opensTicketsInPanel, case .ticket = route else { return false }
+    private func opensInWindow(_ route: Route) -> Bool {
+        guard scope == .main, opensTicketsInWindows, onOpenTicket != nil, case .ticket = route else { return false }
         return true
     }
 
-    /// Opens `route` in the panel, replacing whatever ticket (and stack) it showed.
-    public func showInPanel(_ route: Route) {
+    /// Main scope: turns opening tickets in their own windows on or off (the width changed).
+    public func setOpensTicketsInWindows(_ on: Bool) {
         guard scope == .main else { return }
-        panel = Router(ticket: route, host: self)
+        opensTicketsInWindows = on
     }
 
-    public func closePanel() { panel = nil }
-
-    /// Turns panel mode on or off (the width changed). Turning it off moves an open panel's
-    /// ticket and stack onto the selected section's stack, so the ticket stays on screen.
-    public func setOpensTicketsInPanel(_ on: Bool) {
-        guard scope == .main, on != opensTicketsInPanel else { return }
-        opensTicketsInPanel = on
-        if !on, let p = panel {
-            panel = nil
-            paths[selectedTab, default: []].append(contentsOf: (p.root.map { [$0] } ?? []) + p.path(.board))
-        }
-    }
-
-    /// Closes the panel and returns the ticket to open in its own window: the one on top of the
-    /// panel's stack. Nil when the panel is closed.
-    public func detachPanel() -> Route? {
-        guard let p = panel else { return nil }
-        panel = nil
-        return p.topTicket
-    }
-
-    /// Ticket scope: the ticket the stack shows on top (the last ticket pushed, else the root).
-    public var topTicket: Route? {
-        path(.board).last { if case .ticket = $0 { true } else { false } } ?? root
+    /// Ticket scope: shows `route` (another tab, or another ticket) at the root, its stack cleared.
+    /// A link to a ticket whose window is already open lands here.
+    public func show(_ route: Route) {
+        guard scope == .ticket, case .ticket = route else { return }
+        root = route
+        paths[selectedTab] = []
+        closeRequested = false
     }
 
     // MARK: A ticket screen's place on the stack
@@ -195,8 +166,8 @@ public final class Router {
         }
     }
 
-    /// Takes the last ticket screen whose key matches off the selected stack. When it's the root of
-    /// a ticket scope, the panel closes, or the window is asked to close. False when none matched.
+    /// Takes the last ticket screen whose key matches off the selected stack. When it's a ticket
+    /// window's root, the window is asked to close. False when none matched.
     @discardableResult
     public func removeTicket(where matches: (String) -> Bool) -> Bool {
         let tab = selectedTab
@@ -207,11 +178,7 @@ public final class Router {
             return true
         }
         guard scope == .ticket, case let .ticket(k, _)? = root, matches(k) else { return false }
-        if let host {
-            if host.panel === self { host.panel = nil }
-        } else {
-            closeRequested = true
-        }
+        closeRequested = true
         return true
     }
 

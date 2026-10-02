@@ -4,34 +4,44 @@ import UIKit
 
 // The iPad's windows (ARCHITECTURE.md § App shell, Windows): any number of main windows (RootView,
 // each with its own Router) and ticket windows (TicketWindowRoot, keyed by TicketWindowValue).
-// AppModel, the BoardStore, ToastCenter and Actions are shared by all of them.
+// AppModel, the BoardStore, ToastCenter and Actions are shared by all of them. On iPad at regular
+// width, opening a ticket opens (or brings forward) its window.
 
 /// The scene ids HarnessApp's WindowGroups use.
 enum SceneID {
     static let ticket = "ticket"
 }
 
-/// The main windows, most recently active last, so a ticket window can send a section link
-/// (harness://board, …) to one and bring it forward, and a ticket window that opens can close the
-/// panel it was dragged out of.
+/// The open windows: main windows, most recently active last, so a ticket window can send a
+/// section link (harness://board, …) to one and bring it forward; and ticket windows by key, so
+/// tapping a ticket whose window is open brings that window forward instead of opening another.
 @MainActor
 final class WindowDirectory {
     static let shared = WindowDirectory()
 
-    private struct Main {
+    private struct Entry {
         weak var router: Router?
         weak var scene: UIWindowScene?
     }
 
-    private var mains: [Main] = []
+    private var mains: [Entry] = []
+    private var tickets: [String: Entry] = [:]
     /// A section link that came from a ticket window while no main window was open: the next main
     /// window to come up applies it.
     private var pending: DeepLink?
 
-    /// A main window came up or became active.
+    /// A main window came up or became active (`scene` is nil until the view is in its window).
+    /// Its ticket links open ticket windows from here on.
     func mainActive(_ router: Router, scene: UIWindowScene?) {
+        let known = mains.first { $0.router === router }?.scene
         mains.removeAll { $0.router == nil || $0.router === router }
-        mains.append(Main(router: router, scene: scene))
+        mains.append(Entry(router: router, scene: scene ?? known))
+        if router.onOpenTicket == nil {
+            router.onOpenTicket = { [weak self, weak router] route in
+                guard let self, let v = TicketWindowValue(route: route) else { return }
+                self.openTicket(v, from: self.mains.first { $0.router === router }?.scene)
+            }
+        }
         if let link = pending {
             pending = nil
             router.open(link)
@@ -53,13 +63,30 @@ final class WindowDirectory {
         }
     }
 
-    /// A ticket window opened on `value`: a panel showing that ticket was dragged out to make it,
-    /// so it closes.
-    func ticketWindowOpened(_ value: TicketWindowValue) {
-        for main in mains {
-            guard let router = main.router, let top = TicketWindowValue(route: router.panel?.topTicket) else { continue }
-            if top.key == value.key { router.closePanel() }
+    /// A ticket window is showing `key` (again, after its ticket changed).
+    func ticketWindow(_ router: Router, scene: UIWindowScene?, key: String) {
+        tickets = tickets.filter { $0.value.router != nil && $0.value.router !== router }
+        tickets[key.uppercased()] = Entry(router: router, scene: scene)
+    }
+
+    /// Opens `value`'s ticket in a window of its own: the system's prominent placement, centered
+    /// over `from`, which the user can then move, resize, tile or put in Slide Over with the
+    /// window's own controls. A window already showing the ticket comes forward instead, on the
+    /// link's tab.
+    func openTicket(_ value: TicketWindowValue, from scene: UIWindowScene?) {
+        if let open = tickets[value.key.uppercased()], let router = open.router, let session = open.scene?.session {
+            router.show(value.route)
+            UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session))
+            return
         }
+        let activity = NSUserActivity(activityType: TicketWindowValue.activityType)
+        activity.title = value.key
+        activity.targetContentIdentifier = TicketWindowValue.sceneMatch
+        activity.userInfo = value.userInfo
+        let options = UIWindowScene.ActivationRequestOptions()
+        options.placement = UIWindowSceneProminentPlacement.prominent()
+        options.requestingScene = scene
+        UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(role: .windowApplication, userActivity: activity, options: options))
     }
 }
 
@@ -86,28 +113,18 @@ struct SceneReader: UIViewRepresentable {
     }
 }
 
-/// The NSItemProvider a dragged-out panel carries: an NSUserActivity for the ticket, which iPadOS
-/// turns into a new window when it's dropped at the screen's edge (TicketWindowValue).
-@MainActor
-func ticketWindowItemProvider(_ value: TicketWindowValue, title: String) -> NSItemProvider {
-    let activity = NSUserActivity(activityType: TicketWindowValue.activityType)
-    activity.title = title
-    activity.targetContentIdentifier = TicketWindowValue.sceneMatch
-    activity.userInfo = value.userInfo
-    let provider = NSItemProvider()
-    provider.registerObject(activity, visibility: .all)
-    provider.suggestedName = title
-    return provider
-}
-
 /// A ticket window: one ticket's stack with its own Router, sheets and links. `value` is the
-/// scene's saved ticket (nil when the window came from a dragged-out panel until its activity
-/// arrives). A ticket the screen swaps for another (a remote ID's pick) becomes the saved one, so
+/// scene's saved ticket (nil when the window came from WindowDirectory.openTicket until its
+/// activity arrives). A ticket the screen swaps for another (a remote ID's pick) becomes the saved one, so
 /// a relaunch reopens it. A section link goes to the main window (WindowDirectory).
 struct TicketWindowRoot: View {
     @Binding var value: TicketWindowValue?
 
     @Environment(AppModel.self) private var app
+    /// The ticket, JSON, saved with the scene too: SwiftUI saves `value` only when openWindow gave
+    /// it, so a window opened by WindowDirectory.openTicket's activation request (value set from
+    /// its activity) would come back empty on relaunch without this.
+    @SceneStorage("ticketWindow") private var saved = ""
     @State private var router: Router?
     @State private var scene: UIWindowScene?
     @State private var waited = false
@@ -142,21 +159,31 @@ struct TicketWindowRoot: View {
         }
         .background(SceneReader { s in
             scene = s
-            if let value { s.title = value.key }
+            if let value {
+                s.title = value.key
+                if let router { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key) }
+            }
         })
         .onContinueUserActivity(TicketWindowValue.activityType) { activity in
             if let v = TicketWindowValue(userInfo: activity.userInfo) { value = v }
+        }
+        .onAppear {
+            if value == nil, let v = TicketWindowValue(json: saved) { value = v }
         }
         // Links from outside the app go to a main window (RootView prefers them).
         .handlesExternalEvents(preferring: [], allowing: ["\(DeepLink.scheme)://"])
         .onChange(of: value, initial: true) { _, v in
             guard let v else { return }
+            saved = v.json
             scene?.title = v.key
-            WindowDirectory.shared.ticketWindowOpened(v)
-            if router?.root == v.route { return }
-            let r = Router(ticket: v.route)
-            r.onSectionLink = { WindowDirectory.shared.openInMain($0) }
-            router = r
+            if let router, TicketWindowValue(route: router.root)?.key == v.key {
+                if router.root != v.route { router.show(v.route) }
+            } else {
+                let r = Router(ticket: v.route)
+                r.onSectionLink = { WindowDirectory.shared.openInMain($0) }
+                router = r
+            }
+            if let router { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key) }
         }
     }
 }

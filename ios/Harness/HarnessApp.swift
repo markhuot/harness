@@ -37,8 +37,8 @@ struct HarnessApp: App {
             }
         }
 
-        // A ticket in a window of its own (iPad): opened from the slide-over panel, saved with the
-        // scene so a relaunch reopens it (Windows.swift).
+        // A ticket in a window of its own (iPad): opened by tapping a ticket at regular width or by
+        // Open in New Window, saved with the scene so a relaunch reopens it (Windows.swift).
         WindowGroup("Ticket", id: SceneID.ticket, for: TicketWindowValue.self) { $value in
             TicketWindowRoot(value: $value)
                 .environment(app)

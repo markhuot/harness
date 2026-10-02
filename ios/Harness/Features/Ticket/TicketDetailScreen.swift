@@ -104,8 +104,8 @@ struct TicketDetailScreen: View {
         tab = t
     }
 
-    /// Off this screen's place on the stack (the last ticket route with the link's key; the root of
-    /// the panel or a ticket window closes it), into the New session editor.
+    /// Off this screen's place on the stack (the last ticket route with the link's key; a ticket
+    /// window's root closes the window), into the New session editor.
     private func openDraft() {
         let draftKey = ticketKey
         router.removeTicket { $0 == key }
@@ -270,9 +270,9 @@ private struct TicketDetailHeader: ViewModifier {
         }
     }
 
-    /// This screen is the root of a ticket window (not the panel, which has a host).
+    /// This screen is the root of a ticket window.
     private func isWindowRoot(_ key: String) -> Bool {
-        router.scope == .ticket && router.host == nil && TicketWindowValue(route: router.root)?.key == key
+        router.scope == .ticket && TicketWindowValue(route: router.root)?.key == key
     }
 
     /// Back off the deleted ticket's screen.

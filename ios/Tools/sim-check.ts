@@ -1368,6 +1368,8 @@ async function toggleSidebar(udid: string, show: boolean) {
   await until(`sidebar ${show ? "shown" : "hidden"}`, async () => sidebarShown(await labels(udid)) === show, 8000);
   await Bun.sleep(500);
 }
+/** The ticket --ipad's ticket-window check opened a window for. */
+let windowKey = "";
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
@@ -1546,54 +1548,43 @@ function screens(s: Seeded): Screen[] {
       },
     },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
-    // iPad: the slide-over panel's "Open in New Window" makes a ticket window of its own (no board
-    // in it), and the next link brings the main window back.
+    // iPad: tapping a card opens the ticket in a window of its own (the system's prominent
+    // placement over the board); the window comes back on relaunch, and the next link brings the
+    // main window back.
     ...(ipad
       ? [
           {
             name: "ticket-window",
-            url: `harness://ticket/${k(s.hello)}?tab=transcript`,
-            ready: (l: string[]) => l.some((x) => x.startsWith("Message the agent")),
+            url: BOARD,
             seconds: 12,
             prepare: async (udid: string) => {
-              await tapWhere(udid, "Open in New Window");
-              await until("ticket window up", async () => {
+              // A card fully on screen (the columns scroll sideways).
+              const card = await until("a card on screen", async () => (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && n.frame.x > 0 && n.frame.x + n.frame.width < 800), 8000);
+              const key = card.AXLabel!.split(" ")[0]!;
+              await axe("tap", "-x", String(Math.round(card.frame.x + card.frame.width / 2)), "-y", String(Math.round(card.frame.y + card.frame.height / 2)), "--udid", udid);
+              windowKey = key;
+              await until(`${key}'s window up`, async () => {
                 const l = await labels(udid);
-                return !onBoard(l) && !l.includes("Close ticket") && l.some((x) => x.startsWith("Message the agent"));
+                return !onBoard(l) && l.includes(key);
               }, 10000);
-              await Bun.sleep(800);
+              moved(udid);
+              await Bun.sleep(1200);
             },
             after: async (udid: string) => {
-              moved(udid);
               // The window comes back on relaunch (the scene saves its ticket): home, kill, launch.
               await axe("button", "home", "--udid", udid);
               await Bun.sleep(1500);
               await simctl("terminate", udid, BUNDLE).catch(() => {});
               await simctl("launch", udid, BUNDLE);
-              await until("ticket window restored", async () => {
+              const restored = await until("ticket window restored", async () => {
                 const l = await labels(udid);
-                return !onBoard(l) && l.includes("GREET-1") && l.some((x) => x.startsWith("Message the agent"));
-              }, 20000);
+                return !onBoard(l) && l.includes(windowKey);
+              }, 20000).catch((e) => e as Error);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-window-relaunched");
+              if (restored instanceof Error) throw restored;
               await simctl("openurl", udid, BOARD);
               await until("main window back", async () => onBoard(await labels(udid)), 10000);
-            },
-          } satisfies Screen,
-          // A swipe on the panel's header toward the trailing edge closes it, back to the board.
-          {
-            name: "ticket-panel-swiped",
-            url: `harness://ticket/${k(s.hello)}?tab=summaries`,
-            seconds: 8,
-            prepare: async (udid: string) => {
-              const close = await until("panel up", () => findElement(udid, (l) => l === "Close ticket"), 8000);
-              const y = String(Math.round(close.frame.y + close.frame.height / 2));
-              const x = Math.round(close.frame.x + close.frame.width + 60);
-              await axe("swipe", "--start-x", String(x), "--start-y", y, "--end-x", String(x + 400), "--end-y", y, "--duration", "0.3", "--udid", udid);
-              await until("panel closed", async () => {
-                const l = await labels(udid);
-                return onBoard(l) && !l.includes("Close ticket");
-              }, 8000);
-              moved(udid);
-              await Bun.sleep(500);
             },
           } satisfies Screen,
         ]

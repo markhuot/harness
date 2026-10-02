@@ -27,6 +27,7 @@ struct RootView: View {
                 scene = s
                 WindowDirectory.shared.mainActive(router, scene: s)
             })
+            .onAppear { WindowDirectory.shared.mainActive(router, scene: scene) }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
             }
@@ -130,12 +131,12 @@ private struct SceneChrome: ViewModifier {
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
 /// section's sidebar button, switches between them, and the board's bottom bar holds its filter,
-/// search field and New session. At regular width (iPad) it's DesktopShell, where tickets open in
-/// the slide-over panel (the Router's panel mode); narrowing the window moves an open panel onto
-/// the section's stack.
+/// search field and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
+/// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.supportsMultipleWindows) private var multipleWindows
 
     var body: some View {
         Group {
@@ -145,8 +146,8 @@ struct MainTabs: View {
                 SectionStack()
             }
         }
-        .onChange(of: sizeClass == .regular, initial: true) { _, regular in
-            router.setOpensTicketsInPanel(regular)
+        .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
+            router.setOpensTicketsInWindows(windows)
         }
     }
 }
@@ -167,8 +168,7 @@ private struct SectionStack: View {
 /// The iPad's desktop layout: the Projects sidebar as a split view's sidebar column next to the
 /// selected section, hidden and shown by the system toggle and remembered in prefs
 /// (`sidebarHidden`). The sections put search and their actions in the top bar
-/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet. An open ticket is
-/// the slide-over panel over the trailing side.
+/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet.
 private struct DesktopShell: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -185,8 +185,6 @@ private struct DesktopShell: View {
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
-        // A ticket slides over the trailing side (TicketPanel).
-        .overlay { TicketPanelOverlay() }
         .onChange(of: router.sheet, initial: true) { _, sheet in
             guard case .projects? = sheet else { return }
             router.sheet = nil
