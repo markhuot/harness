@@ -10,6 +10,7 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     #if DEBUG
     /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
@@ -90,8 +91,13 @@ struct RootView: View {
         }
     }
 
+    /// At regular width the Projects sheet is the split view's sidebar column (MainTabs shows it
+    /// and clears the route), so it never comes up as a sheet there.
     private var sheetBinding: Binding<SheetRoute?> {
-        Binding(get: { router.sheet }, set: { router.sheet = $0 })
+        Binding(get: {
+            if sizeClass == .regular, case .projects? = router.sheet { return nil }
+            return router.sheet
+        }, set: { router.sheet = $0 })
     }
 
     /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
@@ -100,10 +106,24 @@ struct RootView: View {
     }
 }
 
-/// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar:
-/// the Projects sidebar, behind each section's sidebar button, switches between them, and the
-/// board's bottom bar holds its filter, search field and New session.
+/// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
+/// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
+/// section's sidebar button, switches between them, and the board's bottom bar holds its filter,
+/// search field and New session. At regular width (iPad) it's DesktopShell.
 struct MainTabs: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        if sizeClass == .regular {
+            DesktopShell()
+        } else {
+            SectionStack()
+        }
+    }
+}
+
+/// The selected section's stack.
+private struct SectionStack: View {
     @Environment(Router.self) private var router
 
     var body: some View {
@@ -115,16 +135,67 @@ struct MainTabs: View {
     }
 }
 
+/// The iPad's desktop layout: the Projects sidebar as a split view's sidebar column next to the
+/// selected section, hidden and shown by the system toggle and remembered in prefs
+/// (`sidebarHidden`). The sections put search and their actions in the top bar
+/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet.
+private struct DesktopShell: View {
+    @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: visibility) {
+            ProjectsSidebar(column: true)
+                .background(c.bgSidebar.ignoresSafeArea())
+                .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
+        } detail: {
+            // The column paints the system background; the phone's sections show RootView's `bg`.
+            SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())
+        }
+        // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: router.sheet, initial: true) { _, sheet in
+            guard case .projects? = sheet else { return }
+            router.sheet = nil
+            app.setPref(\.sidebarHidden, false)
+        }
+    }
+
+    private var visibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { app.prefs.sidebarHidden == true ? .detailOnly : .all },
+            set: { v in
+                let hidden = v == .detailOnly
+                if (app.prefs.sidebarHidden == true) != hidden { app.setPref(\.sidebarHidden, hidden) }
+            })
+    }
+}
+
+extension EnvironmentValues {
+    /// Inside the iPad's DesktopShell: the split view's toggle replaces the sidebar button, and the
+    /// board's search, filter and New session sit in the top bar instead of a bottom bar.
+    @Entry var desktopShell = false
+}
+
 /// The header button that opens the Projects sidebar, on each section's root screen. Its amber
 /// badge counts the triage sessions triaging or busy, like the sidebar's Inbox row, so the tab
-/// bar's old Inbox badge still shows from every section.
+/// bar's old Inbox badge still shows from every section. None in the iPad's DesktopShell, where
+/// the split view's own toggle shows the sidebar and its Inbox row carries the badge.
 struct SidebarToolbarItem: ToolbarContent {
     @Environment(Router.self) private var router
+    @Environment(\.desktopShell) private var desktop
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
 
     var body: some ToolbarContent {
         let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
+        if !desktop {
+            item(triaging)
+        }
+    }
+
+    private func item(_ triaging: Int) -> some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
             Button { router.present(.projects) } label: {
                 Image(systemName: "sidebar.left")

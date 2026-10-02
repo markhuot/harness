@@ -5,13 +5,16 @@ import SwiftUI
 /// (counts) on top, the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. The bottom
 /// bar reads filter ("Show child tickets", off by default), the search field (always on screen)
-/// and New session. Typing searches on the server; results page the same way, across every column.
+/// and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
+/// navigation bar, ⌘F; Filter and New session, ⌘N, trailing) and there's no bottom bar. Typing
+/// searches on the server; results page the same way, across every column.
 struct BoardScreen: View {
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    @Environment(\.desktopShell) private var desktop
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
@@ -21,6 +24,7 @@ struct BoardScreen: View {
     /// The chip a dragged card hovers over.
     @State private var dropChip: TicketStatus?
     @State private var query = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         let ctx = BoardContext(store.state, app.prefs)
@@ -34,10 +38,18 @@ struct BoardScreen: View {
             pager(ctx)
         }
         .background(c.bg)
+        // ⌘F focuses the search field; the field is its own button, so this one isn't drawn.
+        .background {
+            Button("Search") { searchFocused = true }
+                .keyboardShortcut("f")
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
         .navigationTitle(ctx.project?.name ?? "All projects")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets")
+        .searchable(text: $query, placement: desktop ? .toolbar : .automatic, prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets")
+        .searchFocused($searchFocused)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .toolbar { toolbar(ctx) }
@@ -75,23 +87,30 @@ struct BoardScreen: View {
     // MARK: Pager
 
     private func pager(_ ctx: BoardContext) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 0) {
-                ForEach(TicketStatus.allKnown, id: \.self) { status in
-                    BoardColumnView(
-                        status: status, ctx: ctx,
-                        onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
-                        onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
-                        onDiscard: discard)
-                        .containerRelativeFrame(.horizontal)
-                        .id(status)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(TicketStatus.allKnown, id: \.self) { status in
+                        BoardColumnView(
+                            status: status, ctx: ctx,
+                            onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
+                            onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
+                            onDiscard: discard)
+                            .containerRelativeFrame(.horizontal)
+                            .id(status)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $page)
+            .scrollIndicators(.hidden)
+            // A new width (the iPad's sidebar hidden or shown, a rotation) keeps the old offset,
+            // which strands the pager between two columns: snap back to the one on screen.
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { _, _ in
+                if let page { proxy.scrollTo(page, anchor: .leading) }
+            }
         }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition(id: $page)
-        .scrollIndicators(.hidden)
     }
 
     private func goTo(_ s: TicketStatus) {
@@ -110,26 +129,37 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// Sidebar in the header; filter, search field and New session along the bottom.
+    /// Phone: sidebar in the header; filter, search field and New session along the bottom.
+    /// iPad (DesktopShell): the split view's toggle, the search field in the navigation bar, and
+    /// Filter and New session trailing.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
-        SidebarToolbarItem()
-        ToolbarItem(placement: .bottomBar) {
-            Menu {
-                Toggle("Show child tickets", systemImage: "arrow.turn.down.right", isOn: Binding(
-                    get: { !app.prefs.hideChildren }, set: { app.setPref(\.hideChildren, !$0) }))
-            } label: {
-                // Filled while the board shows more than its default (child tickets).
-                Label("Filter", systemImage: app.prefs.hideChildren
-                    ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-            }
+        if desktop {
+            ToolbarItem(placement: .primaryAction) { filterMenu }
+            ToolbarItem(placement: .primaryAction) { newSession(ctx).keyboardShortcut("n") }
+        } else {
+            SidebarToolbarItem()
+            ToolbarItem(placement: .bottomBar) { filterMenu }
+            // Its own glass, not tucked into the search field's.
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
-        // Its own glass, not tucked into the search field's.
-        ToolbarSpacer(.fixed, placement: .bottomBar)
-        DefaultToolbarItem(kind: .search, placement: .bottomBar)
-        ToolbarItem(placement: .bottomBar) {
-            Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
-                .primaryToolbarItem(c)
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Toggle("Show child tickets", systemImage: "arrow.turn.down.right", isOn: Binding(
+                get: { !app.prefs.hideChildren }, set: { app.setPref(\.hideChildren, !$0) }))
+        } label: {
+            // Filled while the board shows more than its default (child tickets).
+            Label("Filter", systemImage: app.prefs.hideChildren
+                ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
         }
+    }
+
+    private func newSession(_ ctx: BoardContext) -> some View {
+        Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
+            .primaryToolbarItem(c)
     }
 
     // MARK: Moves
@@ -201,7 +231,7 @@ struct BoardContext {
     /// The project filter, when that project still exists.
     let projectId: String?
     let project: Project?
-    /// The search in the bottom bar's field (nil while it's empty).
+    /// The search in the toolbar's field (nil while it's empty).
     let search: SearchState?
     let board: Columns
     let pending: Bool
