@@ -181,6 +181,10 @@ here and in a doc comment:
   IPv4 shorthand, IDNA, or IPv6 re-compression).
 - `patchRows` drops one scalar where JS `slice(1)` drops one code unit; line numbers past
   `Int.max` saturate.
+- `ChangesPatch.parse` (the Changes tab's port of @pierre/diffs' parsePatchFiles) parses only
+  git-format patches (no `diff --git` lines: no files) and doesn't split `format-patch` mailboxes.
+  `ChangesViewedStore` keeps a ticket's marks as an array of pairs, not a JSON object, so their
+  order (which decides the ones kept past MAX_FILES) survives Swift's JSON coding.
 
 ### Local stand-ins to dedupe
 
@@ -317,7 +321,7 @@ feature needs something new here, add to it without changing what's there.
   | Link | Opens |
   | --- | --- |
   | `harness://board`, `/search`, `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that tab, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
-  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped) |
+  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, PromptsScreen, PromptDetailScreen |
@@ -443,6 +447,29 @@ What HARNESS-140 settled:
   are no links, as in RN.
 - **Not checked on screen:** thinking blocks (the dummy driver never emits one) and inline tool
   output images.
+
+## Changes tab (Ticket/Changes*)
+
+Changes is built in (HARNESS-153), not the git plugin's page in a WebView:
+
+- **Data** comes through HarnessKit's `ChangesSource`. Until the service has a core Changes API,
+  `PluginChangesSource` reads the git plugin's `/plugins/git/api/{changes,log,file}`; a core API is
+  one more conformance, swapped in where ChangesTabView builds its `ChangesStore`.
+- **Tabs.** `Tabs` stays a fixture-checked port of shared/src/state/tabs.ts. `ChangesTab` sits on
+  top: `plugin:git:changes` normalizes to `changes`, git:changes is filtered out of the plugin
+  tabs, and the tab shows with a workdir or while the service still offers the plugin tab (a diff
+  pinned before the worktree went away). It goes after Browser, ahead of Details.
+- **Decisions live in HarnessKit** (tested): `ChangesStore` (refresh queueing, a 600 ms debounce on
+  ticket events, a 4 s poll while the ticket is busy and the tab is on screen, viewed marks and
+  collapse toggles, context expansion from `/file?side=new`), `ChangesRows` (rows, gaps, split
+  pairing, highlight source, copy), `ChangesPatch` and `ChangesViewedStore` (fixture parity with
+  @pierre/diffs and plugins/git/ui/viewed.ts, so a file changed again after viewing reads as
+  unviewed). Marks and the Unified/Split choice are in UserDefaults; split shows unified below
+  560 pt but keeps the choice.
+- **Drawing.** One `LazyVStack` of rows (overview, file list, each file's header, gaps, lines), so
+  long diffs stay lazy. Lines wrap instead of scrolling sideways; add/del tints are full-width row
+  backgrounds. Each file is highlighted as one diff job (`ChangesHighlights`), keyed by its rows and
+  the theme.
 
 ## Content components (Features/Content)
 
@@ -636,6 +663,7 @@ Tick these off as later tickets land them. The RN source for each is in parenthe
 - [x] Agents tab / sub-agents (screens/AgentsTab)
 - [x] Browser tab (screens/BrowserTab, lib/browserInput)
 - [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
+- [x] Changes tab, built in and native (plugins/git/ui)
 - [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
 - [x] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
 - [x] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)

@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// The ticket's tabs (TicketDetail.tsx TabStrip): Summaries, Tickets (conductors), Transcript,
-/// Agents (once there are sub-agents), Browser, Details, then the plugin tabs. Counts and a live
+/// Agents (once there are sub-agents), Browser, Changes (with a workdir or a pinned diff),
+/// Details, then the plugin tabs. Counts and a live
 /// dot ride along; a sub-agent's view highlights Agents.
 struct TicketDetailTabStrip: View {
     let ticket: Ticket
@@ -40,9 +41,12 @@ struct TicketDetailTabStrip: View {
         let state = store.state
         let subagents = state.subagentsOf(ticket.sessionId)
         let conductor = ticket.isConductor
-        let builtin: [Item] = Tabs.ticketTabs
-            .filter { ($0 != .children || conductor) && ($0 != .agents || Tabs.showsAgentsTab(subagents)) }
-            .map { t in
+        // The order, Changes included (built in; the git plugin's own tab never shows), is
+        // ChangesTab.visibleTabs'; this adds labels, counts, live dots and plugin icons.
+        let plugins = ChangesTab.otherPluginTabs(pluginTabs) ?? []
+        return ChangesTab.visibleTabs(conductor: conductor, workdir: ticket.workdir, subagents: subagents, pluginTabs: pluginTabs).map { tab in
+            if tab == .changes { return Item(id: tab, label: ChangesTab.label) }
+            if let t = tab.builtin {
                 let count: Int? = switch t {
                 case .summaries: state.summaries[ticket.sessionId]?.count ?? 0
                 case .children: conductor ? state.childrenOf(ticket.id).count : 0
@@ -50,12 +54,11 @@ struct TicketDetailTabStrip: View {
                 default: nil
                 }
                 let live = (t == .transcript && ticket.busy) || (t == .agents && (subagents?.contains { $0.status == .running } ?? false))
-                return Item(id: TicketTab(t), label: Tabs.tabLabel[t] ?? t.rawValue, count: count, live: live)
+                return Item(id: tab, label: Tabs.tabLabel[t] ?? t.rawValue, count: count, live: live)
             }
-        let plugins = (pluginTabs ?? []).map { p in
-            Item(id: Tabs.pluginTabRoute(p.pluginId, p.id), label: p.title, icon: p.icon.flatMap { Icons.isIconName($0) ? $0 : nil })
+            let p = plugins.first { Tabs.pluginTabRoute($0.pluginId, $0.id) == tab }
+            return Item(id: tab, label: p?.title ?? tab.rawValue, icon: p?.icon.flatMap { Icons.isIconName($0) ? $0 : nil })
         }
-        return builtin + plugins
     }
 
     private func button(_ item: Item, on: Bool) -> some View {

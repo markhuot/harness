@@ -145,10 +145,10 @@ private struct TicketDetailBody: View {
 
     var body: some View {
         let state = store.state
-        let shown = Tabs.effectiveTab(tab, conductor: ticket.isConductor, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
+        let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let agent = Tabs.parseSubagentTab(shown)
         let plugin = Tabs.parsePluginTab(shown)
-        let compact = shown == .browser || plugin != nil || agent != nil
+        let compact = shown == .browser || shown == .changes || plugin != nil || agent != nil
         VStack(spacing: 0) {
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
@@ -177,6 +177,8 @@ private struct TicketDetailBody: View {
     @ViewBuilder private func tabBody(_ shown: TicketTab, agent: String?, plugin: Tabs.ParsedPluginTab?) -> some View {
         if let agent {
             SubagentView(ticket: ticket, subagentId: agent).id(agent)
+        } else if shown == .changes {
+            ChangesTabView(ticket: ticket).id(ticket.key)
         } else if let plugin {
             if let pluginTabs {
                 if let active = pluginTabs.first(where: { $0.pluginId == plugin.pluginId && $0.id == plugin.tabId }) {

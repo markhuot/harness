@@ -102,7 +102,8 @@ public enum DeepLink: Equatable, Sendable {
             return .tab(.settings, themes: patch == ThemePicker.ThemePrefsPatch() ? nil : patch)
         case "ticket":
             guard let key = tail.first, !key.isEmpty else { return nil }
-            let tab = param("tab").flatMap { Tabs.isTicketTab($0) ? TicketTab($0) : nil }
+            // Changes is a built-in tab here; "plugin:git:changes" links open it.
+            let tab = param("tab").flatMap { ChangesTab.isTicketTab($0) ? ChangesTab.normalize(TicketTab($0)) : nil }
             return .push(.ticket(key: key, tab: tab))
         case "project":
             guard let id = tail.first, !id.isEmpty else { return nil }
