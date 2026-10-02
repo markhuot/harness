@@ -105,7 +105,7 @@ describe("PermissionGate static policy", () => {
 
   test("tools the gate doesn't own pass through untouched", async () => {
     const h = env("read_only");
-    expect(await gate(null).check("post_summary", { summary: "x" }, h.env)).toEqual({ behavior: "allow" });
+    expect(await gate(null).check("post_note", { note: "x" }, h.env)).toEqual({ behavior: "allow" });
     expect(h.logs).toHaveLength(0);
   });
 });

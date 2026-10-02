@@ -57,15 +57,19 @@ describe("dummy driver", () => {
     expect(driver.hasBuiltinTools).toBe(false);
   });
 
-  test("plan: text with first line and numbered steps, then update_plan with the same plan", async () => {
+  test("plan: text with first line and numbered steps, then read_spec and update_spec with the same plan", async () => {
     const { req, ops } = makeReq("plan", "\n  Add dark mode\nmore detail here");
     const { events, error } = await collect(driver, req);
     expect(error).toBeNull();
     const [text] = texts(events);
     expect(text!.startsWith("Here's a plan for: Add dark mode")).toBe(true);
     expect(text).toMatch(/\n1\. /);
-    expect(ops.calls).toEqual([{ method: "updatePlan", args: [text, undefined] }]);
-    expect(calls(events).map((c) => c.name)).toEqual(["update_plan"]);
+    // fakeOps' read_spec answers "Revision 1", so the plan is written on top of revision 1
+    expect(ops.calls).toEqual([
+      { method: "readSpec", args: [undefined] },
+      { method: "updateSpec", args: [{ spec: text, note: "Plan drafted", baseRevision: 1, title: undefined }] },
+    ]);
+    expect(calls(events).map((c) => c.name)).toEqual(["read_spec", "update_spec"]);
   });
 
   test("text_delta fragments concatenate to the text block", async () => {
@@ -77,12 +81,15 @@ describe("dummy driver", () => {
     expect(deltas.join("")).toBe(texts(events)[0]!);
   });
 
-  test("work default: greeting, post_summary then submit_for_review, state last", async () => {
+  test("work default: greeting, post_note, the spec's Status, then submit_for_review, state last", async () => {
     const { req, ops } = makeReq("work", "fix the bug");
     const { events, error } = await collect(driver, req);
     expect(error).toBeNull();
     expect(texts(events)[0]).toBe('Hello from the dummy driver! You said: "fix the bug"');
-    expect(ops.calls.map((c) => c.method)).toEqual(["postSummary", "submitForReview"]);
+    expect(ops.calls.map((c) => c.method)).toEqual(["postNote", "readSpec", "editSpec", "submitForReview"]);
+    // fakeOps' spec (revision 1, one empty line) has no Status yet: the edit inserts one after its last line
+    expect(ops.calls[2]!.args).toEqual([{ baseRevision: 1, note: "Status: The dummy driver finished the work.", edits: [{ start_line: 2, end_line: 1, new_text: "\n## Status\n* The dummy driver finished the work." }] }]);
+    expect(ops.calls[3]!.args.slice(0, 2)).toEqual(["The dummy driver finished the work.", true]);
     expect(events[events.length - 1]).toEqual({ type: "state", state: { turns: 1 } });
     // every tool_call is followed by a tool_result with the same callId
     const cs = calls(events);
@@ -121,7 +128,7 @@ describe("dummy driver", () => {
     expect(texts(events).filter((_, i, all) => all[i]!.startsWith("Sub-task"))).toEqual(["Sub-task 1 is done.", "Sub-task 3 is done.", "Sub-task 2 is done."]);
     const tagged = events.filter((e) => "subagentId" in e && e.subagentId === id(3)).map((e) => e.type);
     expect(tagged).toEqual(["text", "tool_call", "tool_result", "text"]);
-    expect(ops.calls.map((c) => c.method)).toEqual(["submitForReview"]);
+    expect(ops.calls.map((c) => c.method)).toEqual(["readSpec", "editSpec", "submitForReview"]);
   });
 
   test("/agents without a count runs two; the count is capped at five", async () => {
@@ -146,7 +153,7 @@ describe("dummy driver", () => {
     expect(confineOutputPath(path)).not.toBeNull();
     expect(readTaskOutput(path, undefined, true).text).toBe("line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
     expect(calls(events).find((c) => c.name === "Bash")!.input).toMatchObject({ run_in_background: true, description: "Count to 6" });
-    expect(ops.calls.map((c) => c.method)).toEqual(["submitForReview"]);
+    expect(ops.calls.map((c) => c.method)).toEqual(["readSpec", "editSpec", "submitForReview"]);
     rmSync(dirname(path), { recursive: true, force: true });
   });
 
@@ -165,7 +172,7 @@ describe("dummy driver", () => {
 
     const done = makeReq("chat", `Postgres [dummy:unblock] [dummy:submit]${note}`);
     await collect(driver, done.req);
-    expect(done.ops.calls.map((c) => c.method)).toEqual(["unblock", "submitForReview"]);
+    expect(done.ops.calls.map((c) => c.method)).toEqual(["unblock", "readSpec", "editSpec", "submitForReview"]);
 
     const again = makeReq("chat", "Postgres [dummy:unblock] [dummy:block]");
     await collect(driver, again.req);
@@ -230,11 +237,21 @@ describe("dummy driver", () => {
     expect(String(ops.calls[0]!.args[1]).length).toBeGreaterThan(0);
   });
 
+  test("[dummy:reject-once] requests changes on the first round only", async () => {
+    const first = makeReq("review", "Review TEST-1 [dummy:reject-once]");
+    await collect(driver, first.req);
+    expect(first.ops.calls[0]!.args[0]).toBe("request_changes");
+    // A re-review's prompt lists the earlier rounds
+    const again = makeReq("review", "Review TEST-1 [dummy:reject-once]\n\n## Earlier review rounds\n1. changes requested");
+    await collect(driver, again.req);
+    expect(again.ops.calls[0]!.args[0]).toBe("approve");
+  });
+
   test("complete posts 'Completed.'", async () => {
     const { req, ops } = makeReq("complete", "Finalize");
     const { events } = await collect(driver, req);
     expect(texts(events).length).toBe(1);
-    expect(ops.calls).toEqual([{ method: "postSummary", args: ["Completed."] }]);
+    expect(ops.calls).toEqual([{ method: "postNote", args: ["Completed."] }]);
   });
 
   test("conductor first run without bullets: two children, second depends on first", async () => {
@@ -293,7 +310,7 @@ describe("dummy driver", () => {
     Object.assign(b!, { status: "done" });
     ops.calls.length = 0;
     await collect(driver, makeReq("conductor", "updates", { state: state2, ctx: { ops } }).req);
-    expect(ops.calls.map((c) => c.method)).toEqual(["listTickets", "submitForReview"]);
+    expect(ops.calls.map((c) => c.method)).toEqual(["listTickets", "readSpec", "editSpec", "submitForReview"]);
   });
 
   // Real triage prompts, so the dummy's parsing follows the prompt contract (prompts.ts).
@@ -412,23 +429,23 @@ describe("dummy driver", () => {
     }
 
     test("a tool error stops the run and keeps the rest; 'Retry it now' resumes from the failed call", async () => {
-      const failing = fakeOps({ postSummary: async () => { throw new Error("awaiting approval"); } });
+      const failing = fakeOps({ postNote: async () => { throw new Error("awaiting approval"); } });
       const script = [
         { name: "list_projects", input: {} },
-        { name: "post_summary", input: { summary: "halfway" } },
+        { name: "post_note", input: { note: "halfway" } },
         { name: "list_watchers", input: {} },
       ];
       const first = makeReq("work", `/tools ${JSON.stringify(script)}`, { ctx: { ops: failing } });
       const run1 = await collect(driver, first.req);
       expect(run1.error).toBeNull();
       // Stopped at the failed call: nothing after it, and no submit_for_review
-      expect(first.ops.calls.map((c) => c.method)).toEqual(["listProjects", "postSummary"]);
+      expect(first.ops.calls.map((c) => c.method)).toEqual(["listProjects", "postNote"]);
       const state = stateOf(run1.events)!.state as { pendingCalls?: unknown };
       expect(state.pendingCalls).toEqual(script.slice(1));
 
       const retry = makeReq("work", "The human approved your request. Retry it now and continue.", { state });
       await collect(driver, retry.req);
-      expect(retry.ops.calls.map((c) => c.method)).toEqual(["postSummary", "listWatchers", "submitForReview"]);
+      expect(retry.ops.calls.map((c) => c.method)).toEqual(["postNote", "listWatchers", "readSpec", "editSpec", "submitForReview"]);
     });
   });
 
@@ -491,7 +508,7 @@ describe("dummy /approve directive", () => {
     expect(calls(events)[0]).toMatchObject({ name: "permission_prompt", input: { tool_name: "Bash", input: { command: "git init" } } });
     expect(ops.calls.find((c) => c.method === "requestApproval")!.args).toEqual(["Bash", { command: "git init" }, { viaPromptTool: true }]);
     expect(texts(events)).toContain("Approved Bash");
-    expect(calls(events).map((c) => c.name)).toEqual(["permission_prompt", "submit_for_review"]);
+    expect(calls(events).map((c) => c.name)).toEqual(["permission_prompt", "read_spec", "edit_spec", "submit_for_review"]);
   });
 
   test("denied: the run stops without submitting", async () => {
