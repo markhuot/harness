@@ -557,6 +557,19 @@ export const BrowserState: P.BrowserState[] = [
       { id: 4, url: "about:blank", title: "", loading: true },
     ],
   },
+  // A suspended tab (its page closed, reloads when opened), and a viewer on one that's reopening.
+  {
+    sessionId: "ses_31",
+    tabId: 2,
+    url: "http://localhost:3000/settings",
+    title: "Settings",
+    loading: false,
+    suspended: true,
+    tabs: [
+      { id: 1, url: "http://localhost:3000/login", title: "Log in", loading: false, suspended: false },
+      { id: 2, url: "http://localhost:3000/settings", title: "Settings", loading: false, suspended: true },
+    ],
+  },
 ];
 
 export const BranchInfo: P.BranchInfo[] = [

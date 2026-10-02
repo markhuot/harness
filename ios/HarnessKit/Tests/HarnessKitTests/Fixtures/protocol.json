@@ -154,6 +154,30 @@
           "loading": true
         }
       ]
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 2,
+      "url": "http://localhost:3000/settings",
+      "title": "Settings",
+      "loading": false,
+      "suspended": true,
+      "tabs": [
+        {
+          "id": 1,
+          "url": "http://localhost:3000/login",
+          "title": "Log in",
+          "loading": false,
+          "suspended": false
+        },
+        {
+          "id": 2,
+          "url": "http://localhost:3000/settings",
+          "title": "Settings",
+          "loading": false,
+          "suspended": true
+        }
+      ]
     }
   ],
   "ClientMessage": [

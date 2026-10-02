@@ -158,7 +158,7 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
             }}
           />
         </Row>
-        <Row title="Close unused browser tabs after" sub="In minutes. Tabs you're watching stay open. 0 means never.">
+        <Row title="Suspend unused browser tabs after" sub="Minutes. Frees memory; pages reload when opened. 0 means never.">
           <DraftInput
             type="number"
             value={String(settings.browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES)}

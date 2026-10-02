@@ -17,9 +17,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Browser tab on the Mac, iPhone and iPad has a new-tab button, and once more than one tab is
   open, a row of tabs above the page. Tap or click a tab to watch it, or close it with its ×.
   Each app keeps its own place, so you can watch one tab while the agent works in another.
-- Settings has a new **Close unused browser tabs after** option on the Mac, iPhone and iPad. It
-  sets how many minutes a ticket's browser tab can go unused before it's closed (5 by default, or 0
-  to keep tabs open). A tab you have open in an app's Browser tab stays open.
+- Settings has a new **Suspend unused browser tabs after** option on the Mac, iPhone and iPad. It
+  sets how many minutes a ticket's browser tab can go unused before its page is suspended to free
+  memory (5 by default, or 0 to keep pages running). A tab you're watching in an app's Browser tab
+  isn't suspended.
 
 ### Changed
 
@@ -59,12 +60,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
   a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
   kept Chrome busy until it was quit.
-- Harness's background Chrome no longer keeps a finished ticket's pages running. When a ticket
-  moves to Done, its browser tabs close, so a dev server or web app it was checking stops using the
-  Mac's CPU. If the ticket is re-opened, its next run opens fresh tabs.
-- Browser tabs that nobody has used for a few minutes now close on their own (see the new setting
-  above), and agents are asked to close the tabs they're done with. A tab stays open while you're
-  watching it in the Browser tab.
+- Harness's background Chrome no longer keeps every page a ticket ever opened running. A tab nobody
+  has used for a few minutes (see the new setting above), and every tab of a ticket that moves to
+  Done, is suspended: its page closes, so a dev server or web app it was showing stops using the
+  Mac's CPU and memory, but the tab stays in the Browser tab's strip (dimmed). Open it and the page
+  reloads where you left off, including after a link you clicked or a restart of Harness. Once no
+  tab has a page, Chrome itself quits until it's needed again. Agents are also asked to close the
+  tabs they're done with.
 
 ### Removed
 

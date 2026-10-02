@@ -83,6 +83,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   const browser = opts.browser ?? (await import("./browser/index")).createBrowserService({
     profileDir: paths.chromeProfileDir,
     headless: true,
+    tabStore: store.browserTabs,
     idleTabMs: () => (settings().browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES) * 60_000,
   });
   const mcp: McpHandler = (await import("./api/mcp")).handleMcpRequest;

@@ -1855,12 +1855,14 @@ async function route(req: Request, url: URL): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 // Like the service: a session's browser has tabs (ids count up from 1, never reused); each socket
-// watches one tab per session, and resize applies to every tab.
+// watches one tab per session, and resize applies to every tab. A suspended tab (its page closed
+// to save memory) reopens when a socket watches it.
 interface TabSim {
   id: number;
   url: string;
   title: string;
   loading: boolean;
+  suspended?: boolean;
   mouseX: number;
   mouseY: number;
   clicks: { x: number; y: number }[];
@@ -1891,6 +1893,7 @@ function sim(sessionId: string): BrowserSim {
     b = { width: 1280, height: 800, tabs: new Map(), nextTab: 1 };
     browsers.set(sessionId, b);
     addTab(b, "http://localhost:3000/", "Local dev server");
+    addTab(b, "http://localhost:3000/docs", "Docs").suspended = true;
   }
   return b;
 }
@@ -1903,8 +1906,8 @@ function tabOf(sessionId: string, tabId?: number): TabSim {
 
 function stateFor(sessionId: string, tabId?: number): BrowserState {
   const t = tabOf(sessionId, tabId);
-  const tabs = [...sim(sessionId).tabs.values()].map(({ id, url, title, loading }) => ({ id, url, title, loading }));
-  return { sessionId, tabId: t.id, url: t.url, title: t.title, loading: t.loading, tabs };
+  const tabs = [...sim(sessionId).tabs.values()].map(({ id, url, title, loading, suspended }) => ({ id, url, title, loading, ...(suspended && { suspended }) }));
+  return { sessionId, tabId: t.id, url: t.url, title: t.title, loading: t.loading, ...(t.suspended && { suspended: true }), tabs };
 }
 
 function sendEvent(ws: ServerWebSocket<WsData>, event: HarnessEvent) {
@@ -1923,6 +1926,10 @@ function emitState(sessionId: string) {
 function watch(ws: ServerWebSocket<WsData>, sessionId: string, tabId?: number) {
   const t = tabOf(sessionId, tabId);
   ws.data.subs.set(sessionId, t.id);
+  if (t.suspended) {
+    t.suspended = false; // watching reopens it
+    emitState(sessionId);
+  }
   sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, t.id) });
   sendEvent(ws, { kind: "browser.frame", sessionId, tabId: t.id, ...renderFrame(sessionId, t.id, frameTick) });
 }

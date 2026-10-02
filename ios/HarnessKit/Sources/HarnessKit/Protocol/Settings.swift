@@ -31,7 +31,7 @@ public struct Settings: Codable, Sendable, Equatable {
     /// (default { mode: "localhost" }); optional so clients tolerate an older service without it.
     public var listen: ListenSetting?
     /// Minutes a session browser tab may go unused (no agent call, no viewer input) while nobody has
-    /// it open in the app before the service closes it. 0 = never. Integer 0–1440, default 5. The
+    /// it open in the app before the service suspends it (closes its page; it reloads when used). 0 = never. Integer 0–1440, default 5. The
     /// service always sends it; optional so clients tolerate an older service without it.
     public var browserIdleTabMinutes: Int?
     /// The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null

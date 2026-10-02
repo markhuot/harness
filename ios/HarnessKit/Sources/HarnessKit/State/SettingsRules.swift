@@ -59,7 +59,7 @@ public enum SettingsRules {
         return Int(min(32, max(1, n)))
     }
 
-    /// Close unused browser tabs after N minutes, as typed: `Math.round(Number(v))`, clamped to
+    /// Suspend unused browser tabs after N minutes, as typed: `Math.round(Number(v))`, clamped to
     /// 0…1440 (0 = never); nil when it's blank or not a finite number (nothing is saved).
     public static func browserIdleTabMinutes(_ text: String) -> Int? {
         guard !JSCompat.trim(text).isEmpty else { return nil }

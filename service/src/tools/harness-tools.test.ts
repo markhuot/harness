@@ -519,12 +519,14 @@ describe("browser tools → BrowserService", () => {
     const tabs = [
       { id: 1, url: "http://a.test/", title: "A", loading: false },
       { id: 3, url: "http://c.test/", title: "", loading: true },
+      { id: 4, url: "http://d.test/", title: "D", loading: false, suspended: true },
     ];
     const browser = fakeBrowser({ tabs: async () => tabs });
     const ctx = fakeContext({ browser });
-    expect(text(await tool("browser_tabs").execute({}, ctx))).toBe("Tab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)");
+    const listing = "Tab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)\nTab 4: D — http://d.test/ (suspended: reloads when you use it)";
+    expect(text(await tool("browser_tabs").execute({}, ctx))).toBe(listing);
     const closed = await tool("browser_close_tab").execute({ tab: 2 }, ctx);
-    expect(text(closed)).toBe("Closed tab 2.\nOpen tabs:\nTab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)");
+    expect(text(closed)).toBe(`Closed tab 2.\nOpen tabs:\n${listing}`);
     expect(browser.calls.find((c) => c.method === "closeTab")?.args).toEqual(["s_1", 2]);
     const none = fakeBrowser({ tabs: async () => [] });
     expect(text(await tool("browser_tabs").execute({}, fakeContext({ browser: none })))).toContain("No tabs are open");

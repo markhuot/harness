@@ -2,7 +2,12 @@
 // Clients see a tab through a CDP screencast relayed over the WebSocket, and can drive it.
 //
 // Tabs are numbered per session from 1 and never reuse a number. A call without `tab` uses the
-// session's lowest open tab, creating tab 1 when the session has none.
+// session's lowest tab, creating tab 1 when the session has none.
+//
+// A tab outlives its Chrome page. Idle tabs nobody watches, and a done ticket's tabs, are
+// suspended: the page closes, the tab keeps its number, URL and title (in the database, so it
+// also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
+// deleting its session, removes it.
 
 import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 
@@ -13,6 +18,26 @@ export interface BrowserFrame {
   data: string;
   width: number;
   height: number;
+}
+
+/** A tab as stored: enough to reload its page once Chrome no longer has it. */
+export interface StoredBrowserTab {
+  id: number;
+  url: string;
+  title: string;
+}
+
+export interface StoredBrowserTabs {
+  /** The number the session's next tab gets (numbers are never reused). */
+  nextTabId: number;
+  tabs: StoredBrowserTab[];
+}
+
+/** Where sessions' tabs are kept across suspensions and restarts (the database's browser_tabs). */
+export interface BrowserTabStore {
+  load(sessionId: string): StoredBrowserTabs | null;
+  save(sessionId: string, state: StoredBrowserTabs): void;
+  delete(sessionId: string): void;
 }
 
 /** Which tab a call acts on. An explicit tab that isn't open throws. */
@@ -38,7 +63,7 @@ export interface BrowserService {
   evaluate(sessionId: string, expression: string, opts?: TabOption): Promise<string>;
   /** PNG screenshot as base64 */
   screenshot(sessionId: string, opts?: TabOption): Promise<string>;
-  /** Close one tab. Viewers on it move to the lowest open tab; when it was the last one and someone is watching, a blank tab replaces it. */
+  /** Close one tab (live or suspended) for good. Viewers on it move to the lowest open tab; when it was the last one and someone is watching, a blank tab replaces it. */
   closeTab(sessionId: string, tab: number): Promise<void>;
   /**
    * Apply user input coming from a client viewer. Without `tab` it goes to the tab `subscriberId`
@@ -59,11 +84,11 @@ export interface BrowserService {
   ): Promise<void>;
   unsubscribe(sessionId: string, subscriberId: string): Promise<void>;
   /**
-   * Close all of the session's tabs but keep the session (its viewers and tab numbering): its next
-   * call opens a fresh tab. When someone is watching, a blank tab replaces the closed ones.
+   * The ticket is done: close the pages of the session's tabs and keep the tabs (each reloads its
+   * URL when watched or used). A tab someone is watching keeps its page until the viewer leaves.
    */
-  closeTabs(sessionId: string): Promise<void>;
-  /** Close all of the session's tabs and forget it (unless someone is still watching). */
+  suspendTabs(sessionId: string): Promise<void>;
+  /** Close all of the session's tabs and forget them, stored ones included (the session is deleted). */
   close(sessionId: string): Promise<void>;
   /** Shut down Chrome. */
   shutdown(): Promise<void>;

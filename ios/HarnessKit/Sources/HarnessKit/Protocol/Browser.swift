@@ -9,15 +9,18 @@ public struct BrowserState: Codable, Sendable, Equatable {
     public var url: String
     public var title: String
     public var loading: Bool
+    /// The tab's page is closed to save memory; it reloads its URL when opened. nil: false.
+    public var suspended: Bool?
     /// Every open tab, ascending id.
     public var tabs: [BrowserTab]?
 
-    public init(sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, tabs: [BrowserTab]? = nil) {
+    public init(sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, suspended: Bool? = nil, tabs: [BrowserTab]? = nil) {
         self.sessionId = sessionId
         self.tabId = tabId
         self.url = url
         self.title = title
         self.loading = loading
+        self.suspended = suspended
         self.tabs = tabs
     }
 }
@@ -28,13 +31,19 @@ public struct BrowserTab: Codable, Sendable, Equatable, Identifiable {
     public var url: String
     public var title: String
     public var loading: Bool
+    /// Its page is closed to save memory; watching it or an agent using it reloads its URL. nil: false.
+    public var suspended: Bool?
 
-    public init(id: Int, url: String, title: String, loading: Bool) {
+    public init(id: Int, url: String, title: String, loading: Bool, suspended: Bool? = nil) {
         self.id = id
         self.url = url
         self.title = title
         self.loading = loading
+        self.suspended = suspended
     }
+
+    /// Whether its page is closed (an older service never sends it).
+    public var isSuspended: Bool { suspended ?? false }
 }
 
 /// Input for the session browser (ClientMessage `browser.input`), discriminated by `type`. An

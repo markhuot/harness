@@ -490,6 +490,18 @@ export const MIGRATIONS: string[] = [
   UPDATE tickets SET skip_human_review = 1 WHERE project_id IN (SELECT id FROM projects WHERE require_human_review = 0);
   ALTER TABLE projects DROP COLUMN require_human_review;
   `,
+  // 26: browser tabs (DESIGN.md "Browser tabs"). One row per session: its tabs' numbers, URLs and
+  //     titles as JSON, and the next tab number (numbers are never reused). A tab outlives its
+  //     Chrome page: an idle or done ticket's pages are closed and reload from here when someone
+  //     comes back, including after a restart. Deleting the session deletes its row.
+  `
+  CREATE TABLE browser_tabs (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    next_tab_id INTEGER NOT NULL,
+    tabs TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ];
 
 /**

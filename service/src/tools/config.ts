@@ -187,7 +187,7 @@ function settingsView(settings: PublicSettings): unknown {
 export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), how many minutes an unused browser tab stays open (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
   inputSchema: schema({
     include_prompts: {
       type: "boolean",
@@ -472,7 +472,7 @@ export const updateSettings = defineGatedTool<SettingsInput>({
       type: "integer",
       minimum: 0,
       maximum: 1440,
-      description: "Minutes a session browser tab may go unused while nobody has it open in the app before it is closed. 0 never closes one. Default 5.",
+      description: "Minutes a session browser tab may go unused while nobody has it open in the app before it is suspended: its page closes to free memory, and the tab reloads its URL when next used. 0 never suspends one. Default 5.",
     },
     permission_mode: { type: "string", enum: [...PERMISSION_MODES], description: "Default permission mode for tickets whose project and ticket don't set one." },
     classifier: { type: "string", enum: ["claude-cli", "anthropic-api", "off"], description: "Who judges actions in auto mode for drivers without built-in permissions (\"off\" asks a human)." },

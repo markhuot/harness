@@ -185,7 +185,7 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
     input: async () => {},
     subscribe: async () => {},
     unsubscribe: async () => {},
-    closeTabs: async () => {},
+    suspendTabs: async () => {},
     close: async () => {},
     shutdown: async () => {},
   };

@@ -194,7 +194,8 @@ struct BrowserTabView: View {
 }
 
 /// One open tab in the strip: spinner while loading, its label (title, host, or "New Tab"), and a
-/// close button. Tapping it switches to that tab.
+/// close button. Tapping it switches to that tab. A suspended tab (its page closed to save memory)
+/// is dimmed until it's opened, which reloads it.
 struct BrowserTabChip: View {
     let tab: BrowserTab
     let current: Bool
@@ -202,13 +203,17 @@ struct BrowserTabChip: View {
     let close: () -> Void
     @Environment(\.palette) private var c
 
+    private var dimmed: Bool { tab.isSuspended && !current }
+
     var body: some View {
         let label = BrowserTabSelection.label(tab)
         HStack(spacing: 6) {
             if tab.loading { Spinner().controlSize(.mini) }
             Text(label)
                 .font(.scaled(size: 12.5, weight: current ? .semibold : .regular))
+                .italic(dimmed)
                 .foregroundStyle(current ? c.accentText : c.text2)
+                .opacity(dimmed ? 0.55 : 1)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Button {
@@ -238,6 +243,7 @@ struct BrowserTabChip: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
+        .accessibilityValue(dimmed ? "Suspended, reloads when opened" : "")
         .accessibilityAction { select() }
     }
 }
