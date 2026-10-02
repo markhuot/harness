@@ -2,9 +2,9 @@
 // app-YYYYMMDD.HHMM (the UTC minute the release was prepared) with a matching CHANGELOG.md
 // section; publish-install.sh builds only a commit that carries such a tag. See CLAUDE.md → Releases.
 //
-//   bun Tools/release.ts prepare [--at <ISO time>]   move [Unreleased] into a new release section, print the tag
-//   bun Tools/release.ts check <tag>                 validate the tag and its section, print the build number
-//   bun Tools/release.ts notes <tag>                 print the tag's CHANGELOG section body
+//   bun release/release.ts prepare [--at <ISO time>]   move [Unreleased] into a new release section, print the tag
+//   bun release/release.ts check <tag>                 validate the tag and its section, print the build number
+//   bun release/release.ts notes <tag>                 print the tag's CHANGELOG section body
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 

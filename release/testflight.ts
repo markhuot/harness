@@ -1,12 +1,12 @@
 // TestFlight distribution through the App Store Connect API. publish-install.sh uploads the build
-// (xcodebuild -exportArchive with ExportOptions-testflight.plist); this script then waits for App
+// (ios/Tools/build.ts export --method testflight, with ios/ExportOptions-testflight.plist); this script then waits for App
 // Store Connect to finish processing it, adds it to the external "Public" beta group (created with
 // a public link the first time), submits it for Beta App Review and prints the group's public link.
 //
-//   bun Tools/testflight.ts setup                 fill in the app's Test Information (once per app)
-//   bun Tools/testflight.ts distribute <build>    distribute an uploaded build, print JSON { publicLink, … }
-//   bun Tools/testflight.ts uploaded <build>      exit 0 when App Store Connect already has the build
-//   bun Tools/testflight.ts link                  print the public link (empty until the group exists)
+//   bun release/testflight.ts setup                 fill in the app's Test Information (once per app)
+//   bun release/testflight.ts distribute <build>    distribute an uploaded build, print JSON { publicLink, … }
+//   bun release/testflight.ts uploaded <build>      exit 0 when App Store Connect already has the build
+//   bun release/testflight.ts link                  print the public link (empty until the group exists)
 //
 // Env: ASC_KEY_ID and ASC_ISSUER_ID (a team API key with the App Manager role or higher; export
 // them in the publishing Mac's shell profile, not in this repo); the .p8 lives at ASC_KEY_PATH, default ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8, where xcodebuild
@@ -152,7 +152,7 @@ export async function distribute(c: Client, buildNumber: string, whatsNew: strin
     // Only one build per version can wait in Beta App Review. This one is in the group with its notes;
     // submit it once the earlier build clears, by rerunning `distribute` for it.
     else if (e instanceof AscError && e.codes.includes("ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW"))
-      review = `waiting: another build is in beta review; once it clears, run \`bun Tools/testflight.ts distribute ${buildNumber}\``;
+      review = `waiting: another build is in beta review; once it clears, run \`bun release/testflight.ts distribute ${buildNumber}\``;
     else throw e;
   }
   return { publicLink: group.attributes.publicLink as string | null, build: build.attributes.version as string, group: group.id, review };
@@ -224,7 +224,7 @@ if (import.meta.main) {
     const { data } = await c.get(`/betaGroups?filter[app]=${app.id}&filter[name]=${GROUP_NAME}&limit=10`);
     console.log((data as Resource[]).find((g) => !g.attributes.isInternalGroup)?.attributes.publicLink ?? "");
   } else {
-    console.error("usage: bun Tools/testflight.ts setup | distribute <build number> | uploaded <build number> | link");
+    console.error("usage: bun release/testflight.ts setup | distribute <build number> | uploaded <build number> | link");
     process.exit(2);
   }
 }
