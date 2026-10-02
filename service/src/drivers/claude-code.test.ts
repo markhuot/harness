@@ -56,7 +56,7 @@ interface Setup {
 }
 
 function setup(
-  opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number; backgroundWaitMs?: number } = {},
+  opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number; backgroundWaitMs?: number; exitGraceMs?: number } = {},
 ): Setup {
   const dir = tmp();
   const record = join(dir, "record.ndjson");
@@ -77,6 +77,7 @@ function setup(
     env,
     loginUrlTimeoutMs: opts.loginUrlTimeoutMs,
     backgroundWaitMs: opts.backgroundWaitMs,
+    exitGraceMs: opts.exitGraceMs,
   });
   const ndjson = (file: string) =>
     existsSync(file)
@@ -850,6 +851,43 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
       "Waiting for a background task to finish (Follow log), up to 1s.",
       "Background tasks were still running after 1s, so the turn ended and they were stopped.",
     ]);
+  });
+
+  // HARNESS-204: the agent submitted with a Monitor (`tail -f`) still running. claude 2.1.287
+  // didn't exit when stdin closed, so the run never ended: the agent review never started and the
+  // human's message was queued behind a run nobody could reach.
+  test("a CLI that stays up after stdin closes is stopped, with the background shells under it", async () => {
+    const s = setup({
+      exitGraceMs: 300,
+      script: [
+        init(),
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "m1", name: "Monitor", input: { command: "tail -f log", description: "Follow the publish log" } }] } },
+        taskStarted("bm", "m1", "Follow the publish log"),
+        toolResult("m1", "Monitor started (task bm, expires in 30m unless the source ends first)."),
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "s1", name: "mcp__harness__submit_for_review", input: { summary: "Done" } }] } },
+        success(),
+        { __linger: true },
+      ],
+    });
+    const started = Date.now();
+    const { events, error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(events.filter((e) => e.type === "status").map((e) => (e as { text: string }).text)).toEqual([
+      "Claude Code was still running 1s after the run ended (kept up by Follow the publish log), so it and its background tasks were stopped.",
+    ]);
+    const { pid } = (s.marks() as unknown as { label: string; pid: number }[]).find((m) => m.label === "linger")!;
+    let alive = true;
+    for (let i = 0; i < 50 && alive; i++) {
+      try {
+        process.kill(pid, 0);
+        await Bun.sleep(20);
+      } catch {
+        alive = false;
+      }
+    }
+    if (alive) process.kill(pid, "SIGKILL");
+    expect(alive).toBe(false);
   });
 });
 

@@ -8,6 +8,8 @@
 //                          {"__echo_session": true} → emits system/init with the --resume id (or "new-session")
 //                          {"__mark": "label"} → appends { label, stdinClosed } to FAKE_CLAUDE_RECORD + ".marks"
 //                          {"__until_stdin_closed": true} → waits for the harness to close stdin
+//                          {"__linger": true} → starts a detached `sleep 600` (its pid goes to the
+//                            marks as { label: "linger", pid }) and never exits on its own
 //                          {"__until_input": n} → waits (up to 5s) until n more user messages arrived
 //                          {"__replay": true} → echoes the oldest un-echoed later user message the
 //                            way --replay-user-messages does (isReplay, with its uuid)
@@ -178,6 +180,13 @@ for (const raw of script.split("\n")) {
   else if (line.__echo_session) out(JSON.stringify({ type: "system", subtype: "init", session_id: resume ?? "new-session", tools: [] }));
   else if (typeof line.__mark === "string") {
     if (env.FAKE_CLAUDE_RECORD) appendFileSync(env.FAKE_CLAUDE_RECORD + ".marks", JSON.stringify({ label: line.__mark, stdinClosed }) + "\n");
+  } else if (line.__linger) {
+    // Like claude 2.1.287 with a Monitor running: a background shell in its own process group,
+    // and the CLI ignores stdin closing until it's killed.
+    const child = Bun.spawn(["sleep", "600"], { detached: true, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+    if (env.FAKE_CLAUDE_RECORD) appendFileSync(env.FAKE_CLAUDE_RECORD + ".marks", JSON.stringify({ label: "linger", pid: child.pid }) + "\n");
+    setInterval(() => {}, 1000);
+    await new Promise(() => {});
   } else if (line.__until_stdin_closed) await untilStdinClosed(10_000);
   else if (typeof line.__until_input === "number") {
     const start = Date.now();
