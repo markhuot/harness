@@ -1086,7 +1086,7 @@ to be next to an earlier task's (`<dir>/<task>.output`), else in the CLI's layou
 the same mapping as an agent's, with the notification's `summary` as `result`. A sub-agent's own
 background commands aren't the session's tasks.
 
-**Store** (migration 21). `subagents` gains `kind`, `command`, `output_path` (service-side only;
+**Store** (migration 22). `subagents` gains `kind`, `command`, `output_path` (service-side only;
 clients see `hasOutput`) and the kept output: `output` holds the raw tail of the file (up to
 256 KB) from byte `output_start` of `output_size`. The output path is set once and never moved.
 When a task finishes (a finishing report, a run's stop, a stale run's recovery), the orchestrator

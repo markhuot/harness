@@ -187,14 +187,18 @@ describe("readTaskOutput", () => {
   });
 });
 
-test("migration 21 keeps existing sub-agents as agents", () => {
+test("migration 22 keeps existing sub-agents as agents", () => {
   const db = new Database(":memory:", { strict: true });
-  for (const [v, sql] of MIGRATIONS.slice(0, 20).entries()) {
+  for (const [v, sql] of MIGRATIONS.slice(0, 21).entries()) {
     db.exec(sql);
     db.exec(`PRAGMA user_version = ${v + 1}`);
   }
   db.query("INSERT INTO sessions (id, key, kind, driver, cwd, created_at, updated_at) VALUES ('s1', 'K-1', 'ticket', 'fake', '/', 0, 0)").run();
   db.query("INSERT INTO subagents (session_id, id, status, started_at, updated_at) VALUES ('s1', 'a', 'succeeded', 0, 0)").run();
+  const columns = () => (db.query("PRAGMA table_info(subagents)").all() as { name: string }[]).map((c) => c.name);
+  // Seeded up to the migration before this one: the columns come from 22 itself.
+  expect(columns()).not.toContain("kind");
   migrate(db);
+  expect(columns()).toEqual(expect.arrayContaining(["kind", "command", "output_path", "output", "output_start", "output_size"]));
   expect(db.query("SELECT kind, command, output FROM subagents").get()).toEqual({ kind: "agent", command: null, output: null });
 });
