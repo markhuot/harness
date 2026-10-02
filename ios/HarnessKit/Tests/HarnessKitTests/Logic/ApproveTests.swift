@@ -21,11 +21,6 @@ struct ApproveTests {
         let ticket: PrimaryTicket
     }
 
-    struct CompleteMenuInput: Decodable, Sendable {
-        let opts: Completion.Options
-        let canRun: Bool
-    }
-
     struct ToastInput: Decodable, Sendable {
         let choice: Approve.Choice
         let key: String
@@ -33,12 +28,6 @@ struct ApproveTests {
 
     struct OptionsInput: Decodable, Sendable {
         let actions: [CompletionAction]
-    }
-
-    struct BodyInput: Decodable, Sendable {
-        let choose: Bool
-        let action: CompletionAction
-        let instructions: String
     }
 
     static func json(_ value: some Encodable) throws -> JSONValue {
@@ -64,16 +53,6 @@ struct ApproveTests {
         #expect(try Self.json(got) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("approve", "completeMenuChoicesCases", input: CompleteMenuInput.self, output: JSONValue.self))
-    func completeMenuChoices(_ c: Fixture.Case<CompleteMenuInput, JSONValue>) throws {
-        #expect(try Self.json(Approve.completeMenuChoices(c.input.opts, canRun: c.input.canRun)) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("approve", "completeMenuRequestCases", input: Approve.Choice.self, output: JSONValue.self))
-    func completeMenuRequest(_ c: Fixture.Case<Approve.Choice, JSONValue>) throws {
-        #expect(try Self.json(Approve.completeMenuRequest(c.input)) == c.output)
-    }
-
     @Test(arguments: Fixture.cases("approve", "approveToastCases", input: ToastInput.self, output: String.self))
     func approveToast(_ c: Fixture.Case<ToastInput, String>) {
         #expect(Approve.approveToast(c.input.choice, key: c.input.key) == c.output)
@@ -82,11 +61,6 @@ struct ApproveTests {
     @Test(arguments: Fixture.cases("approve", "completionActionOptionsCases", input: OptionsInput.self, output: JSONValue.self))
     func completionActionOptions(_ c: Fixture.Case<OptionsInput, JSONValue>) throws {
         #expect(try Self.json(Approve.completionActionOptions(c.input.actions)) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("approve", "completeBodyCases", input: BodyInput.self, output: JSONValue.self))
-    func completeBody(_ c: Fixture.Case<BodyInput, JSONValue>) throws {
-        #expect(try Self.json(Approve.completeBody(choose: c.input.choose, action: c.input.action, instructions: c.input.instructions)) == c.output)
     }
 
     @Test func namesMatchTS() throws {

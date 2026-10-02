@@ -18,14 +18,7 @@ struct TicketDetailHero: View {
     @State private var contentHeight: CGFloat = 0
     @State private var requestingChanges = false
     @State private var reopening = false
-    @State private var completing: Completing?
     @State private var approvingCustom = false
-
-    /// The Complete sheet, opened by the button (the preselected action) or a menu's Custom.
-    private struct Completing: Identifiable {
-        let id = UUID()
-        var action: CompletionAction?
-    }
 
     private var api: HarnessClient? { store.api }
 
@@ -46,7 +39,6 @@ struct TicketDetailHero: View {
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
         .sheet(isPresented: $requestingChanges) { TicketDetailNotesSheet(ticket: ticket) }
         .sheet(isPresented: $reopening) { TicketDetailNotesSheet(ticket: ticket, reopen: true) }
-        .sheet(item: $completing) { TicketDetailCompleteSheet(ticket: ticket, initialAction: $0.action) }
         .sheet(isPresented: $approvingCustom) { TicketDetailApproveCustomSheet(ticket: ticket) }
     }
 
@@ -79,7 +71,7 @@ struct TicketDetailHero: View {
         if !compact && (ticket.busy || [.planning, .review, .done].contains(ticket.status)) {
             FlowLayout(spacing: 8) { buttons(project: project, parent: parent) }
         }
-        // A child's conductor acts as its human reviewer and lands it, so its Approve and Complete are off.
+        // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
         if !compact, ticket.status == .review, let conductor = Completion.managingConductor(ticket: ticket, parent: parent) {
             Text(Completion.conductorManagedReason(conductorKey: conductor.key))
                 .font(.scaled(size: 13))
@@ -122,7 +114,6 @@ struct TicketDetailHero: View {
     @ViewBuilder private func buttons(project: Project?, parent: Ticket?) -> some View {
         // A ticket on its base branch offers no merge or pull request, only clean up.
         let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: store.state.settings?.baseBranch)
-        let ready = BoardState.isReady(ticket)
         let label = Keys.keyLabel(ticket)
         let managedReason = Completion.managingConductor(ticket: ticket, parent: parent).map { Completion.conductorManagedReason(conductorKey: $0.key) }
         let managed = managedReason != nil
@@ -131,7 +122,9 @@ struct TicketDetailHero: View {
                 perform(nil) { try await $0.startTicket($1) }
             }
         }
-        if ticket.status == .review && ticket.humanReview != .approved {
+        // Approving lands the work once both reviews pass; there's no separate Complete step. A
+        // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.
+        if ticket.status == .review && (ticket.humanReview != .approved || managed) {
             HStack(spacing: 2) {
                 let approveTitle = Completion.approveLabel(opts) ?? "Approve"
                 HButton(approveTitle, icon: "check", variant: .primary, small: true, fullWidth: false, haptic: .success,
@@ -141,15 +134,11 @@ struct TicketDetailHero: View {
                 .disabled(managed)
                 approveMenu(opts, label: label).disabled(managed)
             }
+        }
+        if ticket.status == .review && ticket.humanReview != .approved {
             HButton("Request changes", icon: "edit", small: true, fullWidth: false) { requestingChanges = true }
         }
         if ticket.status == .review {
-            HStack(spacing: 2) {
-                HButton("Complete", icon: "checkCircle", variant: ready ? .primary : .secondary, small: true, fullWidth: false,
-                        accessibilityLabel: TicketDetailLogic.completeButtonLabel(ready: ready, busy: ticket.busy, managedReason: managedReason)) { completing = Completing() }
-                    .disabled(!ready || ticket.busy || managed)
-                if ticket.humanReview == .approved { completeMenu(opts, ready: ready, label: label).disabled(managed) }
-            }
             HButton(TicketDetailLogic.agentReviewButton(ticket.agentReview), icon: "refresh", variant: .ghost, small: true, fullWidth: false) {
                 perform("Agent review queued") { try await $0.rerunAgentReview($1) }
             }
@@ -195,39 +184,6 @@ struct TicketDetailHero: View {
         }
         haptic(.success)
         send(Approve.approveRequest(choice), toast: Approve.approveToast(choice, key: label))
-    }
-
-    /// After the human approved: complete another way, or take no action (no agent run).
-    private func completeMenu(_ opts: Completion.Options, ready: Bool, label: String) -> some View {
-        let choices = Approve.completeMenuChoices(opts, canRun: ready && !ticket.busy)
-        return Menu {
-            Section {
-                ForEach(Array(choices.dropLast().enumerated()), id: \.offset) { _, choice in
-                    Button(choice.label ?? "") { complete(choice.value, label: label) }
-                }
-            } header: {
-                Text("Complete \(label)")
-            }
-            if let last = choices.last {
-                Section { Button(last.label ?? "") { complete(last.value, label: label) } }
-            }
-        } label: {
-            Icon("chevronDown", size: 13, weight: .semibold)
-        }
-        .menuStyle(.button)
-        .menuOrder(.fixed)
-        .buttonStyle(.harness(ready ? .primary : .secondary, small: true, fullWidth: false))
-        .accessibilityLabel("More ways to complete")
-    }
-
-    private func complete(_ choice: Approve.Choice, label: String) {
-        if choice == .action(.custom) {
-            completing = Completing(action: .custom)
-            return
-        }
-        haptic(.success)
-        let body = Approve.completeMenuRequest(choice)
-        perform(TicketDetailLogic.completeMenuToast(choice, label: label)) { try await $0.completeTicket($1, body) }
     }
 
     private func send(_ request: Approve.Request, toast: String) {
