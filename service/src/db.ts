@@ -442,6 +442,19 @@ export const MIGRATIONS: string[] = [
   END;
 
   `,
+  // 21: background tasks (DESIGN.md "Background tasks"). A subagents row can be a Bash command or
+  //     a Monitor the agent left running instead of an agent: kind ('agent', 'bash', 'monitor'),
+  //     its command, and the file the CLI writes its output to (output_path, service-side only).
+  //     output keeps the tail of that file once the task ends (the CLI's files live in /tmp),
+  //     starting at byte output_start of output_size.
+  `
+  ALTER TABLE subagents ADD COLUMN kind TEXT NOT NULL DEFAULT 'agent';
+  ALTER TABLE subagents ADD COLUMN command TEXT;
+  ALTER TABLE subagents ADD COLUMN output_path TEXT;
+  ALTER TABLE subagents ADD COLUMN output TEXT;
+  ALTER TABLE subagents ADD COLUMN output_start INTEGER;
+  ALTER TABLE subagents ADD COLUMN output_size INTEGER;
+  `,
 ];
 
 /**

@@ -262,6 +262,12 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.transcript(params.id!, Number.isFinite(after) ? after : 0, url.searchParams.get("subagent") || null);
   });
   add("GET", "/sessions/:id/subagents", ({ params }) => o.subagents(params.id!));
+  add("GET", "/sessions/:id/subagents/:subagentId/output", ({ params, url }) => {
+    const raw = url.searchParams.get("offset");
+    const offset = raw === null || raw === "" ? undefined : Number(raw);
+    if (offset !== undefined && !(Number.isInteger(offset) && offset >= 0)) throw new HarnessError(400, "offset must be a whole number of bytes");
+    return o.taskOutput(params.id!, params.subagentId!, offset);
+  });
 
   // Watchers (inject before :id so it isn't captured as an id)
   add("GET", "/watchers", () => o.listWatchers());

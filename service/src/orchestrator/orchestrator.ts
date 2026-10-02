@@ -5,6 +5,8 @@ import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import type {
+  Subagent,
+  TaskOutput,
   ApprovalBody,
   CompleteBody,
   PendingApproval,
@@ -125,6 +127,7 @@ import {
 } from "./settings";
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
+import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands";
 import { PermissionGate, type GateEnv } from "../permissions/gate";
@@ -508,7 +511,7 @@ export class Orchestrator {
   private interruptRun(run: Run, reason: string) {
     const r = this.store.runs.finish(run.id, "failed", reason);
     this.bus.emit({ kind: "run.upserted", run: r });
-    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    this.stopSubagents(run.id);
     this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
     const session = this.store.sessions.get(run.sessionId);
     if (session?.kind === "triage" && session.triageStatus === "triaging") {
@@ -1732,6 +1735,40 @@ export class Orchestrator {
   subagents(sessionId: string) {
     this.getSession(sessionId);
     return this.store.subagents.listBySession(sessionId);
+  }
+
+  /**
+   * A background task's output (DESIGN.md "Background tasks"): the tail, or what follows `offset`.
+   * Read from the CLI's file while it runs, from the kept tail once it has ended. 404 for an
+   * unknown id or an agent.
+   */
+  taskOutput(sessionId: string, subagentId: string, offset?: number): TaskOutput {
+    this.getSession(sessionId);
+    const task = this.store.subagents.get(sessionId, subagentId);
+    const source = this.store.subagents.outputSource(sessionId, subagentId);
+    if (!task || !source) throw notFound(`Unknown background task: ${subagentId}`);
+    const done = task.status !== "running";
+    if (done && source.snapshot) return readSnapshot(source.snapshot, offset);
+    const path = source.path && confineOutputPath(source.path);
+    return path ? readTaskOutput(path, offset, done) : unavailable(offset, done);
+  }
+
+  /** The run ended: its sub-agents and tasks still running stopped with it. */
+  private stopSubagents(runId: string) {
+    for (const subagent of this.store.subagents.stopRunning(runId)) {
+      this.keepTaskOutput(subagent);
+      this.bus.emit({ kind: "subagent.upserted", subagent });
+    }
+  }
+
+  /** A background task ended: keep the tail of its output, since the CLI's file lives in /tmp. */
+  private keepTaskOutput(subagent: Subagent) {
+    if (!subagent.kind || subagent.kind === "agent") return;
+    const source = this.store.subagents.outputSource(subagent.sessionId, subagent.id);
+    if (!source?.path || source.snapshot) return;
+    const path = confineOutputPath(source.path);
+    const snapshot = path && snapshotTaskOutput(path);
+    if (snapshot) this.store.subagents.saveOutput(subagent.sessionId, subagent.id, snapshot);
   }
 
   // =========================================================================
@@ -3325,7 +3362,7 @@ export class Orchestrator {
       this.active.delete(run.id);
     }
     // Sub-agents live inside the run: whatever the driver didn't report as finished ended with it.
-    for (const subagent of this.store.subagents.stopRunning(run.id)) this.bus.emit({ kind: "subagent.upserted", subagent });
+    this.stopSubagents(run.id);
     // A one-time grant is for the run it was handed to. The CLI doesn't always ask about the
     // granted call (acceptEdits runs read-only Bash itself, a retry can differ from the approved
     // input), and a grant left over would put every later run in ask mode (planGrants). A failed
@@ -3515,7 +3552,10 @@ export class Orchestrator {
         return null;
       case "subagent": {
         const subagent = this.store.subagents.upsert(run.sessionId, run.id, ev.subagent);
-        if (subagent) this.bus.emit({ kind: "subagent.upserted", subagent });
+        if (subagent) {
+          if (subagent.status !== "running") this.keepTaskOutput(subagent);
+          this.bus.emit({ kind: "subagent.upserted", subagent });
+        }
         return null;
       }
       case "state":
