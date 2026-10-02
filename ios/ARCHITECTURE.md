@@ -447,9 +447,10 @@ is) to the store, never a single window's.
   `closeRequested`, and the window destroys its scene. These semantics are tested in
   RouterWindowTests.
 - **Restoring.** SwiftUI saves the WindowGroup's value with the scene only when `openWindow` gave
-  it, so TicketWindowRoot also keeps the ticket in `@SceneStorage("ticketWindow")`
-  (`TicketWindowValue.json`). A relaunch brings ticket windows back on their tickets; their stacks
-  start over at the root.
+  it (and `@SceneStorage` didn't come back for activation-made scenes either), so TicketWindowRoot
+  also keeps the ticket in the scene session's `userInfo` (`TicketWindowValue.userInfo`), which UIKit
+  saves across launches. A relaunch brings ticket windows back on their tickets; their stacks start
+  over at the root.
 - **External links** (`onOpenURL`) prefer a main window (`handlesExternalEvents(preferring:)` on
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.

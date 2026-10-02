@@ -121,10 +121,6 @@ struct TicketWindowRoot: View {
     @Binding var value: TicketWindowValue?
 
     @Environment(AppModel.self) private var app
-    /// The ticket, JSON, saved with the scene too: SwiftUI saves `value` only when openWindow gave
-    /// it, so a window opened by WindowDirectory.openTicket's activation request (value set from
-    /// its activity) would come back empty on relaunch without this.
-    @SceneStorage("ticketWindow") private var saved = ""
     @State private var router: Router?
     @State private var scene: UIWindowScene?
     @State private var waited = false
@@ -160,22 +156,20 @@ struct TicketWindowRoot: View {
         .background(SceneReader { s in
             scene = s
             if let value {
-                s.title = value.key
+                remember(value, in: s)
                 if let router { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key) }
+            } else if let v = TicketWindowValue(userInfo: s.session.userInfo) {
+                value = v
             }
         })
         .onContinueUserActivity(TicketWindowValue.activityType) { activity in
             if let v = TicketWindowValue(userInfo: activity.userInfo) { value = v }
         }
-        .onAppear {
-            if value == nil, let v = TicketWindowValue(json: saved) { value = v }
-        }
         // Links from outside the app go to a main window (RootView prefers them).
         .handlesExternalEvents(preferring: [], allowing: ["\(DeepLink.scheme)://"])
         .onChange(of: value, initial: true) { _, v in
             guard let v else { return }
-            saved = v.json
-            scene?.title = v.key
+            remember(v, in: scene)
             if let router, TicketWindowValue(route: router.root)?.key == v.key {
                 if router.root != v.route { router.show(v.route) }
             } else {
@@ -186,6 +180,17 @@ struct TicketWindowRoot: View {
             if let router { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key) }
         }
     }
+}
+
+/// Titles the window and saves its ticket on the scene's session, which UIKit keeps across
+/// launches. SwiftUI saves a WindowGroup's value only when openWindow gave it, so a window from
+/// WindowDirectory.openTicket's activation request (value set from its activity) reads it back from
+/// here on relaunch.
+@MainActor
+private func remember(_ value: TicketWindowValue, in scene: UIWindowScene?) {
+    guard let scene else { return }
+    scene.title = value.key
+    scene.session.userInfo = value.userInfo
 }
 
 /// The ticket window's screen: its ticket (the Router's root) under its own stack, once connected.

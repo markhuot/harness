@@ -137,16 +137,6 @@ struct TicketWindowValueTests {
         #expect(TicketWindowValue(userInfo: ["key": "A-1", "tab": "plugin:git:changes"])?.tab == ChangesTab.normalize(TicketTab("plugin:git:changes")))
     }
 
-    @Test func roundTripsThroughSceneStorage() {
-        let v = TicketWindowValue(key: "A-1", tab: .details)
-        #expect(TicketWindowValue(json: v.json) == v)
-        #expect(TicketWindowValue(json: TicketWindowValue(key: "A-1", tab: nil).json)?.tab == nil)
-        // A fresh scene's empty storage, or anything else, is no ticket.
-        #expect(TicketWindowValue(json: "") == nil)
-        #expect(TicketWindowValue(json: "{\"key\":\"\"}") == nil)
-        #expect(TicketWindowValue(json: "nope") == nil)
-    }
-
     @Test func onlyATicketRouteMakesAValue() {
         #expect(TicketWindowValue(route: .prompts) == nil)
         #expect(TicketWindowValue(route: nil) == nil)
