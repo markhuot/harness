@@ -61,23 +61,35 @@ describe("buildPlist", () => {
   });
 });
 
-/** Fake launchctl tracking loaded state; bootstrap/kickstart can boot an in-process harness. */
-function fakeLaunchctl(onStart?: () => Promise<void>) {
+/**
+ * Fake launchctl tracking loaded state; bootstrap/kickstart can boot an in-process harness. Like the
+ * real one, bootout returns at once but the job stays (print finds it, bootstrap fails with 5) for
+ * `lingerPrints` more prints while the daemon shuts down; then launchd removes it.
+ */
+function fakeLaunchctl(onStart?: () => Promise<void>, o: { lingerPrints?: number } = {}) {
   const calls: string[][] = [];
   let loaded = false;
+  let dying = 0;
   const exec: Exec = async (cmd) => {
     calls.push(cmd);
     const [, verb] = cmd;
-    if (verb === "print") return loaded ? { code: 0, stdout: "state = running\n\tpid = 4242\n", stderr: "" } : { code: 113, stdout: "", stderr: "not found" };
+    if (verb === "print") {
+      if (dying > 0 && --dying === 0) loaded = false;
+      return loaded ? { code: 0, stdout: "state = running\n\tpid = 4242\n", stderr: "" } : { code: 113, stdout: "", stderr: "not found" };
+    }
     if (verb === "bootstrap") {
+      if (dying > 0) return { code: 5, stdout: "", stderr: "Bootstrap failed: 5: Input/output error" };
       loaded = true;
       await onStart?.();
     }
-    if (verb === "bootout") loaded = false;
+    if (verb === "bootout") {
+      if (o.lingerPrints) dying = o.lingerPrints + 1;
+      else loaded = false;
+    }
     if (verb === "kickstart") await onStart?.();
     return { code: 0, stdout: "", stderr: "" };
   };
-  return { exec, calls, verbs: () => calls.map((c) => c[1]) };
+  return { exec, calls, verbs: () => calls.map((c) => c[1]), get loaded() { return loaded; } };
 }
 
 function deps(over: Partial<CliDeps>): CliDeps {
@@ -128,9 +140,47 @@ describe("Cli service commands", () => {
 
     const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
     expect((await moved.install()).changed).toBe(true);
-    expect(la.verbs().slice(3)).toEqual(["print", "bootout", "bootstrap"]);
+    expect(la.verbs().slice(3)).toEqual(["print", "bootout", "print", "bootstrap"]);
     expect(readFileSync(cli.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
     expect(existsSync(join(home, "token"))).toBe(true);
+  });
+
+  test("a changed plist waits for launchd to drop the booted-out job before bootstrapping it again", async () => {
+    const la = fakeLaunchctl(undefined, { lingerPrints: 3 });
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() } });
+    await new Cli(d).install();
+    const before = la.verbs().length;
+    await new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] }).install();
+    // bootstrapping while the old job was still shutting down failed with 5, and launchd then
+    // removed the job, leaving nothing loaded and nothing to restart it.
+    expect(la.verbs().slice(before)).toEqual(["print", "bootout", "print", "print", "print", "print", "bootstrap"]);
+    expect(la.loaded).toBe(true);
+  });
+
+  test("restart reloads a plist that changed since launchd loaded it instead of relaunching the old one", async () => {
+    const la = fakeLaunchctl();
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() } });
+    await new Cli(d).install();
+    const before = la.verbs().length;
+    await new Cli(d).restart();
+    expect(la.calls.slice(before).map((c) => c.slice(1, 3))).toEqual([["print", "gui/501/com.markhuot.harness"], ["kickstart", "-k"]]);
+
+    const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
+    const mid = la.verbs().length;
+    await moved.restart();
+    expect(la.verbs().slice(mid)).toEqual(["print", "print", "bootout", "print", "bootstrap"]);
+    expect(readFileSync(moved.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
+  });
+
+  test("a stopped job with a stale plist starts from the new plist", async () => {
+    const la = fakeLaunchctl();
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() } });
+    await new Cli(d).install();
+    await new Cli(d).stop();
+    const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
+    await moved.start();
+    expect(la.loaded).toBe(true);
+    expect(readFileSync(moved.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
   });
 
   test("HARNESS_DUMMY_DRIVER=1 adds the dummy driver to the plist; installing without it takes it out", async () => {
@@ -172,6 +222,53 @@ describe("Cli service commands", () => {
     expect(JSON.parse(out[0]!)).toMatchObject({ installed: true, loaded: true, healthy: true, pid: process.pid });
   });
 
+  test("ensure leaves a service with running agents alone when the plist changed, until --force", async () => {
+    const home = tempHome();
+    const port = await freePort();
+    const la = fakeLaunchctl(async () => {
+      running ??= await createHarness({ home, port, drivers: [new DummyDriver({ delayMs: 60_000 })], browser: stubBrowser(), watchers: null, log: () => {} });
+    });
+    const env = { HARNESS_HOME: home, HARNESS_PORT: String(port) };
+    const out: string[] = [];
+    const d = deps({ exec: la.exec, env, out: (s) => out.push(s) });
+    expect(await new Cli(d).run(["service", "ensure", "--json"])).toBe(0);
+    mkdirSync(join(home, "proj"), { recursive: true });
+    const project = await running!.orchestrator.createProject({ path: join(home, "proj") });
+    await running!.orchestrator.createTicket({ projectId: project.id, prompt: "Long one", driver: "dummy" });
+
+    const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
+    const plistBefore = readFileSync(moved.plistPath, "utf8");
+    const before = la.verbs().length;
+    out.length = 0;
+    expect(await moved.run(["service", "ensure", "--json"])).toBe(0);
+    expect(JSON.parse(out[0]!)).toMatchObject({ pid: process.pid, deferred: { busy: 1 } });
+    expect(la.verbs().slice(before)).not.toContain("bootout");
+    // The plist stays as launchd loaded it, so the next ensure still sees the change.
+    expect(readFileSync(moved.plistPath, "utf8")).toBe(plistBefore);
+
+    out.length = 0;
+    expect(await moved.run(["service", "ensure", "--force", "--json"])).toBe(0);
+    expect(JSON.parse(out[0]!).deferred).toBeUndefined();
+    expect(la.verbs().slice(before)).toContain("bootout");
+    expect(readFileSync(moved.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
+  });
+
+  test("ensure reloads a changed plist right away when no agents are running", async () => {
+    const home = tempHome();
+    const port = await freePort();
+    const la = fakeLaunchctl(async () => {
+      running ??= await createHarness({ home, port, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
+    });
+    const out: string[] = [];
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: home, HARNESS_PORT: String(port) }, out: (s) => out.push(s) });
+    expect(await new Cli(d).run(["service", "ensure", "--json"])).toBe(0);
+    const before = la.verbs().length;
+    out.length = 0;
+    expect(await new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] }).run(["service", "ensure", "--json"])).toBe(0);
+    expect(JSON.parse(out[0]!).deferred).toBeUndefined();
+    expect(la.verbs().slice(before)).toContain("bootout");
+  });
+
   test("ensure fails when the service never becomes healthy", async () => {
     const out: string[] = [];
     const port = await freePort();
@@ -186,7 +283,7 @@ describe("Cli service commands", () => {
     await cli.install();
     await cli.uninstall();
     expect(existsSync(cli.plistPath)).toBe(false);
-    expect(la.verbs().at(-1)).toBe("bootout");
+    expect(la.verbs().slice(-2)).toEqual(["bootout", "print"]);
   });
 
   test("unknown commands print usage and exit 2", async () => {

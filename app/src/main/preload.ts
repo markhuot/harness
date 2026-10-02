@@ -1,12 +1,17 @@
 // Preload bridge: the renderer's only access to Electron. Exposed as window.harness.
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import type { HarnessBridge, MenuCommand, TerminalExit, ThemeState } from "./types";
+import type { ConnectionResult, HarnessBridge, MenuCommand, TerminalExit, ThemeState } from "./types";
 import { stampTheme } from "./theme";
 
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
   retryService: () => ipcRenderer.invoke("harness:retryService"),
+  onConnection: (cb) => {
+    const listener = (_e: IpcRendererEvent, conn: ConnectionResult) => cb(conn);
+    ipcRenderer.on("harness:connection", listener);
+    return () => ipcRenderer.removeListener("harness:connection", listener);
+  },
   reloadToken: (rotated) => ipcRenderer.invoke("harness:reloadToken", rotated),
   restartService: () => ipcRenderer.invoke("harness:restartService"),
   setServiceMode: (mode) => ipcRenderer.invoke("harness:setServiceMode", mode),

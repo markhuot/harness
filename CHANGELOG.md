@@ -9,6 +9,22 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Installing a different build of the Mac app (one that runs the service from another place) no
+  longer restarts a login-item service while agents are working. The previous service keeps
+  running, a banner says how many agents it's waiting on, and the app switches over once they
+  finish. "Restart now" still switches right away if you'd rather not wait.
+
+### Fixed
+
+- The service no longer stops for good after the Mac app reinstalls it as a login item. macOS
+  hadn't finished shutting down the old service when the app tried to start the new one, so
+  nothing came back and the window showed a blank screen.
+- A window that loses the service before it loads anything now says it can't reach the service
+  and offers Retry, which starts the service again. When the connection drops after the window
+  has loaded, a banner at the bottom says so and offers the same Retry.
+
 ## [app-20261002.1508](https://github.com/markhuot/harness/releases/tag/app-20261002.1508) - 2026-10-02
 
 ### Added

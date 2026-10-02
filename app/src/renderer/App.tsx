@@ -9,7 +9,7 @@ import { SettingsView } from "./views/Settings";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { PaneWorkspace } from "./components/PaneWorkspace";
-import { ServiceBanner } from "./components/ServiceBanner";
+import { ServiceBanner, ServiceLoading } from "./components/ServiceBanner";
 import { sidebarBounds, toggleSidebar, updateLayout, useLayout } from "./state/layout";
 import { GLOBAL_OWNER, commandOrigin, useCommands, useKeyboardDispatcher } from "./components/commands";
 import { usePaneCommands } from "./components/paneCommands";
@@ -48,6 +48,8 @@ export function Root() {
 
   useEffect(() => {
     void resolveConnection().then(setConn);
+    // The main process replaces the connection when a deferred service reload settles.
+    return window.harness?.onConnection(setConn);
   }, []);
 
   // Token rotation: Electron re-reads the token file; a plain browser takes the rotated token.
@@ -65,11 +67,11 @@ export function Root() {
     setConn(next);
   }, []);
 
-  const retry = async () => {
+  const retry = useCallback(async () => {
     setRetrying(true);
     setConn(await resolveConnection(true));
     setRetrying(false);
-  };
+  }, []);
 
   return (
     <>
@@ -78,7 +80,14 @@ export function Root() {
       ) : "error" in conn ? (
         <ErrorScreen error={conn} onRetry={retry} retrying={retrying} />
       ) : (
-        <StoreProvider baseUrl={conn.baseUrl} token={conn.token} toast={toast} onTokenRotated={onTokenRotated}>
+        <StoreProvider
+          baseUrl={conn.baseUrl}
+          token={conn.token}
+          toast={toast}
+          onTokenRotated={onTokenRotated}
+          serviceDeferred={!!conn.deferred}
+          retryService={window.harness ? retry : undefined}
+        >
           <AppWindow />
         </StoreProvider>
       )}
@@ -245,9 +254,7 @@ function Shell() {
       </div>
       <main className="main">
         {!state.ready ? (
-          <div className="empty" style={{ flex: 1 }}>
-            <div className="spinner" />
-          </div>
+          <ServiceLoading />
         ) : route.view === "inbox" ? (
           <InboxView />
         ) : route.view === "settings" ? (

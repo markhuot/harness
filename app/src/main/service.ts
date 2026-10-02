@@ -23,6 +23,8 @@ export interface EnsureOutput {
   tokenPath: string;
   home?: string;
   pid?: number;
+  /** The plist changed but agents are running, so the service wasn't reloaded (Cli.ensure). */
+  deferred?: { busy: number };
 }
 
 /** `harness service status --json` (service/src/cli.ts Cli.status). */
@@ -200,8 +202,9 @@ export class ServiceManager {
   private async cli(src: ServiceSource, args: string[]) {
     const [cmd, ...pre] = cliCommand(src);
     const childEnv = { ...this.env, PATH: augmentedPath(src.kind === "checkout" ? src.bunPath : null) };
-    // launchctl bootout waits for the service to shut down, which can take ~25s (Chrome).
-    const out = await run(cmd!, [...pre, ...args], childEnv, 45_000);
+    // A reload waits for launchd to drop the old job (up to ExitTimeOut + 5s, closing Chrome) and
+    // then for /health (15s); killing the CLI in between would leave nothing loaded.
+    const out = await run(cmd!, [...pre, ...args], childEnv, 90_000);
     const transcript = [`$ ${cliCommand(src).join(" ")} ${args.join(" ")}`, out.stdout.trim(), out.stderr.trim(), out.error ?? ""].filter(Boolean).join("\n");
     return { out, transcript };
   }
@@ -249,7 +252,21 @@ export class ServiceManager {
     if (!parsed) return fail("The harness service returned something unexpected.", transcript);
     const token = readTokenFile(parsed.tokenPath);
     if (typeof token !== "string") return token;
-    return { baseUrl: parsed.url, token, source: "service", mode: "login", tokenPath: parsed.tokenPath, home: parsed.home, pid: parsed.pid };
+    const conn: Connection = { baseUrl: parsed.url, token, source: "service", mode: "login", tokenPath: parsed.tokenPath, home: parsed.home, pid: parsed.pid };
+    return parsed.deferred ? { ...conn, deferred: { busy: parsed.deferred.busy } } : conn;
+  }
+
+  /**
+   * A deferred login item (see Connection.deferred), once no agents are running: ensure again, which
+   * now reloads launchd onto this build's service. Null while agents still run, or with nothing
+   * deferred. The CLI counts busy agents again itself, so one that starts in between defers again.
+   */
+  async settleDeferred(conn: ConnectionResult | null): Promise<ConnectionResult | null> {
+    if (!conn || "error" in conn || !conn.deferred) return null;
+    if ((await this.busyAgents(conn)) > 0) return null;
+    const src = this.source();
+    if ("error" in src) return src;
+    return this.ensureLaunchd(src);
   }
 
   private connection(status: StatusOutput, mode: ServiceMode, pid: number | null | undefined): ConnectionResult {
@@ -321,6 +338,7 @@ export class ServiceManager {
    * a service started by hand) ask the service to restart itself.
    */
   async restart(conn: ConnectionResult | null): Promise<{ ok: true } | ConnectionError> {
+    // `service restart` also reloads a plist launchd hasn't picked up yet (a deferred ensure).
     if (!conn || "error" in conn) return fail("Not connected to the service.", "");
     if (conn.source === "service" && conn.mode === "app") {
       await this.child.restart();

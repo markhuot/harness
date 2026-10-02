@@ -14,3 +14,19 @@ export function serviceCodeOf(health: Health | ServiceStatus): NonNullable<Servi
 export function isServiceStale(code: ServiceCode): boolean {
   return !!code && (code.build === undefined || code.stale);
 }
+
+/** How long the socket can be down before the window says it can't reach the service. */
+export const UNREACHABLE_AFTER_MS = 8000;
+
+/**
+ * The service notice a window shows, most urgent first: "unreachable" (the socket has been down
+ * for UNREACHABLE_AFTER_MS; `downSince` is when it dropped, null while connected), "deferred" (a
+ * new build's login item waits for running agents before it reloads the service), or "stale".
+ */
+export type ServiceNotice = "unreachable" | "deferred" | "stale" | null;
+
+export function serviceNotice(o: { stale: boolean; deferred: boolean; downSince: number | null; now: number }): ServiceNotice {
+  if (o.downSince !== null && o.now - o.downSince >= UNREACHABLE_AFTER_MS) return "unreachable";
+  if (o.deferred) return "deferred";
+  return o.stale ? "stale" : null;
+}

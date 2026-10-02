@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // harness CLI: manage the launchd agent and do quick ticket operations.
 //
-//   harness service install|uninstall|start|stop|restart|status|ensure [--json]
+//   harness service install|uninstall|start|stop|restart|status|ensure [--force] [--json]
 //   harness new <dir> "<prompt>" [--driver <id>] [--plan]
 //   harness tickets [--json]
 
@@ -13,6 +13,8 @@ import { ensureHome, ensureToken, harnessPaths, readServiceJson, readToken, reso
 import { COMPILED, daemonProgram } from "./runtime";
 
 export const LAUNCHD_LABEL = "com.markhuot.harness";
+/** The plist's ExitTimeOut: launchd SIGKILLs the daemon this long after SIGTERM. */
+export const EXIT_TIMEOUT_S = 30;
 
 export interface PlistOptions {
   label?: string;
@@ -80,7 +82,7 @@ ${envXml}
     <key>ThrottleInterval</key>
     <integer>5</integer>
     <key>ExitTimeOut</key>
-    <integer>30</integer>
+    <integer>${EXIT_TIMEOUT_S}</integer>
     <key>StandardOutPath</key>
     <string>${esc(o.logPath)}</string>
     <key>StandardErrorPath</key>
@@ -181,11 +183,15 @@ export class Cli {
     return { loaded: true, pid: m ? Number(m[1]) : null };
   }
 
+  /** The plist on disk differs from the one this build writes (or there is none). */
+  plistChanged(): boolean {
+    return (existsSync(this.plistPath) ? readFileSync(this.plistPath, "utf8") : null) !== this.plist();
+  }
+
   /** Write the plist when missing or different. Returns true when it changed. */
   writePlist(): boolean {
+    if (!this.plistChanged()) return false;
     const next = this.plist();
-    const current = existsSync(this.plistPath) ? readFileSync(this.plistPath, "utf8") : null;
-    if (current === next) return false;
     mkdirSync(dirname(this.plistPath), { recursive: true });
     ensureHome(this.home);
     writeFileSync(this.plistPath, next);
@@ -196,9 +202,23 @@ export class Cli {
     ensureToken(ensureHome(this.home));
     const changed = this.writePlist();
     const state = await this.loaded();
-    if (state.loaded && changed) await this.launchctl("bootout", `${this.domain}/${LAUNCHD_LABEL}`);
+    if (state.loaded && changed) await this.bootout();
     if (!state.loaded || changed) await this.bootstrap();
     return { changed };
+  }
+
+  /**
+   * `launchctl bootout` returns as soon as it has sent SIGTERM, but launchd keeps the job until the
+   * daemon exits (up to ExitTimeOut, closing Chrome), and a bootstrap before then fails with 5
+   * while `print` still finds the dying job. So wait for the job to be gone.
+   */
+  private async bootout() {
+    await this.launchctl("bootout", `${this.domain}/${LAUNCHD_LABEL}`);
+    const deadline = Date.now() + (EXIT_TIMEOUT_S + 5) * 1000;
+    while ((await this.loaded()).loaded) {
+      if (Date.now() >= deadline) throw new Error(`launchd still has ${LAUNCHD_LABEL} ${EXIT_TIMEOUT_S + 5}s after bootout`);
+      await this.d.sleep(250);
+    }
   }
 
   private async bootstrap() {
@@ -208,24 +228,41 @@ export class Cli {
   }
 
   async uninstall() {
-    await this.launchctl("bootout", `${this.domain}/${LAUNCHD_LABEL}`);
+    await this.bootout();
     if (existsSync(this.plistPath)) unlinkSync(this.plistPath);
   }
 
   async start() {
-    if (!existsSync(this.plistPath)) return this.install();
+    if (this.plistChanged()) return this.install();
     if (!(await this.loaded()).loaded) await this.bootstrap();
     else await this.launchctl("kickstart", `${this.domain}/${LAUNCHD_LABEL}`);
     return { changed: false };
   }
 
   async stop() {
-    await this.launchctl("bootout", `${this.domain}/${LAUNCHD_LABEL}`);
+    await this.bootout();
   }
 
   async restart() {
     if (!(await this.loaded()).loaded) return this.start();
+    // launchd relaunches the definition it loaded, so a plist that changed since (an ensure that
+    // was deferred) is reloaded instead.
+    if (this.plistChanged()) return this.install();
     await this.launchctl("kickstart", "-k", `${this.domain}/${LAUNCHD_LABEL}`);
+  }
+
+  /** Agents mid-run on the service; 0 when it can't be asked. */
+  async busyAgents(): Promise<number> {
+    const token = readToken(harnessPaths(this.home));
+    if (!token) return 0;
+    try {
+      const res = await this.d.fetch(`${this.url}/sessions`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2000) });
+      if (!res.ok) return 0;
+      const body = (await res.json()) as { data?: { busy?: boolean }[] };
+      return (body.data ?? []).filter((s) => s.busy).length;
+    } catch {
+      return 0;
+    }
   }
 
   async health(): Promise<{ ok: true; version: string; pid: number } | null> {
@@ -266,8 +303,17 @@ export class Cli {
     };
   }
 
-  /** Install if missing or changed, start, and wait for /health. */
-  async ensure(): Promise<{ url: string; tokenPath: string; home: string; pid: number }> {
+  /**
+   * Install if missing or changed, start, and wait for /health. A changed plist (another build of
+   * the app, say) restarts the service, so while agents are running that waits: the running
+   * service is left alone and `deferred` says why, until an ensure with `force` or a `restart`.
+   */
+  async ensure(opts: { force?: boolean } = {}): Promise<{ url: string; tokenPath: string; home: string; pid: number; deferred?: { busy: number } }> {
+    if (!opts.force && existsSync(this.plistPath) && this.plistChanged() && (await this.loaded()).loaded) {
+      const running = await this.health();
+      const busy = running ? await this.busyAgents() : 0;
+      if (running && busy > 0) return { url: this.url, tokenPath: harnessPaths(this.home).tokenPath, home: this.home, pid: running.pid, deferred: { busy } };
+    }
     const { changed } = await this.install();
     let health = changed ? null : await this.health();
     if (!health) {
@@ -344,8 +390,9 @@ export class Cli {
             return s.healthy ? 0 : 3;
           }
           case "ensure": {
-            const r = await this.ensure();
-            print(`harness running at ${r.url} (pid ${r.pid})`, r);
+            const r = await this.ensure({ force: args.includes("--force") });
+            const deferred = r.deferred ? ` · not reloaded: ${r.deferred.busy} agent(s) running (--force restarts it)` : "";
+            print(`harness running at ${r.url} (pid ${r.pid})${deferred}`, r);
             return 0;
           }
         }
@@ -400,7 +447,7 @@ export class Cli {
     this.d.err(
       [
         "usage:",
-        "  harness service install|uninstall|start|stop|restart|status|ensure [--json]",
+        "  harness service install|uninstall|start|stop|restart|status|ensure [--force] [--json]",
         '  harness new <dir> "<prompt>" [--driver <id>] [--plan] [--json]',
         "  harness tickets [--json]",
         "  harness network [--json]",

@@ -42,8 +42,38 @@ else if (debug.capture) app.setPath("userData", join(app.getPath("temp"), "harne
 const service = new ServiceManager({ appRoot, exeDir: dirname(process.execPath) });
 let connection: Promise<ConnectionResult> | null = null;
 function getConnection(force = false) {
-  if (!connection || force) connection = service.connect();
-  return connection;
+  if (!connection || force) setConnection(service.connect());
+  return connection!;
+}
+
+/** Replace the connection; `announce` tells every window (they asked for the old one). */
+function setConnection(next: Promise<ConnectionResult>, announce = false) {
+  connection = next;
+  void next.then((conn) => {
+    if (connection !== next) return;
+    if (announce) broadcast("harness:connection", conn);
+    watchDeferred(conn);
+  });
+}
+
+// A deferred login item (another build's service, kept while agents run) is reloaded onto this
+// build's once none are running: checked every 10s, as long as the connection stays deferred.
+let settleTimer: ReturnType<typeof setInterval> | null = null;
+function watchDeferred(conn: ConnectionResult) {
+  if (settleTimer) clearInterval(settleTimer);
+  settleTimer = null;
+  if ("error" in conn || !conn.deferred) return;
+  let settling = false;
+  settleTimer = setInterval(async () => {
+    if (settling || !connection) return;
+    settling = true;
+    try {
+      const next = await service.settleDeferred(await connection);
+      if (next) setConnection(Promise.resolve(next), true);
+    } finally {
+      settling = false;
+    }
+  }, 10_000);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,17 +430,23 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
-ipcMain.handle("harness:restartService", async () => service.restart(await getConnection()));
+ipcMain.handle("harness:restartService", async () => {
+  const conn = await getConnection();
+  const res = await service.restart(conn);
+  // A login item may have reloaded onto a new plist; connect again so `deferred` clears.
+  if (!("error" in res) && !("error" in conn) && conn.mode === "login") setConnection(service.connect(), true);
+  return res;
+});
 ipcMain.handle("harness:setServiceMode", async (_e, mode: unknown) => {
   if (mode !== "app" && mode !== "login") return { connection: await getConnection(), error: { error: `Unknown service mode ${String(mode)}`, output: "" } };
   const result = service.setMode(mode);
-  connection = result.then((r) => r.connection);
+  setConnection(result.then((r) => r.connection));
   return result;
 });
 ipcMain.handle("harness:reloadToken", async (_e, rotated: unknown) => {
   const next = reloadToken(await getConnection(), typeof rotated === "string" ? rotated : undefined);
   // Keep the refreshed token for later getConnection() calls (reloads, new windows).
-  if (!("error" in next)) connection = Promise.resolve(next);
+  if (!("error" in next)) setConnection(Promise.resolve(next));
   return next;
 });
 ipcMain.handle("harness:pickDirectory", async (e, raw: PickDirectoryOptions | undefined) => {

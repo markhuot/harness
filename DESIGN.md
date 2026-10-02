@@ -1222,7 +1222,7 @@ the query. That holds for loopback and remote clients alike;
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
-GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
+GET    /health                   → { ok, version, pid, build, stale }; 503 while shutting down (see "Service updates")
 POST   /service/restart          → { ok }; exits so its supervisor restarts it (409 when unsupervised)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
@@ -1474,6 +1474,29 @@ agents are running. The app restarts its own child in place. For a login item th
 runs `cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age.
 Other connections call `POST /service/restart`. The banner goes away when the reconnected service
 reports fresh code.
+
+**Reinstalling a login item.** `service ensure` rewrites the plist when this build's differs (a
+`--checkout` app replacing a bundled one, or the reverse), and a changed plist means a reload:
+`launchctl bootout`, then `bootstrap`. Two details make that safe:
+
+- `bootout` returns as soon as it has sent SIGTERM, but launchd keeps the job (`print` still finds
+  it, and `bootstrap` fails with 5) until the daemon exits, which can take up to `ExitTimeOut`
+  (30s) while it closes Chrome. `Cli.bootout` polls `print` until the job is gone before anything
+  bootstraps it again. Before that wait, a bootstrap that failed with 5 looked successful because
+  `print` still found the dying job, and launchd then removed the job with nothing to replace it.
+- `/health` answers 503 from the moment shutdown starts (the HTTP listeners close last), so
+  neither `ensure` nor the app mistakes a dying service for a healthy one.
+
+While agents are running, `ensure` leaves a changed plist alone. It doesn't write the new plist or
+reload the job, and it returns `deferred: { busy }` with the running service's details. The app
+connects to that service and shows a banner. Every 10s its main process asks whether any agents
+are still busy (`ServiceManager.settleDeferred`), and once none are it runs `ensure` again, which
+now reloads. `ensure --force` and `service restart` reload right away. `restart` also checks for a
+changed plist, because `kickstart -k` would relaunch the definition launchd already has.
+
+A window whose socket stays down for 8s says so: a "Can't reach the harness service" card in place
+of the loading spinner when nothing has loaded yet, otherwise a banner. Retry runs the same
+connect path as launch, which starts the service again.
 
 ## Network
 

@@ -20,6 +20,11 @@ export interface Connection {
   tokenPath?: string;
   home?: string;
   pid?: number;
+  /**
+   * A login item still running the service another build of the app installed: this build's
+   * plist would restart it, which waits while `busy` agents are running (`service ensure` defers).
+   */
+  deferred?: { busy: number };
 }
 
 export interface ConnectionError {
@@ -130,6 +135,8 @@ export interface PopoutBridge {
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   retryService(): Promise<ConnectionResult>;
+  /** The main process replaced the connection (a deferred service reload settled, or a restart). */
+  onConnection(cb: (conn: ConnectionResult) => void): () => void;
   /** Re-read the token file after POST /token/rotate (env connections take `rotated`). */
   reloadToken(rotated?: string): Promise<ConnectionResult>;
   /** Restart the service now (the app's child, or launchd's job); running agents are stopped. */

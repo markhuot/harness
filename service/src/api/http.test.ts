@@ -490,6 +490,26 @@ describe("http api", () => {
     expect((await fetch(`${h.url}/health`)).headers.get("access-control-allow-origin")).toBeNull();
   });
 
+  test("/health answers 503 once the service starts shutting down, while it's still serving", async () => {
+    const { h } = await boot();
+    // Plugins stop before the HTTP server does; holding them open holds the server mid-shutdown.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    const stopPlugins = h.plugins.stop.bind(h.plugins);
+    h.plugins.stop = async () => {
+      await held;
+      await stopPlugins();
+    };
+    expect((await fetch(`${h.url}/health`)).status).toBe(200);
+    const stopping = h.stop();
+    const res = await fetch(`${h.url}/health`);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "The service is shutting down" });
+    release();
+    await stopping;
+    harness = null;
+  });
+
   test("POST /tickets/:key/approval answers a pending approval; 409 without one", async () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir });

@@ -35,6 +35,8 @@ export interface HttpServerOptions {
   serviceStatus?: () => ServiceStatus;
   /** Enables POST /service/restart: exit so launchd starts the service again. */
   restart?: () => void;
+  /** True once the service is shutting down: /health answers 503 so nobody connects to it. */
+  stopping?: () => boolean;
 }
 
 export interface HttpHandler {
@@ -385,6 +387,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return opts.plugins.serveUi(decodeURIComponent(ui[1]!), ui[2]);
       }
 
+      if (req.method === "GET" && path === "/health" && opts.stopping?.()) return json({ error: "The service is shutting down" }, 503);
       if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid, ...(opts.serviceStatus?.() ?? { build: null, stale: false }) } });
 
       // MCP: authenticated by the run-scoped token in the path. Only agents on this machine use it,

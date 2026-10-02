@@ -33,7 +33,7 @@ const URL = "http://127.0.0.1:7717";
  * A fake app + repo whose service CLI is a script backed by state.json ({ installed, healthy,
  * ensureFails }), logging each call to `calls`. The fake child "serves" /health while it runs.
  */
-function fixture(state: { installed?: boolean; healthy?: boolean; ensureFails?: boolean } = {}) {
+function fixture(state: { installed?: boolean; healthy?: boolean; ensureFails?: boolean; stalePlist?: boolean; busy?: number } = {}) {
   const root = tempDir("harness-app-test-");
   const repo = join(root, "repo");
   mkdirSync(join(repo, "service/src"), { recursive: true });
@@ -55,7 +55,11 @@ function fixture(state: { installed?: boolean; healthy?: boolean; ensureFails?: 
     }
     if (args === "service ensure --json") {
       if (state.ensureFails) { console.error("launchctl bootstrap failed: 5"); process.exit(1); }
-      state.installed = true; state.healthy = true; save();
+      if (state.stalePlist && state.busy) {
+        console.log(JSON.stringify({ url: base.url, tokenPath: base.tokenPath, home: root, pid: 41, deferred: { busy: state.busy } }));
+        process.exit(0);
+      }
+      state.installed = true; state.healthy = true; state.stalePlist = false; save();
       console.log("launchd: loaded");
       console.log(JSON.stringify({ url: base.url, tokenPath: base.tokenPath, home: root, pid: 42 }));
       process.exit(0);
@@ -96,13 +100,15 @@ function fixture(state: { installed?: boolean; healthy?: boolean; ensureFails?: 
       };
     },
   });
-  const state$ = () => JSON.parse(readFileSync(join(root, "state.json"), "utf8")) as { installed?: boolean; healthy?: boolean };
+  const state$ = () => JSON.parse(readFileSync(join(root, "state.json"), "utf8")) as { installed?: boolean; healthy?: boolean; stalePlist?: boolean; busy?: number };
+  const setState = (patch: Record<string, unknown>) => writeFileSync(join(root, "state.json"), JSON.stringify({ ...state$(), ...patch }));
   const fetch = (async (url: string) => {
     if (url === `${URL}/health`) {
       if (up) return Response.json({ data: { ok: true, pid } });
       if (state$().healthy) return Response.json({ data: { ok: true, pid: 99 } });
       throw new Error("ECONNREFUSED");
     }
+    if (url === `${URL}/sessions`) return Response.json({ data: Array.from({ length: state$().busy ?? 0 }, () => ({ busy: true })) });
     throw new Error(`unexpected fetch ${url}`);
   }) as unknown as typeof globalThis.fetch;
   const manager = (env: NodeJS.ProcessEnv = {}) =>
@@ -114,7 +120,7 @@ function fixture(state: { installed?: boolean; healthy?: boolean; ensureFails?: 
       return [];
     }
   };
-  return { root, repo, app, child, spawned, manager, calls, state: state$, exitImmediately: () => (exitImmediately = true) };
+  return { root, repo, app, child, spawned, manager, calls, state: state$, setState, exitImmediately: () => (exitImmediately = true) };
 }
 
 describe("ServiceManager.connect", () => {
@@ -309,6 +315,34 @@ describe("ServiceManager.restart", () => {
     const m = new ServiceManager({ appRoot: "/x", exeDir: "/x", env: {} });
     expect("error" in (await m.restart(null))).toBe(true);
     expect("error" in (await m.restart({ error: "down", output: "" }))).toBe(true);
+  });
+});
+
+describe("ServiceManager.settleDeferred", () => {
+  test("a login item another build installed stays deferred while agents run, then reloads once they're done", async () => {
+    const f = fixture({ installed: true, healthy: true, stalePlist: true, busy: 2 });
+    const m = f.manager();
+    const conn = await m.connect();
+    expect(conn).toMatchObject({ mode: "login", pid: 41, deferred: { busy: 2 } });
+    // Agents still running: nothing to do, and no CLI call.
+    const before = f.calls().length;
+    expect(await m.settleDeferred(conn)).toBeNull();
+    expect(f.calls().length).toBe(before);
+
+    f.setState({ busy: 0 });
+    const next = await m.settleDeferred(conn);
+    expect(next).toMatchObject({ mode: "login", pid: 42 });
+    expect(next && "deferred" in next ? next.deferred : undefined).toBeUndefined();
+    expect(f.calls().at(-1)).toBe("service ensure --json");
+    expect(f.state().stalePlist).toBe(false);
+  });
+
+  test("nothing deferred, or no connection: nothing to settle", async () => {
+    const f = fixture({ installed: true });
+    const m = f.manager();
+    expect(await m.settleDeferred(await m.connect())).toBeNull();
+    expect(await m.settleDeferred(null)).toBeNull();
+    expect(await m.settleDeferred({ error: "down", output: "" })).toBeNull();
   });
 });
 

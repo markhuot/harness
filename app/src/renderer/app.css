@@ -40,6 +40,13 @@
 .error-card p {
   margin: 0 0 14px;
 }
+/* The same card in the main area, for a window whose service went away before anything loaded. */
+.service-unreachable {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+}
 .error-icon {
   width: 36px;
   height: 36px;

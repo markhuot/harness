@@ -104,6 +104,12 @@ export interface Store {
   serviceCode: ServiceCode;
   /** The service runs older code than this app (see state/service.ts) */
   serviceStale: boolean;
+  /** The service is another build's, kept until running agents finish (Connection.deferred) */
+  serviceDeferred: boolean;
+  /** When the socket dropped (or the window opened, before it first connects); null while connected */
+  serviceDownSince: number | null;
+  /** Start or reconnect to the service again (Electron only); undefined where the window can't */
+  retryService?: () => Promise<void>;
   /** Restart the service now; running agents are stopped. Rejects with the reason it didn't. */
   restartService: () => Promise<void>;
 }
@@ -235,11 +241,15 @@ export function StoreProvider({
   children,
   toast,
   onTokenRotated,
+  serviceDeferred = false,
+  retryService,
 }: {
   baseUrl: string;
   token: string;
   children: ReactNode;
   toast: Store["toast"];
+  serviceDeferred?: boolean;
+  retryService?: () => Promise<void>;
   /** Resolves once the connection carries the new token (Root re-reads the token file in Electron). */
   onTokenRotated?: (rotatedToken: string) => Promise<void>;
 }) {
@@ -436,6 +446,10 @@ export function StoreProvider({
     }
   }, [client]);
   const serviceStale = isServiceStale(serviceCode);
+  const [serviceDownSince, setServiceDownSince] = useState<number | null>(() => Date.now());
+  useEffect(() => {
+    setServiceDownSince((since) => (state.connected ? null : (since ?? Date.now())));
+  }, [state.connected]);
 
   const reconnect = useCallback(async (rotated: string) => {
     if (!onTokenRotated) throw new Error("This window can't switch tokens; reload it.");
@@ -497,12 +511,15 @@ export function StoreProvider({
       loadMoreSearch,
       serviceCode,
       serviceStale,
+      serviceDeferred,
+      serviceDownSince,
+      retryService,
       restartService,
       openTerminal,
       openCompose,
       openFile,
     }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, restartService, openTerminal, openCompose, openFile],
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, openCompose, openFile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

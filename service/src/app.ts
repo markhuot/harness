@@ -134,6 +134,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
         log,
       })
     : null;
+  let stopped = false;
   const http = createHttpHandler({
     orchestrator,
     bus,
@@ -144,6 +145,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     network,
     serviceStatus: codeWatch ? () => codeWatch.status() : undefined,
     restart: opts.restart,
+    stopping: () => stopped,
   });
   try {
     await network.boot();
@@ -158,7 +160,6 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   baseUrl = network.loopbackUrl;
   codeWatch?.start(opts.codeWatch!.intervalMs);
 
-  let stopped = false;
   return {
     url: baseUrl,
     port,
