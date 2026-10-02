@@ -1368,6 +1368,10 @@ async function toggleSidebar(udid: string, show: boolean) {
   await until(`sidebar ${show ? "shown" : "hidden"}`, async () => sidebarShown(await labels(udid)) === show, 8000);
   await Bun.sleep(500);
 }
+/** The ticket --ipad's ticket-window check opened a window for. */
+let windowKey = "";
+/** A ticket screen for `key` is up: its key and its tab strip. */
+const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Summaries") && l.includes("Details");
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
@@ -1546,6 +1550,45 @@ function screens(s: Seeded): Screen[] {
       },
     },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
+    // iPad: tapping a card opens the ticket in a window of its own (the system's prominent
+    // placement over the board); the window comes back on relaunch, and the next link brings the
+    // main window back.
+    ...(ipad
+      ? [
+          {
+            name: "ticket-window",
+            url: BOARD,
+            seconds: 12,
+            prepare: async (udid: string) => {
+              // A card fully on screen (the columns scroll sideways).
+              const card = await until("a card on screen", async () => (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && n.frame.x > 0 && n.frame.x + n.frame.width < 800), 8000);
+              const key = card.AXLabel!.split(" ")[0]!;
+              await axe("tap", "-x", String(Math.round(card.frame.x + card.frame.width / 2)), "-y", String(Math.round(card.frame.y + card.frame.height / 2)), "--udid", udid);
+              windowKey = key;
+              // AXe lists the board behind the prominent window too, so look for the ticket screen.
+              await until(`${key}'s window up`, async () => ticketShown(await labels(udid), key), 10000);
+              moved(udid);
+              await Bun.sleep(1200);
+            },
+            after: async (udid: string) => {
+              // The window comes back on relaunch (the scene saves its ticket): home, kill, launch.
+              await axe("button", "home", "--udid", udid);
+              await Bun.sleep(1500);
+              await simctl("terminate", udid, BUNDLE).catch(() => {});
+              await simctl("launch", udid, BUNDLE);
+              const restored = await until("ticket window restored", async () => {
+                const l = await labels(udid);
+                return ticketShown(l, windowKey);
+              }, 20000).catch((e) => e as Error);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-window-relaunched");
+              if (restored instanceof Error) throw restored;
+              await simctl("openurl", udid, BOARD);
+              await until("main window back", async () => onBoard(await labels(udid)), 10000);
+            },
+          } satisfies Screen,
+        ]
+      : []),
   ];
 }
 /** Deals `items` out to `n` lanes so each gets about the same total `weight`, keeping their order within a lane. */
