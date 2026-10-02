@@ -4,11 +4,12 @@ import UIKit
 
 /// A tool call with its result: chevron, icon, short name, a mono preview of the
 /// input and a spinner, ✓ or ✗. Expanded, it shows the input as JSON and the output (text pretty
-/// printed and capped, images inline). A call that started a sub-agent links to its transcript.
+/// printed and capped, images inline). A call that started a sub-agent links to its transcript, one
+/// that left a background task running to its output.
 struct TranscriptToolRow: View {
     let call: TranscriptEntry?
     let result: TranscriptEntry?
-    /// The sub-agent this call started, when it started one
+    /// The sub-agent or background task this call started, when it started one
     let agent: Subagent?
 
     @Environment(\.palette) private var c
@@ -48,11 +49,11 @@ struct TranscriptToolRow: View {
                     openTab(Tabs.subagentTabRoute(agent.id))
                 } label: {
                     HStack(spacing: 7) {
-                        Icon("bot", size: 13).foregroundStyle(c.text2)
+                        Icon(Subagents.isTask(agent) ? "terminal" : "bot", size: 13).foregroundStyle(c.text2)
                         Text("\(Subagents.title(agent)) · \(Subagents.statusLabel(agent.status))")
                             .font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Transcript").font(.scaled(size: 13)).foregroundStyle(c.accent)
+                        Text(Subagents.openLabel(agent)).font(.scaled(size: 13)).foregroundStyle(c.accent)
                         Icon("chevronRight", size: 12).foregroundStyle(c.accent)
                     }
                     .padding(.horizontal, 10)
@@ -61,7 +62,7 @@ struct TranscriptToolRow: View {
                 }
                 .buttonStyle(TranscriptPressedRowStyle())
                 .overlay(alignment: .top) { Rectangle().fill(c.border).frame(height: 1 / 3) }
-                .accessibilityLabel("Open \(Subagents.title(agent))'s transcript")
+                .accessibilityLabel("\(Subagents.openLabel(agent)): \(Subagents.title(agent))")
                 .accessibilityAddTraits(.isLink)
             }
 

@@ -2,9 +2,9 @@ import HarnessKit
 import SwiftUI
 
 /// The ticket's tabs: Summaries, Tickets (conductors), Transcript,
-/// Agents (once there are sub-agents), Browser, Changes (when the service lists the git plugin's tab),
-/// Details, then the plugin tabs. Counts and a live
-/// dot ride along; a sub-agent's view highlights Agents.
+/// Agents & tasks (once there are sub-agents or background tasks), Browser, Changes (when the service
+/// lists the git plugin's tab), Details, then the plugin tabs. Counts and a live dot ride along; a
+/// sub-agent's or task's view highlights Agents & tasks.
 struct TicketDetailTabStrip: View {
     let ticket: Ticket
     /// The tab shown (already through Tabs.effectiveTab)
@@ -20,6 +20,8 @@ struct TicketDetailTabStrip: View {
         let label: String
         var count: Int?
         var live = false
+        /// What the live dot means, for VoiceOver
+        var liveLabel: String?
         var icon: String?
     }
 
@@ -56,8 +58,9 @@ struct TicketDetailTabStrip: View {
                 case .agents: subagents?.count
                 default: nil
                 }
-                let live = (t == .transcript && ticket.busy) || (t == .agents && (subagents?.contains { $0.status == .running } ?? false))
-                return Item(id: tab, label: Tabs.tabLabel[t] ?? t.rawValue, count: count, live: live)
+                let agentsLive = t == .agents && (subagents?.contains { $0.status == .running } ?? false)
+                let live = (t == .transcript && ticket.busy) || agentsLive
+                return Item(id: tab, label: Tabs.tabLabel[t] ?? t.rawValue, count: count, live: live, liveLabel: agentsLive ? Tabs.agentsLiveLabel : nil)
             }
             let p = plugins.first { Tabs.pluginTabRoute($0.pluginId, $0.id) == tab }
             return Item(id: tab, label: p?.title ?? tab.rawValue, icon: p?.icon.flatMap { Icons.isIconName($0) ? $0 : nil })
@@ -93,7 +96,7 @@ struct TicketDetailTabStrip: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.label)
-        .accessibilityValue(item.count.flatMap { $0 > 0 ? "\($0)" : nil } ?? "")
+        .accessibilityValue([item.count.flatMap { $0 > 0 ? "\($0)" : nil }, item.liveLabel].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 }

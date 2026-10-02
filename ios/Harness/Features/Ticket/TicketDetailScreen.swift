@@ -174,7 +174,12 @@ private struct TicketDetailBody: View {
 
     @ViewBuilder private func tabBody(_ shown: TicketTab, agent: String?, plugin: Tabs.ParsedPluginTab?) -> some View {
         if let agent {
-            SubagentView(ticket: ticket, subagentId: agent).id(agent)
+            // A background task has output, not a conversation.
+            if store.state.subagentById(ticket.sessionId, agent).map(Subagents.isTask) == true {
+                TaskOutputView(ticket: ticket, subagentId: agent).id(agent)
+            } else {
+                SubagentView(ticket: ticket, subagentId: agent).id(agent)
+            }
         } else if shown == .changes {
             ChangesTabView(ticket: ticket).id(ticket.key)
         } else if let plugin {

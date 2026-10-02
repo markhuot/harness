@@ -1,8 +1,8 @@
 // Simulator walk-through against a REAL daemon on a throwaway HARNESS_HOME:
 //   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=1)
 //   2. seeds a project with a hello-world ticket, a conductor with children, a /browse ticket,
-//      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes and
-//      a draft (a New session saved before launch),
+//      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes,
+//      sub-agents (/agents), a background task (/bgtask) and a draft (a New session saved before launch),
 //      while it builds the Release app for the simulator with `bun ios/Tools/build.ts sim` (XcodeGen,
 //      then a Release simulator build into ios/build/dd; skip with --no-build, override with --app=)
 //   3. on the shared simulator ("harness-shared", see ios/Tools/sim.ts and CLAUDE.md → Simulators),
@@ -689,6 +689,8 @@ async function seed() {
   const jira62 = { source: "jira", key: "JIRA-62", url: "https://example.com/browse/JIRA-62", raw: null };
   const linked = await create(project.id, "Review the empty-name crash fix", { start: false, externalRef: jira62 });
   const linkedStage = await create(project.id, "Ship the empty-name crash fix", { start: false, externalRef: jira62 });
+  // A background Bash task (the dummy driver's /bgtask): Agents & tasks lists it, and its view shows the output.
+  const tasks = await create(project.id, "Count the greetings in the background\n/bgtask 30", { skipAgentReview: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -725,6 +727,7 @@ async function seed() {
     settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(linked.key, (t) => t.status === "planning" && !t.busy),
     settle(linkedStage.key, (t) => t.status === "planning" && !t.busy),
+    settle(tasks.key, (t) => t.status === "review" && !t.busy),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -738,8 +741,9 @@ async function seed() {
   writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
   writeFileSync(join(wd, GREETINGS_PATH), greetings(true));
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
+  const task = (await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents!.find((s) => s.kind === "bash")!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tables, code, diff, fileLink, linked, linkedStage };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tasks, task, tables, code, diff, fileLink, linked, linkedStage };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1368,6 +1372,8 @@ function screens(s: Seeded): Screen[] {
     { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
     { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
     { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },
+    { name: "ticket-tasks", url: `harness://ticket/${k(s.tasks)}?tab=agents`, ready: (l) => l.some((x) => x.startsWith("Count to 30")) },
+    { name: "ticket-task-output", url: `harness://ticket/${k(s.tasks)}?tab=${encodeURIComponent(`agent:${s.task.id}`)}`, ready: hasLabel("Back to Agents & tasks") },
     { name: "approval", url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once") },
     { name: "approval-config", url: `harness://ticket/${k(s.configApproval)}`, ready: hasLabel("Allow once") },
     { name: "blocked", url: `harness://ticket/${k(s.blocked)}` },
