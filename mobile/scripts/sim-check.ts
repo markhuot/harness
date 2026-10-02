@@ -33,10 +33,9 @@
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
-//      New session sheet scrolls to its last button above it; keyboard-*.png. iOS hides the
-//      software keyboard once it has seen a hardware one, and AXe's typing is hardware key events,
-//      so before each focus the run clears the device's HardwareKeyboardLastSeen (in the simulated
-//      device's own preferences, so no other simulator changes) and puts the old value back after
+//      New session sheet scrolls to its last button above it; keyboard-*.png. A headless simulator
+//      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
+//      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
 //   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
 //      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
@@ -1003,38 +1002,57 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
 }
 
 /**
- * The simulated device's "a hardware keyboard was seen" flag (com.apple.keyboard.preferences in the
- * device's own data), which keeps the software keyboard down. AXe types with hardware key events,
- * which set it again, so --keyboard clears it before every focus. Returns the value it found ("1",
- * "0" or null when unset) so the run can put it back.
+ * A preference in the simulated device's own data (so no other simulator changes): reads it, and
+ * writes a bool or deletes it when `value` is given. Returns the value it found ("1", "0" or null
+ * when unset) so the run can put it back.
  */
-async function hardwareKeyboardSeen(udid: string, value?: "0" | "1" | null): Promise<string | null> {
-  const domain = "com.apple.keyboard.preferences";
-  const key = "HardwareKeyboardLastSeen";
+async function devicePref(udid: string, domain: string, key: string, value?: "0" | "1" | null): Promise<string | null> {
   const was = (await sh(["xcrun", "simctl", "spawn", udid, "defaults", "read", domain, key], { allowFail: true })) || null;
   if (value === null) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "delete", domain, key], { allowFail: true });
   else if (value !== undefined) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "write", domain, key, "-bool", value === "1" ? "YES" : "NO"]);
   return was === "1" || was === "0" ? was : null;
 }
+const KEYBOARD_PREFS = "com.apple.keyboard.preferences";
 
-/** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
+/**
+ * --keyboard: the composer and a sheet's last control stay above the on-screen keyboard.
+ *
+ * A headless simulator always has a hardware keyboard, and iOS then minimizes the software one to a
+ * bar: the run turns the device's AutomaticMinimizationEnabled off, and puts it back afterwards.
+ * Text goes in by tapping the on-screen keys, since AXe's typing is hardware key events.
+ */
 async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
-  const was = await hardwareKeyboardSeen(udid);
+  const minimize = await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", "0");
   try {
     await keyboardChecksWithSoftwareKeyboard(udid, p);
   } finally {
-    await hardwareKeyboardSeen(udid, was as "0" | "1" | null);
+    await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", minimize as "0" | "1" | null);
   }
 }
 
 async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
-  // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
-  const keyboardTop = async () => {
-    const keys = (await nodes(udid)).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
-    return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
+  // Types by tapping the on-screen keys (letters, space, return). AXe's `type` and `key` send
+  // hardware key events, which put iOS in hardware-keyboard mode for the rest of the run.
+  const typeOnKeys = async (text: string) => {
+    const keys = (await nodes(udid)).filter((n) => n.AXLabel && (/^[a-zA-Z]$/.test(n.AXLabel) || /^(space|return|new line)$/i.test(n.AXLabel)));
+    const at = (label: string) => keys.find((k) => k.AXLabel!.toLowerCase() === label);
+    for (const ch of text) {
+      const k = ch === " " ? at("space") : ch === "\n" ? (at("return") ?? at("new line")) : at(ch.toLowerCase());
+      if (!k) throw new Error(`no key for ${JSON.stringify(ch)} on the keyboard`);
+      await axe("tap", "-x", String(Math.round(k.frame.x + k.frame.width / 2)), "-y", String(Math.round(k.frame.y + k.frame.height / 2)), "--udid", udid);
+    }
   };
-  // Before each focus: forget the hardware keyboard AXe's typing announced.
-  const software = () => hardwareKeyboardSeen(udid, "0");
+  // The keyboard's top edge: the top letter row ("q"), or the predictive bar sitting right on it
+  // (suggested words, Passwords) when there is one. A suggested "I" is a single-letter label too, so
+  // the letter row is found by its "q" key, not as the highest single letter.
+  const keyboardTop = async () => {
+    const all = await nodes(udid);
+    if (all.filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "")).length < 10) return null;
+    const q = all.find((n) => n.AXLabel === "q" || n.AXLabel === "Q");
+    if (!q) return null;
+    const bar = all.filter((n) => n.frame.y < q.frame.y - 4 && n.frame.y > q.frame.y - 70 && Math.abs(n.frame.y + n.frame.height - q.frame.y) <= 12);
+    return Math.min(q.frame.y, ...bar.map((n) => n.frame.y)) - 8;
+  };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
 
   // The composer's "Move to in progress" switch and hint show only while writing: once the field
@@ -1042,25 +1060,22 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
   // the keyboard, which blurs the field.
   const switchShown = async () => (await labels(udid)).includes("Move to in progress");
   const dismiss = async (top: number) => {
-    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
+    // Start in the list just above the composer (the native hero and tab strip reach y≈325).
+    await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 150)), "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
     await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
   };
   await check("the composer's switch shows while writing", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     if (await switchShown()) throw new Error("shown before the field was focused");
-    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
     if (!(await switchShown())) throw new Error("no switch once focused");
     await dismiss(top);
     await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
-    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     await until("keyboard up", keyboardTop, 8000);
-    await axe("type", "Draft", "--udid", udid);
-    // The typing announced a hardware keyboard, which may have taken the software one down already.
-    if (await keyboardTop()) await dismiss(top);
-    else await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", "700", "--duration", "0.3", "--udid", udid);
+    await typeOnKeys("draft");
+    await dismiss(top);
     await Bun.sleep(400);
     if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
     return "hidden until focused, gone after an empty blur, kept with a draft";
@@ -1068,7 +1083,6 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
 
   await check("ticket composer sits on top of the keyboard", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
-    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
     await Bun.sleep(600);
@@ -1082,7 +1096,6 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
   });
 
   await check("New session scrolls to its last button above the keyboard", async () => {
-    await software();
     await goto(udid, "harness://new");
     const top = await until("keyboard up", keyboardTop, 8000);
     await Bun.sleep(600);
@@ -1107,12 +1120,10 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     const isField = (l: string) => l === "Agent review prompt";
     await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
     const start = await until("editor field", () => findElement(udid, isField), 5000);
-    await software();
     // Near its last line puts the cursor at the end of the text.
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
-    for (let i = 0; i < 16; i++) await axe("key", "40", "--udid", udid); // return
-    await axe("type", "End of the prompt.", "--udid", udid);
+    await typeOnKeys("\n".repeat(16) + "end of the prompt");
     await Bun.sleep(900);
     await shot(udid, "keyboard-prompt");
     const field = await findElement(udid, isField);

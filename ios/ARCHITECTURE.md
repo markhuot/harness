@@ -325,7 +325,8 @@ feature needs something new here, add to it without changing what's there.
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
   to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
   a NavigationStack with a Cancel (✕) toolbar button by `SheetHost` (Projects excepted), so a sheet
-  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack.
+  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack, and RouteScreen hides the tab bar under them (RN
+  pushes them on the root stack, over the tabs).
   `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
 - **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
 
@@ -740,8 +741,10 @@ Checked on the shared simulator (iOS 27.0) unless marked **device**:
   - Smoothness (frame times) of a long transcript fling.
   - Switching between two plugin tabs: this repo's only plugin tab is git:changes, which is now
     built in.
-- **`--keyboard`:** a headless simulator (no Simulator.app) never shows the software keyboard.
-  That holds even after a reboot with the device's `HardwareKeyboardLastSeen` cleared and a
-  per-device `ConnectHardwareKeyboard = 0`, and with no AXe input at all. sim-check clears and
-  restores `HardwareKeyboardLastSeen` around each focus, which is enough wherever the software
-  keyboard can show.
+- **`--keyboard`** passes (4/4 native). A headless simulator (no Simulator.app) always has a
+  hardware keyboard attached, which minimizes the software keyboard to a bar. That holds whatever
+  the host's `ConnectHardwareKeyboard` says, and after a reboot too. So sim-check turns the
+  simulated device's own `AutomaticMinimizationEnabled` (com.apple.keyboard.preferences) off for
+  the run and puts it back afterwards, so no other simulator changes. It types by tapping the
+  on-screen keys, because AXe's `type` and `key` are hardware key events, which put iOS back in
+  hardware-keyboard mode.
