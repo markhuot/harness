@@ -76,8 +76,14 @@ describe("draftCreateBody", () => {
   });
 
   test("skip review and dependencies go only when set", () => {
-    expect("skipAgentReview" in draftCreateBody(blank(), project())).toBe(false);
+    expect("skipAgentReview" in draftCreateBody(blank(), project()) || "skipHumanReview" in draftCreateBody(blank(), project())).toBe(false);
     expect(draftCreateBody({ ...blank(), skipAgentReview: true, dependsOn: ["WEB-1"] }, project())).toMatchObject({ skipAgentReview: true, dependsOn: ["WEB-1"] });
+    expect(draftCreateBody({ ...blank(), skipHumanReview: true }, project())).toMatchObject({ skipHumanReview: true });
+  });
+
+  test("skipping the human review alone makes a draft worth saving", () => {
+    expect(draftIsEmpty({ ...blank(), skipHumanReview: true }, project(), settings)).toBe(false);
+    expect(draftPatch(blank(), { ...blank(), skipHumanReview: true })).toEqual({ skipHumanReview: true });
   });
 });
 
@@ -175,8 +181,8 @@ describe("newSessionOptionsSummary", () => {
   });
 
   test("each override, in row order", () => {
-    const t = { ...blank(), model: "sonnet", permissionMode: "read_only" as const, requestedBranch: "feat", baseBranch: "develop", skipAgentReview: true, dependsOn: ["WEB-1"] };
-    expect(newSessionOptionsSummary(t, project(), settings, labels)).toEqual(["Sonnet 5", "Read only", "feat", "into develop", "Skip agent review", "After WEB-1"]);
+    const t = { ...blank(), model: "sonnet", permissionMode: "read_only" as const, requestedBranch: "feat", baseBranch: "develop", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1"] };
+    expect(newSessionOptionsSummary(t, project(), settings, labels)).toEqual(["Sonnet 5", "Read only", "feat", "into develop", "Skip agent review", "Skip human review", "After WEB-1"]);
   });
 
   test("the checkout pick reads as no worktree, and hides the base", () => {

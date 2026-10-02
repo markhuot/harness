@@ -122,6 +122,7 @@ const ticket: P.Ticket = {
   baseBranch: "develop",
   useWorktree: true,
   skipAgentReview: true,
+  skipHumanReview: true,
   completionAction: "pr",
   completionInstructions: "Squash before opening the PR",
   pullRequestUrl: "https://github.com/nytimes/app/pull/812",
@@ -182,6 +183,7 @@ export const Ticket: P.Ticket[] = [
     baseBranch: null,
     useWorktree: null,
     skipAgentReview: false,
+    skipHumanReview: false,
     completionAction: null,
     completionInstructions: null,
     pullRequestUrl: null,
@@ -709,6 +711,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     branch: "feature/swift",
     baseBranch: "develop",
     skipAgentReview: true,
+    skipHumanReview: true,
     dependsOn: ["NYTIMES-30"],
     autoStart: false,
     parentId: "tkt_30",
@@ -721,7 +724,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
 ];
 
 export const UpdateTicketBody: P.UpdateTicketBody[] = [
-  { title: "Renamed", description: "New brief", status: "in_progress", driver: "anthropic-api", dependsOn: [], position: 3, skipAgentReview: false, kind: "task", projectId: "prj_00a1" },
+  { title: "Renamed", description: "New brief", status: "in_progress", driver: "anthropic-api", dependsOn: [], position: 3, skipAgentReview: false, skipHumanReview: true, kind: "task", projectId: "prj_00a1" },
   { model: null, permissionMode: null, baseBranch: null, branch: null, externalRef: null, useWorktree: null },
   { model: "sonnet", permissionMode: "auto", baseBranch: "main", branch: "feature/x", externalRef: { key: "FOO-1", url: null }, useWorktree: true },
   { status: "done" },
