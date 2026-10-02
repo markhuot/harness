@@ -8,7 +8,7 @@ the React Native app's TypeScript, the frozen fixtures (§ Fixture pipeline) are
 `swift test` owns them. The app follows the desktop's behavior, not its look. Use native SwiftUI
 patterns (NavigationStack, `.sheet`, `Menu`, `.searchable`,
 swipe actions, drag and drop). iPhone is the primary target. The build is universal: at regular width (iPad) the shell is a
-desktop-style split view (§ App shell, iPad layout); at compact width (iPhone, and an iPad in a
+desktop-style split view (§ iPad layout); at compact width (iPhone, and an iPad in a
 narrow Split View window) it's the phone layout.
 
 ## Layout
@@ -341,19 +341,7 @@ feature needs something new here, add to it without changing what's there.
   The sidebar's rows are `SidebarRow` (HarnessKit/Shell): `SidebarRow.current(tab:boardProject:projectExists:)`
   is the highlighted row and `router.select(row, app:)` goes there (a board row saves the project
   filter first), tested in SidebarRowTests.
-- **iPad layout.** `MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At
-  compact width each section's root has `SidebarToolbarItem` (the Projects sheet) and the board's
-  bottom bar reads Filter, search, New session. At regular width it's `DesktopShell`: a
-  `NavigationSplitView` (`.balanced`, so the sidebar sits beside the section in portrait too) with
-  `ProjectsSidebar(column: true)` in the sidebar column and the selected section's stack in the
-  detail, so the gear's `router.push(.project(id:))` lands there. The column's visibility is the
-  `sidebarHidden` pref (remembered across launches); the system toggle hides and shows it. The
-  detail gets `\.desktopShell`: `SidebarToolbarItem` draws nothing, and BoardScreen puts its
-  search in the navigation bar (`.searchable(placement: .toolbar)`) and Filter and New session
-  (⌘N) in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
-  width. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
-  never presents it there). A section that doesn't set its own background gets `bg` from the
-  detail column, since the split view paints the system background.
+- **iPad layout:** see § iPad layout.
 - **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
 
   | Link | Opens |
@@ -383,6 +371,48 @@ feature needs something new here, add to it without changing what's there.
   return or blur). Also `FlowLayout` (wrapping rows, leading or trailing),
   `.primaryToolbarItem(c)` (prominent only when the theme's onAccent is
   white), `PickerLatest`, `String.nilIfEmpty` and `deviceName`. Settings-style screens are plain `Form` + `LabeledContent`.
+
+## iPad layout
+
+`MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At compact width each section's root has `SidebarToolbarItem` (the Projects sheet) and the board's
+bottom bar reads Filter, search, New session. At regular width it's `DesktopShell`: a
+`NavigationSplitView` (`.balanced`, so the sidebar sits beside the section in portrait too) with
+`ProjectsSidebar(column: true)` in the sidebar column and the selected section's stack in the
+detail, so the gear's `router.push(.project(id:))` lands there. The column's visibility is the
+`sidebarHidden` pref (remembered across launches); the system toggle hides and shows it. The
+detail gets `\.desktopShell`: `SidebarToolbarItem` draws nothing, and BoardScreen puts its
+search in the navigation bar (`.searchable(placement: .toolbar)`) and Filter and New session
+(⌘N) in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
+width. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
+never presents it there). A section that doesn't set its own background gets `bg` from the
+detail column, since the split view paints the system background.
+
+The board inside it has two layouts, also picked by `horizontalSizeClass`, so an iPad in a narrow
+Split View or a small Stage Manager window gets the phone's:
+
+- **Pager** (compact): `BoardStatusStrip` over a paging horizontal `ScrollView`, one
+  `BoardColumnView` per page, the landing column and the swipe haptic. A width change (the sidebar
+  hidden or shown, a rotation) snaps it back to the column on screen (`onGeometryChange`).
+- **Columns** (regular, iPad): every column at once, as on the Mac. Each is a `BoardColumnFrame`
+  (rounded `bgColumn` panel, header with dot, label and count) around the same `BoardColumnView`,
+  so cards, paging footers, empty states and pull to refresh are shared. There is no strip: the
+  headers read "Planning, 3" like the chips (sim-check's `onBoard`, dev-sim's `screenState` and
+  AXe taps rely on it), and a tap on one scrolls its column into view. Widths come from
+  `BoardScreenRules.columnSizing` (equal shares of the detail column's width, so they follow the
+  sidebar toggle; 216…400pt, the Mac's 216 minimum):
+  five fit an 11-inch iPad in landscape, and anything narrower keeps the minimum and scrolls
+  sideways without paging. The board starts at Planning (no landing column). Which columns are
+  on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
+  autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
+
+Neither layout drags cards between columns, as on the Mac: a card moves from its menu (Move to a
+column, top or bottom) or its VoiceOver actions.
+
+simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
+only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
+`UISupportedInterfaceOrientations~ipad` set to landscape only (never commit that), and rotate the
+screenshots with `sips -r 270`. AXe taps land in the wrong place in that build, so only use it for
+screens that don't tap.
 
 ## Feature slots
 
@@ -432,9 +462,9 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
-board's decisions that don't draw (landing column, card menu and AX label, drop positions) are in
-HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from the
-environment (store, router, palette), not from extra initializer arguments.
+board's decisions that don't draw (landing column, card menu and AX label, column sizing, when
+Done tops itself up) are in HarnessKit's `BoardScreenRules`. The shared parameters a
+slot needs come from the environment (store, router, palette), not from extra initializer arguments.
 
 The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
 (Ticket/PluginTabsLoader.swift: nil until loaded, [] on failure, refetched on
@@ -684,11 +714,11 @@ native-pattern difference, not a missing feature.
 | Connect: Scan, saved Macs, manual entry, Keychain footer, "Token rejected", pairing sheet | screens/Connect, app/connect, app/pair | Features/Connect/ConnectScreen | done |
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
-| Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done |
+| Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
 | Board header: title, sidebar (Projects); bottom bar: Filter (Show child tickets), search field, + New session (iPad: search in the navigation bar, Filter and New session top trailing, ⌘F / ⌘N) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
-| Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done (plus drag and drop, native only) |
+| Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |
 | Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
 | Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
@@ -754,7 +784,6 @@ Checked on the shared simulator (iOS 27.0) unless marked **device**:
 - **Large boards:** `--paging` (125+ done tickets) passes. The Done column loads 50 a page, so a
   bigger history only adds pages.
 - **Device only (simctl and AXe can't do these):**
-  - Board drag and drop with a real touch.
   - The chip-jump haptics.
   - Rotating on the Browser tab (ResizeGate).
   - Long-press-then-drag on the Browser tab.

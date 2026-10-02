@@ -2051,9 +2051,11 @@ the conventions, and ios/README.md the build and test commands.
   over (same bundle id, so the same access group). ATS allows plain http (Tailscale IPs), and a local-network usage string is set.
   Foregrounding rebuilds the socket and refetches; a 401 (token rotated on the Mac) shows a
   re-pair banner.
-- **Board.** Five columns as horizontal pages under a status strip with counts. Touch and hold
-  a card to move it between columns or to the top or bottom, or drag it (VoiceOver gets the moves
-  as custom actions). The project filter and the sidebar live in a Projects sheet.
+- **Board.** On iPhone, five columns as horizontal pages under a status strip with counts; on
+  iPad at regular width, all five side by side with their own headers, as on the Mac (they scroll
+  sideways when the window is too narrow). Touch and hold a card to move it between columns or to
+  the top or bottom (VoiceOver gets the moves as custom actions). The project filter and the
+  sidebar live in a Projects sheet (on iPad, a sidebar column beside the section).
 - **New session.** `harness://new` starts a blank draft and `harness://new?key=<KEY>` reopens a
   saved one (a draft's `harness://ticket/<key>` link goes there too). It saves lazily like the
   desktop (see "Drafts"), and its Options row holds the same ticket settings rows as the Details
