@@ -705,23 +705,40 @@ defines no DEBUG condition.
 Still ahead (transition, not parity): switching `release:publish` to `--ios-app=native` and
 deleting `mobile/`.
 
-## Manual checks for HARNESS-145
+## Manual checks (HARNESS-145 results)
 
-Things AXe and sim-check can't drive, to try by hand on a device:
+Checked on the shared simulator (iOS 27.0) unless marked **device**:
 
-- Board drag and drop on a real touch: a card dragged onto another card in the same column sits
-  above it, one dropped on a status chip or into another column moves there, and the move sticks
-  after a refresh.
-- An animated chip jump (tap Done while on Planning) plays no select haptic for the pages it
-  scrolls through on the way. A swipe from one column to the next plays exactly one.
-- sim-check's "tapping a board card pushes its ticket and Back returns" timed out in HARNESS-139's
-  full interaction run, though a card push worked by hand with one card in the column. Rerun it with
-  the real Board and ticket detail both merged. If it still fails, find out whether the tap lands
-  on the wrong card (a lazy column, the hero, a stale frame) or Back doesn't settle, and fix the app
-  or make the step label-based.
-- `--keyboard` needs the shared simulator's Connect Hardware Keyboard turned off; sim-check should
-  turn it off for its run (or HARNESS-145 asks the human).
-- Transcript rows the dummy driver can't produce: a thinking row expands and collapses, and a tool
-  result with an inline base64 image shows the image in the expanded row.
-- A long transcript (500+ entries) scrolls smoothly, and "Show earlier messages (N)" adds the older
-  rows while keeping the row you were reading in place.
+- **Board card push → Back:** passes in every full interaction run. Back is tapped by label when
+  AXe sees it, else at RN's header point (sim-check `tapHeader`).
+- **Robustness (a scripted pass with real daemons):**
+  - Daemon restart: the "Reconnecting to …" banner shows, then clears, and a ticket made after
+    the restart arrives live (4 of 5 runs; once the live event didn't arrive within 20 s,
+    though the banner cleared).
+  - Token rotation shows the red re-pair banner, and re-pairing clears it.
+  - Two Macs paired, switching between them from Connect.
+  - Cold launch from `harness://ticket/<key>?tab=details`.
+  - Backgrounding to Settings.app: a ticket made meanwhile shows on return.
+  - Dynamic Type at AX5 on the board, ticket, Settings and New session.
+- **Keychain migration:** the native Release build installed over a paired RN app comes up with
+  the RN app's saved Mac.
+- **Transcript rows the dummy driver can't produce** (seeded straight into the service's
+  database):
+  - A thinking row expands and collapses.
+  - A tool result with an inline base64 PNG shows the image in the expanded row.
+  - 604 entries: "Show earlier messages (460)" → (310) keeps the row being read in place.
+- **Large boards:** `--paging` (125+ done tickets) passes. The Done column loads 50 a page, so a
+  bigger history only adds pages.
+- **Device only (simctl and AXe can't do these):**
+  - Board drag and drop with a real touch.
+  - The chip-jump haptics.
+  - Rotating on the Browser tab (ResizeGate).
+  - Long-press-then-drag on the Browser tab.
+  - Smoothness (frame times) of a long transcript fling.
+  - Switching between two plugin tabs: this repo's only plugin tab is git:changes, which is now
+    built in.
+- **`--keyboard`:** a headless simulator (no Simulator.app) never shows the software keyboard.
+  That holds even after a reboot with the device's `HardwareKeyboardLastSeen` cleared and a
+  per-device `ConnectHardwareKeyboard = 0`, and with no AXe input at all. sim-check clears and
+  restores `HardwareKeyboardLastSeen` around each focus, which is enough wherever the software
+  keyboard can show.
