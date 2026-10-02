@@ -14,6 +14,8 @@ enum BoardMode: Hashable, Sendable {
 /// Board tab never shows search results.
 struct BoardScreen: View {
     let mode: BoardMode
+    /// The Search tab's query. The field is on the Search tab's stack (MainTabs), so it sits in the tab bar.
+    var query = ""
 
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -23,7 +25,6 @@ struct BoardScreen: View {
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
-    @State private var query = ""
     @State private var landed = false
     /// Set while the pager scrolls because of a chip tap or a jump, so only swipes play the haptic.
     @State private var jumping = false
@@ -48,7 +49,6 @@ struct BoardScreen: View {
         .navigationTitle(searchTab ? "Search" : ctx.project?.name ?? "All projects")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar(ctx) }
-        .modifier(BoardSearchField(enabled: searchTab, query: $query, prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets"))
         // Paging follows the project filter; a refetch drops the paging, so ask again when it's gone.
         .onChange(of: ctx.projectId, initial: true) { _, id in store.setBoardScope(id) }
         .onChange(of: FirstPageKey(projectId: ctx.projectId, ready: store.state.ready, paging: ctx.paging), initial: true) {
@@ -250,24 +250,6 @@ struct BoardContext {
 
     func count(_ s: TicketStatus) -> Int {
         BoardColumns.columnCount(state, projectId, shown: shown, status: s, searching: searching)
-    }
-}
-
-/// The Search tab's search field (the native one, in the tab bar's search role); nothing on the Board tab.
-private struct BoardSearchField: ViewModifier {
-    let enabled: Bool
-    @Binding var query: String
-    let prompt: String
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content
-                .searchable(text: $query, placement: .automatic, prompt: prompt)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-        } else {
-            content
-        }
     }
 }
 

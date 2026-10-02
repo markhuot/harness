@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone, Search sits on its own in the tab bar. One tap turns it into the search field right
+  there at the bottom of the screen, ready to type, instead of opening a screen with the field at
+  the top.
+
 ## [app-20261002.0906](https://github.com/markhuot/harness/releases/tag/app-20261002.0906) - 2026-10-02
 
 ### Changed
