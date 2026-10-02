@@ -16,6 +16,7 @@ import type {
   CreateTicketBody,
   DriverInfo,
   ExternalRef,
+  ExternalRefInput,
   FileDiff,
   FileMatch,
   CommandMatch,
@@ -1214,7 +1215,7 @@ export class Orchestrator {
     const skipHuman = validBoolean("skipHumanReview", body.skipHumanReview);
     if (skipHuman !== undefined && skipHuman !== !!ticket.skipHumanReview) patch.skipHumanReview = skipHuman;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
-    const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket, body.externalRef) : undefined;
+    const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
     if (moveTo) ticket = this.moveDraft(ticket, moveTo);
     if (externalRef !== undefined) {
       const before = ticket.externalRef?.key ?? null;
@@ -1257,9 +1258,10 @@ export class Orchestrator {
   /**
    * PATCH externalRef: a remote ID set by hand ({ key, url? }, source "manual"), or null to unlink.
    * The key is upper-cased and must look like FOO-123. Changing only the link of the remote ID
-   * the ticket already carries keeps where it came from (a watcher's source and raw item).
+   * the ticket already carries (`current`) keeps where it came from (a watcher's source and raw item).
+   * create_ticket's remote_id goes through here too, with no current link.
    */
-  private manualExternalRef(ticket: Ticket, input: UpdateTicketBody["externalRef"]): ExternalRef | null {
+  private manualExternalRef(current: ExternalRef | null, input: UpdateTicketBody["externalRef"]): ExternalRef | null {
     if (input === null) return null;
     if (!input || typeof input !== "object" || Array.isArray(input)) throw badRequest("externalRef must be { key, url? } or null");
     if (typeof input.key !== "string") throw badRequest("externalRef.key must be a remote ID like FOO-123");
@@ -1268,7 +1270,6 @@ export class Orchestrator {
     if (input.url !== undefined && input.url !== null && typeof input.url !== "string") throw badRequest("externalRef.url must be a string or null");
     const url = input.url?.trim() || null;
     if (url && !/^https?:\/\/\S+$/i.test(url)) throw badRequest("externalRef.url must be an http(s) link");
-    const current = ticket.externalRef;
     if (current && current.key.toUpperCase() === key) return { ...current, key, url };
     return { source: "manual", key, url, raw: null };
   }
@@ -2340,6 +2341,8 @@ export class Orchestrator {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
     this.assertAgentMaySkipReview({ projectId: project.id }, { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview });
+    if (input.remoteUrl && !input.remoteId) throw new Error("remote_url needs remote_id: the external item's key, e.g. FOO-123");
+    const externalRef = input.remoteId ? this.asToolSync(() => this.manualExternalRef(null, { key: input.remoteId!, url: input.remoteUrl })) : null;
     if (input.child ?? own.kind === "conductor") {
       // Children run on the parent's driver/model unless it picks another. Any ticket can take
       // children; having one makes it act as a conductor (isConductor).
@@ -2361,6 +2364,7 @@ export class Orchestrator {
           baseBranch: input.baseBranch,
           skipAgentReview: input.skipAgentReview,
           skipHumanReview: input.skipHumanReview,
+          externalRef,
         }),
       );
     }
@@ -2381,6 +2385,7 @@ export class Orchestrator {
         baseBranch: input.baseBranch,
         skipAgentReview: input.skipAgentReview,
         skipHumanReview: input.skipHumanReview,
+        externalRef,
       }),
     );
   }
@@ -2402,6 +2407,7 @@ export class Orchestrator {
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
+    if (input.remoteId !== undefined || input.remoteUrl !== undefined) body.externalRef = this.toolExternalRef(target, input.remoteId, input.remoteUrl);
     if (input.skipAgentReview !== undefined || input.skipHumanReview !== undefined) {
       // Turning one on in review would end the review under way; that's the reviewers' call.
       if (target.status === "review" && target.parentId !== actor.id) {
@@ -2425,6 +2431,25 @@ export class Orchestrator {
     }
     if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
     return this.asTool(() => this.updateTicket(target.key, body));
+  }
+
+  /**
+   * update_ticket's remote_id / remote_url as a PATCH externalRef. remote_id null unlinks; a remote
+   * ID without remote_url keeps the link it already has when it's the one the ticket carries; a
+   * remote_url alone re-links the ticket's current remote ID.
+   */
+  private toolExternalRef(target: Ticket, remoteId: string | null | undefined, remoteUrl: string | null | undefined): ExternalRefInput | null {
+    const current = target.externalRef;
+    if (remoteId === null) {
+      if (remoteUrl) throw new Error("remote_url can't be set while unlinking (remote_id \"\")");
+      return null;
+    }
+    if (remoteId === undefined) {
+      if (!current) throw new Error(`${target.key} has no remote ID to change the link of; pass remote_id too`);
+      return { key: current.key, url: remoteUrl ?? null };
+    }
+    const same = current && current.key.toUpperCase() === remoteId.trim().toUpperCase();
+    return { key: remoteId, url: remoteUrl !== undefined ? remoteUrl : same ? current.url : null };
   }
 
   async moveTicket_(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket> {

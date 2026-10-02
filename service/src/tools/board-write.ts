@@ -32,7 +32,16 @@ const skipHumanReviewProp = {
     "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it. Only when the human asked for it, and not with skip_agent_review: one review has to check the work.",
 };
 
+const remoteIdProp = {
+  type: "string",
+  description:
+    "The external item's key this ticket is for (its remote ID), e.g. the Jira issue \"FOO-123\". The board shows it in place of the local key, but tools and links still take the local key.",
+};
+const remoteUrlProp = { type: "string", description: "Link to the external item, e.g. https://example.atlassian.net/browse/FOO-123." };
+
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
+/** "" → null (unlink / no link); undefined → unchanged. */
+const remoteInput = (s: string | undefined) => (s === undefined ? undefined : s.trim() || null);
 /** "inherit" / "" → null (inherit); undefined → unchanged. */
 const baseBranchInput = (b: string | undefined) => (b === undefined ? undefined : b.trim() === "inherit" ? null : b.trim() || null);
 const branchInput = (b: string | undefined) => (b === undefined ? undefined : b.trim() || null);
@@ -53,10 +62,12 @@ export const createTicket = defineTool<{
   branch?: string;
   skip_agent_review?: boolean;
   skip_human_review?: boolean;
+  remote_id?: string;
+  remote_url?: string;
 }>({
   name: "create_ticket",
   description:
-    "Create a ticket. With child true (the default for a conductor ticket) it is a child of this ticket: it starts on its own once its depends_on are done unless auto_start is false, and this ticket becomes its conductor, reviewing it with review_ticket and finalizing it with complete_ticket. Otherwise it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's key; pass keys from earlier create_ticket calls in depends_on to order work.",
+    "Create a ticket. With child true (the default for a conductor ticket) it is a child of this ticket: it starts on its own once its depends_on are done unless auto_start is false, and this ticket becomes its conductor, reviewing it with review_ticket and finalizing it with complete_ticket. Otherwise it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. When the ticket is for an external item with a key (a Jira issue \"FOO-123\", say), pass it as remote_id and its link as remote_url. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's local key: use it, not the remote ID, in depends_on, in other tools and as the target of links to the ticket; pass keys from earlier create_ticket calls in depends_on to order work.",
   inputSchema: schema(
     {
       title: { type: "string", minLength: 1, description: "Short ticket title." },
@@ -81,6 +92,8 @@ export const createTicket = defineTool<{
       branch: branchProp,
       skip_agent_review: skipAgentReviewProp,
       skip_human_review: skipHumanReviewProp,
+      remote_id: remoteIdProp,
+      remote_url: remoteUrlProp,
     },
     ["title", "description"],
   ),
@@ -101,6 +114,8 @@ export const createTicket = defineTool<{
       branch: branchInput(input.branch),
       skipAgentReview: input.skip_agent_review,
       skipHumanReview: input.skip_human_review,
+      remoteId: remoteInput(input.remote_id) ?? undefined,
+      remoteUrl: remoteInput(input.remote_url),
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },
@@ -118,10 +133,12 @@ export const updateTicket = defineTool<{
   branch?: string;
   skip_agent_review?: boolean;
   skip_human_review?: boolean;
+  remote_id?: string;
+  remote_url?: string;
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -135,6 +152,8 @@ export const updateTicket = defineTool<{
       branch: branchProp,
       skip_agent_review: skipAgentReviewProp,
       skip_human_review: skipHumanReviewProp,
+      remote_id: { ...remoteIdProp, description: `${remoteIdProp.description} "" unlinks it.` },
+      remote_url: { ...remoteUrlProp, description: `${remoteUrlProp.description} "" clears it.` },
     },
     ["key"],
   ),
@@ -150,6 +169,8 @@ export const updateTicket = defineTool<{
       branch: branchInput(input.branch),
       skipAgentReview: input.skip_agent_review,
       skipHumanReview: input.skip_human_review,
+      remoteId: remoteInput(input.remote_id),
+      remoteUrl: remoteInput(input.remote_url),
     });
     return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, permissionMode: ticket.permissionMode })}`;
   },

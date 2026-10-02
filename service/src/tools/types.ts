@@ -138,6 +138,10 @@ export interface CreateTicketInput {
   skipAgentReview?: boolean;
   /** Skip the human review (it lands once the agent review passes); refused alongside skipAgentReview. */
   skipHumanReview?: boolean;
+  /** Remote ID to link the new ticket to (e.g. a Jira key), source "manual"; omitted → unlinked. */
+  remoteId?: string;
+  /** Link to the remote item; needs remoteId. */
+  remoteUrl?: string | null;
 }
 
 export interface UpdateTicketInput {
@@ -155,6 +159,10 @@ export interface UpdateTicketInput {
   skipAgentReview?: boolean;
   /** Ticket.skipHumanReview; true is refused when the ticket skips its agent review. */
   skipHumanReview?: boolean;
+  /** Link to a remote ID (PATCH externalRef); null unlinks. Without remoteUrl, re-linking the same ID keeps its link. */
+  remoteId?: string | null;
+  /** The remote item's link; null clears it. Alone, it changes the link of the remote ID the ticket carries. */
+  remoteUrl?: string | null;
 }
 
 /**

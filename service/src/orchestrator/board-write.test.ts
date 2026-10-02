@@ -7,7 +7,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, Ticket, TicketStatus } from "@harness/shared";
 import { executeTool } from "../drivers/types";
-import { createTicket as createTicketTool } from "../tools/board-write";
+import { createTicket as createTicketTool, updateTicket as updateTicketTool } from "../tools/board-write";
 import { makeOrchestrator } from "../testing/fakes";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { toolsForRun } from "../tools";
@@ -453,6 +453,79 @@ describe("update, move, start, cancel, reopen", () => {
     const r = await h.orch.ops.reopenTicket(h.ctx("work", me), t.key, "the footer is broken");
     expect(r.status).toBe("in_progress");
     expect(h.store.summaries.listBySession(t.sessionId).at(-1)!.body).toBe("Re-opened: the footer is broken");
+  });
+});
+
+describe("remote IDs (remote_id / remote_url)", () => {
+  const tools = [createTicketTool, updateTicketTool];
+
+  test("create_ticket links the new ticket, a top-level one or a conductor's child, to a manual remote ID", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const r = await executeTool(tools, "create_ticket", { title: "Hero", description: "Dress the hero", remote_id: " rfawc-726 ", remote_url: "https://jira.test/browse/RFAWC-726" }, h.ctx("work", me));
+    expect(r.isError).toBeFalsy();
+    const key = text(r).match(/Created (\S+)\./)![1]!;
+    expect(key).toMatch(/^WEB-\d+$/); // a native key: the remote ID never becomes the ticket's key
+    expect(text(r)).toContain('"externalKey": "RFAWC-726"');
+    expect(h.orch.ticketDetail(key).ticket.externalRef).toEqual({ source: "manual", key: "RFAWC-726", url: "https://jira.test/browse/RFAWC-726", raw: null });
+
+    const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "part", description: "a part", remoteId: "RFAWC-727" });
+    expect([child.parentId, child.externalRef?.key, child.externalRef?.url]).toEqual([c.id, "RFAWC-727", null]);
+    // Blank strings through the tool mean "no remote ID", not a validation error.
+    const plain = await executeTool(tools, "create_ticket", { title: "Plain", description: "No item", remote_id: " ", remote_url: "" }, h.ctx("work", me));
+    expect(h.orch.ticketDetail(text(plain).match(/Created (\S+)\./)![1]!).ticket.externalRef).toBeNull();
+  });
+
+  test("create_ticket refuses a bad remote ID or link before creating anything", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const before = h.orch.listTickets().length;
+    const create = (input: Record<string, unknown>) => executeTool(tools, "create_ticket", { title: "x", description: "y", ...input }, h.ctx("work", me));
+    expect(text(await create({ remote_id: "not a key" }))).toContain("Invalid remote ID: not a key");
+    expect(text(await create({ remote_id: "FOO-1", remote_url: "ftp://x/FOO-1" }))).toContain("must be an http(s) link");
+    expect(text(await create({ remote_url: "https://x/FOO-1" }))).toContain("remote_url needs remote_id");
+    expect(h.orch.listTickets().length).toBe(before);
+  });
+
+  test("update_ticket links, re-links, changes or clears the link, and unlinks", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const t = await h.make("t");
+    const update = async (input: Record<string, unknown>) => {
+      const r = await executeTool(tools, "update_ticket", { key: t.key, ...input }, h.ctx("work", me));
+      if (r.isError) throw new Error(text(r));
+      return h.get(t).externalRef;
+    };
+    await expect(update({ remote_url: "https://x/FOO-1" })).rejects.toThrow(`${t.key} has no remote ID to change the link of`);
+    expect(await update({ remote_id: "foo-1", remote_url: "https://x/FOO-1" })).toEqual({ source: "manual", key: "FOO-1", url: "https://x/FOO-1", raw: null });
+    // The same remote ID again keeps its link; a different one doesn't carry the old item's link over.
+    expect((await update({ remote_id: "FOO-1" }))?.url).toBe("https://x/FOO-1");
+    expect(await update({ remote_url: "https://x/browse/FOO-1" })).toMatchObject({ key: "FOO-1", url: "https://x/browse/FOO-1" });
+    expect(await update({ remote_url: "" })).toMatchObject({ key: "FOO-1", url: null });
+    expect(await update({ remote_id: "BAR-2" })).toMatchObject({ key: "BAR-2", url: null });
+    await expect(update({ remote_id: "", remote_url: "https://x" })).rejects.toThrow("remote_url can't be set while unlinking");
+    expect(await update({ remote_id: "" })).toBeNull();
+    const status = h.store.transcript.tail(t.sessionId, 50, ["status"]).map((e) => (e.content.type === "status" ? e.content.text : ""));
+    expect(status).toEqual(expect.arrayContaining(["Linked to FOO-1", "Linked to BAR-2", "Unlinked from BAR-2"]));
+  });
+
+  test("update_ticket keeps a watcher's link source when only the URL changes", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const t = await h.make("t");
+    h.store.tickets.setExternalRef(t.id, { source: "jira", key: "FOO-9", url: null, raw: { id: 9 } });
+    const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { remoteUrl: "https://x/FOO-9" });
+    expect(u.externalRef).toEqual({ source: "jira", key: "FOO-9", url: "https://x/FOO-9", raw: { id: 9 } });
+  });
+
+  test("a stricter agent can't relink a looser ticket", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    h.store.tickets.update(me.id, { permissionMode: "read_only" });
+    const t = await h.make("t");
+    await expect(h.orch.ops.updateTicket(h.ctx("work", h.get(me)), t.key, { remoteId: "FOO-1" })).rejects.toThrow("looser than your read_only");
+    expect(h.get(t).externalRef).toBeNull();
   });
 });
 
