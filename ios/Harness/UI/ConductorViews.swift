@@ -57,6 +57,50 @@ struct ConductorRollup: View {
     }
 }
 
+/// Progress across a ticket's children in the ticket hero: the label, how many wait on you, and
+/// the bar. Taps open the Tickets tab, where each child has its detail. `loading` while the
+/// done children are still paging in.
+struct ConductorProgressCard: View {
+    let progress: Conductor.Progress
+    var loading = false
+    let onOpen: () -> Void
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        if progress.total > 0 {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(Conductor.progressLabel(progress)).font(.scaled(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(c.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if loading { Spinner() }
+                        Icon("chevronRight", size: 13).foregroundStyle(c.text3)
+                    }
+                    ProgressBar(progress: progress)
+                    if progress.attention > 0 {
+                        HStack(spacing: 5) {
+                            Icon("alert", size: 12, weight: .semibold)
+                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.scaled(size: 13))
+                        }
+                        .foregroundStyle(c.red)
+                    }
+                }
+                .padding(12)
+                .background(c.bgElev, in: .rect(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(progress.attention > 0
+                ? "\(Conductor.progressLabel(progress)), \(TicketDetailLogic.waitingOnYou(progress.attention))"
+                : Conductor.progressLabel(progress))
+            .accessibilityHint("Shows the tickets")
+            .accessibilityAddTraits(.isButton)
+        }
+    }
+}
+
 /// "Part of HAR-12 Ship the thing ›" on a child ticket.
 struct ParentCrumb: View {
     let parent: Ticket
