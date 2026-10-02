@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
+
 ### Changed
 
 - On iPad, each ticket you tap opens in a window of its own again, instead of replacing the ticket
