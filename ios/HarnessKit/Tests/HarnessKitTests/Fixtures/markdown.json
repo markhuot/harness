@@ -119,6 +119,73 @@
       ]
     },
     {
+      "name": "remote ID label on a ticket key",
+      "input": "See [RFAWC-726](RFACOM-2) now",
+      "output": [
+        {
+          "t": "text",
+          "text": "See "
+        },
+        {
+          "t": "ticket",
+          "key": "RFACOM-2",
+          "text": "RFAWC-726"
+        },
+        {
+          "t": "text",
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "plain label on a ticket key",
+      "input": "[the fix](HARNESS-12), done",
+      "output": [
+        {
+          "t": "ticket",
+          "key": "HARNESS-12",
+          "text": "the fix"
+        },
+        {
+          "t": "text",
+          "text": ", done"
+        }
+      ]
+    },
+    {
+      "name": "ticket link target lower case",
+      "input": "[x](rfacom-2)",
+      "output": [
+        {
+          "t": "link",
+          "text": "x",
+          "url": "rfacom-2"
+        }
+      ]
+    },
+    {
+      "name": "ticket link target with suffix",
+      "input": "[X](FOO-1a)",
+      "output": [
+        {
+          "t": "link",
+          "text": "X",
+          "url": "FOO-1a"
+        }
+      ]
+    },
+    {
+      "name": "ticket link target with path",
+      "input": "[X](FOO-1/bar)",
+      "output": [
+        {
+          "t": "link",
+          "text": "X",
+          "url": "FOO-1/bar"
+        }
+      ]
+    },
+    {
       "name": "empty",
       "input": "",
       "output": []
@@ -3451,6 +3518,31 @@
       "name": "key as link label",
       "input": "[PLAYR-9](https://x.test/PLAYR-9)",
       "output": "PLAYR-9"
+    },
+    {
+      "name": "remote ID label on a ticket key",
+      "input": "See [RFAWC-726](RFACOM-2) now",
+      "output": "See RFAWC-726 now"
+    },
+    {
+      "name": "plain label on a ticket key",
+      "input": "[the fix](HARNESS-12), done",
+      "output": "the fix, done"
+    },
+    {
+      "name": "ticket link target lower case",
+      "input": "[x](rfacom-2)",
+      "output": "x"
+    },
+    {
+      "name": "ticket link target with suffix",
+      "input": "[X](FOO-1a)",
+      "output": "X"
+    },
+    {
+      "name": "ticket link target with path",
+      "input": "[X](FOO-1/bar)",
+      "output": "X"
     },
     {
       "name": "plain",

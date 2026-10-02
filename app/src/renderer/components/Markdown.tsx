@@ -78,7 +78,8 @@ export function inline(text: string, tickets?: TicketLinks, onLink?: (url: strin
         return tok.text;
       case "ticket": {
         const title = tickets?.title(tok.key);
-        if (title == null) return tok.key;
+        const label = tok.text ?? tok.key;
+        if (title == null) return label;
         return (
           <a
             key={k}
@@ -90,7 +91,7 @@ export function inline(text: string, tickets?: TicketLinks, onLink?: (url: strin
               tickets!.open(tok.key);
             }}
           >
-            {tok.key}
+            {label}
           </a>
         );
       }

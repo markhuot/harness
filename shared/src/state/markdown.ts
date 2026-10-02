@@ -134,7 +134,10 @@ export type InlineToken =
   | { t: "strong"; text: string }
   | { t: "em"; text: string }
   | { t: "link"; text: string; url: string }
-  | { t: "ticket"; key: string };
+  | { t: "ticket"; key: string; text?: string };
+
+/** A ticket key, as a whole string: the bare-word pattern INLINE uses, anchored. */
+const TICKET_KEY = /^[A-Z][A-Z0-9]*-\d+$/;
 
 const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)/g;
 
@@ -144,6 +147,9 @@ const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\
  * the label. Bare URLs are autolinked only for http(s).
  * An UPPERCASE-NN word is a "ticket" token; renderers link it only when it names a ticket they
  * can open (ticketLinkable), so "UTF-8" or "SHA-256" stay plain text.
+ * [label](KEY), whose target is a whole ticket key (`[RFAWC-726](RFACOM-2)`: a remote ID labelling
+ * the local ticket), is a "ticket" token for KEY carrying the label as `text`; renderers show the
+ * label, linked to KEY when it's linkable and plain otherwise. Bare keys have no `text`.
  */
 export function inlineTokens(text: string): InlineToken[] {
   const out: InlineToken[] = [];
@@ -157,7 +163,9 @@ export function inlineTokens(text: string): InlineToken[] {
     else if (m[3]) out.push({ t: "em", text: s.slice(1, -1) });
     else if (m[4]) {
       const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s)!;
-      out.push(/^https?:/.test(mm[2]!) || parseFileLink(mm[2]!) ? { t: "link", text: mm[1]!, url: mm[2]! } : { t: "text", text: mm[1]! });
+      const [, label, url] = mm as unknown as [string, string, string];
+      if (TICKET_KEY.test(url)) out.push({ t: "ticket", key: url, text: label });
+      else out.push(/^https?:/.test(url) || parseFileLink(url) ? { t: "link", text: label, url } : { t: "text", text: label });
     } else if (m[5]) out.push({ t: "link", text: s, url: s });
     else if (m[6]) out.push({ t: "ticket", key: s });
     last = idx + s.length;

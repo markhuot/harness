@@ -95,6 +95,11 @@ const inlineCorpus: Record<string, string> = {
   "key in code span": "`HARNESS-1`",
   "key in URL": "https://happycog.atlassian.net/browse/PLAYR-123",
   "key as link label": "[PLAYR-9](https://x.test/PLAYR-9)",
+  "remote ID label on a ticket key": "See [RFAWC-726](RFACOM-2) now",
+  "plain label on a ticket key": "[the fix](HARNESS-12), done",
+  "ticket link target lower case": "[x](rfacom-2)",
+  "ticket link target with suffix": "[X](FOO-1a)",
+  "ticket link target with path": "[X](FOO-1/bar)",
   // extra
   empty: "",
   plain: "just text",
