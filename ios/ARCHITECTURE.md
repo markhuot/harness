@@ -435,10 +435,12 @@ is) to the store, never a single window's.
   NSUserActivityTypes; `targetContentIdentifier` = `sceneMatch`, which the ticket WindowGroup's
   `handlesExternalEvents` matches) and `UIWindowSceneProminentPlacement`: the system's centered
   window over the board, which the user moves, resizes, tiles or puts in Slide Over with the
-  window's own controls. Nothing in the app draws a panel or handles a drag for it. A ticket whose
-  window is open (WindowDirectory tracks them by key) comes forward with `router.show(route)`
-  instead. "Open in New Window" (the card's menu, the ticket's More menu) is
-  `openWindow(id: SceneID.ticket, value:)`, a standard new window. Compact width (iPhone, narrow
+  window's own controls. Nothing in the app draws a panel or handles a drag for it. The window that
+  activation makes is the **viewer**: the next tap reuses it (`router.show(route)` and an activation
+  request for its session) rather than adding a window per card, unless the ticket already has a
+  window (WindowDirectory tracks them by key), which comes forward instead. "Open in New Window"
+  (the card's menu, the ticket's More menu) is `openWindow(id: SceneID.ticket, value:)`, a standard
+  window that stays on its ticket. Compact width (iPhone, narrow
   Split View) pushes as before.
 - **A ticket window's Router** has the `.ticket` scope: `root` is its ticket, pushes (sub-tickets,
   files, triage) land on its own stack, sheets are its own, and a section link (`.tab`, such as
@@ -448,15 +450,21 @@ is) to the store, never a single window's.
   RouterWindowTests.
 - **Restoring.** SwiftUI saves the WindowGroup's value with the scene only when `openWindow` gave
   it (and `@SceneStorage` didn't come back for activation-made scenes either), so TicketWindowRoot
-  also keeps the ticket in the scene session's `userInfo` (`TicketWindowValue.userInfo`), which UIKit
-  saves across launches. A relaunch brings ticket windows back on their tickets; their stacks start
+  also keeps the ticket (and whether the window is the viewer) in the scene session's `userInfo`
+  (`TicketWindowValue.userInfo`), which UIKit saves across launches. A relaunch brings ticket windows back on their tickets; their stacks start
   over at the root.
 - **External links** (`onOpenURL`) prefer a main window (`handlesExternalEvents(preferring:)` on
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
 
-`sim-check --ipad`'s `ticket-window` check taps a card, expects its window (no board on screen),
-then sends the app home, kills and relaunches it, and expects the window back on the same ticket.
+`sim-check --ipad`'s `ticket-window` check taps a card, expects its window (AXe also lists the
+board behind a prominent window, so it looks for the ticket's key and tab strip), then sends the
+app home, kills and relaunches it, and expects the window back on the same ticket.
+
+The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
+`CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and
+AXe's tree go with it. That's the simulator's renderer, not the app. Reboot the device
+(`xcrun simctl shutdown`/`boot` under its lock) and rerun.
 
 ## Feature slots
 

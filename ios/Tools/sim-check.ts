@@ -1370,6 +1370,8 @@ async function toggleSidebar(udid: string, show: boolean) {
 }
 /** The ticket --ipad's ticket-window check opened a window for. */
 let windowKey = "";
+/** A ticket screen for `key` is up: its key and its tab strip. */
+const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Summaries") && l.includes("Details");
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
@@ -1563,10 +1565,8 @@ function screens(s: Seeded): Screen[] {
               const key = card.AXLabel!.split(" ")[0]!;
               await axe("tap", "-x", String(Math.round(card.frame.x + card.frame.width / 2)), "-y", String(Math.round(card.frame.y + card.frame.height / 2)), "--udid", udid);
               windowKey = key;
-              await until(`${key}'s window up`, async () => {
-                const l = await labels(udid);
-                return !onBoard(l) && l.includes(key);
-              }, 10000);
+              // AXe lists the board behind the prominent window too, so look for the ticket screen.
+              await until(`${key}'s window up`, async () => ticketShown(await labels(udid), key), 10000);
               moved(udid);
               await Bun.sleep(1200);
             },
@@ -1578,7 +1578,7 @@ function screens(s: Seeded): Screen[] {
               await simctl("launch", udid, BUNDLE);
               const restored = await until("ticket window restored", async () => {
                 const l = await labels(udid);
-                return !onBoard(l) && l.includes(windowKey);
+                return ticketShown(l, windowKey);
               }, 20000).catch((e) => e as Error);
               await Bun.sleep(800);
               await shot(udid, "ticket-window-relaunched");

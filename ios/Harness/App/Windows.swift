@@ -5,7 +5,8 @@ import UIKit
 // The iPad's windows (ARCHITECTURE.md § App shell, Windows): any number of main windows (RootView,
 // each with its own Router) and ticket windows (TicketWindowRoot, keyed by TicketWindowValue).
 // AppModel, the BoardStore, ToastCenter and Actions are shared by all of them. On iPad at regular
-// width, opening a ticket opens (or brings forward) its window.
+// width, opening a ticket shows it in the ticket viewer: one prominent window, reused from ticket to
+// ticket. Open in New Window gives a ticket a window that stays on it.
 
 /// The scene ids HarnessApp's WindowGroups use.
 enum SceneID {
@@ -13,8 +14,9 @@ enum SceneID {
 }
 
 /// The open windows: main windows, most recently active last, so a ticket window can send a
-/// section link (harness://board, …) to one and bring it forward; and ticket windows by key, so
-/// tapping a ticket whose window is open brings that window forward instead of opening another.
+/// section link (harness://board, …) to one and bring it forward; ticket windows by key, so
+/// tapping a ticket whose window is open brings that window forward instead of opening another;
+/// and the viewer, the ticket window that taps reuse.
 @MainActor
 final class WindowDirectory {
     static let shared = WindowDirectory()
@@ -26,6 +28,7 @@ final class WindowDirectory {
 
     private var mains: [Entry] = []
     private var tickets: [String: Entry] = [:]
+    private var viewer: Entry?
     /// A section link that came from a ticket window while no main window was open: the next main
     /// window to come up applies it.
     private var pending: DeepLink?
@@ -63,20 +66,26 @@ final class WindowDirectory {
         }
     }
 
-    /// A ticket window is showing `key` (again, after its ticket changed).
-    func ticketWindow(_ router: Router, scene: UIWindowScene?, key: String) {
+    /// A ticket window is showing `key` (again, after its ticket changed); `viewer` when it's the
+    /// one taps reuse.
+    func ticketWindow(_ router: Router, scene: UIWindowScene?, key: String, viewer isViewer: Bool) {
         tickets = tickets.filter { $0.value.router != nil && $0.value.router !== router }
         tickets[key.uppercased()] = Entry(router: router, scene: scene)
+        if isViewer { viewer = Entry(router: router, scene: scene) }
     }
 
-    /// Opens `value`'s ticket in a window of its own: the system's prominent placement, centered
-    /// over `from`, which the user can then move, resize, tile or put in Slide Over with the
-    /// window's own controls. A window already showing the ticket comes forward instead, on the
-    /// link's tab.
+    /// Shows `value`'s ticket in the viewer: a window of its own in the system's prominent
+    /// placement, centered over `from`, which the user can then move, resize, tile or put in Slide
+    /// Over with the window's own controls. A window already showing the ticket comes forward
+    /// instead, on the link's tab; otherwise an open viewer switches to the ticket and comes
+    /// forward, so tapping one card after another doesn't pile up windows.
     func openTicket(_ value: TicketWindowValue, from scene: UIWindowScene?) {
-        if let open = tickets[value.key.uppercased()], let router = open.router, let session = open.scene?.session {
+        let target = tickets[value.key.uppercased()].flatMap { $0.router == nil ? nil : $0 } ?? viewer
+        if let target, let router = target.router, let session = target.scene?.session {
             router.show(value.route)
-            UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session))
+            let options = UIWindowScene.ActivationRequestOptions()
+            options.requestingScene = scene
+            UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session, userActivity: nil, options: options))
             return
         }
         let activity = NSUserActivity(activityType: TicketWindowValue.activityType)
@@ -124,6 +133,9 @@ struct TicketWindowRoot: View {
     @State private var router: Router?
     @State private var scene: UIWindowScene?
     @State private var waited = false
+    /// The viewer that ticket taps reuse (it came from WindowDirectory.openTicket's activity), not a
+    /// window from Open in New Window.
+    @State private var isViewer = false
 
     var body: some View {
         Group {
@@ -156,20 +168,24 @@ struct TicketWindowRoot: View {
         .background(SceneReader { s in
             scene = s
             if let value {
-                remember(value, in: s)
-                if let router { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key) }
+                remember(value, viewer: isViewer, in: s)
+                if let router { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key, viewer: isViewer) }
             } else if let v = TicketWindowValue(userInfo: s.session.userInfo) {
+                isViewer = s.session.userInfo?[viewerKey] as? Bool == true
                 value = v
             }
         })
         .onContinueUserActivity(TicketWindowValue.activityType) { activity in
-            if let v = TicketWindowValue(userInfo: activity.userInfo) { value = v }
+            if let v = TicketWindowValue(userInfo: activity.userInfo) {
+                isViewer = true
+                value = v
+            }
         }
         // Links from outside the app go to a main window (RootView prefers them).
         .handlesExternalEvents(preferring: [], allowing: ["\(DeepLink.scheme)://"])
         .onChange(of: value, initial: true) { _, v in
             guard let v else { return }
-            remember(v, in: scene)
+            remember(v, viewer: isViewer, in: scene)
             if let router, TicketWindowValue(route: router.root)?.key == v.key {
                 if router.root != v.route { router.show(v.route) }
             } else {
@@ -177,7 +193,7 @@ struct TicketWindowRoot: View {
                 r.onSectionLink = { WindowDirectory.shared.openInMain($0) }
                 router = r
             }
-            if let router { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key) }
+            if let router { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key, viewer: isViewer) }
         }
     }
 }
@@ -185,13 +201,17 @@ struct TicketWindowRoot: View {
 /// Titles the window and saves its ticket on the scene's session, which UIKit keeps across
 /// launches. SwiftUI saves a WindowGroup's value only when openWindow gave it, so a window from
 /// WindowDirectory.openTicket's activation request (value set from its activity) reads it back from
-/// here on relaunch.
+/// here on relaunch, along with whether it's the viewer.
 @MainActor
-private func remember(_ value: TicketWindowValue, in scene: UIWindowScene?) {
+private func remember(_ value: TicketWindowValue, viewer: Bool, in scene: UIWindowScene?) {
     guard let scene else { return }
     scene.title = value.key
-    scene.session.userInfo = value.userInfo
+    var info: [String: Any] = value.userInfo
+    info[viewerKey] = viewer
+    scene.session.userInfo = info
 }
+
+private let viewerKey = "viewer"
 
 /// The ticket window's screen: its ticket (the Router's root) under its own stack, once connected.
 private struct TicketWindowContent: View {
