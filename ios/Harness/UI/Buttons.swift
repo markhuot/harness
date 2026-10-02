@@ -1,3 +1,4 @@
+import HarnessKit
 import SwiftUI
 
 /// The RN kit's button variants (ui/kit.tsx Button).
@@ -86,5 +87,19 @@ struct HButton: View {
         .buttonStyle(.harness(variant, small: small, fullWidth: fullWidth))
         .disabled(loading)
         .accessibilityLabel(accessibilityLabel ?? title ?? "")
+    }
+}
+
+extension View {
+    /// A primary toolbar button (ui/header.ts primaryItemStyle). The system draws a prominent
+    /// item's glyph in white on the tint, so only themes whose onAccent is white get one; the
+    /// rest (Dracula, Catppuccin, Nord…) get a plain item tinted with the accent, which keeps the
+    /// glyph readable.
+    @ViewBuilder func primaryToolbarItem(_ c: Palette) -> some View {
+        if c.tokens[.onAccent].lowercased() == "#ffffff" {
+            buttonStyle(.borderedProminent).tint(c.accent)
+        } else {
+            tint(c.accent)
+        }
     }
 }

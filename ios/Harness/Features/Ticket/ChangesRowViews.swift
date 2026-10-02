@@ -212,6 +212,8 @@ struct ChangesOverview: View {
                         .font(.system(size: 12))
                         .foregroundStyle(c.text3)
                 }
+                // Touch and hold to select and copy a sha or subject.
+                .textSelection(.enabled)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -262,6 +264,7 @@ struct ChangesFileHeader: View {
     let file: ChangedFile
     let model: ChangesStore
 
+    @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
     var body: some View {
@@ -283,10 +286,21 @@ struct ChangesFileHeader: View {
             .disabled(!canMark)
             .accessibilityLabel("\(collapsed ? "Expand" : "Collapse") \(file.path)")
             ChangesStatusBadge(status: file.status)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(file.path).font(.mono(12.5, weight: .semibold)).foregroundStyle(c.text).lineLimit(2).truncationMode(.head)
-                if let old = file.oldPath { Text("from \(old)").font(.mono(11)).foregroundStyle(c.text3).lineLimit(1).truncationMode(.head) }
+            // The path opens the file in the file viewer (its Diff tab shows the same change); a
+            // deleted file has nothing left in the worktree to open.
+            Button {
+                router.push(.file(FileRouteParams(path: file.path, ticket: model.ticketKey)))
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(file.path).font(.mono(12.5, weight: .semibold)).foregroundStyle(c.text).lineLimit(2).truncationMode(.head)
+                    if let old = file.oldPath { Text("from \(old)").font(.mono(11)).foregroundStyle(c.text3).lineLimit(1).truncationMode(.head) }
+                }
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            .disabled(file.status == .deleted)
+            .accessibilityLabel(file.path)
+            .accessibilityHint(file.status == .deleted ? "" : "Opens the file")
             Spacer(minLength: 4)
             ChangesDecoration(file: file)
             Button {
@@ -382,6 +396,15 @@ private func lineText(_ line: ChangesLine, _ highlighted: HighlightedLine?, _ re
     return text
 }
 
+/// A diff line's touch-and-hold menu: copies the line's text, without the +/- sign.
+private struct ChangesCopyLineButton: View {
+    let text: String
+
+    var body: some View {
+        Button("Copy line", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
+    }
+}
+
 struct ChangesLineRow: View {
     let line: ChangesLine
     let highlighted: HighlightedLine?
@@ -408,6 +431,7 @@ struct ChangesLineRow: View {
         .padding(.vertical, 1.5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(line.kind == .add ? tints.add : line.kind == .del ? tints.del : c.bgElev)
+        .contextMenu { ChangesCopyLineButton(text: line.text) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(line.kind == .add ? "Added" : line.kind == .del ? "Removed" : "Line") \(n.map(String.init) ?? ""): \(line.text)")
     }
@@ -449,6 +473,7 @@ struct ChangesSplitLineRow: View {
         .padding(.vertical, 1.5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(line == nil ? c.bgSunken : line?.kind == .ctx ? c.bgElev : tint)
+        .contextMenu { if let line { ChangesCopyLineButton(text: line.text) } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(line.map { "\($0.kind == .add ? "Added" : $0.kind == .del ? "Removed" : "Line") \(number.map(String.init) ?? ""): \($0.text)" } ?? "")
         .accessibilityHidden(line == nil)

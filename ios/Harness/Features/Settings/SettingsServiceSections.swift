@@ -30,7 +30,7 @@ struct SettingsDriversSection: View {
                         title: "Default model",
                         defaultLabel: "Driver default"
                     ) { choice in
-                        guard let api = store.settingsAPI else { return }
+                        guard let api = store.api else { return }
                         let patch = Models.settingsChoicePatch(choice, models)
                         actions.perform { _ = try await api.updateSettings(patch) }
                     }
@@ -97,7 +97,7 @@ struct SettingsGeneralSection: View {
     }
 
     private func save(_ patch: SettingsPatch, ok: String? = nil) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         actions.perform(ok) { _ = try await api.updateSettings(patch) }
     }
 }
@@ -132,7 +132,7 @@ struct SettingsPermissionsSection: View {
     }
 
     private func save(_ patch: SettingsPatch) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         actions.perform { _ = try await api.updateSettings(patch) }
     }
 }
@@ -153,7 +153,7 @@ struct SettingsTriageSection: View {
                     title: "Default model",
                     defaultLabel: "Same as default"
                 ) { choice in
-                    guard let api = store.settingsAPI else { return }
+                    guard let api = store.api else { return }
                     let patch = Watchers.settingsWatcherChoicePatch(choice, settings: settings)
                     actions.perform { _ = try await api.updateSettings(patch) }
                 }

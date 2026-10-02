@@ -129,8 +129,3 @@ private struct DriverModelSheet: View {
         }
     }
 }
-
-extension String {
-    /// nil for "".
-    var nilIfEmpty: String? { isEmpty ? nil : self }
-}

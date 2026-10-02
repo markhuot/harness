@@ -50,7 +50,7 @@ struct SettingsWatchersSection: View {
             }
             ForEach(watchers) { w in
                 SettingsWatcherRow(watcher: w, onTap: { openMenu(w) }) { on in
-                    guard let api = store.settingsAPI else { return }
+                    guard let api = store.api else { return }
                     actions.perform { _ = try await api.updateWatcher(w.id, WatcherBody(enabled: on)) }
                 }
             }
@@ -62,7 +62,7 @@ struct SettingsWatchersSection: View {
     }
 
     private func openMenu(_ w: Watcher) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         model.menu = ChoiceSheet(title: w.name, choices: [
             Choice(label: "Run now") { actions.perform("Watcher started") { _ = try await api.runWatcher(w.id) } },
             Choice(label: "Edit…") { router.present(.watcher(id: w.id)) },

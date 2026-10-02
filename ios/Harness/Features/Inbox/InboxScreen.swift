@@ -134,7 +134,7 @@ private struct InboxWatcherRow: View {
                 if InboxLogic.showsRetry(w, status: s) {
                     HButton("Retry now", icon: "play", small: true, fullWidth: false) {
                         let name = w.name
-                        actions.perform("Restarting \(name)") { _ = try await (store.client as? HarnessClient)?.runWatcher(w.id) }
+                        actions.perform("Restarting \(name)") { _ = try await store.connectedAPI().runWatcher(w.id) }
                     }
                 }
             }

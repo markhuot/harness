@@ -20,7 +20,7 @@ struct ProjectColorPicker: View {
         let custom = current?.hasPrefix("#") == true ? current : nil
         let showGrid = open ?? (custom != nil)
         VStack(alignment: .leading, spacing: 12) {
-            FlowSwatches {
+            FlowLayout(spacing: 4) {
                 ProjectColorSwatch(fill: c.accentSoft, selected: current == nil, label: "Default") {
                     open = false
                     onChange(nil)
@@ -63,6 +63,8 @@ struct ProjectColorPicker: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project color")
         .onAppear { hex = custom ?? "" }
         .onChange(of: custom) { _, v in hex = v ?? "" }
     }
@@ -89,6 +91,8 @@ struct ProjectColorPicker: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Custom colors")
     }
 
     private func commitHex() {
@@ -131,45 +135,3 @@ private struct ProjectColorSwatch<Content: View>: View {
     }
 }
 
-/// Wraps the swatches onto as many rows as they need.
-private struct FlowSwatches: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX
-            for i in row.items {
-                let size = subviews[i].sizeThatFits(.unspecified)
-                subviews[i].place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
-
-    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
-        var rows: [Row] = [Row()]
-        for (i, view) in subviews.enumerated() {
-            let size = view.sizeThatFits(.unspecified)
-            let extra = rows[rows.count - 1].items.isEmpty ? size.width : size.width + spacing
-            if rows[rows.count - 1].width + extra > width, !rows[rows.count - 1].items.isEmpty {
-                rows.append(Row())
-            }
-            let isFirst = rows[rows.count - 1].items.isEmpty
-            rows[rows.count - 1].items.append(i)
-            rows[rows.count - 1].width += isFirst ? size.width : size.width + spacing
-            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-        }
-        return rows
-    }
-}

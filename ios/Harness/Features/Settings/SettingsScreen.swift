@@ -12,7 +12,6 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
 
     @State private var model = SettingsModel()
@@ -41,7 +40,7 @@ struct SettingsScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .environment(model)
         .task(id: "\(store.epoch)#\(store.state.settings?.listen?.mode.rawValue ?? "")#\(model.networkReloads)") {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             let net = try? await api.network()
             if !Task.isCancelled { model.network = net }
         }
@@ -59,11 +58,6 @@ struct SettingsScreen: View {
             if let m = p.message { Text(m) }
         }
         .onChange(of: model.textPrompt?.id) { promptText = model.textPrompt?.initial ?? "" }
-        .sheet(item: Bindable(model).page) { p in
-            SettingsSafariView(url: p.url)
-                .ignoresSafeArea()
-                .onDisappear { if let m = p.message, !m.isEmpty { toasts.show(m, kind: .info) } }
-        }
     }
 }
 
@@ -75,7 +69,6 @@ final class SettingsModel {
     var menu: ChoiceSheet?
     var confirm: Confirmation?
     var textPrompt: SettingsTextPrompt?
-    var page: SettingsWebPage?
 
     var network: NetworkStatus?
     /// Bumped to load the network status again (after a listen change has had time to apply).
@@ -85,9 +78,9 @@ final class SettingsModel {
     let prompts = PromptCatalog()
 
     func reloadDrivers(_ store: BoardStore, _ actions: Actions) async {
-        guard let api = store.settingsAPI else { return }
+        let client = store.client
         driversLoading = true
-        if let drivers = await actions.run(nil, { try await api.listDrivers() }) { store.dispatch(.drivers(drivers)) }
+        if let drivers = await actions.run(nil, { try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
         driversLoading = false
     }
 }
@@ -169,7 +162,7 @@ private struct SettingsConnectionSection: View {
             message: "Every client using the current token is disconnected, including the desktop app until it reconnects. This \(deviceName) switches to the new token.",
             action: "Rotate"
         ) {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             let baseUrl = store.baseUrl
             Task {
                 if let res = await actions.run("Token rotated", { try await api.rotateToken() }) {
@@ -239,7 +232,7 @@ private struct SettingsNetworkSection: View {
     }
 
     private func apply(_ mode: ListenMode) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         let model = model
         Task {
             await actions.run("Network updated") { try await api.updateSettings(SettingsPatch(listen: ListenSetting(mode: mode))) }

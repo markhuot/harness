@@ -95,9 +95,9 @@ struct TranscriptView<Header: View>: View {
 
     private func backfill() async {
         error = nil
-        guard let api = store.client as? HarnessClient else { return }
         do {
-            let entries = try await api.transcript(sessionId, after: 0, subagentId: subagentId)
+            // A dead client is an error to show, not a transcript that never loads.
+            let entries = try await store.connectedAPI().transcript(sessionId, after: 0, subagentId: subagentId)
             guard !Task.isCancelled else { return }
             store.dispatch(.transcript(sessionId: sessionId, subagentId: Patch(subagentId), entries: entries))
         } catch {

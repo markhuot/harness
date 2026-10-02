@@ -95,9 +95,7 @@ struct HarnessClientURLTests {
         #expect(c.attachmentUrl("att 1/x.png") == "\(base)/attachments/att%201%2Fx.png?token=t%26k%3D1%20%2F")
     }
 
-    @Test func pluginUiUrlEncodesAndDropsTrailingSlash() {
-        #expect(HarnessClient.pluginUiUrl(baseUrl: "http://127.0.0.1:7717/", pluginId: "git", tabId: "changes")
-            == "http://127.0.0.1:7717/plugins/git/ui/index.html?tab=changes")
+    @Test func pluginUiUrlEncodesOnTheClientsBase() {
         #expect(client().pluginUiUrl(pluginId: "my plugin", tabId: "a&b") == "\(base)/plugins/my%20plugin/ui/index.html?tab=a%26b")
     }
 

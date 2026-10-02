@@ -67,7 +67,6 @@ struct BoardStatusStrip: View {
 struct BoardColumnView: View {
     let status: TicketStatus
     let ctx: BoardContext
-    let models: ModelListCache?
     let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
     /// A card (by key) dropped above `before` (nil: at the end).
     let onDrop: (String, String?) -> Bool
@@ -84,7 +83,7 @@ struct BoardColumnView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
-                    BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, models: models, onMove: onMove, onDiscard: onDiscard)
+                    BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, onMove: onMove, onDiscard: onDiscard)
                         .draggable(t.key) { BoardDragPreview(ticket: t) }
                         .dropDestination(for: String.self) { keys, _ in
                             guard let key = keys.first else { return false }

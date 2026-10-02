@@ -1,9 +1,5 @@
 import HarnessKit
 import SwiftUI
-import UIKit
-
-/// "iPhone" / "iPad" (lib/device.ts DEVICE), for copy that names the device.
-@MainActor var deviceName: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
 
 /// Pairing (screens/Connect.tsx): scan the desktop's QR code (or let the Camera app open
 /// harness://pair…), or enter the URL and token by hand. Saved Macs can be switched between.

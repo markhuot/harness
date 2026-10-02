@@ -170,7 +170,7 @@ struct TranscriptOutputImage: View {
         .clipShape(.rect(cornerRadius: 6))
         .accessibilityElement()
         .accessibilityLabel("Tool output image")
-        .task(id: base64.count) {
+        .task(id: base64) {
             let data = base64
             image = await Task.detached { Data(base64Encoded: data, options: .ignoreUnknownCharacters).flatMap(UIImage.init(data:)) }.value
         }

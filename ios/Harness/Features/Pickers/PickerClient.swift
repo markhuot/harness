@@ -40,10 +40,3 @@ extension BoardStore {
         return cache
     }
 }
-
-/// `e instanceof Error ? e.message : String(e)` for the pickers' inline errors.
-func pickerErrorMessage(_ error: any Error) -> String {
-    if let e = error as? HarnessAPIError { return e.message }
-    if let e = error as? LocalizedError, let d = e.errorDescription { return d }
-    return error.localizedDescription
-}

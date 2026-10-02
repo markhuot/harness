@@ -36,10 +36,23 @@ public enum ChangesTab {
         tabs?.filter { !isPluginChanges($0) }
     }
 
-    /// Whether the ticket has a Changes tab: it has a workdir, or the service still offers the git
-    /// plugin's tab (its diff was pinned before the worktree was removed; git plugin `showTab`).
+    /// Whether the ticket has a Changes tab. The service decides, as in RN: once the plugin tabs
+    /// have loaded, only when they list git:changes (the plugin is enabled and its `when: "workdir"`
+    /// holds, or a diff was pinned before the worktree went away; git plugin `showTab`). Until they
+    /// load, a workdir is the best guess.
     public static func shows(workdir: String?, pluginTabs: [PluginTab]?) -> Bool {
-        workdir != nil || (pluginTabs?.contains(where: isPluginChanges) ?? false)
+        guard let pluginTabs else { return workdir != nil }
+        return pluginTabs.contains(where: isPluginChanges)
+    }
+
+    /// The git plugin's icon for the tab (plugins/git/plugin.json).
+    public static let defaultIcon = "branch"
+
+    /// The tab's icon: the one the service lists for git:changes, else the plugin's default.
+    public static func icon(_ pluginTabs: [PluginTab]?) -> String {
+        let listed = pluginTabs?.first(where: isPluginChanges)?.icon
+        guard let listed, !listed.isEmpty else { return defaultIcon }
+        return listed
     }
 
     /// Tabs.effectiveTab with the built-in Changes tab: shown while it applies (and while the plugin

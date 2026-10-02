@@ -105,7 +105,15 @@ struct MentionTextEditor: View {
             .background(c.bgElev)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
+            // A labeled container (mentions.tsx), whose rows stay their own tappable elements.
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(isCommands(shown) ? "Commands" : "Files")
         }
+    }
+
+    private func isCommands(_ shown: [MentionItem]) -> Bool {
+        if case .command = shown.first { return true }
+        return false
     }
 
     private func pick(_ item: MentionItem, target: MentionTarget?) {

@@ -73,8 +73,10 @@ targets:
           UIColorName: LaunchBackground
           UIImageName: SplashIcon
           UIImageRespectsSafeAreaInsets: true
+        # One scene, as in the React Native app (mobile/plugins/withSceneLifecycle.js): the app has
+        # a single Router and AppModel, so a second window would share and fight over them.
         UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: true
+          UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

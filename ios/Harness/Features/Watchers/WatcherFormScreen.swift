@@ -136,7 +136,7 @@ struct WatcherFormScreen: View {
     private func submit(_ existing: Watcher?) {
         let name = trimmed(draft.name)
         let command = trimmed(draft.command)
-        guard !name.isEmpty, !command.isEmpty, !busy, let api = store.settingsAPI else { return }
+        guard !name.isEmpty, !command.isEmpty, !busy, let api = store.api else { return }
         busy = true
         let body = WatcherDraft.watcherBody(draft, existing: existing)
         Task {

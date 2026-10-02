@@ -130,7 +130,7 @@ struct TicketDetailDetailsTab: View {
             if ticket.allowedTools.isEmpty {
                 Text("None granted").font(.system(size: 14)).foregroundStyle(c.text3)
             } else {
-                TicketDetailFlow(spacing: 4, alignment: .trailing) {
+                FlowLayout(spacing: 4, alignment: .trailing) {
                     ForEach(ticket.allowedTools, id: \.self) { DepChip(label: $0, done: true) }
                 }
             }
@@ -165,28 +165,25 @@ struct TicketDetailDetailsTab: View {
     }
 
     private func saveTitle(_ draft: String) {
-        guard let api = store.client as? HarnessClient else { return }
         // The ticket as it is now: a commit can fire with an older render's closure.
         let current = store.state.ticketByKey(ticket.key) ?? ticket
         let title = TicketDetailLogic.trim(draft)
         guard !title.isEmpty, title != current.title else { return }
         let key = current.key
-        actions.perform { _ = try await api.updateTicket(key, UpdateTicketBody(title: title)) }
+        actions.perform { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(title: title)) }
     }
 
     private func saveDescription() {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = description
-        actions.perform("Saved") { _ = try await api.updateTicket(key, UpdateTicketBody(description: text)) }
+        actions.perform("Saved") { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(description: text)) }
     }
 
     private func patch(_ body: UpdateTicketBody) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let relinks: Bool = if case .absent = body.externalRef { false } else { true }
         Task {
-            let ok = await actions.run(TicketDetailLogic.patchToast(body)) { try await api.updateTicket(key, body) }
+            let ok = await actions.run(TicketDetailLogic.patchToast(body)) { try await store.connectedAPI().updateTicket(key, body) }
             // A new remote ID has other tickets on it (some may not be loaded): fetch the list again.
             if ok != nil, relinks { _ = try? await store.loadDetail(key) }
         }

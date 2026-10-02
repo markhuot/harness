@@ -25,7 +25,7 @@ private struct PluginTabsLoader: ViewModifier {
 
     func body(content: Content) -> some View {
         content.task(id: ticket.map { Key(key: $0.key, workdir: $0.workdir, branch: $0.branch, epoch: store.epoch) }) {
-            guard let key = ticket?.key, let client = store.client as? HarnessClient else { return }
+            guard let key = ticket?.key, let client = store.api else { return }
             let result = (try? await client.ticketTabs(key)) ?? []
             if !Task.isCancelled { tabs = result }
         }

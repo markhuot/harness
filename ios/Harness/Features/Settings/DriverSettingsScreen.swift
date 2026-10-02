@@ -75,7 +75,7 @@ private struct DriverSettingsForm: View {
                 Section {
                     SettingsRow(label: "Review model") {
                         ModelPicker(driver: d.id, value: settings.reviewModels[d.id] ?? nil, defaultLabel: "Same as work", plainDefault: true, title: "Review model") { m in
-                            guard let api = store.settingsAPI else { return }
+                            guard let api = store.api else { return }
                             actions.perform { _ = try await api.updateSettings(SettingsPatch(reviewModels: [d.id: m])) }
                         }
                     }
@@ -100,7 +100,7 @@ private struct DriverSettingsForm: View {
     /// POST /drivers/:id/login, then its page in Safari (or the system, for another scheme); the
     /// message toasts once the page closes.
     private func login() {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         let id = driver.id
         Task {
             guard let res = await actions.run(nil, { try await api.loginDriver(id) }) else { return }
@@ -172,7 +172,7 @@ private struct DriverAnthropicKeySection: View {
     }
 
     private func saveKey() {
-        guard let key = SettingsRules.apiKeyToSave(apiKey), let api = store.settingsAPI else { return }
+        guard let key = SettingsRules.apiKeyToSave(apiKey), let api = store.api else { return }
         Task {
             if await actions.run("API key saved", { try await api.updateSettings(SettingsPatch(anthropicApiKey: .value(key))) }) != nil {
                 apiKey = ""
@@ -183,7 +183,7 @@ private struct DriverAnthropicKeySection: View {
     }
 
     private func clearKey() {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         Task {
             if await actions.run("API key cleared", { try await api.updateSettings(SettingsPatch(anthropicApiKey: .null)) }) != nil {
                 reloadModels()

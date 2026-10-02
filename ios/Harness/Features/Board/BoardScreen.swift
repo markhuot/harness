@@ -27,7 +27,6 @@ struct BoardScreen: View {
     @State private var landed = false
     /// Set while the pager scrolls because of a chip tap or a jump, so only swipes play the haptic.
     @State private var jumping = false
-    @State private var models: ModelListCache?
     /// The chip a dragged card hovers over.
     @State private var dropChip: TicketStatus?
 
@@ -79,9 +78,6 @@ struct BoardScreen: View {
         .onChange(of: page) { _, _ in
             if jumping { jumping = false } else { haptic(.select) }
         }
-        .task(id: ObjectIdentifier(store)) {
-            models = (store.client as? HarnessClient).map { ModelListCache(client: $0) }
-        }
     }
 
     // MARK: Pager
@@ -91,7 +87,7 @@ struct BoardScreen: View {
             HStack(spacing: 0) {
                 ForEach(TicketStatus.allKnown, id: \.self) { status in
                     BoardColumnView(
-                        status: status, ctx: ctx, models: models,
+                        status: status, ctx: ctx,
                         onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
                         onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
                         onDiscard: discard)
@@ -139,19 +135,18 @@ struct BoardScreen: View {
                 } label: {
                     Label("Board options", systemImage: "ellipsis")
                 }
-                .accessibilityLabel("Options")
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
-                    .buttonStyle(.borderedProminent)
+                    .primaryToolbarItem(c)
             }
         }
     }
 
     // MARK: Moves
 
-    private var api: HarnessClient? { store.client as? HarnessClient }
+    private var api: HarnessClient? { store.api }
 
     /// Optimistic; the service's event confirms it. A failed update refetches the board.
     private func move(_ t: Ticket, _ m: BoardColumns.Move?, to status: TicketStatus) {

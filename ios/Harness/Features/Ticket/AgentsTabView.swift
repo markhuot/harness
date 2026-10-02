@@ -109,7 +109,7 @@ private struct AgentsRow: View {
                         .multilineTextAlignment(.leading)
                 }
                 if type != nil || parent != nil {
-                    TicketDetailFlow(spacing: 6) {
+                    FlowLayout(spacing: 6) {
                         if let type { AgentsTypeBadge(type: type) }
                         if let parent {
                             Text("started by \(Subagents.title(parent))").font(.system(size: 12.5)).foregroundStyle(c.text3)

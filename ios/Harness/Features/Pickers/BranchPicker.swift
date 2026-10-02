@@ -163,7 +163,7 @@ private struct BranchSheet: View {
             return
         } catch {
             if Task.isCancelled { return }
-            self.error = pickerErrorMessage(error)
+            self.error = localizedErrorMessage(error)
             loading = false
         }
     }

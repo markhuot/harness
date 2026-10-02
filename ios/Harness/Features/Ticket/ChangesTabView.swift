@@ -19,14 +19,14 @@ struct ChangesTabView: View {
         Group {
             if let model {
                 ChangesTabContent(model: model)
-            } else if board.client is HarnessClient {
+            } else if board.api != nil {
                 ChangesLoading()
             } else {
                 EmptyState(icon: "alert", title: "Couldn't load changes", message: "Not connected to a Mac.")
             }
         }
         .task(id: ticket.key) {
-            guard model?.ticketKey != ticket.key, let client = board.client as? HarnessClient else { return }
+            guard model?.ticketKey != ticket.key, let client = board.api else { return }
             model?.stop()
             let m = ChangesStore(ticketKey: ticket.key, source: PluginChangesSource(client: client), defaults: UserDefaults.standard, timers: TaskTimers())
             m.setBusy(ticket.busy)
@@ -164,7 +164,7 @@ private struct ChangesTabContent: View {
 
     private func diffs(_ changes: Changes) -> some View {
         let style = model.style(width: Double(width))
-        let theme = SyntaxTheme.name(c.appearance, c.theme.syntaxTheme)
+        let theme = c.syntaxTheme
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {

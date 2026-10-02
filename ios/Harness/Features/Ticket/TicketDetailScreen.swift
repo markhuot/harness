@@ -231,7 +231,7 @@ private struct TicketDetailHeader: ViewModifier {
 
     private func menu(_ label: String) -> some View {
         let key = ticket.key
-        let api = store.client as? HarnessClient
+        let api = store.api
         return Menu {
             Button("Copy key", systemImage: "number") { UIPasteboard.general.string = key }
             if let ref = ticket.externalRef, let url = ref.url.flatMap(URL.init(string:)) {

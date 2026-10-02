@@ -384,16 +384,10 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)/tabs")
     }
 
-    /// The page a plugin tab's web view loads: `pluginUiUrl` in shared/src/state/pluginBridge.ts.
+    /// The page a plugin tab's web view loads: `PluginBridge.pluginUiUrl` (shared/src/state/pluginBridge.ts)
+    /// on this client's base URL.
     public func pluginUiUrl(pluginId: String, tabId: String) -> String {
-        Self.pluginUiUrl(baseUrl: baseUrl, pluginId: pluginId, tabId: tabId)
-    }
-
-    /// `<base>/plugins/<pluginId>/ui/index.html?tab=<tabId>`, both encodeURIComponent'd; one
-    /// trailing slash on `baseUrl` is dropped.
-    public static func pluginUiUrl(baseUrl: String, pluginId: String, tabId: String) -> String {
-        let base = baseUrl.hasSuffix("/") ? String(baseUrl.dropLast()) : baseUrl
-        return "\(base)/plugins/\(URIComponent.encode(pluginId))/ui/index.html?tab=\(URIComponent.encode(tabId))"
+        PluginBridge.pluginUiUrl(baseUrl: baseUrl, pluginId: pluginId, tabId: tabId)
     }
 
     // MARK: Live events

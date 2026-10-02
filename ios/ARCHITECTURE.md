@@ -202,6 +202,11 @@ places until someone dedupes them:
   `Ticket`/`Project` directly. `Ticket` and `RelatedTicket` conform to `TicketKeyed` (Keys.swift).
 - `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
   promotes at 1024) behave differently in TS too.
+- RN's `e instanceof Error ? e.message : String(e)` has two ports in Client/ErrorMessage.swift.
+  `errorMessage` falls back to `String(describing:)` (the board loaders and model lists, whose
+  tests fake errors with CustomStringConvertible), and `localizedErrorMessage` falls back to
+  `localizedDescription` (screens and pickers, so a URLError reads as a sentence). Use one of
+  them rather than writing a third.
 
 ## Syntax highlighting (HarnessHighlight)
 
@@ -287,8 +292,13 @@ feature needs something new here, add to it without changing what's there.
   `connectionNonce`, and `store`: the one `BoardStore` for the active server, rebuilt whenever the
   server, its token or the nonce changes (RN's `<StoreProvider key={id:nonce}>`). Storage is the
   Keychain (`KeychainStorage`, readable after first unlock) under the RN keys `harness.servers`,
-  `harness.prefs`, `harness.token.<id>`, in its own service, so the two apps don't share pairings.
-  `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
+  `harness.prefs`, `harness.token.<id>`, in its own service. Updating from the RN app keeps saved
+  Macs, tokens and prefs through a one-way migration: when the native service has no item for a
+  key, `get` reads expo-secure-store's (service `app:no-auth`, then the legacy `app`; the key's
+  bytes as account and generic), copies it into the native service and returns it. It never
+  changes or deletes the RN item. The Release app shares the RN app's bundle id and so its access
+  group; the Debug "Harness Dev" build (`com.markhuot.harness.dev`) has its own and can't see RN
+  items. `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
 - **Environment.** Views read `@Environment(AppModel.self)`, `@Environment(Router.self)`,
   `@Environment(BoardStore.self)` (inside the tabs and RequireStore only), `@Environment(ToastCenter.self)`,
   `@Environment(Actions.self)` and `@Environment(\.palette)`.
@@ -457,8 +467,10 @@ Changes is built in (HARNESS-153), not the git plugin's page in a WebView:
   one more conformance, swapped in where ChangesTabView builds its `ChangesStore`.
 - **Tabs.** `Tabs` stays a fixture-checked port of shared/src/state/tabs.ts. `ChangesTab` sits on
   top: `plugin:git:changes` normalizes to `changes`, git:changes is filtered out of the plugin
-  tabs, and the tab shows with a workdir or while the service still offers the plugin tab (a diff
-  pinned before the worktree went away). It goes after Browser, ahead of Details.
+  tabs, and the tab shows only when the service lists the git plugin's tab (the plugin is enabled
+  and its `when: "workdir"` holds, or a diff was pinned before the worktree went away), as in RN.
+  Until the plugin tabs load it falls back to "has a workdir". It goes after Browser, ahead of
+  Details, with the listed tab's icon (the plugin's `branch` by default).
 - **Decisions live in HarnessKit** (tested): `ChangesStore` (refresh queueing, a 600 ms debounce on
   ticket events, a 4 s poll while the ticket is busy and the tab is on screen, viewed marks and
   collapse toggles, context expansion from `/file?side=new`), `ChangesRows` (rows, gaps, split
@@ -536,7 +548,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   only suits short hints). `SettingsButtonRow` is a tappable row; `SettingsSectionHeader` is a
   header with a trailing icon button ("Add watcher", "Refresh drivers").
 - **No modifiers on a Form `Section`.** SwiftUI applies them to every row of the section, so
-  Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` / `page` and the screen
+  Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` and the screen
   presents them, and it runs the network, drivers and prompt-catalog loads once.
 - **AXe and segmented Pickers.** AXe lists a segmented Picker as one unlabeled element, so a
   segment sim-check taps or waits for ("Compare with built-in") is a labeled Button

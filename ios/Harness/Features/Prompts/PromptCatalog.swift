@@ -39,7 +39,7 @@ final class PromptCatalog {
     }
 
     func load() async {
-        guard let api = store?.settingsAPI else { return }
+        guard let api = store?.api else { return }
         do {
             prompts = try await api.listPrompts()
             error = nil

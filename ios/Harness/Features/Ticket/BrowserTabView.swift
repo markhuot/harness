@@ -19,7 +19,7 @@ struct BrowserTabView: View {
     @State private var typing = false
 
     private var sessionId: String { ticket.sessionId }
-    private var client: HarnessClient? { store.client as? HarnessClient }
+    private var client: HarnessClient? { store.api }
 
     private struct Subscription: Hashable {
         let sessionId: String

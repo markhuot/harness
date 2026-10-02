@@ -209,14 +209,6 @@ private struct TicketSettingsRows: View {
     }
 }
 
-/// The latest render's values, for callbacks SwiftUI may keep from an earlier render: a TextField's
-/// `onSubmit` (and the focus-change handlers next to it) can fire with closures that captured an
-/// older ticket, so they read it from here. Set during body; not observed.
-final class PickerLatest<Value> {
-    private(set) var value: Value?
-    func set(_ v: Value) { value = v }
-}
-
 /// One settings row (RN `Prop`): the label with its hint under it, the control on the right, and
 /// an optional footer across the row.
 struct TicketSettingsRow<Control: View, Footer: View>: View {
@@ -293,14 +285,15 @@ private struct TicketDependsOnRow: View {
             if !bad.isEmpty {
                 Text("Not a ticket key: \(bad.joined(separator: ", "))").font(.system(size: 13)).foregroundStyle(c.red)
             } else if !deps.isEmpty {
-                HStack(spacing: 6) {
-                    Spacer(minLength: 0)
+                // RN wraps the chips (flexWrap) and packs them to the right.
+                FlowLayout(spacing: 6, alignment: .trailing) {
                     ForEach(deps, id: \.key) { d in
                         let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
                         DepChip(label: d.ticket.map(Keys.keyLabel) ?? d.key, done: d.done, unknown: d.state == .unknown,
                                 onTap: opens ? { router.push(.ticket(key: d.ticket?.key ?? d.key, tab: nil)) } : nil)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .onAppear { text = ticket.dependsOn.joined(separator: ", ") }

@@ -10,6 +10,7 @@ struct ScanScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var permission = AVCaptureDevice.authorizationStatus(for: .video)
     @State private var message: String?
@@ -72,6 +73,10 @@ struct ScanScreen: View {
             .padding(.trailing, 16)
         }
         .onAppear { permission = AVCaptureDevice.authorizationStatus(for: .video) }
+        // Back from Settings (Open Settings to allow): pick up the new answer.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { permission = AVCaptureDevice.authorizationStatus(for: .video) }
+        }
     }
 
     private func onScan(_ data: String) async {

@@ -27,7 +27,7 @@ struct TicketDetailHero: View {
         var action: CompletionAction?
     }
 
-    private var api: HarnessClient? { store.client as? HarnessClient }
+    private var api: HarnessClient? { store.api }
 
     var body: some View {
         let compact = compactTab && !expanded
@@ -59,11 +59,11 @@ struct TicketDetailHero: View {
         }
         title(compact: compact)
         if !compact {
-            TicketDetailFlow(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 if let project { ProjectKeyBadge(project.key, color: project.color) }
                 StatusPill(status: ticket.status)
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
-                ModelBadge(model: ticket.model, models: nil)
+                ModelBadge(model: ticket.model, driver: ticket.driver)
                 KindBadge(ticket: ticket, childCount: ticket.isConductor ? state.childrenOf(ticket.id).count : nil)
                 if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
                 if let url = ticket.pullRequestUrl.optional { pullRequestBadge(url) }
@@ -77,7 +77,7 @@ struct TicketDetailHero: View {
             TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
         }
         if !compact && (ticket.busy || [.planning, .review, .done].contains(ticket.status)) {
-            TicketDetailFlow(spacing: 8) { buttons(project: project, parent: parent) }
+            FlowLayout(spacing: 8) { buttons(project: project, parent: parent) }
         }
         // A child's conductor acts as its human reviewer and lands it, so its Approve and Complete are off.
         if !compact, ticket.status == .review, let conductor = Completion.managingConductor(ticket: ticket, parent: parent) {

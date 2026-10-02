@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// A tool-permission request (screens/Approval.tsx): allow once, always allow the tool on this
-/// ticket, or deny with an optional note for the agent.
+/// ticket, or deny with an optional note for the agent. RN marks it `accessibilityRole="alert"`;
+/// here VoiceOver announces each new request and reads the card as one container.
 struct TicketDetailApprovalCard: View {
     let ticket: Ticket
     let approval: PendingApproval
@@ -111,17 +112,21 @@ struct TicketDetailApprovalCard: View {
         .padding(12)
         .background(c.amberSoft, in: .rect(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.amber, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .task(id: approval.id) {
+            let text: String = "Approval needed: the agent wants to use \(tool)"
+            AccessibilityNotification.Announcement(text).post()
+        }
     }
 
     private func answer(_ decision: ApprovalDecision, tool: String) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = TicketDetailLogic.trim(message)
         let body = ApprovalBody(decision: decision, message: text.isEmpty ? nil : text)
         busy = decision
         Task {
             let ok = await actions.run(Format.approvalToast(decision, tool: tool, ticketKey: Keys.keyLabel(ticket))) {
-                try await api.answerApproval(key, body)
+                try await store.connectedAPI().answerApproval(key, body)
             }
             if ok != nil { haptic(decision == .deny ? .warning : .success) }
             busy = nil

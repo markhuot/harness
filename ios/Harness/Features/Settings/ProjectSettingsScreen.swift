@@ -18,6 +18,8 @@ struct ProjectSettingsScreen: View {
             EmptyState(icon: "folder", title: "This project no longer exists")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(c.bg)
+                .navigationTitle("Project settings")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
@@ -29,7 +31,7 @@ private struct ProjectSettingsForm: View {
     @Environment(AppModel.self) private var app
     @Environment(Actions.self) private var actions
     @Environment(ToastCenter.self) private var toasts
-    @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
     /// Done tickets page in, so Remove project's count asks the service for its done total.
@@ -173,7 +175,7 @@ private struct ProjectSettingsForm: View {
         .onChange(of: project.path) { _, p in path = p }
         .onChange(of: pathFocused) { _, now in if !now { commitPath() } }
         .task(id: project.id) {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             if let page = try? await api.ticketPage(status: .done, projectId: project.id, limit: 1), !Task.isCancelled { doneTotal = page.total }
         }
     }
@@ -185,7 +187,7 @@ private struct ProjectSettingsForm: View {
     }
 
     private func save(_ body: UpdateProjectBody, ok: String? = nil) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         let id = project.id
         actions.perform(ok) { _ = try await api.updateProject(id, body) }
     }
@@ -201,15 +203,27 @@ private struct ProjectSettingsForm: View {
         }
     }
 
+    /// Leaves this screen through the Router rather than `dismiss`: the socket's projectDeleted
+    /// can land before the request returns, which swaps this form for the empty state, so the
+    /// form's own dismiss action may no longer be the screen's. Pops only when the selected tab's
+    /// stack still ends at this project.
+    private func pop(_ router: Router, projectId id: String) {
+        let tab = router.selectedTab
+        var path = router.path(tab)
+        guard case let .project(top)? = path.last, top == id else { return }
+        path.removeLast()
+        router.setPath(tab, path)
+    }
+
     private func remove(_ count: Int) {
         let copy = SettingsRules.removeProjectConfirm(name: project.name, key: project.key, count: count)
         let id = project.id
         confirm = Confirmation(title: copy.title, message: copy.message, action: "Remove") {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             Task {
                 if await actions.run("Project removed", { try await api.deleteProject(id) }) != nil {
                     if app.prefs.boardProject == id { app.setPref(\.boardProject, nil) }
-                    dismiss()
+                    pop(router, projectId: id)
                 }
             }
         }
@@ -268,7 +282,7 @@ private struct ProjectSettingsKeyRow: View {
     }
 
     private func commit() {
-        guard let preview = latest.value, preview.changed, preview.error == nil, !busy, let api = store.settingsAPI else { return }
+        guard let preview = latest.value, preview.changed, preview.error == nil, !busy, let api = store.api else { return }
         busy = true
         let id = project.id
         Task {

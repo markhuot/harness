@@ -86,11 +86,12 @@ struct TicketDetailComposer: View {
 
     private func send(move: Bool) {
         let body = TicketDetailLogic.trim(text)
-        guard !body.isEmpty, !sending, let api = store.client as? HarnessClient else { return }
+        guard !body.isEmpty, !sending else { return }
         let key = ticket.key
         sending = true
         Task {
-            let ok = await actions.run { try await api.sendMessage(key, text: body, move: move) }
+            // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
+            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move) }
             sending = false
             if ok != nil {
                 haptic(.success)

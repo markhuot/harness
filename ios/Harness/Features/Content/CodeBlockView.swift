@@ -39,7 +39,7 @@ struct CodeBlockView: View {
         let diff = Code.codeKind(fence: fence, text: code) == .diff
         // The app theme's Shiki theme, Pierre's when it names none (RN useSyntaxTheme). Every
         // registry theme's syntaxTheme is bundled (HighlighterTests.everyAppThemesSyntaxThemeIsBundled).
-        let theme = SyntaxTheme.name(c.appearance, c.theme.syntaxTheme)
+        let theme = c.syntaxTheme
         let key = HighlightCache.Key(code: code, language: Code.codeLanguage(fence), theme: theme, diff: diff)
         let hl = highlighted(key)
         let lines = hl?.lines ?? PlainLines.reuse(PlainLines.lines(code, diff: diff), last?.key.theme == key.theme ? last?.result?.lines : nil)

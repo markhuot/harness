@@ -102,14 +102,13 @@ struct TicketDetailNotesSheet: View {
     }
 
     private func submit() {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = notes
         Task {
             let ok: Ticket? = if reopen {
-                await actions.run("Re-opened") { try await api.reopenTicket(key, ReopenBody(notes: text)) }
+                await actions.run("Re-opened") { try await store.connectedAPI().reopenTicket(key, ReopenBody(notes: text)) }
             } else {
-                await actions.run("Changes requested") { try await api.humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
+                await actions.run("Changes requested") { try await store.connectedAPI().humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
             }
             if ok != nil { dismiss() }
         }
@@ -145,7 +144,7 @@ struct TicketDetailApproveCustomSheet: View {
     }
 
     private func submit() {
-        guard let api = store.client as? HarnessClient,
+        guard let api = store.api,
               case let .review(body) = Approve.approveRequest(.action(.custom), instructions: instructions) else { return }
         let key = ticket.key
         Task {
@@ -209,11 +208,10 @@ struct TicketDetailCompleteSheet: View {
     }
 
     private func submit(choose: Bool, action: CompletionAction) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let body = Approve.completeBody(choose: choose, action: action, instructions: instructions)
         Task {
-            if await actions.run("Completion run queued", { try await api.completeTicket(key, body) }) != nil {
+            if await actions.run("Completion run queued", { try await store.connectedAPI().completeTicket(key, body) }) != nil {
                 haptic(.success)
                 dismiss()
             }

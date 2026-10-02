@@ -5,12 +5,6 @@ import SwiftUI
 // Shared by Settings, Project settings, the watcher form and Prompts (ui/settings.tsx's Group and
 // SRow, as Form idioms).
 
-extension BoardStore {
-    /// The store's client as the full HarnessClient, for the calls that aren't on BoardClient
-    /// (settings, network, prompts, watchers, projects).
-    var settingsAPI: HarnessClient? { client as? HarnessClient }
-}
-
 extension View {
     /// A Form row drawn in the theme's elevated color.
     func settingsRowBackground(_ c: Palette) -> some View { listRowBackground(c.bgElev) }

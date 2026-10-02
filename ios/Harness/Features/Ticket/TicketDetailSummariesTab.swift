@@ -28,7 +28,7 @@ struct TicketDetailSummariesTab: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
                 }
                 if !deps.isEmpty {
-                    TicketDetailFlow(spacing: 6) {
+                    FlowLayout(spacing: 6) {
                         SectionTitle("Depends on")
                         ForEach(deps, id: \.key) { d in
                             let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)

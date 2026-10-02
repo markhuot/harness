@@ -60,7 +60,7 @@ private struct FileViewerContent: View {
                 if let loader {
                     switch loader.file {
                     case .loading:
-                        Spinner().frame(maxWidth: .infinity, maxHeight: .infinity)
+                        LoadingScreen()
                     case let .error(e):
                         FileErrorView(copy: FileViewerRules.errorCopy(.file, e, path: path)) { Task { await loader.refresh() } }
                     case let .ok(v):
@@ -72,7 +72,7 @@ private struct FileViewerContent: View {
                         }
                     }
                 } else {
-                    Spinner().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingScreen()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -245,9 +245,6 @@ private struct FileErrorView: View {
     }
 }
 
-/// The app theme's Shiki theme, Pierre's when it names none (RN useSyntaxTheme).
-private func syntaxTheme(_ c: Palette) -> String { SyntaxTheme.name(c.appearance, c.theme.syntaxTheme) }
-
 /// Folded into a code list's version, so rows on screen redraw in a new app theme's colors.
 private func paletteSeed(_ c: Palette) -> Int { c.theme.id.hashValue ^ (c.isDark ? 1 : 0) }
 
@@ -293,7 +290,7 @@ private struct FileBody: View {
     }
 
     private func list(_ text: FileText) -> some View {
-        let theme = syntaxTheme(c)
+        let theme = c.syntaxTheme
         let lang = Diff.langForPath(view.path)
         let char = FileCodeMetrics.char
         let gutter = ceil(CGFloat(String(text.lines.count).count) * char) + 20
@@ -401,7 +398,7 @@ private struct FileDiffBody: View {
     var body: some View {
         switch FileViewerRules.diffBody(diff, rows: rows) {
         case .loading:
-            Spinner().frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingScreen()
         case let .error(e):
             FileErrorView(copy: FileViewerRules.errorCopy(.diff, e, path: path)) { Task { await onRefresh() } }
         case .tooLarge:
@@ -417,7 +414,7 @@ private struct FileDiffBody: View {
 
     private func list(_ patch: String) -> some View {
         // The patch highlighted as a diff: its lines line up with parseDiff's, which PatchRow.source indexes.
-        let key = HighlightCache.Key(code: patch, language: nil, theme: syntaxTheme(c), diff: true)
+        let key = HighlightCache.Key(code: patch, language: nil, theme: c.syntaxTheme, diff: true)
         let hl = landed?.key == key ? landed?.result : (Highlighter.app.cached(patch, language: nil, theme: key.theme, diff: true) ?? nil)
         let git = hl?.git ?? HighlightColors.gitColors(nil, c.appearance)
         let tints = try? HighlightColors.diffTints(c.tokens.bg, git, c.appearance)

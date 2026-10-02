@@ -46,11 +46,7 @@ public struct FileLoadError: Equatable, Sendable, Error {
 
     /// The RN `failed(e)`: a HarnessAPIError keeps its status; anything else is a status-less message.
     public init(_ error: any Error) {
-        if let api = error as? HarnessAPIError {
-            self.init(status: api.status, message: api.message)
-        } else {
-            self.init(status: nil, message: error.localizedDescription)
-        }
+        self.init(status: (error as? HarnessAPIError)?.status, message: localizedErrorMessage(error))
     }
 }
 

@@ -93,13 +93,19 @@ public enum HeroCollapse {
     /// The events a SwiftUI scroll phase change stands for (`onScrollPhaseChange`), with the
     /// geometry at the change: a finger landing starts a drag; lifting it ends the drag, with
     /// momentum when the view goes on decelerating; the deceleration ending (or a finger catching
-    /// it) ends the momentum. `tracking` and `animating` aren't gestures and send nothing.
+    /// it) ends the momentum. `tracking` and `animating` aren't gestures and send nothing, except
+    /// that an animated scroll which settles at the top is how a status-bar tap shows up (SwiftUI
+    /// has no scroll-to-top callback), so it sends `show`, as RN's `onScrollToTop` does.
     public static func events(from old: StickScrollPhase, to new: StickScrollPhase, metrics m: ScrollMetrics) -> [CollapseEvent] {
         if old == new { return [] }
         var events: [CollapseEvent] = []
         if old == .interacting { events.append(.endDrag(velocity: new == .decelerating ? 1 : 0)) }
         if old == .decelerating { events.append(.momentumEnd) }
+        if old == .animating && new == .idle && m.offset <= scrolledToTopSlop { events.append(.show) }
         if new == .interacting { events.append(.beginDrag(m)) }
         return events
     }
+
+    /// How close to the top (pt) an animated scroll has to settle to count as a scroll to top.
+    static let scrolledToTopSlop = 1.0
 }

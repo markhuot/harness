@@ -151,14 +151,24 @@ struct KindBadge: View {
     }
 }
 
-/// The ticket's model, by its display name when the driver's model list has it.
+/// The ticket's model, by its display name when the driver's model list has it (ui/selects.tsx
+/// ModelBadge). The list comes from the store's shared per-driver cache, loaded only when there's
+/// a model to name; without a store in the environment (previews) it shows the raw id.
 struct ModelBadge: View {
     let model: String?
-    var models: [ModelInfo]?
+    let driver: String
+
+    @Environment(BoardStore.self) private var store: BoardStore?
 
     var body: some View {
         if let model, !model.isEmpty {
-            Badge(Models.modelName(models, model), outline: true, icon: "layers")
+            let cache = store?.sharedModelCache
+            Badge(Models.modelName(cache?.get(driver).data?.models, model), outline: true, icon: "layers")
+                .task(id: "\(driver)#\(store?.epoch ?? 0)#\(store.map { ObjectIdentifier($0).hashValue } ?? 0)") {
+                    guard let store, let cache else { return }
+                    cache.syncEpoch(store.epoch)
+                    await cache.load(driver)
+                }
         }
     }
 }

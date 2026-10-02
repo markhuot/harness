@@ -29,6 +29,15 @@ final class TicketDetailHeroCollapse {
     }
 }
 
+extension BoardStore {
+    /// `api`, or the "No connection" error a user action should surface (Actions.run/perform toast
+    /// it) instead of silently doing nothing when the store has no HarnessClient.
+    func connectedAPI() throws -> HarnessClient {
+        guard let api else { throw HarnessAPIError(status: 0, message: "No connection", data: nil) }
+        return api
+    }
+}
+
 /// Opens a tab on the ticket screen that hosts the view (a sub-agent's `agent:<id>`, or back to
 /// `agents`). Nil outside a ticket screen.
 struct TicketDetailTabOpener: Sendable {
@@ -114,59 +123,3 @@ private struct TicketDetailStickToBottom: ViewModifier {
     }
 }
 
-/// Lays its children out in rows, wrapping onto as many as they need (RN `flexWrap: "wrap"`).
-/// `alignment` places each row: leading, or trailing for a value column.
-struct TicketDetailFlow: Layout {
-    var spacing: CGFloat = 6
-    var lineSpacing: CGFloat?
-    var alignment: HorizontalAlignment = .leading
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.reduce(0) { $0 + $1.height } + (lineSpacing ?? spacing) * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: min(proposal.width ?? width, width), height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(width: bounds.width, subviews: subviews) {
-            var x = alignment == .trailing ? bounds.maxX - row.width : bounds.minX
-            for i in row.items {
-                let size = Self.size(of: subviews[i], width: bounds.width)
-                subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + (lineSpacing ?? spacing)
-        }
-    }
-
-    private struct Row {
-        var items: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
-        var rows = [Row()]
-        for (i, view) in subviews.enumerated() {
-            let size = Self.size(of: view, width: width)
-            let last = rows.count - 1
-            let extra = rows[last].items.isEmpty ? size.width : size.width + spacing
-            if rows[last].width + extra > width, !rows[last].items.isEmpty {
-                rows.append(Row())
-            }
-            let r = rows.count - 1
-            rows[r].width += rows[r].items.isEmpty ? size.width : size.width + spacing
-            rows[r].items.append(i)
-            rows[r].height = max(rows[r].height, size.height)
-        }
-        return rows
-    }
-
-    /// Its natural size; a child wider than the row (a long branch name) gets the row and truncates.
-    private static func size(of view: LayoutSubview, width: CGFloat) -> CGSize {
-        let size = view.sizeThatFits(.unspecified)
-        return size.width > width ? view.sizeThatFits(ProposedViewSize(width: width, height: nil)) : size
-    }
-}
