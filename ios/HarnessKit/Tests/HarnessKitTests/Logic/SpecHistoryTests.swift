@@ -184,3 +184,58 @@ struct ComposerLogTests {
         #expect(TicketDetailLogic.composerPlaceholder(review, tab: .activity) == "Ask about the work, or ask for a change (shows in Activity)")
     }
 }
+
+@Suite("Spec draft")
+struct SpecDraftTests {
+    static func t(_ spec: String, rev: Int) -> Ticket {
+        Ticket(id: "t", key: "T-1", projectId: "p", title: "t", spec: spec, specRevision: rev, status: .inProgress, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
+    }
+
+    @Test func savesSendTheRevisionTheEditStartedFrom() {
+        var d = SpecDraft(Self.t("## Goal", rev: 3))
+        #expect(!d.dirty)
+        d.text = "## Goal\n\nMore"
+        #expect(d.dirty)
+        #expect(d.patch == UpdateTicketBody(spec: "## Goal\n\nMore", baseRevision: 3))
+    }
+
+    @Test func followsNewerRevisionsOnlyWhileUnedited() {
+        var d = SpecDraft(Self.t("a", rev: 1))
+        d.follow(Self.t("b", rev: 2))
+        #expect(d.text == "b")
+        #expect(d.base == 2)
+        d.text = "mine"
+        d.follow(Self.t("c", rev: 3))
+        // The agent's revision doesn't clobber the edit, and the save still names rev 2.
+        #expect(d.text == "mine")
+        #expect(d.patch.baseRevision == 2)
+        // The save's own echo (the ticket now says what the user wrote) settles it.
+        d.follow(Self.t("mine", rev: 4))
+        #expect(!d.dirty)
+        #expect(d.base == 4)
+    }
+
+    @Test func reloadTakesTheNewerSpec_overwriteKeepsMine() {
+        let conflict = SpecConflict(currentRevision: 5, spec: "theirs")
+        var reload = SpecDraft(Self.t("a", rev: 2))
+        reload.text = "mine"
+        reload.reload(conflict)
+        #expect(reload.text == "theirs")
+        #expect(!reload.dirty)
+        #expect(reload.base == 5)
+        var over = SpecDraft(Self.t("a", rev: 2))
+        over.text = "mine"
+        over.overwrite(conflict)
+        #expect(over.dirty)
+        #expect(over.patch == UpdateTicketBody(spec: "mine", baseRevision: 5))
+    }
+
+    @Test func revertTakesTheTicketsCurrentSpec() {
+        var d = SpecDraft(Self.t("a", rev: 1))
+        d.text = "mine"
+        d.follow(Self.t("b", rev: 2))
+        d.revert(Self.t("b", rev: 2))
+        #expect(d.text == "b")
+        #expect(d.base == 2)
+    }
+}

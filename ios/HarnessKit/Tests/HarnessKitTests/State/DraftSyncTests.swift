@@ -330,8 +330,8 @@ struct DraftSyncTests {
         let f = FakeDraftAPI()
         let h = Harness(f)
         h.edit(UpdateTicketBody(spec: "  "))
-        await #expect(throws: DraftSyncError.noPrompt) { _ = try await h.sync.submit(start: true) }
-        #expect(DraftSyncError.noPrompt.localizedDescription == "Write a prompt first.")
+        await #expect(throws: DraftSyncError.noSpec) { _ = try await h.sync.submit(start: true) }
+        #expect(DraftSyncError.noSpec.localizedDescription == "Write a spec first.")
         #expect(f.calls.isEmpty)
     }
 

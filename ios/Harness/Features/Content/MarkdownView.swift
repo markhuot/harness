@@ -57,8 +57,8 @@ struct MarkdownView: View {
     }
 
     /// What the viewer pages through. Markdown knows only the id and alt text; the header shows the alt text.
-    private func attachment(_ m: Markdown.Media) -> SummaryAttachment {
-        SummaryAttachment(id: m.id, kind: kind(m), mimeType: "", name: m.alt.isEmpty ? m.id : m.alt, size: 0)
+    private func attachment(_ m: Markdown.Media) -> Attachment {
+        Attachment(id: m.id, kind: kind(m), mimeType: "", name: m.alt.isEmpty ? m.id : m.alt, size: 0)
     }
 
     private func mediaScope(_ media: [Markdown.Media]) -> MarkdownMediaScope {

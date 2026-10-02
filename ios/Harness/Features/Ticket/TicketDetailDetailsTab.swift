@@ -1,9 +1,11 @@
 import HarnessKit
 import SwiftUI
 
-/// The Details tab: the title and brief, the settings rows
+/// The Details tab: the title and spec, the settings rows
 /// (TicketSettingsForm), then what it blocks, where it works, its remote ID and the tickets sharing
-/// it, granted tools, auto-start, timestamps and its runs.
+/// it, granted tools, auto-start, timestamps and its runs. A spec save names the revision the edit
+/// started from (SpecDraft); when the spec moved on meanwhile, the service refuses it and an alert
+/// offers Reload (take the newer spec) or Overwrite (save this one over it).
 struct TicketDetailDetailsTab: View {
     let ticket: Ticket
 
@@ -12,8 +14,11 @@ struct TicketDetailDetailsTab: View {
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @Environment(\.openURL) private var openURL
-    @State private var description = ""
-    @FocusState private var editingBrief: Bool
+    @State private var draft: SpecDraft?
+    /// The 409 a save got, while its alert is up
+    @State private var conflict: SpecConflict?
+    @State private var saving = false
+    @FocusState private var editingSpec: Bool
 
     var body: some View {
         let state = store.state
@@ -25,21 +30,23 @@ struct TicketDetailDetailsTab: View {
                     .accessibilityLabel("Title")
             }
             .listRowBackground(c.bgElev)
-            Section(ticket.status == .planning ? "Plan / brief" : "Brief") {
-                TextField("", text: $description, prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)
+            Section("Spec") {
+                TextField("", text: Binding(get: { draft?.text ?? ticket.spec }, set: { draft?.text = $0 }),
+                          prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)
                     .font(.scaled(size: 14.5))
                     .foregroundStyle(c.text)
-                    // A long plan scrolls inside the field instead of pushing the settings off screen.
+                    // A long spec scrolls inside the field instead of pushing the settings off screen.
                     .lineLimit(5...10)
                     .lineSpacing(3)
-                    .focused($editingBrief)
+                    .focused($editingSpec)
                     .disabled(!editable)
-                    .accessibilityLabel(ticket.status == .planning ? "Plan / brief" : "Brief")
-                if description != ticket.description {
+                    .accessibilityLabel("Spec")
+                if let draft, draft.dirty {
                     HStack(spacing: 8) {
-                        Text("Unsaved changes").font(.scaled(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
-                        HButton("Revert", variant: .ghost, small: true, fullWidth: false) { description = ticket.description }
-                        HButton("Save", variant: .primary, small: true, fullWidth: false) { saveDescription() }
+                        Text(draft.base < SpecHistory.latest(ticket) ? "Unsaved changes · the spec has changed since" : "Unsaved changes")
+                            .font(.scaled(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
+                        HButton("Revert", variant: .ghost, small: true, fullWidth: false) { self.draft?.revert(ticket) }
+                        HButton("Save", variant: .primary, small: true, loading: saving, fullWidth: false) { saveSpec() }
                     }
                 }
             }
@@ -63,8 +70,19 @@ struct TicketDetailDetailsTab: View {
         .background(c.bg)
         .scrollDismissesKeyboard(.interactively)
         .ticketHeroScroll()
-        .onAppear { description = ticket.description }
-        .onChange(of: ticket.description) { _, d in description = d }
+        .onAppear { if draft == nil { draft = SpecDraft(ticket) } }
+        .onChange(of: "\(ticket.specRevision ?? 1)\n\(ticket.spec)") { draft?.follow(ticket) }
+        .alert("The spec changed while you were editing", isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
+               presenting: conflict) { c in
+            Button("Reload") { draft?.reload(c) }
+            Button("Overwrite", role: .destructive) {
+                draft?.overwrite(c)
+                saveSpec()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { c in
+            Text("It's at revision \(c.currentRevision) now. Reload it and lose your edit, or overwrite it with yours.")
+        }
     }
 
     @ViewBuilder private func readOnlyRows(_ state: BoardState) -> some View {
@@ -173,10 +191,26 @@ struct TicketDetailDetailsTab: View {
         actions.perform { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(title: title)) }
     }
 
-    private func saveDescription() {
+    private func saveSpec() {
+        guard let draft, !saving else { return }
         let key = ticket.key
-        let text = description
-        actions.perform("Saved") { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(description: text)) }
+        let body = draft.patch
+        saving = true
+        Task {
+            defer { saving = false }
+            do {
+                let t = try await store.connectedAPI().updateTicket(key, body)
+                store.dispatch(.event(.ticketUpserted(ticket: t)))
+                self.draft = SpecDraft(t)
+                actions.toasts.show("Saved", kind: .info)
+            } catch {
+                if let c = HarnessAPIError.specConflict(error) {
+                    conflict = c
+                } else {
+                    await actions.run { () throws -> Void in throw error }
+                }
+            }
+        }
     }
 
     private func patch(_ body: UpdateTicketBody) {

@@ -2,27 +2,24 @@
 import HarnessKit
 import SwiftUI
 
-/// Debug screen for the content components until the Summaries tab renders them: sample markdown
-/// (headings, lists, a table, code in several languages, a diff, ticket keys, file links) and the
-/// summaries of one ticket with their attachments. Launch with `-debugScreen content`, and
-/// `-debugTicket KEY` to pick the ticket whose summaries show (default GREET-1).
+/// Debug screen for the content components: sample markdown (headings, lists, a table, code in
+/// several languages, a diff, ticket keys, file links) and one ticket's spec with its inline
+/// attachments. Launch with `-debugScreen content`, and `-debugTicket KEY` to pick the ticket whose
+/// spec shows (default GREET-1).
 struct ContentPreviewView: View {
     @AppStorage("debugTicket") private var ticketKey = "GREET-1"
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
-    @State private var summaries: [Summary] = []
+    @State private var spec: String?
     @State private var error: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(summaries) { s in
-                    VStack(alignment: .leading, spacing: 6) {
-                        MarkdownView(text: s.body)
-                        AttachmentRow(attachments: s.attachments)
-                    }
-                    .padding(12)
-                    .background(c.bgElev, in: .rect(cornerRadius: 12))
+                if let spec {
+                    MarkdownView(text: spec)
+                        .padding(12)
+                        .background(c.bgElev, in: .rect(cornerRadius: 12))
                 }
                 if let error { Text(error).foregroundStyle(c.red) }
                 MarkdownView(text: Self.sample)
@@ -35,7 +32,7 @@ struct ContentPreviewView: View {
         .fileLinkScope(ticketKey: ticketKey)
         .navigationTitle("Content")
         .task {
-            do { summaries = try await store.client.listSummaries(ticketKey) } catch { self.error = "\(error)" }
+            do { spec = try await store.client.getTicket(ticketKey).ticket.spec } catch { self.error = "\(error)" }
         }
     }
 
@@ -46,7 +43,7 @@ struct ContentPreviewView: View {
     """
 
     static let sample = #"""
-    ## Summary
+    ## Status
 
     Fixed the greeting in [src/greet.ts:3](harness://file/src/greet.ts#L3) and the README (README.md); see GREET-2 and **not** UTF-8 or SHA-256. Docs live at [example.com](https://example.com), and `bun test` passes.
 

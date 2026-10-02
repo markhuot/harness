@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket's tabs: Summaries, Tickets (conductors), Transcript,
+/// The ticket's tabs: Spec, Activity, Tickets (conductors), Transcript,
 /// Agents & tasks (once there are sub-agents or background tasks), Browser, Changes (when the service
 /// lists the git plugin's tab), Details, then the plugin tabs. Counts and a live dot ride along; a
 /// sub-agent's or task's view highlights Agents & tasks.
@@ -53,7 +53,7 @@ struct TicketDetailTabStrip: View {
             }
             if let t = tab.builtin {
                 let count: Int? = switch t {
-                case .summaries: state.summaries[ticket.sessionId]?.count ?? 0
+                case .activity: state.activity[ticket.sessionId]?.count ?? 0
                 case .children: conductor ? state.childrenOf(ticket.id).count : 0
                 case .agents: subagents?.count
                 default: nil

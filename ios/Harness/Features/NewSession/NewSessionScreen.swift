@@ -154,13 +154,13 @@ private struct NewSessionEditorView: View {
             }
             Section {
                 MentionTextEditor(
-                    text: Binding(get: { editor.local?.description ?? "" }, set: { editor.setPrompt($0) }),
+                    text: Binding(get: { editor.local?.spec ?? "" }, set: { editor.setSpec($0) }),
                     placeholder: Format.newSessionPlaceholder(kind),
                     projectId: t.projectId,
                     minHeight: 150,
                     commandDriver: editor.commandDriver(state),
                     boxed: false,
-                    fieldLabel: "Prompt",
+                    fieldLabel: "Spec",
                     autofocus: reopen == nil
                 )
                 .listRowBackground(c.bgElev)
@@ -270,7 +270,7 @@ private struct NewSessionEditorView: View {
             haptic(.success)
             store.dispatch(.tickets([t]))
             app.setPref(\.lastProject, t.projectId)
-            router.open(.push(.ticket(key: t.key, tab: start ? .transcript : .summaries)))
+            router.open(.push(.ticket(key: t.key, tab: start ? .transcript : .spec)))
         }
     }
 

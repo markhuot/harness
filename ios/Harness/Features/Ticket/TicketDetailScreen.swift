@@ -5,8 +5,8 @@ import SwiftUI
 /// approval card, actions), the tab strip and tab bodies, and the message composer. `key` may be
 /// an old key (from before a project rename), which it follows, or a remote ID, which lists the
 /// tickets sharing it (harness://ticket/JIRA-62). `initialTab` is the link's `?tab=`, already
-/// checked with Tabs.isTicketTab; nil opens Summaries, or the Transcript when the ticket turns out
-/// to have no summaries.
+/// checked with ChangesTab.ticketTabFrom (an old "summaries" link is the Spec); nil opens the Spec
+/// (Tabs.openingTab).
 struct TicketDetailScreen: View {
     let key: String
     let initialTab: TicketTab?
@@ -18,16 +18,13 @@ struct TicketDetailScreen: View {
     @State private var renamedTo: String?
     @State private var missing = false
     @State private var tab: TicketTab
-    /// Whether the tab is settled: a linked tab, a pick, or the one-time switch to the Transcript.
-    @State private var opened: Bool
     @State private var pluginTabs: [PluginTab]?
     @State private var hero = TicketDetailHeroCollapse()
 
     init(key: String, initialTab: TicketTab?) {
         self.key = key
         self.initialTab = initialTab
-        _tab = State(initialValue: initialTab ?? .summaries)
-        _opened = State(initialValue: initialTab != nil)
+        _tab = State(initialValue: initialTab ?? Tabs.openingTab())
     }
 
     private var ticketKey: String { renamedTo ?? key }
@@ -86,13 +83,6 @@ struct TicketDetailScreen: View {
         .onChange(of: ticket?.draft == true, initial: true) { _, draft in
             if draft { openDraft() }
         }
-        // Without a tab in the link, a ticket with no summaries opens on the Transcript instead.
-        // Decided once, when its summaries first load; picking a tab before then settles it.
-        .onChange(of: ticket.flatMap { state.summaries[$0.sessionId]?.count }, initial: true) { _, count in
-            guard !opened, let t = Tabs.openingTab(summaryCount: count) else { return }
-            opened = true
-            tab = t
-        }
         // News that needs a look brings the hero back.
         .onChange(of: ticket?.status) { hero.show() }
         .onChange(of: ticket?.pendingApproval?.id) { hero.show() }
@@ -100,7 +90,6 @@ struct TicketDetailScreen: View {
 
     private func pick(_ t: TicketTab) {
         hero.show()
-        opened = true
         tab = t
     }
 
@@ -160,7 +149,7 @@ private struct TicketDetailBody: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket).id(ticket.id)
+            TicketDetailComposer(ticket: ticket, tab: shown).id(ticket.id)
         }
         .modifier(TicketDetailHeader(ticket: ticket))
     }
@@ -190,7 +179,8 @@ private struct TicketDetailBody: View {
             case .agents: AgentsTabView(ticket: ticket)
             case .browser: BrowserTabView(ticket: ticket)
             case .details: TicketDetailDetailsTab(ticket: ticket)
-            default: TicketDetailSummariesTab(ticket: ticket)
+            case .activity: TicketDetailActivityTab(ticket: ticket)
+            default: TicketDetailSpecTab(ticket: ticket)
             }
         }
     }
@@ -258,7 +248,7 @@ private struct TicketDetailHeader: ViewModifier {
                 }
             }
             Button("Delete ticket", systemImage: "trash", role: .destructive) {
-                confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript and summaries are removed too.", action: "Delete") {
+                confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
                     guard let api else { return }
                     Task {
                         if await actions.run("\(label) deleted", { try await api.deleteTicket(key) }) != nil { pop(key) }

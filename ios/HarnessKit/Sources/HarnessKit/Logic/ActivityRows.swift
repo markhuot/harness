@@ -23,6 +23,11 @@ public enum ActivityLook: Equatable, Sendable {
 }
 
 public enum ActivityRows {
+    /// The kinds a board card or a conductor's child row shows as the ticket's latest news: what
+    /// the agent said or did, not questions (the card shows the blocked reason itself), messages
+    /// or the service's own notes.
+    public static let newsKinds: [ActivityKind] = [.note, .submitted, .reviewApproved, .changesRequested, .approved, .answer, .reopened, .failed]
+
     /// The look `kind` takes.
     public static func look(_ e: ActivityEntry) -> ActivityLook {
         switch e.kind {

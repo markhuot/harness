@@ -121,3 +121,51 @@ public struct SpecHistoryLine: Equatable, Sendable {
     /// The approved baseline
     public var baseline: Bool
 }
+
+/// The Details tab's spec editor: the text being edited and the revision it started from, which a
+/// save sends as `baseRevision` so it can't silently overwrite a revision the user hasn't seen.
+/// While the text is unchanged it follows the ticket's newer revisions; once the user has edited it,
+/// it keeps their text and the old base, so a save of a stale spec gets the 409 and the user picks
+/// Reload (take the newer spec) or Overwrite (save theirs over it).
+public struct SpecDraft: Equatable, Sendable {
+    /// What the field holds
+    public var text: String
+    /// The revision `text` started from
+    public private(set) var base: Int
+    /// That revision's text
+    public private(set) var original: String
+
+    public init(_ t: Ticket) {
+        text = t.spec
+        original = t.spec
+        base = SpecHistory.latest(t)
+    }
+
+    /// The user changed the text.
+    public var dirty: Bool { !Branches.jsEqual(text, original) }
+
+    /// The ticket changed: follow its spec unless the user is editing (or it's now what they wrote).
+    public mutating func follow(_ t: Ticket) {
+        if !dirty || Branches.jsEqual(text, t.spec) { self = SpecDraft(t) }
+    }
+
+    /// The PATCH for a save.
+    public var patch: UpdateTicketBody { UpdateTicketBody(spec: text, baseRevision: base) }
+
+    /// Drop the edit for the ticket's current spec.
+    public mutating func revert(_ t: Ticket) { self = SpecDraft(t) }
+
+    /// Reload after a conflict: the newer spec replaces the user's text.
+    public mutating func reload(_ c: SpecConflict) {
+        text = c.spec
+        original = c.spec
+        base = c.currentRevision
+    }
+
+    /// Overwrite after a conflict: keep the user's text, now based on the newer revision, so the
+    /// next `patch` replaces it.
+    public mutating func overwrite(_ c: SpecConflict) {
+        original = c.spec
+        base = c.currentRevision
+    }
+}
