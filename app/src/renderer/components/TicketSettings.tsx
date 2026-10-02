@@ -340,7 +340,7 @@ function RemoteId({ ticket, onSave }: { ticket: Ticket; onSave: (ref: ExternalRe
         ) : (
           <span className="field-hint">
             {ref
-              ? `Shown in place of ${ticket.key}${ref.source !== "manual" ? `. Linked by ${ref.source}` : ""}.`
+              ? `Shown in place of ${ticket.key}.`
               : "An ID from another system (Jira, GitHub) to show in place of the key. Many tickets can share one."}
           </span>
         )}

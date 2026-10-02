@@ -105,7 +105,7 @@ struct TicketDetailDetailsTab: View {
         }
         if let ref = ticket.externalRef {
             LabeledContent("External") {
-                let text = Text("\(Text(ref.key).font(.mono(14)))\(ref.url != nil ? " ↗" : "")\(Text(" · \(TicketDetailLogic.externalSource(ref))").foregroundStyle(c.text3))")
+                let text = Text("\(Text(ref.key).font(.mono(14)))\(ref.url != nil ? " ↗" : "")")
                     .font(.scaled(size: 14))
                     .foregroundStyle(ref.url != nil ? c.accentText : c.text)
                     .multilineTextAlignment(.trailing)

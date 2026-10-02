@@ -139,7 +139,6 @@ export function TicketDetails({
                 ) : (
                   <span className="mono">{ticket.externalRef.key}</span>
                 )}
-                <span className="muted"> · via {ticket.externalRef.source}</span>
               </span>
               {sharing.length > 0 && (
                 <>
