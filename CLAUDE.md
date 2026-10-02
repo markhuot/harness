@@ -86,8 +86,19 @@ If a publish fails partway, fix the cause and rerun it on the same tag, as long 
 release exists for that tag yet. Once a release is published, it stays: never move, delete, or
 reuse a pushed tag. If a published build is broken, fix it on `main` and cut a new tag.
 
+The install page can also carry a native beta card (the SwiftUI app as "Harness Beta", IPA hosted
+on the Vercel site). It's deployed separately from tagged releases with
+`bun ios/Tools/build.ts publish-beta` (see ios/README.md → Beta install page build).
+
 `publish-install.sh --no-publish` builds locally without any tag checks (add `--skip-ios` or
 `--skip-mac` to build one app). An untagged build numbers itself from the clock.
+
+`--ios-app=native` builds the iPhone and iPad app from the SwiftUI project in `ios/`
+(`ios/Tools/build.ts`) instead of the React Native app in `mobile/`. The default is
+`--ios-app=rn`, and releases use it until the native app reaches parity. With either value the
+bundle id, build number, checks, TestFlight upload, GitHub release and install page are the same.
+The IPA check looks for the SwiftUI binary instead of `main.jsbundle` (see ios/README.md →
+Releases).
 
 **TestFlight.** Step 5 also publishes the iPhone and iPad build to TestFlight
 (`mobile/Tools/testflight.ts`), and nothing else has to be run by hand:

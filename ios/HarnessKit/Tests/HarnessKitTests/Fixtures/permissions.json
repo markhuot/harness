@@ -1,0 +1,533 @@
+{
+  "permissionModeLabels": {
+    "auto": {
+      "label": "Auto",
+      "description": "A classifier approves routine actions and asks you about risky ones."
+    },
+    "ask": {
+      "label": "Ask",
+      "description": "Edits inside the working directory run; everything else asks you first."
+    },
+    "read_only": {
+      "label": "Read only",
+      "description": "The agent can read and run read-only commands, but can't change anything."
+    }
+  },
+  "resolvePermissionModeCases": [
+    {
+      "name": "ticket beats project",
+      "input": {
+        "ticket": {
+          "permissionMode": "read_only"
+        },
+        "project": {
+          "permissionMode": "ask"
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "read_only",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "null ticket inherits project",
+      "input": {
+        "ticket": {
+          "permissionMode": null
+        },
+        "project": {
+          "permissionMode": "ask"
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "ask",
+        "source": "project"
+      }
+    },
+    {
+      "name": "both null: settings",
+      "input": {
+        "ticket": {
+          "permissionMode": null
+        },
+        "project": {
+          "permissionMode": null
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "auto",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "no ticket or project",
+      "input": {
+        "ticket": null,
+        "project": null,
+        "settings": {
+          "permissionMode": "ask"
+        }
+      },
+      "output": {
+        "mode": "ask",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "ticket without project",
+      "input": {
+        "ticket": {
+          "permissionMode": "auto"
+        },
+        "project": null,
+        "settings": {
+          "permissionMode": "read_only"
+        }
+      },
+      "output": {
+        "mode": "auto",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "project without ticket",
+      "input": {
+        "ticket": null,
+        "project": {
+          "permissionMode": "read_only"
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "read_only",
+        "source": "project"
+      }
+    },
+    {
+      "name": "unknown ticket mode kept",
+      "input": {
+        "ticket": {
+          "permissionMode": "yolo"
+        },
+        "project": {
+          "permissionMode": "ask"
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "yolo",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "unknown settings mode kept",
+      "input": {
+        "ticket": null,
+        "project": null,
+        "settings": {
+          "permissionMode": "paranoid"
+        }
+      },
+      "output": {
+        "mode": "paranoid",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "empty ticket mode inherits",
+      "input": {
+        "ticket": {
+          "permissionMode": ""
+        },
+        "project": {
+          "permissionMode": "ask"
+        },
+        "settings": {
+          "permissionMode": "auto"
+        }
+      },
+      "output": {
+        "mode": "ask",
+        "source": "project"
+      }
+    },
+    {
+      "name": "empty project mode inherits",
+      "input": {
+        "ticket": null,
+        "project": {
+          "permissionMode": ""
+        },
+        "settings": {
+          "permissionMode": "read_only"
+        }
+      },
+      "output": {
+        "mode": "read_only",
+        "source": "settings"
+      }
+    }
+  ],
+  "resolvePermissionModeEntityCases": [
+    {
+      "name": "ticket override",
+      "input": {
+        "ticket": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "blocked",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "mode": "read_only",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "project override",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "mode": "ask",
+        "source": "project"
+      }
+    },
+    {
+      "name": "settings",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        }
+      },
+      "output": {
+        "mode": "read_only",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "no ticket",
+      "input": {
+        "ticket": null,
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        }
+      },
+      "output": {
+        "mode": "auto",
+        "source": "settings"
+      }
+    }
+  ]
+}

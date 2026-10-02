@@ -17,8 +17,11 @@
 # hands the group's public link to the install page. That step needs ASC_KEY_ID and ASC_ISSUER_ID
 # (see Tools/testflight.ts); --skip-testflight leaves TestFlight alone.
 #
-#   mobile/Tools/publish-install.sh [--skip-ios] [--skip-mac] [--skip-testflight] [--no-publish]
+#   mobile/Tools/publish-install.sh [--ios-app=rn|native] [--skip-ios] [--skip-mac] [--skip-testflight] [--no-publish]
 #
+# --ios-app picks which iPhone/iPad app is built: rn (the default) is this React Native app;
+# native is the SwiftUI app in ios/, archived and exported by ios/Tools/build.ts with the same bundle
+# id, so it replaces the RN app on devices and TestFlight. Everything after the IPA is the same.
 # --no-publish builds without the tag checks (untagged builds number themselves by the clock) and
 # never uploads to TestFlight.
 set -euo pipefail
@@ -31,9 +34,11 @@ TEAM_ID=47P4ZSALX4
 SITE=https://harness-install.vercel.app
 REPO=markhuot/harness
 VERCEL_PROJECT=harness-install
-SKIP_IOS=0; SKIP_MAC=0; SKIP_TESTFLIGHT=0; PUBLISH=1
+SKIP_IOS=0; SKIP_MAC=0; SKIP_TESTFLIGHT=0; PUBLISH=1; IOS_APP=rn
 for a in "$@"; do
   case "$a" in
+    --ios-app=rn|--ios-app=native) IOS_APP=${a#--ios-app=} ;;
+    --ios-app*) echo "error: --ios-app must be rn or native, got '${a#--ios-app}'" >&2; exit 2 ;;
     --skip-ios) SKIP_IOS=1 ;;
     --skip-mac) SKIP_MAC=1 ;;
     --skip-testflight) SKIP_TESTFLIGHT=1 ;;
@@ -109,7 +114,13 @@ check_no_token() {
 }
 
 # ------------------------------------------------------------------ iPhone
-if [[ $SKIP_IOS -eq 0 ]]; then
+if [[ $SKIP_IOS -eq 0 && $IOS_APP == native ]]; then
+  # The SwiftUI app: build.ts regenerates ios/Harness.xcodeproj (XcodeGen) and logs to ios/build/*.log.
+  NATIVE_BUILD=(bun "$ROOT/ios/Tools/build.ts")
+  echo "==> Building the native iOS app (ios/, build $BUILD_NUMBER)"
+  ARCHIVE=$("${NATIVE_BUILD[@]}" archive --build-number "$BUILD_NUMBER") || exit 1
+  IPA=$("${NATIVE_BUILD[@]}" export --method dev --archive-path "$ARCHIVE") || exit 1
+elif [[ $SKIP_IOS -eq 0 ]]; then
   # ios/ is gitignored and outlives the commits that change native dependencies, so regenerate it
   # from app.json and package.json on every build, never only when it's missing: an ios/ from before
   # expo-video still archived, and the app aborted on "Cannot find native module 'ExpoVideo'".
@@ -140,36 +151,41 @@ if [[ $SKIP_IOS -eq 0 ]]; then
     -exportOptionsPlist ExportOptions.plist \
     -exportPath build/ipa-dev \
     -allowProvisioningUpdates > build/export.log 2>&1 || { tail -40 build/export.log >&2; exit 1; }
+  ARCHIVE=build/Harness.xcarchive
   IPA=build/ipa-dev/Harness.ipa
   [[ -f "$IPA" ]] || { echo "error: $IPA was not produced" >&2; exit 1; }
+fi
 
+if [[ $SKIP_IOS -eq 0 ]]; then
+  # ios/Tools/build.ts verify checks the bundle id, CFBundleVersion and an arm64 executable, plus, for
+  # rn, an embedded main.jsbundle (no Metro) or, for native, a SwiftUI binary with no RN bundle or frameworks.
   echo "==> Verifying the IPA"
   CHECK=build/ipa-check
   rm -rf "$CHECK"; mkdir -p "$CHECK"
   unzip -q "$IPA" -d "$CHECK"
   APP="$CHECK/Payload/Harness.app"
   [[ -d "$APP" ]] || { echo "error: Payload/Harness.app missing from the IPA" >&2; exit 1; }
-  ACTUAL_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-  [[ "$ACTUAL_ID" == "$BUNDLE_ID" ]] || { echo "error: CFBundleIdentifier is '$ACTUAL_ID', expected '$BUNDLE_ID'" >&2; exit 1; }
-  [[ -s "$APP/main.jsbundle" ]] || { echo "error: main.jsbundle is not embedded; this build would try to load from Metro" >&2; exit 1; }
+  VERIFIED=$(bun "$ROOT/ios/Tools/build.ts" verify --kind "$IOS_APP" --bundle-id "$BUNDLE_ID" --build-number "$BUILD_NUMBER" "$APP") || exit 1
   IOS_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
   IOS_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
-  [[ "$IOS_BUILD" == "$BUILD_NUMBER" ]] || { echo "error: CFBundleVersion is '$IOS_BUILD', expected '$BUILD_NUMBER'" >&2; exit 1; }
   check_no_token "$CHECK"
   rm -rf "$CHECK"
   cp "$IPA" "$OUT/Harness.ipa"
-  echo "    $BUNDLE_ID $IOS_VERSION ($IOS_BUILD), main.jsbundle embedded, no token found"
+  echo "    $VERIFIED, no token found"
 
   if [[ $TESTFLIGHT -eq 1 ]]; then
     # A rerun of a publish that failed later on finds the build already uploaded; build numbers can't be reused.
     if bun Tools/testflight.ts uploaded "$BUILD_NUMBER"; then
       echo "==> TestFlight already has build $BUILD_NUMBER; not uploading again"
+    elif [[ $IOS_APP == native ]]; then
+      echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
+      bun "$ROOT/ios/Tools/build.ts" export --method testflight --archive-path "$ARCHIVE" >/dev/null || exit 1
     else
       echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
       # Sign in with the same API key testflight.ts uses, not the Apple account in Xcode's settings,
       # whose keychain token expires ("Failed to Use Accounts ... missing Xcode-Token").
       xcodebuild -exportArchive \
-        -archivePath build/Harness.xcarchive \
+        -archivePath "$ARCHIVE" \
         -exportOptionsPlist ExportOptions-testflight.plist \
         -exportPath build/ipa-testflight \
         -authenticationKeyPath "${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8}" \

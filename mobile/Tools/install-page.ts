@@ -3,9 +3,14 @@
 // manifest.plist, which must be served from HTTPS as text/xml) and the Mac build; both files live on
 // the GitHub release. Screenshots come from Install/img/ (see features below). No secrets go in any file.
 //
+// The page can also carry the native SwiftUI app (ios/) as a beta: its IPA is uploaded with the site
+// itself (Install/HarnessBeta.ipa, gitignored) by `bun ios/Tools/build.ts publish-beta`, outside
+// tagged releases, and installs from manifest-beta.plist. Every run saves its input to
+// Install/release.json, so the next run (a release or a new beta) starts from what's live.
+//
 //   bun Tools/install-page.ts '<json>'              (see ReleaseInfo)
 //   bun Tools/install-page.ts --from-json <file>    (the same, read from a file)
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export interface ReleaseInfo {
@@ -23,7 +28,15 @@ export interface ReleaseInfo {
   };
   /** null while the Mac build isn't on the release yet */
   mac: { url: string; version: string; bytes: number; notarized: boolean } | null;
+  /** The native app's development-signed beta (BETA_BUNDLE_ID), hosted on the site; absent when there isn't one */
+  iosBeta?: { url: string; version: string; build: string; bytes: number; builtAt: string } | null;
 }
+
+/** The beta installs beside the main app, so it has its own id (the native Debug id) and name. */
+export const BETA_BUNDLE_ID = "com.markhuot.harness.dev";
+export const BETA_TITLE = "Harness Beta";
+export const BETA_IPA = "HarnessBeta.ipa";
+export const BETA_MANIFEST = "manifest-beta.plist";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -34,6 +47,15 @@ export const CONTACT = "mark@markhuot.com";
 export const MAC_SERVICE_NOTE = "The app includes the service that runs your agents, so you don't need Bun or a copy of the Harness source.";
 
 export function manifest(r: ReleaseInfo): string {
+  return plist(r.site, { url: r.ios.url, version: r.ios.version, bundleId: "com.markhuot.harness", title: "Harness" });
+}
+
+/** The beta's OTA manifest, or null when the page has no beta. */
+export function betaManifest(r: ReleaseInfo): string | null {
+  return r.iosBeta ? plist(r.site, { url: r.iosBeta.url, version: r.iosBeta.version, bundleId: BETA_BUNDLE_ID, title: BETA_TITLE }) : null;
+}
+
+function plist(site: string, app: { url: string; version: string; bundleId: string; title: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -45,23 +67,23 @@ export function manifest(r: ReleaseInfo): string {
 			<array>
 				<dict>
 					<key>kind</key><string>software-package</string>
-					<key>url</key><string>${esc(r.ios.url)}</string>
+					<key>url</key><string>${esc(app.url)}</string>
 				</dict>
 				<dict>
 					<key>kind</key><string>display-image</string>
-					<key>url</key><string>${esc(r.site)}/icon57.png</string>
+					<key>url</key><string>${esc(site)}/icon57.png</string>
 				</dict>
 				<dict>
 					<key>kind</key><string>full-size-image</string>
-					<key>url</key><string>${esc(r.site)}/icon512.png</string>
+					<key>url</key><string>${esc(site)}/icon512.png</string>
 				</dict>
 			</array>
 			<key>metadata</key>
 			<dict>
-				<key>bundle-identifier</key><string>com.markhuot.harness</string>
-				<key>bundle-version</key><string>${esc(r.ios.version)}</string>
+				<key>bundle-identifier</key><string>${esc(app.bundleId)}</string>
+				<key>bundle-version</key><string>${esc(app.version)}</string>
 				<key>kind</key><string>software</string>
-				<key>title</key><string>Harness</string>
+				<key>title</key><string>${esc(app.title)}</string>
 			</dict>
 		</dict>
 	</array>
@@ -324,7 +346,13 @@ const css = `
   section.prose p { margin-top: 8px; }
 `;
 
-const head = (title: string) => `<!doctype html>
+/** Only on a page with the beta card, which sits under the iPhone card in the left column. */
+const betaCss = `
+  @media (min-width: 760px) { .installs section.beta { grid-column: 1; grid-row: 2; } }
+  h2 .tag { margin: 0 0 0 6px; vertical-align: 2px; }
+`;
+
+const head = (title: string, extraCss = "") => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -335,7 +363,7 @@ const head = (title: string) => `<!doctype html>
 <title>${esc(title)}</title>
 <link rel="apple-touch-icon" href="icon512.png">
 <link rel="icon" href="icon57.png">
-<style>${css}</style>
+<style>${css}${extraCss}</style>
 </head>`;
 
 function tile(f: (typeof features)[number]): string {
@@ -383,6 +411,22 @@ function iosSection(r: ReleaseInfo): string {
     </section>`;
 }
 
+/** The native beta, under the main iPhone card; "" without one, so the page is as it was. */
+function betaSection(r: ReleaseInfo): string {
+  const b = r.iosBeta;
+  if (!b) return "";
+  const itms = `itms-services://?action=download-manifest&url=${r.site}/${BETA_MANIFEST}`;
+  return `
+    <section class="beta">
+      <h2>Native iPhone app <span class="tag">Beta</span></h2>
+      <p>An early native SwiftUI rebuild of the iPhone and iPad app. It installs beside the main app as ${esc(BETA_TITLE)}, so you can try it and keep the main app.</p>
+      <a class="install secondary" href="${esc(itms)}">Install ${esc(BETA_TITLE)}</a>
+      <p class="alt">It's a development build, so it only installs on devices registered to Mark's Apple Developer team. Both apps open pairing links, so the QR code may open the main app instead. Typing the URL and token under <strong>Enter manually</strong> always works.</p>
+      <div class="meta">Version ${esc(b.version)} (${esc(b.build)}) &middot; ${mb(b.bytes)} &middot; ${esc(b.builtAt)}</div>
+    </section>
+`;
+}
+
 function macSection(r: ReleaseInfo): string {
   if (!r.mac) {
     return `    <section>
@@ -404,7 +448,7 @@ function macSection(r: ReleaseInfo): string {
 
 export function page(r: ReleaseInfo): string {
   const phoneStep = r.ios.testflightUrl ? "Get the iPhone app from TestFlight (below)" : "Install the iPhone app (below)";
-  return `${head("Install Harness")}
+  return `${head("Install Harness", r.iosBeta ? betaCss : "")}
 <body>
   <div class="stack">
     <section class="intro">
@@ -442,11 +486,11 @@ ${features.map(tile).join("\n")}
 
     <div class="installs">
 ${iosSection(r)}
-
+${betaSection(r)}
 ${macSection(r)}
     </div>
 
-    <p class="foot">Neither build contains a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
+    <p class="foot">${r.iosBeta ? "None of these builds contains" : "Neither build contains"} a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
   </div>
 </body>
 </html>
@@ -500,11 +544,32 @@ export function readInfo(argv: string[], read: (file: string) => string = (f) =>
   return JSON.parse(argv[0] ?? "{}") as ReleaseInfo;
 }
 
+/**
+ * A release doesn't know about the beta, so it keeps the previous page's beta, but only while that
+ * IPA is still in Install/ with the same size: it's deployed from there, and a card whose IPA isn't
+ * deployed would fail to install. `iosBeta: null` drops it on purpose.
+ */
+export function carryBeta(info: ReleaseInfo, previous: ReleaseInfo | null, betaIpaBytes: number | null): ReleaseInfo {
+  if (info.iosBeta !== undefined) return info;
+  const beta = previous?.iosBeta;
+  return { ...info, iosBeta: beta && beta.bytes === betaIpaBytes ? beta : null };
+}
+
 if (import.meta.main) {
-  const info = readInfo(process.argv.slice(2));
   const dir = resolve(import.meta.dir, "..", "Install");
+  const saved = join(dir, "release.json");
+  const ipa = join(dir, BETA_IPA);
+  const info = carryBeta(
+    readInfo(process.argv.slice(2)),
+    existsSync(saved) ? (JSON.parse(readFileSync(saved, "utf8")) as ReleaseInfo) : null,
+    existsSync(ipa) ? statSync(ipa).size : null,
+  );
   writeFileSync(join(dir, "index.html"), page(info));
   writeFileSync(join(dir, "privacy.html"), privacy());
   writeFileSync(join(dir, "manifest.plist"), manifest(info));
-  console.log(`wrote ${dir}/index.html, privacy.html and manifest.plist for ${info.tag}`);
+  const beta = betaManifest(info);
+  if (beta) writeFileSync(join(dir, BETA_MANIFEST), beta);
+  else rmSync(join(dir, BETA_MANIFEST), { force: true });
+  writeFileSync(saved, `${JSON.stringify(info, null, 2)}\n`);
+  console.log(`wrote ${dir}/index.html, privacy.html, manifest.plist${beta ? ` and ${BETA_MANIFEST}` : ""} for ${info.tag}`);
 }

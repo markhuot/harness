@@ -1,0 +1,1184 @@
+{
+  "approveMenuChoicesCases": [
+    {
+      "name": "git with a PR host",
+      "input": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "git without a PR host",
+      "input": {
+        "actions": [
+          "merge",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "outside git",
+      "input": {
+        "actions": [
+          "custom"
+        ],
+        "defaultAction": "custom",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "child on its parent's branch",
+      "input": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "open PR preselects pr",
+      "input": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "pr",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "service list with an unknown action",
+      "input": {
+        "actions": [
+          "merge",
+          "deploy",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "deploy"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "service sent an empty list",
+      "input": {
+        "actions": [],
+        "defaultAction": "custom",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "on its base branch",
+      "input": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup",
+      "input": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    }
+  ],
+  "approveRequestCases": [
+    {
+      "name": "no action completes without a run",
+      "input": {
+        "choice": "none",
+        "instructions": "ignored"
+      },
+      "output": {
+        "via": "complete",
+        "body": {
+          "skipAgent": true
+        }
+      }
+    },
+    {
+      "name": "custom sends trimmed instructions",
+      "input": {
+        "choice": "custom",
+        "instructions": "  squash it  "
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom",
+          "instructions": "squash it"
+        }
+      }
+    },
+    {
+      "name": "custom with blank instructions",
+      "input": {
+        "choice": "custom",
+        "instructions": "   "
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom"
+        }
+      }
+    },
+    {
+      "name": "custom without instructions",
+      "input": {
+        "choice": "custom"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom"
+        }
+      }
+    },
+    {
+      "name": "custom trims NBSP but not NEL",
+      "input": {
+        "choice": "custom",
+        "instructions": " deploy "
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom",
+          "instructions": "deploy"
+        }
+      }
+    },
+    {
+      "name": "merge never carries instructions",
+      "input": {
+        "choice": "merge",
+        "instructions": "stray"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "merge"
+        }
+      }
+    },
+    {
+      "name": "pr never carries instructions",
+      "input": {
+        "choice": "pr",
+        "instructions": "stray"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "pr"
+        }
+      }
+    },
+    {
+      "name": "cleanup never carries instructions",
+      "input": {
+        "choice": "cleanup",
+        "instructions": "stray"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "cleanup"
+        }
+      }
+    },
+    {
+      "name": "an unknown action passes through",
+      "input": {
+        "choice": "deploy",
+        "instructions": "x"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "deploy"
+        }
+      }
+    }
+  ],
+  "approveToastCases": [
+    {
+      "name": "no action names the ticket",
+      "input": {
+        "choice": "none",
+        "key": "MH-12"
+      },
+      "output": "MH-12 approved and marked done"
+    },
+    {
+      "name": "an action says Approved",
+      "input": {
+        "choice": "merge",
+        "key": "MH-12"
+      },
+      "output": "Approved"
+    },
+    {
+      "name": "custom",
+      "input": {
+        "choice": "custom",
+        "key": "MH-12"
+      },
+      "output": "Approved"
+    }
+  ],
+  "completeBodyCases": [
+    {
+      "name": "choice offered, no instructions",
+      "input": {
+        "choose": true,
+        "action": "pr",
+        "instructions": ""
+      },
+      "output": {
+        "action": "pr"
+      }
+    },
+    {
+      "name": "choice not offered, trimmed instructions",
+      "input": {
+        "choose": false,
+        "action": "pr",
+        "instructions": " note "
+      },
+      "output": {
+        "instructions": "note"
+      }
+    },
+    {
+      "name": "choice offered with instructions",
+      "input": {
+        "choose": true,
+        "action": "custom",
+        "instructions": "ship it\n"
+      },
+      "output": {
+        "action": "custom",
+        "instructions": "ship it"
+      }
+    },
+    {
+      "name": "nothing to send",
+      "input": {
+        "choose": false,
+        "action": "merge",
+        "instructions": " \t　"
+      },
+      "output": {}
+    }
+  ],
+  "completeMenuChoicesCases": [
+    {
+      "name": "git with a PR host, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "git with a PR host, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "git without a PR host, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "git without a PR host, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "outside git, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "outside git, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "child on its parent's branch, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": "harness/web-1"
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "child on its parent's branch, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": "harness/web-1"
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "open PR preselects pr, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "pr",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "open PR preselects pr, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "pr",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "service list with an unknown action, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "deploy",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "service sent an empty list, ready",
+      "input": {
+        "opts": {
+          "actions": [],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "service sent an empty list, not ready",
+      "input": {
+        "opts": {
+          "actions": [],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "on its base branch, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "on its base branch, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    }
+  ],
+  "completeMenuRequestCases": [
+    {
+      "name": "none",
+      "input": "none",
+      "output": {
+        "skipAgent": true
+      }
+    },
+    {
+      "name": "merge",
+      "input": "merge",
+      "output": {
+        "action": "merge"
+      }
+    },
+    {
+      "name": "pr",
+      "input": "pr",
+      "output": {
+        "action": "pr"
+      }
+    },
+    {
+      "name": "cleanup",
+      "input": "cleanup",
+      "output": {
+        "action": "cleanup"
+      }
+    },
+    {
+      "name": "custom",
+      "input": "custom",
+      "output": {
+        "action": "custom"
+      }
+    },
+    {
+      "name": "unknown",
+      "input": "deploy",
+      "output": {
+        "action": "deploy"
+      }
+    }
+  ],
+  "completionActionOptionsCases": [
+    {
+      "name": "merge alone",
+      "input": {
+        "actions": [
+          "merge"
+        ]
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Merge"
+        }
+      ]
+    },
+    {
+      "name": "every action",
+      "input": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ]
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Merge"
+        },
+        {
+          "value": "pr",
+          "label": "Open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
+      ]
+    },
+    {
+      "name": "order is kept",
+      "input": {
+        "actions": [
+          "pr",
+          "custom",
+          "merge"
+        ]
+      },
+      "output": [
+        {
+          "value": "pr",
+          "label": "Open PR"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        },
+        {
+          "value": "merge",
+          "label": "Merge"
+        }
+      ]
+    },
+    {
+      "name": "unknown action has no label",
+      "input": {
+        "actions": [
+          "deploy",
+          "merge"
+        ]
+      },
+      "output": [
+        {
+          "value": "deploy"
+        },
+        {
+          "value": "merge",
+          "label": "Merge"
+        }
+      ]
+    },
+    {
+      "name": "no actions",
+      "input": {
+        "actions": []
+      },
+      "output": []
+    }
+  ],
+  "names": {
+    "merge": "Merge",
+    "pr": "Open PR",
+    "cleanup": "Clean up",
+    "custom": "Custom"
+  },
+  "primaryApproveRequestCases": [
+    {
+      "name": "the preselected pr",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "pr",
+          "parentBranch": null
+        },
+        "ticket": {}
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "pr"
+        }
+      }
+    },
+    {
+      "name": "a child on its parent's branch merges",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": "harness/web-1"
+        },
+        "ticket": {
+          "completionAction": "pr"
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "merge"
+        }
+      }
+    },
+    {
+      "name": "a custom re-approval keeps its instructions",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "ticket": {
+          "completionAction": "custom",
+          "completionInstructions": "  deploy to staging "
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom",
+          "instructions": "deploy to staging"
+        }
+      }
+    },
+    {
+      "name": "a custom re-approval with null instructions",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "ticket": {
+          "completionAction": "custom",
+          "completionInstructions": null
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom"
+        }
+      }
+    },
+    {
+      "name": "plain no-git Approve drops stale instructions",
+      "input": {
+        "opts": {
+          "actions": [
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "ticket": {
+          "completionInstructions": "stale"
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom"
+        }
+      }
+    },
+    {
+      "name": "earlier merge with instructions, preselected custom",
+      "input": {
+        "opts": {
+          "actions": [
+            "custom"
+          ],
+          "defaultAction": "custom",
+          "parentBranch": null
+        },
+        "ticket": {
+          "completionAction": "merge",
+          "completionInstructions": "stale"
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "custom"
+        }
+      }
+    },
+    {
+      "name": "earlier custom, but the default is merge",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "merge",
+          "parentBranch": null
+        },
+        "ticket": {
+          "completionAction": "custom",
+          "completionInstructions": "x"
+        }
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "merge"
+        }
+      }
+    }
+  ]
+}

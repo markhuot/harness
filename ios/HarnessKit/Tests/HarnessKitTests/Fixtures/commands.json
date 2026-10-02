@@ -1,0 +1,1048 @@
+{
+  "activeCommandCases": [
+    {
+      "name": "slash at the start",
+      "input": {
+        "text": "/co",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "co"
+      }
+    },
+    {
+      "name": "bare slash",
+      "input": {
+        "text": "/",
+        "caret": 1
+      },
+      "output": {
+        "start": 0,
+        "end": 1,
+        "query": ""
+      }
+    },
+    {
+      "name": "slash after text",
+      "input": {
+        "text": "see /co",
+        "caret": 7
+      },
+      "output": null
+    },
+    {
+      "name": "slash after a space",
+      "input": {
+        "text": " /co",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "slash inside a path",
+      "input": {
+        "text": "src/co",
+        "caret": 6
+      },
+      "output": null
+    },
+    {
+      "name": "caret in the arguments",
+      "input": {
+        "text": "/code-walk this",
+        "caret": 15
+      },
+      "output": null
+    },
+    {
+      "name": "caret right after the space",
+      "input": {
+        "text": "/code-walk ",
+        "caret": 11
+      },
+      "output": null
+    },
+    {
+      "name": "caret before the slash",
+      "input": {
+        "text": "/code",
+        "caret": 0
+      },
+      "output": null
+    },
+    {
+      "name": "caret mid-name",
+      "input": {
+        "text": "/code-walk this branch",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 10,
+        "query": "co"
+      }
+    },
+    {
+      "name": "empty text",
+      "input": {
+        "text": "",
+        "caret": 0
+      },
+      "output": null
+    },
+    {
+      "name": "caret past the end",
+      "input": {
+        "text": "/co",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "negative caret",
+      "input": {
+        "text": "/co",
+        "caret": -1
+      },
+      "output": null
+    },
+    {
+      "name": "name ends at a newline",
+      "input": {
+        "text": "/code\nmore",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 5,
+        "query": "co"
+      }
+    },
+    {
+      "name": "name ends at NBSP",
+      "input": {
+        "text": "/code x",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 5,
+        "query": "co"
+      }
+    },
+    {
+      "name": "NEL is not whitespace",
+      "input": {
+        "text": "/codex",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 7,
+        "query": "co"
+      }
+    },
+    {
+      "name": "tab in the query",
+      "input": {
+        "text": "/a\tb",
+        "caret": 4
+      },
+      "output": null
+    },
+    {
+      "name": "emoji name",
+      "input": {
+        "text": "/😀x y",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 4,
+        "query": "😀"
+      }
+    },
+    {
+      "name": "combining mark name",
+      "input": {
+        "text": "/é",
+        "caret": 3
+      },
+      "output": {
+        "start": 0,
+        "end": 3,
+        "query": "é"
+      }
+    },
+    {
+      "name": "second line slash",
+      "input": {
+        "text": "x\n/co",
+        "caret": 5
+      },
+      "output": null
+    }
+  ],
+  "insertCommandCases": [
+    {
+      "name": "replaces the typed name",
+      "input": {
+        "text": "/co",
+        "command": {
+          "start": 0,
+          "end": 3,
+          "query": "co"
+        },
+        "name": "code-walk"
+      },
+      "output": {
+        "text": "/code-walk ",
+        "caret": 11
+      }
+    },
+    {
+      "name": "keeps the arguments",
+      "input": {
+        "text": "/co this branch",
+        "command": {
+          "start": 0,
+          "end": 3,
+          "query": "co"
+        },
+        "name": "code-walk"
+      },
+      "output": {
+        "text": "/code-walk this branch",
+        "caret": 11
+      }
+    },
+    {
+      "name": "replaces the whole word mid-name",
+      "input": {
+        "text": "/cowalk",
+        "command": {
+          "start": 0,
+          "end": 7,
+          "query": "co"
+        },
+        "name": "code-walk"
+      },
+      "output": {
+        "text": "/code-walk ",
+        "caret": 11
+      }
+    },
+    {
+      "name": "newline after keeps it",
+      "input": {
+        "text": "/co\nmore",
+        "command": {
+          "start": 0,
+          "end": 3,
+          "query": "co"
+        },
+        "name": "code-walk"
+      },
+      "output": {
+        "text": "/code-walk\nmore",
+        "caret": 11
+      }
+    },
+    {
+      "name": "NBSP after keeps it",
+      "input": {
+        "text": "/co more",
+        "command": {
+          "start": 0,
+          "end": 3,
+          "query": "co"
+        },
+        "name": "code-walk"
+      },
+      "output": {
+        "text": "/code-walk more",
+        "caret": 11
+      }
+    },
+    {
+      "name": "emoji name counts UTF-16",
+      "input": {
+        "text": "/",
+        "command": {
+          "start": 0,
+          "end": 1,
+          "query": ""
+        },
+        "name": "😀"
+      },
+      "output": {
+        "text": "/😀 ",
+        "caret": 4
+      }
+    },
+    {
+      "name": "namespaced name",
+      "input": {
+        "text": "/dep",
+        "command": {
+          "start": 0,
+          "end": 4,
+          "query": "dep"
+        },
+        "name": "vercel:deploy"
+      },
+      "output": {
+        "text": "/vercel:deploy ",
+        "caret": 15
+      }
+    },
+    {
+      "name": "empty name",
+      "input": {
+        "text": "/",
+        "command": {
+          "start": 0,
+          "end": 1,
+          "query": ""
+        },
+        "name": ""
+      },
+      "output": {
+        "text": "/ ",
+        "caret": 2
+      }
+    }
+  ],
+  "rankCommandsCases": [
+    {
+      "name": "review",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "review"
+      },
+      "output": [
+        {
+          "name": "review-on-staging",
+          "description": "Merge into staging for a code review"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        }
+      ]
+    },
+    {
+      "name": "deploy",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "deploy"
+      },
+      "output": [
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        }
+      ]
+    },
+    {
+      "name": "ode",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "ode"
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        }
+      ]
+    },
+    {
+      "name": "description only",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "summary"
+      },
+      "output": [
+        {
+          "name": "compact",
+          "description": "Clear history but keep a summary"
+        }
+      ]
+    },
+    {
+      "name": "description current",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "current"
+      },
+      "output": [
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        }
+      ]
+    },
+    {
+      "name": "names beat descriptions",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "code"
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        }
+      ]
+    },
+    {
+      "name": "ties keep driver order",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "co"
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        },
+        {
+          "name": "compact",
+          "description": "Clear history but keep a summary"
+        }
+      ]
+    },
+    {
+      "name": "case-insensitive",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "VERCEL"
+      },
+      "output": [
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        }
+      ]
+    },
+    {
+      "name": "empty lists everything typeable",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": ""
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        },
+        {
+          "name": "review-on-staging",
+          "description": "Merge into staging for a code review"
+        },
+        {
+          "name": "code-review",
+          "description": "Review the current diff"
+        },
+        {
+          "name": "compact",
+          "description": "Clear history but keep a summary"
+        }
+      ]
+    },
+    {
+      "name": "whitespace names never show",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "figma"
+      },
+      "output": []
+    },
+    {
+      "name": "no match",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "zzz"
+      },
+      "output": []
+    },
+    {
+      "name": "limit 2",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "",
+        "limit": 2
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        }
+      ]
+    },
+    {
+      "name": "limit 0",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "",
+        "limit": 0
+      },
+      "output": []
+    },
+    {
+      "name": "negative limit slices from the end",
+      "input": {
+        "commands": [
+          {
+            "name": "code-walk",
+            "description": "Walk a user through code (user)"
+          },
+          {
+            "name": "vercel:deploy",
+            "description": "Deploy the current project to Vercel"
+          },
+          {
+            "name": "review-on-staging",
+            "description": "Merge into staging for a code review"
+          },
+          {
+            "name": "code-review",
+            "description": "Review the current diff"
+          },
+          {
+            "name": "compact",
+            "description": "Clear history but keep a summary"
+          },
+          {
+            "name": "claude.ai Figma:create_rules (MCP)",
+            "description": "Figma rules"
+          }
+        ],
+        "query": "",
+        "limit": -2
+      },
+      "output": [
+        {
+          "name": "code-walk",
+          "description": "Walk a user through code (user)"
+        },
+        {
+          "name": "vercel:deploy",
+          "description": "Deploy the current project to Vercel"
+        },
+        {
+          "name": "review-on-staging",
+          "description": "Merge into staging for a code review"
+        }
+      ]
+    },
+    {
+      "name": "underscore part",
+      "input": {
+        "commands": [
+          {
+            "name": "a_bc",
+            "description": ""
+          },
+          {
+            "name": "xbc",
+            "description": ""
+          }
+        ],
+        "query": "bc"
+      },
+      "output": [
+        {
+          "name": "a_bc",
+          "description": ""
+        },
+        {
+          "name": "xbc",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "empty name skipped",
+      "input": {
+        "commands": [
+          {
+            "name": "",
+            "description": "anything"
+          },
+          {
+            "name": "x",
+            "description": "anything"
+          }
+        ],
+        "query": "any"
+      },
+      "output": [
+        {
+          "name": "x",
+          "description": "anything"
+        }
+      ]
+    },
+    {
+      "name": "tab and NBSP names skipped",
+      "input": {
+        "commands": [
+          {
+            "name": "a\tb",
+            "description": ""
+          },
+          {
+            "name": "a b",
+            "description": ""
+          },
+          {
+            "name": "ab",
+            "description": ""
+          }
+        ],
+        "query": "a"
+      },
+      "output": [
+        {
+          "name": "ab",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "argument hint kept",
+      "input": {
+        "commands": [
+          {
+            "name": "pr",
+            "description": "Open a PR",
+            "argumentHint": "[number]"
+          }
+        ],
+        "query": "p"
+      },
+      "output": [
+        {
+          "name": "pr",
+          "description": "Open a PR",
+          "argumentHint": "[number]"
+        }
+      ]
+    },
+    {
+      "name": "final sigma in a description",
+      "input": {
+        "commands": [
+          {
+            "name": "x",
+            "description": "ΟΔΟΣ"
+          }
+        ],
+        "query": "οδος"
+      },
+      "output": [
+        {
+          "name": "x",
+          "description": "ΟΔΟΣ"
+        }
+      ]
+    },
+    {
+      "name": "unicode lower-casing in a name",
+      "input": {
+        "commands": [
+          {
+            "name": "Über",
+            "description": ""
+          }
+        ],
+        "query": "üb"
+      },
+      "output": [
+        {
+          "name": "Über",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "colon part prefix ranks before contains",
+      "input": {
+        "commands": [
+          {
+            "name": "xdeploy",
+            "description": ""
+          },
+          {
+            "name": "a:deploy",
+            "description": ""
+          }
+        ],
+        "query": "dep"
+      },
+      "output": [
+        {
+          "name": "a:deploy",
+          "description": ""
+        },
+        {
+          "name": "xdeploy",
+          "description": ""
+        }
+      ]
+    }
+  ]
+}

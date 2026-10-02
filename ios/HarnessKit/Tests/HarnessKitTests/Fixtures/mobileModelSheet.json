@@ -1,0 +1,905 @@
+{
+  "choiceSectionsCases": [
+    {
+      "name": "no query: Default first, then a section per driver",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "  ",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        },
+        {
+          "key": "claude-code",
+          "title": "Claude Code",
+          "data": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        },
+        {
+          "key": "openrouter",
+          "title": "OpenRouter",
+          "data": [
+            {
+              "value": "openrouter\u0001meta/llama-4",
+              "label": "Llama 4"
+            },
+            {
+              "value": "openrouter\u0001anthropic/sonnet-5",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a query hides Default and unmatched drivers",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "sonnet",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "claude-code",
+          "title": "Claude Code",
+          "data": [
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        },
+        {
+          "key": "openrouter",
+          "title": "OpenRouter",
+          "data": [
+            {
+              "value": "openrouter\u0001anthropic/sonnet-5",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Default stays when its label matches every word",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "default opus",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Default label match is case-insensitive",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "DEFAULT",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Default needs every word",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "default llama",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": []
+    },
+    {
+      "name": "a driver-name word narrows to that driver",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "openrouter sonnet",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "openrouter",
+          "title": "OpenRouter",
+          "data": [
+            {
+              "value": "openrouter\u0001anthropic/sonnet-5",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a flat group keeps a null heading",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": null,
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        },
+        {
+          "key": "claude-code",
+          "title": null,
+          "data": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flat group matched by driverNames",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": null,
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "claude sonnet",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "claude-code",
+          "title": null,
+          "data": [
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flat group without driverNames",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": null,
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "claude sonnet"
+      },
+      "output": [
+        {
+          "key": "claude-code",
+          "title": null,
+          "data": [
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no match: nothing",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "gpt",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": []
+    },
+    {
+      "name": "no Default: only driver sections",
+      "input": {
+        "choices": {
+          "default": null,
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "claude-code",
+          "title": "Claude Code",
+          "data": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        },
+        {
+          "key": "openrouter",
+          "title": "OpenRouter",
+          "data": [
+            {
+              "value": "openrouter\u0001meta/llama-4",
+              "label": "Llama 4"
+            },
+            {
+              "value": "openrouter\u0001anthropic/sonnet-5",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no Default, a query",
+      "input": {
+        "choices": {
+          "default": null,
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "llama",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "openrouter",
+          "title": "OpenRouter",
+          "data": [
+            {
+              "value": "openrouter\u0001meta/llama-4",
+              "label": "Llama 4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Default only",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": []
+        },
+        "query": ""
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Default with an empty label and a query",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": ""
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "opus"
+      },
+      "output": [
+        {
+          "key": "claude-code",
+          "title": "Claude Code",
+          "data": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NBSP and tab split words",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "default claude\topus",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (Claude Code · Opus)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NEL joins words",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (Claude Code · Opus)"
+          },
+          "groups": [
+            {
+              "driver": "claude-code",
+              "label": "Claude Code",
+              "options": [
+                {
+                  "value": "claude-code\u0001opus",
+                  "label": "Opus"
+                },
+                {
+                  "value": "claude-code\u0001sonnet",
+                  "label": "Sonnet"
+                }
+              ]
+            },
+            {
+              "driver": "openrouter",
+              "label": "OpenRouter",
+              "options": [
+                {
+                  "value": "openrouter\u0001meta/llama-4",
+                  "label": "Llama 4"
+                },
+                {
+                  "value": "openrouter\u0001anthropic/sonnet-5",
+                  "label": "Sonnet 5"
+                }
+              ]
+            }
+          ]
+        },
+        "query": "defaultopus",
+        "driverNames": {
+          "claude-code": "Claude Code",
+          "openrouter": "OpenRouter"
+        }
+      },
+      "output": []
+    },
+    {
+      "name": "Default with a final sigma",
+      "input": {
+        "choices": {
+          "default": {
+            "value": "",
+            "label": "Default (ΟΔΟΣ)"
+          },
+          "groups": []
+        },
+        "query": "οδος"
+      },
+      "output": [
+        {
+          "key": "",
+          "title": null,
+          "data": [
+            {
+              "value": "",
+              "label": "Default (ΟΔΟΣ)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

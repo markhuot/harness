@@ -1,0 +1,1951 @@
+{
+  "approveLabelCases": [
+    {
+      "name": "nothing at all",
+      "input": {
+        "ticket": null,
+        "project": null
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "earlier custom beats an open PR",
+      "input": {
+        "ticket": {
+          "completionAction": "custom",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve"
+    },
+    {
+      "name": "an open PR preselects pr",
+      "input": {
+        "ticket": {
+          "completionAction": null,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and open PR"
+    },
+    {
+      "name": "no earlier choice: the project default",
+      "input": {
+        "ticket": {
+          "completionAction": null,
+          "pullRequestUrl": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "an earlier pr the project no longer offers doesn't stick",
+      "input": {
+        "ticket": {
+          "completionAction": "pr",
+          "pullRequestUrl": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null,
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "an open PR without a PR host",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "an empty pull request url is falsy",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "child of a parent on a branch only merges",
+      "input": {
+        "ticket": {
+          "completionAction": "pr"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "child of a parent in review still merges into its branch",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "review"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "parent without a branch changes nothing",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": null
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "parent with an empty branch changes nothing",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": ""
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "a finished parent releases the child",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "done"
+        }
+      },
+      "output": "Approve and open PR"
+    },
+    {
+      "name": "a child with its own base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": "release"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": "Approve and open PR"
+    },
+    {
+      "name": "a child with a null base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "a child with an empty base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "outside git: custom only",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": "Approve"
+    },
+    {
+      "name": "earlier unknown action the service offers",
+      "input": {
+        "ticket": {
+          "completionAction": "deploy"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null,
+          "completionActions": [
+            "deploy",
+            "custom"
+          ]
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "earlier unknown action not offered",
+      "input": {
+        "ticket": {
+          "completionAction": "deploy"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "only an unknown action offered",
+      "input": {
+        "ticket": null,
+        "project": {
+          "completionActions": [
+            "deploy"
+          ]
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "the service sent an empty list",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": []
+        }
+      },
+      "output": "Approve"
+    },
+    {
+      "name": "on its base branch: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": "feature/pr-head"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        },
+        "base": "feature/pr-head"
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "on its base branch, project default pr: first action left",
+      "input": {
+        "ticket": {
+          "branch": "feature/pr-head"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "base": "feature/pr-head"
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "on its base branch with an earlier merge",
+      "input": {
+        "ticket": {
+          "branch": "x",
+          "completionAction": "merge"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        },
+        "base": "x"
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "on its base branch outside git",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        },
+        "base": "x"
+      },
+      "output": "Approve"
+    },
+    {
+      "name": "a different base branch changes nothing",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "main"
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "an empty branch is never on base",
+      "input": {
+        "ticket": {
+          "branch": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": ""
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "no base known",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": null
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "a child on its parent's branch ignores base",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        },
+        "base": "harness/web-1"
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "earlier cleanup sticks",
+      "input": {
+        "ticket": {
+          "completionAction": "cleanup",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "on base, only merge and pr offered",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": [
+            "merge",
+            "pr"
+          ]
+        },
+        "base": "x"
+      },
+      "output": "Approve"
+    }
+  ],
+  "completionOptionsCases": [
+    {
+      "name": "nothing at all",
+      "input": {
+        "ticket": null,
+        "project": null
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "earlier custom beats an open PR",
+      "input": {
+        "ticket": {
+          "completionAction": "custom",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an open PR preselects pr",
+      "input": {
+        "ticket": {
+          "completionAction": null,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "pr",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no earlier choice: the project default",
+      "input": {
+        "ticket": {
+          "completionAction": null,
+          "pullRequestUrl": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an earlier pr the project no longer offers doesn't stick",
+      "input": {
+        "ticket": {
+          "completionAction": "pr",
+          "pullRequestUrl": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null,
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an open PR without a PR host",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an empty pull request url is falsy",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "child of a parent on a branch only merges",
+      "input": {
+        "ticket": {
+          "completionAction": "pr"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
+    },
+    {
+      "name": "child of a parent in review still merges into its branch",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "review"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
+    },
+    {
+      "name": "parent without a branch changes nothing",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": null
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "parent with an empty branch changes nothing",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": ""
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a finished parent releases the child",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "done"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "pr",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a child with its own base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": "release"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "pr",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a child with a null base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
+    },
+    {
+      "name": "a child with an empty base branch",
+      "input": {
+        "ticket": {
+          "baseBranch": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
+    },
+    {
+      "name": "outside git: custom only",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "actions": [
+          "custom"
+        ],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "earlier unknown action the service offers",
+      "input": {
+        "ticket": {
+          "completionAction": "deploy"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null,
+          "completionActions": [
+            "deploy",
+            "custom"
+          ]
+        }
+      },
+      "output": {
+        "actions": [
+          "deploy",
+          "custom"
+        ],
+        "defaultAction": "deploy",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "earlier unknown action not offered",
+      "input": {
+        "ticket": {
+          "completionAction": "deploy"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "only an unknown action offered",
+      "input": {
+        "ticket": null,
+        "project": {
+          "completionActions": [
+            "deploy"
+          ]
+        }
+      },
+      "output": {
+        "actions": [
+          "deploy"
+        ],
+        "defaultAction": "deploy",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "the service sent an empty list",
+      "input": {
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": []
+        }
+      },
+      "output": {
+        "actions": [],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "on its base branch: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": "feature/pr-head"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        },
+        "base": "feature/pr-head"
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "on its base branch, project default pr: first action left",
+      "input": {
+        "ticket": {
+          "branch": "feature/pr-head"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        },
+        "base": "feature/pr-head"
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "on its base branch with an earlier merge",
+      "input": {
+        "ticket": {
+          "branch": "x",
+          "completionAction": "merge"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        },
+        "base": "x"
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "on its base branch outside git",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        },
+        "base": "x"
+      },
+      "output": {
+        "actions": [
+          "custom"
+        ],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a different base branch changes nothing",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "main"
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an empty branch is never on base",
+      "input": {
+        "ticket": {
+          "branch": ""
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": ""
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no base known",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": null
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a child on its parent's branch ignores base",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        },
+        "base": "harness/web-1"
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
+    },
+    {
+      "name": "earlier cleanup sticks",
+      "input": {
+        "ticket": {
+          "completionAction": "cleanup",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "on base, only merge and pr offered",
+      "input": {
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": [
+            "merge",
+            "pr"
+          ]
+        },
+        "base": "x"
+      },
+      "output": {
+        "actions": [],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    }
+  ],
+  "conductorManagedReasonCases": [
+    {
+      "name": "plain",
+      "input": {
+        "key": "WEB-1"
+      },
+      "output": "Conductor managed: WEB-1 approves and lands this ticket"
+    },
+    {
+      "name": "a remote key",
+      "input": {
+        "key": "JIRA-62"
+      },
+      "output": "Conductor managed: JIRA-62 approves and lands this ticket"
+    }
+  ],
+  "isCompletionActionCases": [
+    {
+      "name": "merge",
+      "input": "merge",
+      "output": true
+    },
+    {
+      "name": "pr",
+      "input": "pr",
+      "output": true
+    },
+    {
+      "name": "cleanup",
+      "input": "cleanup",
+      "output": true
+    },
+    {
+      "name": "custom",
+      "input": "custom",
+      "output": true
+    },
+    {
+      "name": "unknown string",
+      "input": "deploy",
+      "output": false
+    },
+    {
+      "name": "upper case",
+      "input": "MERGE",
+      "output": false
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": false
+    },
+    {
+      "name": "number",
+      "input": 1,
+      "output": false
+    },
+    {
+      "name": "array",
+      "input": [
+        "merge"
+      ],
+      "output": false
+    }
+  ],
+  "labels": {
+    "COMPLETION_ACTION_LABELS": {
+      "merge": "Approve and merge",
+      "pr": "Approve and open PR",
+      "cleanup": "Approve and clean up",
+      "custom": "Approve and…"
+    },
+    "APPROVE_NO_ACTION_LABEL": "Approve and take no action"
+  },
+  "managingConductorCases": [
+    {
+      "name": "a child of a running conductor",
+      "input": {
+        "ticket": {
+          "parentId": "t1"
+        },
+        "parent": {
+          "key": "WEB-1",
+          "status": "in_progress"
+        }
+      },
+      "output": {
+        "key": "WEB-1",
+        "status": "in_progress"
+      }
+    },
+    {
+      "name": "a child of a conductor in review",
+      "input": {
+        "ticket": {
+          "parentId": "t1"
+        },
+        "parent": {
+          "key": "WEB-1",
+          "status": "review"
+        }
+      },
+      "output": {
+        "key": "WEB-1",
+        "status": "review"
+      }
+    },
+    {
+      "name": "a done parent hands the child back",
+      "input": {
+        "ticket": {
+          "parentId": "t1"
+        },
+        "parent": {
+          "key": "WEB-1",
+          "status": "done"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "a parent with no status still manages",
+      "input": {
+        "ticket": {
+          "parentId": "t1"
+        },
+        "parent": {
+          "key": "WEB-1"
+        }
+      },
+      "output": {
+        "key": "WEB-1"
+      }
+    },
+    {
+      "name": "no parent id",
+      "input": {
+        "ticket": {
+          "parentId": null
+        },
+        "parent": {
+          "key": "WEB-1",
+          "status": "in_progress"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "empty parent id",
+      "input": {
+        "ticket": {
+          "parentId": ""
+        },
+        "parent": {
+          "key": "WEB-1",
+          "status": "in_progress"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "parent not loaded",
+      "input": {
+        "ticket": {
+          "parentId": "t1"
+        },
+        "parent": null
+      },
+      "output": null
+    },
+    {
+      "name": "no ticket",
+      "input": {
+        "ticket": null,
+        "parent": {
+          "key": "WEB-1",
+          "status": "in_progress"
+        }
+      },
+      "output": null
+    }
+  ],
+  "offeredCompletionActionsCases": [
+    {
+      "name": "no project",
+      "input": null,
+      "output": [
+        "merge",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "empty project (older payload)",
+      "input": {},
+      "output": [
+        "merge",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "outside git",
+      "input": {
+        "isGit": false,
+        "pullRequestHost": null
+      },
+      "output": [
+        "custom"
+      ]
+    },
+    {
+      "name": "git without a PR host",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null
+      },
+      "output": [
+        "merge",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "git with a gh host",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com"
+      },
+      "output": [
+        "merge",
+        "pr",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "empty PR host is falsy",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": ""
+      },
+      "output": [
+        "merge",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "isGit missing but PR host set",
+      "input": {
+        "pullRequestHost": "github.com"
+      },
+      "output": [
+        "merge",
+        "pr",
+        "cleanup",
+        "custom"
+      ]
+    },
+    {
+      "name": "the service's list wins",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com",
+        "completionActions": [
+          "merge",
+          "custom"
+        ]
+      },
+      "output": [
+        "merge",
+        "custom"
+      ]
+    },
+    {
+      "name": "the service sent an empty list",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com",
+        "completionActions": []
+      },
+      "output": []
+    },
+    {
+      "name": "the service offers an unknown action",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionActions": [
+          "deploy",
+          "custom"
+        ]
+      },
+      "output": [
+        "deploy",
+        "custom"
+      ]
+    }
+  ],
+  "projectCompletionDefaultCases": [
+    {
+      "name": "no project",
+      "input": null,
+      "output": "merge"
+    },
+    {
+      "name": "empty project (older payload)",
+      "input": {},
+      "output": "merge"
+    },
+    {
+      "name": "outside git",
+      "input": {
+        "isGit": false,
+        "pullRequestHost": null
+      },
+      "output": "custom"
+    },
+    {
+      "name": "git without a PR host",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null
+      },
+      "output": "merge"
+    },
+    {
+      "name": "git with a gh host",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com"
+      },
+      "output": "merge"
+    },
+    {
+      "name": "empty PR host is falsy",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": ""
+      },
+      "output": "merge"
+    },
+    {
+      "name": "isGit missing but PR host set",
+      "input": {
+        "pullRequestHost": "github.com"
+      },
+      "output": "merge"
+    },
+    {
+      "name": "the service's list wins",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com",
+        "completionActions": [
+          "merge",
+          "custom"
+        ]
+      },
+      "output": "merge"
+    },
+    {
+      "name": "the service sent an empty list",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com",
+        "completionActions": []
+      },
+      "output": "custom"
+    },
+    {
+      "name": "the service offers an unknown action",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionActions": [
+          "deploy",
+          "custom"
+        ]
+      },
+      "output": "deploy"
+    },
+    {
+      "name": "stored pr with a gh host",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": "github.com",
+        "completionAction": "pr"
+      },
+      "output": "pr"
+    },
+    {
+      "name": "stored pr without a host falls back to merge",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionAction": "pr"
+      },
+      "output": "merge"
+    },
+    {
+      "name": "stored pr outside git falls back to custom",
+      "input": {
+        "isGit": false,
+        "pullRequestHost": null,
+        "completionAction": "pr"
+      },
+      "output": "custom"
+    },
+    {
+      "name": "stored merge outside git falls back to custom",
+      "input": {
+        "isGit": false,
+        "pullRequestHost": null,
+        "completionAction": "merge"
+      },
+      "output": "custom"
+    },
+    {
+      "name": "stored custom in git",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionAction": "custom"
+      },
+      "output": "custom"
+    },
+    {
+      "name": "stored unknown action the service offers",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionAction": "deploy",
+        "completionActions": [
+          "deploy",
+          "custom"
+        ]
+      },
+      "output": "deploy"
+    },
+    {
+      "name": "stored unknown action not offered",
+      "input": {
+        "isGit": true,
+        "pullRequestHost": null,
+        "completionAction": "deploy"
+      },
+      "output": "merge"
+    },
+    {
+      "name": "only an unknown action offered",
+      "input": {
+        "completionActions": [
+          "deploy"
+        ]
+      },
+      "output": "deploy"
+    }
+  ],
+  "resolveCompletionActionCases": [
+    {
+      "name": "nothing requested: the preselected one",
+      "input": {
+        "requested": null,
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        }
+      },
+      "output": {
+        "action": "pr",
+        "error": null
+      }
+    },
+    {
+      "name": "empty request: the preselected one",
+      "input": {
+        "requested": "",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": "merge",
+        "error": null
+      }
+    },
+    {
+      "name": "an offered action passes",
+      "input": {
+        "requested": "custom",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": "custom",
+        "error": null
+      }
+    },
+    {
+      "name": "pr without a PR host",
+      "input": {
+        "requested": "pr",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"pr\" needs a git remote on a host gh is logged into (run gh auth login)"
+      }
+    },
+    {
+      "name": "merge outside git",
+      "input": {
+        "requested": "merge",
+        "ticket": null,
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"merge\" needs a git repository"
+      }
+    },
+    {
+      "name": "pr on a child of a parent with a branch",
+      "input": {
+        "requested": "pr",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket merges into its parent's branch harness/web-1, so it can't complete with \"pr\""
+      }
+    },
+    {
+      "name": "custom on a child of a parent with a branch",
+      "input": {
+        "requested": "custom",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket merges into its parent's branch harness/web-1, so it can't complete with \"custom\""
+      }
+    },
+    {
+      "name": "merge on a child of a parent with a branch",
+      "input": {
+        "requested": "merge",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "action": "merge",
+        "error": null
+      }
+    },
+    {
+      "name": "custom not offered by the service's list",
+      "input": {
+        "requested": "custom",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": [
+            "merge",
+            "pr"
+          ]
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"custom\" isn't offered here (offered: merge, pr)"
+      }
+    },
+    {
+      "name": "an unknown action",
+      "input": {
+        "requested": "deploy",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"deploy\" isn't offered here (offered: merge, pr, cleanup, custom)"
+      }
+    },
+    {
+      "name": "an unknown action the service offers",
+      "input": {
+        "requested": "deploy",
+        "ticket": null,
+        "project": {
+          "completionActions": [
+            "deploy"
+          ]
+        }
+      },
+      "output": {
+        "action": "deploy",
+        "error": null
+      }
+    },
+    {
+      "name": "cleanup in git",
+      "input": {
+        "requested": "cleanup",
+        "ticket": null,
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": "cleanup",
+        "error": null
+      }
+    },
+    {
+      "name": "cleanup outside git",
+      "input": {
+        "requested": "cleanup",
+        "ticket": null,
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"cleanup\" needs a git repository"
+      }
+    },
+    {
+      "name": "merge on its base branch",
+      "input": {
+        "requested": "merge",
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "x"
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket works on its base branch x, so there is nothing to merge: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "pr on its base branch",
+      "input": {
+        "requested": "pr",
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "x"
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket works on its base branch x, so there is nothing to open a pull request from: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "pr on its base branch without a PR host",
+      "input": {
+        "requested": "pr",
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        },
+        "base": "x"
+      },
+      "output": {
+        "action": null,
+        "error": "\"pr\" needs a git remote on a host gh is logged into (run gh auth login)"
+      }
+    },
+    {
+      "name": "cleanup on its base branch",
+      "input": {
+        "requested": "cleanup",
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "x"
+      },
+      "output": {
+        "action": "cleanup",
+        "error": null
+      }
+    },
+    {
+      "name": "nothing requested on its base branch",
+      "input": {
+        "requested": null,
+        "ticket": {
+          "branch": "x"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "base": "x"
+      },
+      "output": {
+        "action": "cleanup",
+        "error": null
+      }
+    }
+  ],
+  "worksOnBaseCases": [
+    {
+      "name": "same branch",
+      "input": {
+        "ticket": {
+          "branch": "feature/x"
+        },
+        "base": "feature/x"
+      },
+      "output": true
+    },
+    {
+      "name": "different branch",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-1"
+        },
+        "base": "main"
+      },
+      "output": false
+    },
+    {
+      "name": "no ticket",
+      "input": {
+        "ticket": null,
+        "base": "main"
+      },
+      "output": false
+    },
+    {
+      "name": "no branch",
+      "input": {
+        "ticket": {},
+        "base": "main"
+      },
+      "output": false
+    },
+    {
+      "name": "null branch",
+      "input": {
+        "ticket": {
+          "branch": null
+        },
+        "base": null
+      },
+      "output": false
+    },
+    {
+      "name": "empty both",
+      "input": {
+        "ticket": {
+          "branch": ""
+        },
+        "base": ""
+      },
+      "output": false
+    },
+    {
+      "name": "no base",
+      "input": {
+        "ticket": {
+          "branch": "main"
+        },
+        "base": null
+      },
+      "output": false
+    },
+    {
+      "name": "case matters",
+      "input": {
+        "ticket": {
+          "branch": "Main"
+        },
+        "base": "main"
+      },
+      "output": false
+    }
+  ]
+}

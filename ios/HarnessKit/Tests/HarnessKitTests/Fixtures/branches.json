@@ -1,0 +1,2237 @@
+{
+  "branchNameErrorCases": [
+    {
+      "name": "main",
+      "input": "main",
+      "output": null
+    },
+    {
+      "name": "feature/login",
+      "input": "feature/login",
+      "output": null
+    },
+    {
+      "name": "medl-1223-ai-app",
+      "input": "medl-1223-ai-app",
+      "output": null
+    },
+    {
+      "name": "harness/web-3",
+      "input": "harness/web-3",
+      "output": null
+    },
+    {
+      "name": "v1.2",
+      "input": "v1.2",
+      "output": null
+    },
+    {
+      "name": "a@b",
+      "input": "a@b",
+      "output": null
+    },
+    {
+      "name": "x.locked",
+      "input": "x.locked",
+      "output": null
+    },
+    {
+      "name": "trailing @",
+      "input": "a@",
+      "output": null
+    },
+    {
+      "name": "inner dash",
+      "input": "a-",
+      "output": null
+    },
+    {
+      "name": "non-ASCII",
+      "input": "café/naïve",
+      "output": null
+    },
+    {
+      "name": "emoji",
+      "input": "feat/🚀",
+      "output": null
+    },
+    {
+      "name": "lock in the middle",
+      "input": "x.lockfile/y",
+      "output": null
+    },
+    {
+      "name": "lone dot inside a name",
+      "input": "a.b/c.d",
+      "output": null
+    },
+    {
+      "name": "DEL-adjacent ASCII",
+      "input": "a}b|c",
+      "output": null
+    },
+    {
+      "name": "NEL is not a control char here",
+      "input": "ab",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "a branch name can't be empty"
+    },
+    {
+      "name": "@",
+      "input": "@",
+      "output": "\"@\" isn't a branch name"
+    },
+    {
+      "name": "HEAD",
+      "input": "HEAD",
+      "output": "\"HEAD\" isn't a branch name"
+    },
+    {
+      "name": "lower-case head is fine",
+      "input": "head",
+      "output": null
+    },
+    {
+      "name": "starts with -",
+      "input": "-x",
+      "output": "a branch name can't start with -"
+    },
+    {
+      "name": "starts with /",
+      "input": "/x",
+      "output": "a branch name can't start or end with /"
+    },
+    {
+      "name": "ends with /",
+      "input": "x/",
+      "output": "a branch name can't start or end with /"
+    },
+    {
+      "name": "ends with .",
+      "input": "x.",
+      "output": "a branch name can't end with ."
+    },
+    {
+      "name": "//",
+      "input": "a//b",
+      "output": "a branch name can't contain //"
+    },
+    {
+      "name": "..",
+      "input": "a..b",
+      "output": "a branch name can't contain .."
+    },
+    {
+      "name": "@{",
+      "input": "a@{1}",
+      "output": "a branch name can't contain @{"
+    },
+    {
+      "name": "space",
+      "input": "a b",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "tilde",
+      "input": "a~1",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "caret",
+      "input": "a^",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "colon",
+      "input": "a:b",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "question",
+      "input": "a?",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "star",
+      "input": "a*",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "bracket",
+      "input": "a[b",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "backslash",
+      "input": "a\\b",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "tab",
+      "input": "a\tb",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "nul",
+      "input": "a\u0000b",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "del",
+      "input": "ab",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "unit separator",
+      "input": "a\u001fb",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": ".hidden",
+      "input": ".hidden",
+      "output": "no part of a branch name can start with ."
+    },
+    {
+      "name": "x/.y",
+      "input": "x/.y",
+      "output": "no part of a branch name can start with ."
+    },
+    {
+      "name": "x.lock",
+      "input": "x.lock",
+      "output": "no part of a branch name can end with .lock"
+    },
+    {
+      "name": "x.lock/y",
+      "input": "x.lock/y",
+      "output": "no part of a branch name can end with .lock"
+    },
+    {
+      "name": ".lock alone",
+      "input": ".lock",
+      "output": "no part of a branch name can start with ."
+    },
+    {
+      "name": "dash then combining mark",
+      "input": "-́x",
+      "output": "a branch name can't start with -"
+    },
+    {
+      "name": "dot then combining mark ends the name",
+      "input": "x́.",
+      "output": "a branch name can't end with ."
+    },
+    {
+      "name": "slash then combining mark",
+      "input": "a/́",
+      "output": null
+    },
+    {
+      "name": "dot-led part with combining mark",
+      "input": "x/.́y",
+      "output": "no part of a branch name can start with ."
+    },
+    {
+      "name": "double slash before combining mark",
+      "input": "a//́b",
+      "output": "a branch name can't contain //"
+    },
+    {
+      "name": "trailing dot after combining mark",
+      "input": "a.́",
+      "output": null
+    },
+    {
+      "name": "CRLF",
+      "input": "a\r\nb",
+      "output": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+    },
+    {
+      "name": "rule order: leading dash beats space",
+      "input": "-a b",
+      "output": "a branch name can't start with -"
+    },
+    {
+      "name": "rule order: .. beats bad char",
+      "input": "a..b c",
+      "output": "a branch name can't contain .."
+    }
+  ],
+  "defaultBaseBranch": "main",
+  "harnessBranchCases": [
+    {
+      "name": "lower-cased",
+      "input": "WEB-3",
+      "output": "harness/web-3"
+    },
+    {
+      "name": "already lower",
+      "input": "web-3",
+      "output": "harness/web-3"
+    },
+    {
+      "name": "mixed case",
+      "input": "MyApp-12",
+      "output": "harness/myapp-12"
+    },
+    {
+      "name": "non-ASCII upper case",
+      "input": "ÉCOLE-1",
+      "output": "harness/école-1"
+    },
+    {
+      "name": "final sigma",
+      "input": "ΟΔΟΣ-1",
+      "output": "harness/οδος-1"
+    },
+    {
+      "name": "lone sigma isn't final",
+      "input": "Σ-1",
+      "output": "harness/σ-1"
+    },
+    {
+      "name": "inner sigma isn't final",
+      "input": "ΑΣΑ-1",
+      "output": "harness/ασα-1"
+    },
+    {
+      "name": "sigma then a case-ignorable mark",
+      "input": "ΑΣ́-1",
+      "output": "harness/ας́-1"
+    },
+    {
+      "name": "sigma after a case-ignorable mark",
+      "input": "ΆΣ",
+      "output": "harness/άς"
+    },
+    {
+      "name": "sigma before a mark then a letter",
+      "input": "ΑΣ́Α",
+      "output": "harness/ασ́α"
+    },
+    {
+      "name": "dotted capital I",
+      "input": "İ-1",
+      "output": "harness/i̇-1"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "harness/"
+    }
+  ],
+  "parentLandingBranchCases": [
+    {
+      "name": "parent's branch",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "in_progress"
+        }
+      },
+      "output": "harness/web-1"
+    },
+    {
+      "name": "parent without status",
+      "input": {
+        "ticket": {},
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": "harness/web-1"
+    },
+    {
+      "name": "no ticket at all",
+      "input": {
+        "ticket": null,
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "review"
+        }
+      },
+      "output": "harness/web-1"
+    },
+    {
+      "name": "empty base branch inherits",
+      "input": {
+        "ticket": {
+          "baseBranch": ""
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": "harness/web-1"
+    },
+    {
+      "name": "ticket's own base branch wins",
+      "input": {
+        "ticket": {
+          "baseBranch": "release"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "parent without a worktree",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "parent": {
+          "branch": null,
+          "status": "in_progress"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "parent with empty branch",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "parent": {
+          "branch": "",
+          "status": "in_progress"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "done parent",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "done"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "unknown parent status still counts",
+      "input": {
+        "ticket": {},
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "archived"
+        }
+      },
+      "output": "harness/web-1"
+    },
+    {
+      "name": "no parent",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "parent": null
+      },
+      "output": null
+    }
+  ],
+  "parentLandingBranchEntityCases": [
+    {
+      "name": "plain child of a working parent",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "parent": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "blocked",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        }
+      },
+      "output": "harness/nytimes-31"
+    },
+    {
+      "name": "child with its own base",
+      "input": {
+        "ticket": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "blocked",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        },
+        "parent": {
+          "id": "tkt_31",
+          "key": "NYTIMES-30",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "blocked",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "done parent",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "parent": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "done",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "parent without a worktree",
+      "input": {
+        "ticket": {
+          "id": "tkt_3",
+          "key": "SCRATCH-3",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "done",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "skipped",
+          "humanReview": "approved",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "childCount": 0,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "completionAction": null,
+          "completionInstructions": null,
+          "pullRequestUrl": null,
+          "draft": true,
+          "completedAt": null
+        },
+        "parent": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "no parent",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "parent": null
+      },
+      "output": null
+    }
+  ],
+  "plannedBranchCases": [
+    {
+      "name": "worktree branch wins",
+      "input": {
+        "key": "WEB-3",
+        "branch": "feature/x",
+        "requestedBranch": "other"
+      },
+      "output": "feature/x"
+    },
+    {
+      "name": "requested branch",
+      "input": {
+        "key": "WEB-3",
+        "branch": null,
+        "requestedBranch": "medl-1223-ai-app"
+      },
+      "output": "medl-1223-ai-app"
+    },
+    {
+      "name": "harness default",
+      "input": {
+        "key": "WEB-3",
+        "branch": null,
+        "requestedBranch": null
+      },
+      "output": "harness/web-3"
+    },
+    {
+      "name": "requested branch missing",
+      "input": {
+        "key": "WEB-3",
+        "branch": null
+      },
+      "output": "harness/web-3"
+    },
+    {
+      "name": "empty worktree branch kept",
+      "input": {
+        "key": "WEB-3",
+        "branch": "",
+        "requestedBranch": "other"
+      },
+      "output": ""
+    },
+    {
+      "name": "empty requested branch kept",
+      "input": {
+        "key": "WEB-3",
+        "branch": null,
+        "requestedBranch": ""
+      },
+      "output": ""
+    }
+  ],
+  "plannedBranchEntityCases": [
+    {
+      "name": "full ticket",
+      "input": {
+        "id": "tkt_31",
+        "key": "NYTIMES-31",
+        "projectId": "prj_8f2c1a",
+        "kind": "conductor",
+        "title": "Port the wire protocol to Swift",
+        "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+        "status": "blocked",
+        "sessionId": "ses_31",
+        "driver": "claude-code",
+        "parentId": "tkt_30",
+        "childCount": 3,
+        "dependsOn": [
+          "NYTIMES-29",
+          "NYTIMES-30"
+        ],
+        "autoStart": true,
+        "agentReview": "approved",
+        "humanReview": "changes_requested",
+        "externalRef": {
+          "source": "jira",
+          "key": "PLAYR-123",
+          "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+          "raw": {
+            "id": "10423",
+            "fields": {
+              "summary": "Video player stalls on seek",
+              "labels": [
+                "bug",
+                "p1"
+              ],
+              "points": 3,
+              "flagged": false
+            }
+          }
+        },
+        "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+        "branch": "harness/nytimes-31",
+        "requestedBranch": "feature/swift-protocol",
+        "baseBranch": "develop",
+        "useWorktree": true,
+        "skipAgentReview": true,
+        "completionAction": "pr",
+        "completionInstructions": "Squash before opening the PR",
+        "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+        "draft": false,
+        "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+        "busy": true,
+        "pendingApproval": {
+          "id": "apr_1",
+          "runId": "run_7",
+          "toolName": "Bash",
+          "input": {
+            "command": "npm install left-pad",
+            "timeout": 120000,
+            "description": "Install deps"
+          },
+          "requestedAt": 1759190405000,
+          "reason": "Installs a package from the network",
+          "source": "classifier",
+          "summary": "npm install left-pad",
+          "onceOnly": false
+        },
+        "allowedTools": [
+          "Bash",
+          "WebFetch"
+        ],
+        "permissionMode": "read_only",
+        "model": "opus",
+        "position": 2.5,
+        "completedAt": 1759197600000,
+        "createdAt": 1759190400000,
+        "updatedAt": 1759194000000
+      },
+      "output": "harness/nytimes-31"
+    },
+    {
+      "name": "plain ticket",
+      "input": {
+        "id": "tkt_2",
+        "key": "SCRATCH-2",
+        "projectId": "prj_00a1",
+        "kind": "task",
+        "title": "Fix the flaky test",
+        "description": "",
+        "status": "planning",
+        "sessionId": "ses_2",
+        "driver": "anthropic-api",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 1759190400000,
+        "updatedAt": 1759190400000
+      },
+      "output": "harness/scratch-2"
+    },
+    {
+      "name": "requested branch only",
+      "input": {
+        "id": "tkt_2",
+        "key": "SCRATCH-2",
+        "projectId": "prj_00a1",
+        "kind": "task",
+        "title": "Fix the flaky test",
+        "description": "",
+        "status": "planning",
+        "sessionId": "ses_2",
+        "driver": "anthropic-api",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 1759190400000,
+        "updatedAt": 1759190400000,
+        "requestedBranch": "feature/y"
+      },
+      "output": "feature/y"
+    },
+    {
+      "name": "explicit null requested branch",
+      "input": {
+        "id": "tkt_3",
+        "key": "SCRATCH-3",
+        "projectId": "prj_00a1",
+        "kind": "task",
+        "title": "Fix the flaky test",
+        "description": "",
+        "status": "done",
+        "sessionId": "ses_2",
+        "driver": "anthropic-api",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "skipped",
+        "humanReview": "approved",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 1759190400000,
+        "updatedAt": 1759190400000,
+        "childCount": 0,
+        "requestedBranch": null,
+        "baseBranch": null,
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "completionAction": null,
+        "completionInstructions": null,
+        "pullRequestUrl": null,
+        "draft": true,
+        "completedAt": null
+      },
+      "output": "harness/scratch-3"
+    }
+  ],
+  "resolveBaseBranchCases": [
+    {
+      "name": "ticket beats project",
+      "input": {
+        "ticket": {
+          "baseBranch": "release"
+        },
+        "project": {
+          "baseBranch": "staging"
+        },
+        "settings": {
+          "baseBranch": "develop"
+        }
+      },
+      "output": {
+        "branch": "release",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "null ticket inherits project",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "baseBranch": "staging"
+        },
+        "settings": {
+          "baseBranch": "develop"
+        }
+      },
+      "output": {
+        "branch": "staging",
+        "source": "project"
+      }
+    },
+    {
+      "name": "empty strings inherit settings",
+      "input": {
+        "ticket": {
+          "baseBranch": ""
+        },
+        "project": {
+          "baseBranch": ""
+        },
+        "settings": {
+          "baseBranch": "develop"
+        }
+      },
+      "output": {
+        "branch": "develop",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "built-in default",
+      "input": {
+        "ticket": null,
+        "project": null,
+        "settings": {}
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "null settings",
+      "input": {
+        "ticket": null,
+        "project": null,
+        "settings": null
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "empty settings branch falls to default",
+      "input": {
+        "ticket": {},
+        "project": {},
+        "settings": {
+          "baseBranch": ""
+        }
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "child lands on parent's branch",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "baseBranch": "develop"
+        },
+        "settings": {},
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "branch": "harness/web-1",
+        "source": "parent"
+      }
+    },
+    {
+      "name": "ticket beats parent",
+      "input": {
+        "ticket": {
+          "baseBranch": "release"
+        },
+        "project": {
+          "baseBranch": "develop"
+        },
+        "settings": {},
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "branch": "release",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "parent without worktree skipped",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "baseBranch": "develop"
+        },
+        "settings": {},
+        "parent": {
+          "branch": null
+        }
+      },
+      "output": {
+        "branch": "develop",
+        "source": "project"
+      }
+    },
+    {
+      "name": "parent with empty branch skipped",
+      "input": {
+        "ticket": {},
+        "project": {
+          "baseBranch": "develop"
+        },
+        "settings": {},
+        "parent": {
+          "branch": ""
+        }
+      },
+      "output": {
+        "branch": "develop",
+        "source": "project"
+      }
+    },
+    {
+      "name": "done parent skipped",
+      "input": {
+        "ticket": {
+          "baseBranch": null
+        },
+        "project": {
+          "baseBranch": "develop"
+        },
+        "settings": {},
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "done"
+        }
+      },
+      "output": {
+        "branch": "develop",
+        "source": "project"
+      }
+    },
+    {
+      "name": "review parent still counts",
+      "input": {
+        "ticket": {},
+        "project": {},
+        "settings": {
+          "baseBranch": "trunk"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "review"
+        }
+      },
+      "output": {
+        "branch": "harness/web-1",
+        "source": "parent"
+      }
+    },
+    {
+      "name": "done parent, no project: settings",
+      "input": {
+        "ticket": {},
+        "project": null,
+        "settings": {
+          "baseBranch": "trunk"
+        },
+        "parent": {
+          "branch": "harness/web-1",
+          "status": "done"
+        }
+      },
+      "output": {
+        "branch": "trunk",
+        "source": "settings"
+      }
+    }
+  ],
+  "resolveBaseBranchEntityCases": [
+    {
+      "name": "ticket override",
+      "input": {
+        "ticket": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "blocked",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": null
+      },
+      "output": {
+        "branch": "develop",
+        "source": "ticket"
+      }
+    },
+    {
+      "name": "plain ticket, project override",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": null
+      },
+      "output": {
+        "branch": "develop",
+        "source": "project"
+      }
+    },
+    {
+      "name": "null-field ticket, plain project, settings",
+      "input": {
+        "ticket": {
+          "id": "tkt_3",
+          "key": "SCRATCH-3",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "done",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "skipped",
+          "humanReview": "approved",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000,
+          "childCount": 0,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "completionAction": null,
+          "completionInstructions": null,
+          "pullRequestUrl": null,
+          "draft": true,
+          "completedAt": null
+        },
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "trunk",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": null
+      },
+      "output": {
+        "branch": "trunk",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "old settings without baseBranch",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        },
+        "parent": null
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "child of a working parent",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "in_progress",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        }
+      },
+      "output": {
+        "branch": "harness/nytimes-31",
+        "source": "parent"
+      }
+    },
+    {
+      "name": "child of a done parent",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": {
+          "id": "tkt_31",
+          "key": "NYTIMES-31",
+          "projectId": "prj_8f2c1a",
+          "kind": "conductor",
+          "title": "Port the wire protocol to Swift",
+          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "status": "done",
+          "sessionId": "ses_31",
+          "driver": "claude-code",
+          "parentId": "tkt_30",
+          "childCount": 3,
+          "dependsOn": [
+            "NYTIMES-29",
+            "NYTIMES-30"
+          ],
+          "autoStart": true,
+          "agentReview": "approved",
+          "humanReview": "changes_requested",
+          "externalRef": {
+            "source": "jira",
+            "key": "PLAYR-123",
+            "url": "https://happycog.atlassian.net/browse/PLAYR-123",
+            "raw": {
+              "id": "10423",
+              "fields": {
+                "summary": "Video player stalls on seek",
+                "labels": [
+                  "bug",
+                  "p1"
+                ],
+                "points": 3,
+                "flagged": false
+              }
+            }
+          },
+          "workdir": "/Users/mark/.harness/worktrees/NYTIMES-31",
+          "branch": "harness/nytimes-31",
+          "requestedBranch": "feature/swift-protocol",
+          "baseBranch": "develop",
+          "useWorktree": true,
+          "skipAgentReview": true,
+          "completionAction": "pr",
+          "completionInstructions": "Squash before opening the PR",
+          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "draft": false,
+          "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
+          "busy": true,
+          "pendingApproval": {
+            "id": "apr_1",
+            "runId": "run_7",
+            "toolName": "Bash",
+            "input": {
+              "command": "npm install left-pad",
+              "timeout": 120000,
+              "description": "Install deps"
+            },
+            "requestedAt": 1759190405000,
+            "reason": "Installs a package from the network",
+            "source": "classifier",
+            "summary": "npm install left-pad",
+            "onceOnly": false
+          },
+          "allowedTools": [
+            "Bash",
+            "WebFetch"
+          ],
+          "permissionMode": "read_only",
+          "model": "opus",
+          "position": 2.5,
+          "completedAt": 1759197600000,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759194000000
+        }
+      },
+      "output": {
+        "branch": "develop",
+        "source": "project"
+      }
+    },
+    {
+      "name": "parent without a worktree",
+      "input": {
+        "ticket": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "parent": {
+          "id": "tkt_2",
+          "key": "SCRATCH-2",
+          "projectId": "prj_00a1",
+          "kind": "task",
+          "title": "Fix the flaky test",
+          "description": "",
+          "status": "planning",
+          "sessionId": "ses_2",
+          "driver": "anthropic-api",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        }
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    },
+    {
+      "name": "nothing at all",
+      "input": {
+        "ticket": null,
+        "project": null,
+        "settings": null,
+        "parent": null
+      },
+      "output": {
+        "branch": "main",
+        "source": "settings"
+      }
+    }
+  ]
+}

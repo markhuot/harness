@@ -1,0 +1,1099 @@
+{
+  "collapseStepCases": [
+    {
+      "name": "scrolling forward past the threshold hides the hero",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 330,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 330
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 330
+        }
+      ]
+    },
+    {
+      "name": "a nudge under the threshold leaves it",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 310,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 300
+        }
+      ]
+    },
+    {
+      "name": "scrolling back brings it back",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 360,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 400
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 360
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 360
+        }
+      ]
+    },
+    {
+      "name": "the threshold counts from where the gesture turned",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 280,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 310,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 280
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 310
+        }
+      ]
+    },
+    {
+      "name": "offsets with no finger down don't count",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 900,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        }
+      ]
+    },
+    {
+      "name": "the momentum after a flick still counts",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 310,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 2
+          },
+          {
+            "type": "scroll",
+            "offset": 360,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 360
+        }
+      ]
+    },
+    {
+      "name": "momentum end ends the gesture",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 2
+          },
+          {
+            "type": "momentumEnd"
+          },
+          {
+            "type": "scroll",
+            "offset": 360,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 300
+        }
+      ]
+    },
+    {
+      "name": "one gesture toggles once",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 3
+          },
+          {
+            "type": "scroll",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1200,
+            "contentHeight": 2000,
+            "viewportHeight": 800
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 1300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 1300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 1400
+        }
+      ]
+    },
+    {
+      "name": "the bounce back past the bottom isn't scrolling back",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 1300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          },
+          {
+            "type": "beginDrag",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1500,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          },
+          {
+            "type": "beginDrag",
+            "offset": 1500,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 1400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 1300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 1400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 1400
+        }
+      ]
+    },
+    {
+      "name": "the top brings it back, even closer than the threshold",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 10,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": -40,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 10
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        }
+      ]
+    },
+    {
+      "name": "a body with room left once the hero is gone hides it",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 0,
+            "contentHeight": 900,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 100,
+            "contentHeight": 900,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 100
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 100
+        }
+      ]
+    },
+    {
+      "name": "a body that would fit once the hero is gone never hides it",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 0,
+            "contentHeight": 810,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 100,
+            "contentHeight": 810,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        }
+      ]
+    },
+    {
+      "name": "show resets it",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          },
+          {
+            "type": "show"
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        }
+      ]
+    },
+    {
+      "name": "exactly the threshold forward hides",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 324,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 324
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 324
+        }
+      ]
+    },
+    {
+      "name": "just under the threshold forward stays",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 323.5,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 300
+        }
+      ]
+    },
+    {
+      "name": "exactly the threshold back shows",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 376,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 400
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 376
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 376
+        }
+      ]
+    },
+    {
+      "name": "just under the threshold back stays hidden",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 376.5,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 400
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        }
+      ]
+    },
+    {
+      "name": "room exactly the threshold hides",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 0,
+            "contentHeight": 824,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 100,
+            "contentHeight": 824,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 100
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 100
+        }
+      ]
+    },
+    {
+      "name": "room just under the threshold stays",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 0,
+            "contentHeight": 823,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 100,
+            "contentHeight": 823,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        }
+      ]
+    },
+    {
+      "name": "hidden, scrolling further forward moves the anchor",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 400,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 600,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 590,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 400
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 600
+        },
+        {
+          "hidden": true,
+          "live": true,
+          "anchor": 600
+        }
+      ]
+    },
+    {
+      "name": "a drag ending with velocity stays live",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 300,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": -1
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 300
+        }
+      ]
+    },
+    {
+      "name": "zero hero height",
+      "input": {
+        "from": {
+          "hidden": false,
+          "live": false,
+          "anchor": 0
+        },
+        "heroHeight": 0,
+        "events": [
+          {
+            "type": "beginDrag",
+            "offset": 0,
+            "contentHeight": 650,
+            "viewportHeight": 600
+          },
+          {
+            "type": "scroll",
+            "offset": 30,
+            "contentHeight": 650,
+            "viewportHeight": 600
+          },
+          {
+            "type": "endDrag",
+            "velocity": 0
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 0
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 30
+        },
+        {
+          "hidden": true,
+          "live": false,
+          "anchor": 30
+        }
+      ]
+    }
+  ],
+  "constants": {
+    "COLLAPSE_THRESHOLD": 24,
+    "SHOWN": {
+      "hidden": false,
+      "live": false,
+      "anchor": 0
+    }
+  }
+}

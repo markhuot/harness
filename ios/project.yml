@@ -1,0 +1,121 @@
+# XcodeGen spec for the native iPhone/iPad app. `cd ios && xcodegen` writes Harness.xcodeproj
+# (gitignored, regenerated like Expo's CNG). Sources are folder-globbed: add files under Harness/
+# and they're in the target, no edits here needed. Portable logic lives in the HarnessKit package.
+name: Harness
+options:
+  bundleIdPrefix: com.markhuot
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+# Beta is a Release build (optimized, no DEBUG routes) that installs beside the main app, for the
+# install page's beta card (ios/Tools/build.ts archive --beta, publish-beta).
+configs:
+  Debug: debug
+  Release: release
+  Beta: release
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: 47P4ZSALX4
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  HarnessKit:
+    path: HarnessKit
+targets:
+  Harness:
+    type: application
+    platform: iOS
+    sources:
+      - path: Harness
+    dependencies:
+      - package: HarnessKit
+        product: HarnessKit
+      - package: HarnessKit
+        product: HarnessHighlight
+    # The syntax highlighter's JavaScriptCore bundle (Shiki, from mobile/src/lib/highlight.ts) is
+    # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
+    # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
+    # tree; build-highlighter.ts leaves the file alone when nothing changed.
+    preBuildScripts:
+      - name: Bundle highlighter
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: |
+          BUN="$(command -v bun || true)"
+          for c in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+            if [ -z "$BUN" ] && [ -x "$c" ]; then BUN="$c"; fi
+          done
+          if [ -z "$BUN" ]; then
+            echo "error: bun (https://bun.sh) is needed to bundle the syntax highlighter. Install it, then run bun install at the repo root."
+            exit 1
+          fi
+          "$BUN" "$SRCROOT/Tools/build-highlighter.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/highlighter.js"
+    info:
+      path: Harness/Info.plist
+      properties:
+        CFBundleDisplayName: $(HARNESS_DISPLAY_NAME)
+        CFBundleName: Harness
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [harness]
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        # Only NSAllowsArbitraryLoads: iOS ignores it when NSAllowsLocalNetworking or the
+        # ...InWebContent / ...ForMedia keys are present, which breaks http to a Tailscale 100.x
+        # address (ios/Tools/config.test.ts guards this, as mobile/Tools/ats-config.test.ts does).
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: Harness connects to the harness service running on your Mac over your local network or Tailscale.
+        NSCameraUsageDescription: Harness uses the camera to scan the pairing QR code shown in the desktop app.
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: SplashIcon
+          UIImageRespectsSafeAreaInsets: true
+        # One scene, as in the React Native app (mobile/plugins/withSceneLifecycle.js): the app has
+        # a single Router and AppModel, so a second window would share and fight over them.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        # "Bundle highlighter" reads node_modules and the TS sources, which a sandboxed script
+        # phase may only do for declared inputs.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.dev
+          HARNESS_DISPLAY_NAME: Harness Dev
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
+          HARNESS_DISPLAY_NAME: Harness
+        Beta:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.dev
+          HARNESS_DISPLAY_NAME: Harness Beta
+schemes:
+  Harness:
+    build:
+      targets:
+        Harness: all
+    run:
+      config: Debug
+    archive:
+      config: Release

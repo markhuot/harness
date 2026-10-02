@@ -1,0 +1,429 @@
+{
+  "checkProjectKeyCases": [
+    {
+      "name": "trimmed and upper-cased",
+      "input": " hel ",
+      "output": {
+        "key": "HEL",
+        "error": null
+      }
+    },
+    {
+      "name": "letter and digits",
+      "input": "p37",
+      "output": {
+        "key": "P37",
+        "error": null
+      }
+    },
+    {
+      "name": "single letter",
+      "input": "A",
+      "output": {
+        "key": "A",
+        "error": null
+      }
+    },
+    {
+      "name": "sixteen characters",
+      "input": "AAAAAAAAAAAAAAAA",
+      "output": {
+        "key": "AAAAAAAAAAAAAAAA",
+        "error": null
+      }
+    },
+    {
+      "name": "seventeen characters",
+      "input": "AAAAAAAAAAAAAAAAA",
+      "output": {
+        "key": "AAAAAAAAAAAAAAAAA",
+        "error": "16 characters at most"
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "key": "",
+        "error": "Enter a key"
+      }
+    },
+    {
+      "name": "only whitespace",
+      "input": "   ",
+      "output": {
+        "key": "",
+        "error": "Enter a key"
+      }
+    },
+    {
+      "name": "starts with digit",
+      "input": "3D",
+      "output": {
+        "key": "3D",
+        "error": "Must start with a letter"
+      }
+    },
+    {
+      "name": "dash inside",
+      "input": "MY-APP",
+      "output": {
+        "key": "MY-APP",
+        "error": "Letters and digits only"
+      }
+    },
+    {
+      "name": "underscore",
+      "input": "A_B",
+      "output": {
+        "key": "A_B",
+        "error": "Letters and digits only"
+      }
+    },
+    {
+      "name": "non-ASCII letter",
+      "input": "CAFÉ",
+      "output": {
+        "key": "CAFÉ",
+        "error": "Letters and digits only"
+      }
+    },
+    {
+      "name": "reserved",
+      "input": "triage",
+      "output": {
+        "key": "TRIAGE",
+        "error": "TRIAGE is reserved"
+      }
+    },
+    {
+      "name": "reserved with whitespace",
+      "input": " Triage ",
+      "output": {
+        "key": "TRIAGE",
+        "error": "TRIAGE is reserved"
+      }
+    },
+    {
+      "name": "reserved as a prefix is fine",
+      "input": "TRIAGE2",
+      "output": {
+        "key": "TRIAGE2",
+        "error": null
+      }
+    }
+  ],
+  "isTicketKeyCases": [
+    {
+      "name": "valid",
+      "input": "hel-1",
+      "output": true
+    },
+    {
+      "name": "invalid",
+      "input": "hel",
+      "output": false
+    }
+  ],
+  "keyedCases": [
+    {
+      "name": "unlinked",
+      "input": {
+        "key": "MH-62",
+        "externalRef": null
+      },
+      "output": {
+        "displayKey": "MH-62",
+        "secondaryKey": null,
+        "keyLabel": "MH-62",
+        "isLegacyMirror": false
+      }
+    },
+    {
+      "name": "no externalRef field",
+      "input": {
+        "key": "MH-62"
+      },
+      "output": {
+        "displayKey": "MH-62",
+        "secondaryKey": null,
+        "keyLabel": "MH-62",
+        "isLegacyMirror": false
+      }
+    },
+    {
+      "name": "linked",
+      "input": {
+        "key": "MH-124",
+        "externalRef": {
+          "key": "MH-62"
+        }
+      },
+      "output": {
+        "displayKey": "MH-62",
+        "secondaryKey": "MH-124",
+        "keyLabel": "MH-62 · MH-124",
+        "isLegacyMirror": false
+      }
+    },
+    {
+      "name": "legacy mirror",
+      "input": {
+        "key": "CEPFR-12",
+        "externalRef": {
+          "key": "CEPFR-12"
+        }
+      },
+      "output": {
+        "displayKey": "CEPFR-12",
+        "secondaryKey": null,
+        "keyLabel": "CEPFR-12",
+        "isLegacyMirror": true
+      }
+    },
+    {
+      "name": "empty remote key falls back",
+      "input": {
+        "key": "MH-5",
+        "externalRef": {
+          "key": ""
+        }
+      },
+      "output": {
+        "displayKey": "MH-5",
+        "secondaryKey": null,
+        "keyLabel": "MH-5",
+        "isLegacyMirror": false
+      }
+    },
+    {
+      "name": "canonically equivalent but different keys",
+      "input": {
+        "key": "É-1",
+        "externalRef": {
+          "key": "É-1"
+        }
+      },
+      "output": {
+        "displayKey": "É-1",
+        "secondaryKey": "É-1",
+        "keyLabel": "É-1 · É-1",
+        "isLegacyMirror": false
+      }
+    }
+  ],
+  "parseTicketKeyCases": [
+    {
+      "name": "native",
+      "input": "NYTIMES-12",
+      "output": {
+        "prefix": "NYTIMES",
+        "number": 12
+      }
+    },
+    {
+      "name": "lower-case external key",
+      "input": "foo-123",
+      "output": {
+        "prefix": "FOO",
+        "number": 123
+      }
+    },
+    {
+      "name": "surrounding whitespace",
+      "input": "  HEL-4\n",
+      "output": {
+        "prefix": "HEL",
+        "number": 4
+      }
+    },
+    {
+      "name": "underscore in prefix",
+      "input": "MY_APP-3",
+      "output": {
+        "prefix": "MY_APP",
+        "number": 3
+      }
+    },
+    {
+      "name": "leading zeros",
+      "input": "HEL-007",
+      "output": {
+        "prefix": "HEL",
+        "number": 7
+      }
+    },
+    {
+      "name": "digit in prefix",
+      "input": "P37-1",
+      "output": {
+        "prefix": "P37",
+        "number": 1
+      }
+    },
+    {
+      "name": "no number",
+      "input": "NYTIMES",
+      "output": null
+    },
+    {
+      "name": "number first",
+      "input": "12-NYTIMES",
+      "output": null
+    },
+    {
+      "name": "trailing dash",
+      "input": "FOO-",
+      "output": null
+    },
+    {
+      "name": "two dashes",
+      "input": "FOO-BAR-1",
+      "output": null
+    },
+    {
+      "name": "trailing newline inside",
+      "input": "FOO-1\nx",
+      "output": null
+    },
+    {
+      "name": "non-ASCII digits",
+      "input": "FOO-١٢",
+      "output": null
+    },
+    {
+      "name": "prefix starting with underscore",
+      "input": "_A-1",
+      "output": null
+    },
+    {
+      "name": "empty string",
+      "input": "",
+      "output": null
+    }
+  ],
+  "projectKeyFromPathCases": [
+    {
+      "name": "basename upper-cased",
+      "input": "/Users/mark/work/nytimes",
+      "output": "NYTIMES"
+    },
+    {
+      "name": "punctuation and trailing slashes",
+      "input": "/tmp/my-app.v2/",
+      "output": "MYAPPV2"
+    },
+    {
+      "name": "several trailing slashes",
+      "input": "/tmp/app///",
+      "output": "APP"
+    },
+    {
+      "name": "leading digit gets P",
+      "input": "/tmp/37signals",
+      "output": "P37SIGNALS"
+    },
+    {
+      "name": "root falls back",
+      "input": "/",
+      "output": "PROJ"
+    },
+    {
+      "name": "empty string falls back",
+      "input": "",
+      "output": "PROJ"
+    },
+    {
+      "name": "only punctuation falls back",
+      "input": "/tmp/---",
+      "output": "PROJ"
+    },
+    {
+      "name": "relative name",
+      "input": "my-app",
+      "output": "MYAPP"
+    },
+    {
+      "name": "sixteen characters kept",
+      "input": "/x/abcdefghijklmnop",
+      "output": "ABCDEFGHIJKLMNOP"
+    },
+    {
+      "name": "longer names cut to sixteen",
+      "input": "/x/abcdefghijklmnopqrstuvwxyz",
+      "output": "ABCDEFGHIJKLMNOP"
+    },
+    {
+      "name": "digit prefix cut to sixteen after P",
+      "input": "/x/1234567890123456789",
+      "output": "P123456789012345"
+    },
+    {
+      "name": "non-ASCII letters dropped",
+      "input": "/x/café-bar",
+      "output": "CAFBAR"
+    },
+    {
+      "name": "sharp s upper-cases to SS",
+      "input": "/x/straße",
+      "output": "STRASSE"
+    },
+    {
+      "name": "underscore dropped",
+      "input": "/x/my_app",
+      "output": "MYAPP"
+    },
+    {
+      "name": "home tilde",
+      "input": "~/work/nytimes",
+      "output": "NYTIMES"
+    }
+  ],
+  "projectKeyPatternCases": [
+    {
+      "name": "HEL",
+      "input": "HEL",
+      "output": true
+    },
+    {
+      "name": "X1",
+      "input": "X1",
+      "output": true
+    },
+    {
+      "name": "sixteen",
+      "input": "ABCDEFGHIJKLMNOP",
+      "output": true
+    },
+    {
+      "name": "seventeen",
+      "input": "ABCDEFGHIJKLMNOPQ",
+      "output": false
+    },
+    {
+      "name": "leading digit",
+      "input": "1A",
+      "output": false
+    },
+    {
+      "name": "underscore",
+      "input": "A_B",
+      "output": false
+    },
+    {
+      "name": "lower case",
+      "input": "hel",
+      "output": false
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "trailing newline",
+      "input": "HEL\n",
+      "output": false
+    }
+  ]
+}

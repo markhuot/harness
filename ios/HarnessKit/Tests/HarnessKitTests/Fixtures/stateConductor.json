@@ -1,0 +1,3731 @@
+{
+  "boardWeightCases": [
+    {
+      "name": "blocked with approval",
+      "input": {
+        "id": "id-A-1",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-1",
+        "description": "",
+        "status": "blocked",
+        "sessionId": "s-A-1",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": {
+          "id": "a",
+          "runId": "r",
+          "toolName": "Bash",
+          "input": {},
+          "requestedAt": 1
+        },
+        "allowedTools": [],
+        "position": 1,
+        "createdAt": 1,
+        "updatedAt": 1,
+        "key": "A-1"
+      },
+      "output": {
+        "isChild": false,
+        "attention": "approval",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "blocked",
+      "input": {
+        "id": "id-A-2",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-2",
+        "description": "",
+        "status": "blocked",
+        "sessionId": "s-A-2",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 2,
+        "createdAt": 2,
+        "updatedAt": 2,
+        "key": "A-2"
+      },
+      "output": {
+        "isChild": false,
+        "attention": "blocked",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "review pending",
+      "input": {
+        "id": "id-A-3",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-3",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-A-3",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 3,
+        "createdAt": 3,
+        "updatedAt": 3,
+        "key": "A-3"
+      },
+      "output": {
+        "isChild": false,
+        "attention": "review",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "review approved",
+      "input": {
+        "id": "id-A-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-4",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-A-4",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "approved",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 4,
+        "createdAt": 4,
+        "updatedAt": 4,
+        "key": "A-4"
+      },
+      "output": {
+        "isChild": false,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "review changes requested",
+      "input": {
+        "id": "id-A-7",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-7",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-A-7",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "changes_requested",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 5,
+        "createdAt": 5,
+        "updatedAt": 5,
+        "key": "A-7"
+      },
+      "output": {
+        "isChild": false,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "in progress, review pending",
+      "input": {
+        "id": "id-A-5",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-5",
+        "description": "",
+        "status": "in_progress",
+        "sessionId": "s-A-5",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 6,
+        "createdAt": 6,
+        "updatedAt": 6,
+        "key": "A-5"
+      },
+      "output": {
+        "isChild": false,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "done, review pending",
+      "input": {
+        "id": "id-A-6",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-6",
+        "description": "",
+        "status": "done",
+        "sessionId": "s-A-6",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 7,
+        "createdAt": 7,
+        "updatedAt": 7,
+        "key": "A-6"
+      },
+      "output": {
+        "isChild": false,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "planning with approval",
+      "input": {
+        "id": "id-A-8",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "A-8",
+        "description": "",
+        "status": "planning",
+        "sessionId": "s-A-8",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": {
+          "id": "a",
+          "runId": "r",
+          "toolName": "Bash",
+          "input": {},
+          "requestedAt": 1
+        },
+        "allowedTools": [],
+        "position": 8,
+        "createdAt": 8,
+        "updatedAt": 8,
+        "key": "A-8"
+      },
+      "output": {
+        "isChild": false,
+        "attention": "approval",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child in review (conductor's job)",
+      "input": {
+        "id": "id-P-2",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "P-2",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-P-2",
+        "driver": "claude-code",
+        "parentId": "id-P-1",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 9,
+        "createdAt": 9,
+        "updatedAt": 9,
+        "key": "P-2"
+      },
+      "output": {
+        "isChild": true,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": true,
+        "hideWhenHiding": true,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child in review with approval",
+      "input": {
+        "id": "id-P-3",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "P-3",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-P-3",
+        "driver": "claude-code",
+        "parentId": "id-P-1",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": {
+          "id": "a",
+          "runId": "r",
+          "toolName": "Bash",
+          "input": {},
+          "requestedAt": 1
+        },
+        "allowedTools": [],
+        "position": 10,
+        "createdAt": 10,
+        "updatedAt": 10,
+        "key": "P-3"
+      },
+      "output": {
+        "isChild": true,
+        "attention": "approval",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child blocked",
+      "input": {
+        "id": "id-P-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "P-4",
+        "description": "",
+        "status": "blocked",
+        "sessionId": "s-P-4",
+        "driver": "claude-code",
+        "parentId": "id-P-1",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 11,
+        "createdAt": 11,
+        "updatedAt": 11,
+        "key": "P-4"
+      },
+      "output": {
+        "isChild": true,
+        "attention": "blocked",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child in progress",
+      "input": {
+        "id": "id-C-2",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "C-2",
+        "description": "",
+        "status": "in_progress",
+        "sessionId": "s-C-2",
+        "driver": "claude-code",
+        "parentId": "id-C-1",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 12,
+        "createdAt": 12,
+        "updatedAt": 12,
+        "key": "C-2"
+      },
+      "output": {
+        "isChild": true,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": true,
+        "hideWhenHiding": true,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child done",
+      "input": {
+        "id": "id-C-7",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "C-7",
+        "description": "",
+        "status": "done",
+        "sessionId": "s-C-7",
+        "driver": "claude-code",
+        "parentId": "id-C-1",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 13,
+        "createdAt": 13,
+        "updatedAt": 13,
+        "key": "C-7"
+      },
+      "output": {
+        "isChild": true,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": true,
+        "hideWhenHiding": true,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "child with empty-string parent is still a child",
+      "input": {
+        "id": "id-C-8",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "C-8",
+        "description": "",
+        "status": "in_progress",
+        "sessionId": "s-C-8",
+        "driver": "claude-code",
+        "parentId": "",
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 14,
+        "createdAt": 14,
+        "updatedAt": 14,
+        "key": "C-8"
+      },
+      "output": {
+        "isChild": true,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": true,
+        "hideWhenHiding": true,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "top-level in progress",
+      "input": {
+        "id": "id-C-5",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "C-5",
+        "description": "",
+        "status": "in_progress",
+        "sessionId": "s-C-5",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 15,
+        "createdAt": 15,
+        "updatedAt": 15,
+        "key": "C-5"
+      },
+      "output": {
+        "isChild": false,
+        "attention": null,
+        "needsHuman": false,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    },
+    {
+      "name": "top-level review pending",
+      "input": {
+        "id": "id-C-6",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "C-6",
+        "description": "",
+        "status": "review",
+        "sessionId": "s-C-6",
+        "driver": "claude-code",
+        "parentId": null,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "position": 16,
+        "createdAt": 16,
+        "updatedAt": 16,
+        "key": "C-6"
+      },
+      "output": {
+        "isChild": false,
+        "attention": "review",
+        "needsHuman": true,
+        "dimOnBoard": false,
+        "hideWhenHiding": false,
+        "hideWhenShowing": false
+      }
+    }
+  ],
+  "childrenOfTicketCases": [
+    {
+      "name": "filters by parent, creation order",
+      "input": {
+        "tickets": {
+          "id-H-3": {
+            "id": "id-H-3",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-3",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-3",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 17,
+            "createdAt": 30,
+            "updatedAt": 17,
+            "key": "H-3"
+          },
+          "id-H-9": {
+            "id": "id-H-9",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-9",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-9",
+            "driver": "claude-code",
+            "parentId": "id-H-8",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 19,
+            "createdAt": 19,
+            "updatedAt": 19,
+            "key": "H-9"
+          },
+          "id-H-2": {
+            "id": "id-H-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-2",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-2",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 18,
+            "createdAt": 20,
+            "updatedAt": 18,
+            "key": "H-2"
+          }
+        },
+        "conductorId": "id-H-1"
+      },
+      "output": [
+        "H-2",
+        "H-3"
+      ]
+    },
+    {
+      "name": "same createdAt falls back to position",
+      "input": {
+        "tickets": {
+          "id-H-5": {
+            "id": "id-H-5",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-5",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-5",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 100,
+            "createdAt": 20,
+            "updatedAt": 21,
+            "key": "H-5"
+          },
+          "id-H-3": {
+            "id": "id-H-3",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-3",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-3",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 17,
+            "createdAt": 30,
+            "updatedAt": 17,
+            "key": "H-3"
+          },
+          "id-H-2": {
+            "id": "id-H-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-2",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-2",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 18,
+            "createdAt": 20,
+            "updatedAt": 18,
+            "key": "H-2"
+          },
+          "id-H-4": {
+            "id": "id-H-4",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-4",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-4",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 0.5,
+            "createdAt": 20,
+            "updatedAt": 20,
+            "key": "H-4"
+          }
+        },
+        "conductorId": "id-H-1"
+      },
+      "output": [
+        "H-4",
+        "H-2",
+        "H-5",
+        "H-3"
+      ]
+    },
+    {
+      "name": "no children",
+      "input": {
+        "tickets": {
+          "id-H-3": {
+            "id": "id-H-3",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-3",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-3",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 17,
+            "createdAt": 30,
+            "updatedAt": 17,
+            "key": "H-3"
+          },
+          "id-H-2": {
+            "id": "id-H-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "H-2",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-H-2",
+            "driver": "claude-code",
+            "parentId": "id-H-1",
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 18,
+            "createdAt": 20,
+            "updatedAt": 18,
+            "key": "H-2"
+          }
+        },
+        "conductorId": "id-nope"
+      },
+      "output": []
+    },
+    {
+      "name": "empty record",
+      "input": {
+        "tickets": {},
+        "conductorId": "id-H-1"
+      },
+      "output": []
+    }
+  ],
+  "depChipTitleCases": [
+    {
+      "name": "done",
+      "input": {
+        "key": "D-1",
+        "done": true,
+        "state": "done"
+      },
+      "output": "D-1 is done"
+    },
+    {
+      "name": "pending",
+      "input": {
+        "key": "D-2",
+        "done": false,
+        "state": "pending"
+      },
+      "output": "Waiting on D-2"
+    },
+    {
+      "name": "unknown, looking up",
+      "input": {
+        "key": "D-3",
+        "done": false,
+        "state": "unknown"
+      },
+      "output": "Looking up D-3…"
+    },
+    {
+      "name": "unknown and missing",
+      "input": {
+        "key": "D-4",
+        "done": false,
+        "state": "unknown",
+        "missing": true
+      },
+      "output": "D-4 wasn't found"
+    },
+    {
+      "name": "unknown, missing false",
+      "input": {
+        "key": "D-5",
+        "done": false,
+        "state": "unknown",
+        "missing": false
+      },
+      "output": "Looking up D-5…"
+    },
+    {
+      "name": "missing flag ignored when pending",
+      "input": {
+        "key": "D-6",
+        "done": false,
+        "state": "pending",
+        "missing": true
+      },
+      "output": "Waiting on D-6"
+    }
+  ],
+  "depStatesCases": [
+    {
+      "name": "case-insensitive, unloaded is unknown",
+      "input": {
+        "tickets": {
+          "id-D-1": {
+            "id": "id-D-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-D-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 38,
+            "createdAt": 38,
+            "updatedAt": 38,
+            "key": "D-1"
+          },
+          "id-D-2": {
+            "id": "id-D-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-2",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "s-D-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 39,
+            "createdAt": 39,
+            "updatedAt": 39,
+            "key": "D-2"
+          },
+          "id-D-3": {
+            "id": "id-D-3",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-3",
+            "description": "",
+            "status": "planning",
+            "sessionId": "s-D-3",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [
+              "d-1",
+              "D-2",
+              "D-99"
+            ],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 40,
+            "createdAt": 40,
+            "updatedAt": 40,
+            "key": "D-3"
+          }
+        },
+        "ticket": {
+          "id": "id-D-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "D-3",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-D-3",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "d-1",
+            "D-2",
+            "D-99"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 40,
+          "createdAt": 40,
+          "updatedAt": 40,
+          "key": "D-3"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "d-1",
+            "done": true,
+            "state": "done",
+            "ticketKey": "D-1",
+            "missing": null
+          },
+          {
+            "key": "D-2",
+            "done": false,
+            "state": "pending",
+            "ticketKey": "D-2",
+            "missing": null
+          },
+          {
+            "key": "D-99",
+            "done": false,
+            "state": "unknown",
+            "ticketKey": null,
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "D-2",
+          "D-99"
+        ],
+        "titles": [
+          "d-1 is done",
+          "Waiting on D-2",
+          "Looking up D-99…"
+        ]
+      }
+    },
+    {
+      "name": "through an alias",
+      "input": {
+        "tickets": {
+          "id-NEW-1": {
+            "id": "id-NEW-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-NEW-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 41,
+            "createdAt": 41,
+            "updatedAt": 41,
+            "key": "NEW-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-1",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-1",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "old-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 43,
+          "createdAt": 43,
+          "updatedAt": 43,
+          "key": "X-1"
+        },
+        "aliases": {
+          "OLD-1": "id-NEW-1"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "old-1",
+            "done": true,
+            "state": "done",
+            "ticketKey": "NEW-1",
+            "missing": null
+          }
+        ],
+        "waitingOn": [],
+        "titles": [
+          "old-1 is done"
+        ]
+      }
+    },
+    {
+      "name": "alias to a pending ticket",
+      "input": {
+        "tickets": {
+          "id-NEW-2": {
+            "id": "id-NEW-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-2",
+            "description": "",
+            "status": "blocked",
+            "sessionId": "s-NEW-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 42,
+            "createdAt": 42,
+            "updatedAt": 42,
+            "key": "NEW-2"
+          }
+        },
+        "ticket": {
+          "id": "id-X-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-2",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-2",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "OLD-2"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 44,
+          "createdAt": 44,
+          "updatedAt": 44,
+          "key": "X-2"
+        },
+        "aliases": {
+          "OLD-2": "id-NEW-2"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "OLD-2",
+            "done": false,
+            "state": "pending",
+            "ticketKey": "NEW-2",
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "OLD-2"
+        ],
+        "titles": [
+          "Waiting on OLD-2"
+        ]
+      }
+    },
+    {
+      "name": "alias to an unloaded id is unknown",
+      "input": {
+        "tickets": {
+          "id-NEW-1": {
+            "id": "id-NEW-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-NEW-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 41,
+            "createdAt": 41,
+            "updatedAt": 41,
+            "key": "NEW-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-3",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-3",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "OLD-3"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 45,
+          "createdAt": 45,
+          "updatedAt": 45,
+          "key": "X-3"
+        },
+        "aliases": {
+          "OLD-3": "id-gone"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "OLD-3",
+            "done": false,
+            "state": "unknown",
+            "ticketKey": null,
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "OLD-3"
+        ],
+        "titles": [
+          "Looking up OLD-3…"
+        ]
+      }
+    },
+    {
+      "name": "alias with an empty id is ignored",
+      "input": {
+        "tickets": {
+          "id-NEW-1": {
+            "id": "id-NEW-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-NEW-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 41,
+            "createdAt": 41,
+            "updatedAt": 41,
+            "key": "NEW-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-4",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-4",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "OLD-4"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 46,
+          "createdAt": 46,
+          "updatedAt": 46,
+          "key": "X-4"
+        },
+        "aliases": {
+          "OLD-4": ""
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "OLD-4",
+            "done": false,
+            "state": "unknown",
+            "ticketKey": null,
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "OLD-4"
+        ],
+        "titles": [
+          "Looking up OLD-4…"
+        ]
+      }
+    },
+    {
+      "name": "alias keys are upper-case only",
+      "input": {
+        "tickets": {
+          "id-NEW-1": {
+            "id": "id-NEW-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-NEW-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 41,
+            "createdAt": 41,
+            "updatedAt": 41,
+            "key": "NEW-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-5",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-5",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "old-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 47,
+          "createdAt": 47,
+          "updatedAt": 47,
+          "key": "X-5"
+        },
+        "aliases": {
+          "old-1": "id-NEW-1"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "old-1",
+            "done": false,
+            "state": "unknown",
+            "ticketKey": null,
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "old-1"
+        ],
+        "titles": [
+          "Looking up old-1…"
+        ]
+      }
+    },
+    {
+      "name": "a direct key wins over an alias",
+      "input": {
+        "tickets": {
+          "id-D-2": {
+            "id": "id-D-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-2",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "s-D-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 39,
+            "createdAt": 39,
+            "updatedAt": 39,
+            "key": "D-2"
+          },
+          "id-NEW-1": {
+            "id": "id-NEW-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "NEW-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-NEW-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 41,
+            "createdAt": 41,
+            "updatedAt": 41,
+            "key": "NEW-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-6",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-6",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-6",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "D-2"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 48,
+          "createdAt": 48,
+          "updatedAt": 48,
+          "key": "X-6"
+        },
+        "aliases": {
+          "D-2": "id-NEW-1"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "D-2",
+            "done": false,
+            "state": "pending",
+            "ticketKey": "D-2",
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "D-2"
+        ],
+        "titles": [
+          "Waiting on D-2"
+        ]
+      }
+    },
+    {
+      "name": "keeps the dependency's spelling and order",
+      "input": {
+        "tickets": {
+          "id-D-1": {
+            "id": "id-D-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-D-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 38,
+            "createdAt": 38,
+            "updatedAt": 38,
+            "key": "D-1"
+          },
+          "id-D-2": {
+            "id": "id-D-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-2",
+            "description": "",
+            "status": "in_progress",
+            "sessionId": "s-D-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 39,
+            "createdAt": 39,
+            "updatedAt": 39,
+            "key": "D-2"
+          }
+        },
+        "ticket": {
+          "id": "id-X-7",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-7",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-7",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "D-2",
+            "d-1",
+            "D-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 49,
+          "createdAt": 49,
+          "updatedAt": 49,
+          "key": "X-7"
+        }
+      },
+      "output": {
+        "deps": [
+          {
+            "key": "D-2",
+            "done": false,
+            "state": "pending",
+            "ticketKey": "D-2",
+            "missing": null
+          },
+          {
+            "key": "d-1",
+            "done": true,
+            "state": "done",
+            "ticketKey": "D-1",
+            "missing": null
+          },
+          {
+            "key": "D-1",
+            "done": true,
+            "state": "done",
+            "ticketKey": "D-1",
+            "missing": null
+          }
+        ],
+        "waitingOn": [
+          "D-2"
+        ],
+        "titles": [
+          "Waiting on D-2",
+          "d-1 is done",
+          "D-1 is done"
+        ]
+      }
+    },
+    {
+      "name": "no dependencies",
+      "input": {
+        "tickets": {
+          "id-D-1": {
+            "id": "id-D-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "D-1",
+            "description": "",
+            "status": "done",
+            "sessionId": "s-D-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 38,
+            "createdAt": 38,
+            "updatedAt": 38,
+            "key": "D-1"
+          }
+        },
+        "ticket": {
+          "id": "id-X-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "X-8",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-X-8",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 50,
+          "createdAt": 50,
+          "updatedAt": 50,
+          "key": "X-8"
+        }
+      },
+      "output": {
+        "deps": [],
+        "waitingOn": [],
+        "titles": []
+      }
+    }
+  ],
+  "dependencyDepthsCases": [
+    {
+      "name": "chains, outside deps and a two-cycle",
+      "input": [
+        {
+          "id": "id-G-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-3",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-3",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-2",
+            "G-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 53,
+          "createdAt": 53,
+          "updatedAt": 53,
+          "key": "G-3"
+        },
+        {
+          "id": "id-G-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-2",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-2",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 52,
+          "createdAt": 52,
+          "updatedAt": 52,
+          "key": "G-2"
+        },
+        {
+          "id": "id-G-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-1",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-1",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "OUT-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 51,
+          "createdAt": 51,
+          "updatedAt": 51,
+          "key": "G-1"
+        },
+        {
+          "id": "id-G-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-4",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-4",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-5"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 54,
+          "createdAt": 54,
+          "updatedAt": 54,
+          "key": "G-4"
+        },
+        {
+          "id": "id-G-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-5",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-5",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-4"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 55,
+          "createdAt": 55,
+          "updatedAt": 55,
+          "key": "G-5"
+        }
+      ],
+      "output": {
+        "G-1": 0,
+        "G-2": 1,
+        "G-3": 2,
+        "G-5": 1,
+        "G-4": 2
+      }
+    },
+    {
+      "name": "two-cycle from the other side",
+      "input": [
+        {
+          "id": "id-G-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-5",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-5",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-4"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 55,
+          "createdAt": 55,
+          "updatedAt": 55,
+          "key": "G-5"
+        },
+        {
+          "id": "id-G-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-4",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-4",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-5"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 54,
+          "createdAt": 54,
+          "updatedAt": 54,
+          "key": "G-4"
+        }
+      ],
+      "output": {
+        "G-4": 1,
+        "G-5": 2
+      }
+    },
+    {
+      "name": "case-insensitive sibling keys",
+      "input": [
+        {
+          "id": "id-g-6",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "g-6",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-g-6",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "g-3"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 56,
+          "createdAt": 56,
+          "updatedAt": 56,
+          "key": "g-6"
+        },
+        {
+          "id": "id-G-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-3",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-3",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-2",
+            "G-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 53,
+          "createdAt": 53,
+          "updatedAt": 53,
+          "key": "G-3"
+        },
+        {
+          "id": "id-G-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-2",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-2",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 52,
+          "createdAt": 52,
+          "updatedAt": 52,
+          "key": "G-2"
+        },
+        {
+          "id": "id-G-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-1",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-1",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "OUT-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 51,
+          "createdAt": 51,
+          "updatedAt": 51,
+          "key": "G-1"
+        }
+      ],
+      "output": {
+        "G-1": 0,
+        "G-2": 1,
+        "G-3": 2,
+        "G-6": 3
+      }
+    },
+    {
+      "name": "self-dependency",
+      "input": [
+        {
+          "id": "id-G-7",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-7",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-7",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-7"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 57,
+          "createdAt": 57,
+          "updatedAt": 57,
+          "key": "G-7"
+        }
+      ],
+      "output": {
+        "G-7": 1
+      }
+    },
+    {
+      "name": "three-cycle with a tail",
+      "input": [
+        {
+          "id": "id-G-11",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-11",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-11",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-8"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 61,
+          "createdAt": 61,
+          "updatedAt": 61,
+          "key": "G-11"
+        },
+        {
+          "id": "id-G-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-8",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-8",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-9"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 58,
+          "createdAt": 58,
+          "updatedAt": 58,
+          "key": "G-8"
+        },
+        {
+          "id": "id-G-9",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-9",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-9",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-10"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 59,
+          "createdAt": 59,
+          "updatedAt": 59,
+          "key": "G-9"
+        },
+        {
+          "id": "id-G-10",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-10",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-10",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-8"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 60,
+          "createdAt": 60,
+          "updatedAt": 60,
+          "key": "G-10"
+        }
+      ],
+      "output": {
+        "G-10": 1,
+        "G-9": 2,
+        "G-8": 3,
+        "G-11": 4
+      }
+    },
+    {
+      "name": "three-cycle from its middle",
+      "input": [
+        {
+          "id": "id-G-9",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-9",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-9",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-10"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 59,
+          "createdAt": 59,
+          "updatedAt": 59,
+          "key": "G-9"
+        },
+        {
+          "id": "id-G-10",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-10",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-10",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-8"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 60,
+          "createdAt": 60,
+          "updatedAt": 60,
+          "key": "G-10"
+        },
+        {
+          "id": "id-G-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-8",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-8",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-9"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 58,
+          "createdAt": 58,
+          "updatedAt": 58,
+          "key": "G-8"
+        },
+        {
+          "id": "id-G-11",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "G-11",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-G-11",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "G-8"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 61,
+          "createdAt": 61,
+          "updatedAt": 61,
+          "key": "G-11"
+        }
+      ],
+      "output": {
+        "G-8": 1,
+        "G-10": 2,
+        "G-9": 3,
+        "G-11": 2
+      }
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": {}
+    }
+  ],
+  "groupChildrenCases": [
+    {
+      "name": "lifecycle order, attention then dependency order",
+      "input": [
+        {
+          "id": "id-L-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-3",
+          "description": "",
+          "status": "done",
+          "sessionId": "s-L-3",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 64,
+          "createdAt": 64,
+          "updatedAt": 64,
+          "key": "L-3"
+        },
+        {
+          "id": "id-L-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-1",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-1",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [
+            "L-2"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 62,
+          "createdAt": 1,
+          "updatedAt": 62,
+          "key": "L-1"
+        },
+        {
+          "id": "id-L-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-4",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-L-4",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "approved",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 65,
+          "createdAt": 1,
+          "updatedAt": 65,
+          "key": "L-4"
+        },
+        {
+          "id": "id-L-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-2",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-2",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 63,
+          "createdAt": 2,
+          "updatedAt": 63,
+          "key": "L-2"
+        },
+        {
+          "id": "id-L-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-5",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-L-5",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 66,
+          "createdAt": 2,
+          "updatedAt": 66,
+          "key": "L-5"
+        },
+        {
+          "id": "id-L-6",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-6",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "s-L-6",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 67,
+          "createdAt": 1,
+          "updatedAt": 67,
+          "key": "L-6"
+        },
+        {
+          "id": "id-L-7",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-7",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "s-L-7",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": {
+            "id": "a",
+            "runId": "r",
+            "toolName": "Bash",
+            "input": {},
+            "requestedAt": 1
+          },
+          "allowedTools": [],
+          "position": 68,
+          "createdAt": 2,
+          "updatedAt": 68,
+          "key": "L-7"
+        }
+      ],
+      "output": [
+        {
+          "status": "planning",
+          "tickets": [
+            "L-2",
+            "L-1"
+          ]
+        },
+        {
+          "status": "in_progress",
+          "tickets": [
+            "L-7",
+            "L-6"
+          ]
+        },
+        {
+          "status": "review",
+          "tickets": [
+            "L-4",
+            "L-5"
+          ]
+        },
+        {
+          "status": "done",
+          "tickets": [
+            "L-3"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blocked children by age",
+      "input": [
+        {
+          "id": "id-L-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-8",
+          "description": "",
+          "status": "blocked",
+          "sessionId": "s-L-8",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 69,
+          "createdAt": 5,
+          "updatedAt": 69,
+          "key": "L-8"
+        },
+        {
+          "id": "id-L-9",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-9",
+          "description": "",
+          "status": "blocked",
+          "sessionId": "s-L-9",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 70,
+          "createdAt": 3,
+          "updatedAt": 70,
+          "key": "L-9"
+        }
+      ],
+      "output": [
+        {
+          "status": "blocked",
+          "tickets": [
+            "L-9",
+            "L-8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "attention beats depth; depth beats age",
+      "input": [
+        {
+          "id": "id-L-10",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-10",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-10",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [
+            "L-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 71,
+          "createdAt": 0,
+          "updatedAt": 71,
+          "key": "L-10"
+        },
+        {
+          "id": "id-L-12",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-12",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-12",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 73,
+          "createdAt": 4,
+          "updatedAt": 73,
+          "key": "L-12"
+        },
+        {
+          "id": "id-L-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-1",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-1",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [
+            "L-2"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 62,
+          "createdAt": 1,
+          "updatedAt": 62,
+          "key": "L-1"
+        },
+        {
+          "id": "id-L-11",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-11",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-11",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [
+            "L-10"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": {
+            "id": "a",
+            "runId": "r",
+            "toolName": "Bash",
+            "input": {},
+            "requestedAt": 1
+          },
+          "allowedTools": [],
+          "position": 72,
+          "createdAt": 9,
+          "updatedAt": 72,
+          "key": "L-11"
+        },
+        {
+          "id": "id-L-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-2",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-2",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 63,
+          "createdAt": 2,
+          "updatedAt": 63,
+          "key": "L-2"
+        }
+      ],
+      "output": [
+        {
+          "status": "planning",
+          "tickets": [
+            "L-11",
+            "L-2",
+            "L-12",
+            "L-1",
+            "L-10"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ties keep input order",
+      "input": [
+        {
+          "id": "id-L-13",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-13",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-13",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 74,
+          "createdAt": 4,
+          "updatedAt": 74,
+          "key": "L-13"
+        },
+        {
+          "id": "id-L-12",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-12",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-12",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 73,
+          "createdAt": 4,
+          "updatedAt": 73,
+          "key": "L-12"
+        }
+      ],
+      "output": [
+        {
+          "status": "planning",
+          "tickets": [
+            "L-13",
+            "L-12"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ties keep input order, reversed",
+      "input": [
+        {
+          "id": "id-L-12",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-12",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-12",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 73,
+          "createdAt": 4,
+          "updatedAt": 73,
+          "key": "L-12"
+        },
+        {
+          "id": "id-L-13",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "L-13",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-L-13",
+          "driver": "claude-code",
+          "parentId": "id-L-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 74,
+          "createdAt": 4,
+          "updatedAt": 74,
+          "key": "L-13"
+        }
+      ],
+      "output": [
+        {
+          "status": "planning",
+          "tickets": [
+            "L-12",
+            "L-13"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": []
+    }
+  ],
+  "hideChildrenDefault": true,
+  "hideChildrenKey": "harness.board.hideChildren.v2",
+  "progressCases": [
+    {
+      "name": "mixed children",
+      "input": [
+        {
+          "id": "id-K-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-1",
+          "description": "",
+          "status": "done",
+          "sessionId": "s-K-1",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 22,
+          "createdAt": 22,
+          "updatedAt": 22,
+          "key": "K-1"
+        },
+        {
+          "id": "id-K-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-2",
+          "description": "",
+          "status": "done",
+          "sessionId": "s-K-2",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 23,
+          "createdAt": 23,
+          "updatedAt": 23,
+          "key": "K-2"
+        },
+        {
+          "id": "id-K-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-3",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "s-K-3",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 24,
+          "createdAt": 24,
+          "updatedAt": 24,
+          "key": "K-3"
+        },
+        {
+          "id": "id-K-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-4",
+          "description": "",
+          "status": "blocked",
+          "sessionId": "s-K-4",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": {
+            "id": "a",
+            "runId": "r",
+            "toolName": "Bash",
+            "input": {},
+            "requestedAt": 1
+          },
+          "allowedTools": [],
+          "position": 25,
+          "createdAt": 25,
+          "updatedAt": 25,
+          "key": "K-4"
+        },
+        {
+          "id": "id-K-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-5",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-K-5",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 26,
+          "createdAt": 26,
+          "updatedAt": 26,
+          "key": "K-5"
+        },
+        {
+          "id": "id-K-6",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-6",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-K-6",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 27,
+          "createdAt": 27,
+          "updatedAt": 27,
+          "key": "K-6"
+        },
+        {
+          "id": "id-K-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-8",
+          "description": "",
+          "status": "blocked",
+          "sessionId": "s-K-8",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 28,
+          "createdAt": 28,
+          "updatedAt": 28,
+          "key": "K-8"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 7,
+          "byStatus": {
+            "planning": 1,
+            "in_progress": 1,
+            "blocked": 2,
+            "review": 1,
+            "done": 2
+          },
+          "attention": 2
+        },
+        "label": "2/7 done · 1 in progress · 2 blocked · 1 review · 1 up next",
+        "segments": [
+          {
+            "status": "done",
+            "count": 2,
+            "pct": 28.57142857142857
+          },
+          {
+            "status": "review",
+            "count": 1,
+            "pct": 14.285714285714285
+          },
+          {
+            "status": "in_progress",
+            "count": 1,
+            "pct": 14.285714285714285
+          },
+          {
+            "status": "blocked",
+            "count": 2,
+            "pct": 28.57142857142857
+          },
+          {
+            "status": "planning",
+            "count": 1,
+            "pct": 14.285714285714285
+          }
+        ]
+      }
+    },
+    {
+      "name": "one done",
+      "input": [
+        {
+          "id": "id-K-7",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-7",
+          "description": "",
+          "status": "done",
+          "sessionId": "s-K-7",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 29,
+          "createdAt": 29,
+          "updatedAt": 29,
+          "key": "K-7"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 1,
+          "byStatus": {
+            "planning": 0,
+            "in_progress": 0,
+            "blocked": 0,
+            "review": 0,
+            "done": 1
+          },
+          "attention": 0
+        },
+        "label": "1/1 done",
+        "segments": [
+          {
+            "status": "done",
+            "count": 1,
+            "pct": 100
+          }
+        ]
+      }
+    },
+    {
+      "name": "none done",
+      "input": [
+        {
+          "id": "id-K-9",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-9",
+          "description": "",
+          "status": "planning",
+          "sessionId": "s-K-9",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 30,
+          "createdAt": 30,
+          "updatedAt": 30,
+          "key": "K-9"
+        },
+        {
+          "id": "id-K-10",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "K-10",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "s-K-10",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 31,
+          "createdAt": 31,
+          "updatedAt": 31,
+          "key": "K-10"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 2,
+          "byStatus": {
+            "planning": 1,
+            "in_progress": 1,
+            "blocked": 0,
+            "review": 0,
+            "done": 0
+          },
+          "attention": 0
+        },
+        "label": "0/2 done · 1 in progress · 1 up next",
+        "segments": [
+          {
+            "status": "in_progress",
+            "count": 1,
+            "pct": 50
+          },
+          {
+            "status": "planning",
+            "count": 1,
+            "pct": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "thirds (pct is not a round number)",
+      "input": [
+        {
+          "id": "id-T-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "T-1",
+          "description": "",
+          "status": "done",
+          "sessionId": "s-T-1",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 32,
+          "createdAt": 32,
+          "updatedAt": 32,
+          "key": "T-1"
+        },
+        {
+          "id": "id-T-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "T-2",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-T-2",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 33,
+          "createdAt": 33,
+          "updatedAt": 33,
+          "key": "T-2"
+        },
+        {
+          "id": "id-T-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "T-3",
+          "description": "",
+          "status": "blocked",
+          "sessionId": "s-T-3",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 34,
+          "createdAt": 34,
+          "updatedAt": 34,
+          "key": "T-3"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 3,
+          "byStatus": {
+            "planning": 0,
+            "in_progress": 0,
+            "blocked": 1,
+            "review": 1,
+            "done": 1
+          },
+          "attention": 1
+        },
+        "label": "1/3 done · 1 blocked · 1 review",
+        "segments": [
+          {
+            "status": "done",
+            "count": 1,
+            "pct": 33.33333333333333
+          },
+          {
+            "status": "review",
+            "count": 1,
+            "pct": 33.33333333333333
+          },
+          {
+            "status": "blocked",
+            "count": 1,
+            "pct": 33.33333333333333
+          }
+        ]
+      }
+    },
+    {
+      "name": "attention counts approvals outside blocked",
+      "input": [
+        {
+          "id": "id-Q-1",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "Q-1",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "s-Q-1",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": {
+            "id": "a",
+            "runId": "r",
+            "toolName": "Bash",
+            "input": {},
+            "requestedAt": 1
+          },
+          "allowedTools": [],
+          "position": 35,
+          "createdAt": 35,
+          "updatedAt": 35,
+          "key": "Q-1"
+        },
+        {
+          "id": "id-Q-2",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "Q-2",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-Q-2",
+          "driver": "claude-code",
+          "parentId": "id-K-0",
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 36,
+          "createdAt": 36,
+          "updatedAt": 36,
+          "key": "Q-2"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 2,
+          "byStatus": {
+            "planning": 0,
+            "in_progress": 1,
+            "blocked": 0,
+            "review": 1,
+            "done": 0
+          },
+          "attention": 1
+        },
+        "label": "0/2 done · 1 in progress · 1 review",
+        "segments": [
+          {
+            "status": "review",
+            "count": 1,
+            "pct": 50
+          },
+          {
+            "status": "in_progress",
+            "count": 1,
+            "pct": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "top-level review counts as attention",
+      "input": [
+        {
+          "id": "id-Q-3",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "Q-3",
+          "description": "",
+          "status": "review",
+          "sessionId": "s-Q-3",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 37,
+          "createdAt": 37,
+          "updatedAt": 37,
+          "key": "Q-3"
+        }
+      ],
+      "output": {
+        "progress": {
+          "total": 1,
+          "byStatus": {
+            "planning": 0,
+            "in_progress": 0,
+            "blocked": 0,
+            "review": 1,
+            "done": 0
+          },
+          "attention": 1
+        },
+        "label": "0/1 done · 1 review",
+        "segments": [
+          {
+            "status": "review",
+            "count": 1,
+            "pct": 100
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": {
+        "progress": {
+          "total": 0,
+          "byStatus": {
+            "planning": 0,
+            "in_progress": 0,
+            "blocked": 0,
+            "review": 0,
+            "done": 0
+          },
+          "attention": 0
+        },
+        "label": "0/0 done",
+        "segments": []
+      }
+    }
+  ],
+  "segmentOrder": [
+    "done",
+    "review",
+    "in_progress",
+    "blocked",
+    "planning"
+  ],
+  "waitingOnCases": [
+    {
+      "name": "unknown keys count",
+      "input": [
+        {
+          "key": "A",
+          "done": true,
+          "state": "done"
+        },
+        {
+          "key": "B",
+          "done": false,
+          "state": "pending"
+        },
+        {
+          "key": "C",
+          "done": false,
+          "state": "unknown"
+        }
+      ],
+      "output": [
+        "B",
+        "C"
+      ]
+    },
+    {
+      "name": "all done",
+      "input": [
+        {
+          "key": "A",
+          "done": true,
+          "state": "done"
+        }
+      ],
+      "output": []
+    },
+    {
+      "name": "goes by done, not state",
+      "input": [
+        {
+          "key": "A",
+          "done": false,
+          "state": "done"
+        }
+      ],
+      "output": [
+        "A"
+      ]
+    },
+    {
+      "name": "none",
+      "input": [],
+      "output": []
+    }
+  ]
+}

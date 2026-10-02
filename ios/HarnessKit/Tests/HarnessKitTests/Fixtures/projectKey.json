@@ -1,0 +1,2376 @@
+{
+  "formatRunsCases": [
+    {
+      "name": "empty",
+      "input": [],
+      "output": ""
+    },
+    {
+      "name": "one",
+      "input": [
+        4
+      ],
+      "output": "4"
+    },
+    {
+      "name": "runs",
+      "input": [
+        1,
+        2,
+        3,
+        5,
+        7,
+        8
+      ],
+      "output": "1…3, 5, 7…8"
+    },
+    {
+      "name": "pair is a run",
+      "input": [
+        1,
+        2
+      ],
+      "output": "1…2"
+    },
+    {
+      "name": "no runs",
+      "input": [
+        1,
+        3,
+        5
+      ],
+      "output": "1, 3, 5"
+    },
+    {
+      "name": "duplicates break runs",
+      "input": [
+        1,
+        1,
+        2
+      ],
+      "output": "1, 1…2"
+    },
+    {
+      "name": "huge numbers",
+      "input": [
+        100000000000000000000,
+        100000000000000000000
+      ],
+      "output": "100000000000000000000…100000000000000000000"
+    },
+    {
+      "name": "zero",
+      "input": [
+        0,
+        1
+      ],
+      "output": "0…1"
+    }
+  ],
+  "nativeTicketsCases": [
+    {
+      "name": "seeded",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "tickets": [
+          {
+            "id": "t189",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t190",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t191",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t192",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ]
+      },
+      "output": [
+        {
+          "id": "t189",
+          "suffix": "1",
+          "n": 1
+        },
+        {
+          "id": "t190",
+          "suffix": "2",
+          "n": 2
+        },
+        {
+          "id": "t191",
+          "suffix": "3",
+          "n": 3
+        }
+      ]
+    },
+    {
+      "name": "sorted by number, stable for equal numbers",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "tickets": [
+          {
+            "id": "t193",
+            "key": "HELLOHARNESS-02",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t194",
+            "key": "HELLOHARNESS-10",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t195",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t196",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ]
+      },
+      "output": [
+        {
+          "id": "t196",
+          "suffix": "1",
+          "n": 1
+        },
+        {
+          "id": "t193",
+          "suffix": "02",
+          "n": 2
+        },
+        {
+          "id": "t195",
+          "suffix": "2",
+          "n": 2
+        },
+        {
+          "id": "t194",
+          "suffix": "10",
+          "n": 10
+        }
+      ]
+    },
+    {
+      "name": "skips other projects, mirrors and foreign prefixes",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "tickets": [
+          {
+            "id": "t197",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p2",
+            "externalRef": null
+          },
+          {
+            "id": "t198",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "HELLOHARNESS-2"
+            }
+          },
+          {
+            "id": "t199",
+            "key": "X-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t200",
+            "key": "HELLOHARNESS-4",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "MH-1"
+            }
+          }
+        ]
+      },
+      "output": [
+        {
+          "id": "t200",
+          "suffix": "4",
+          "n": 4
+        }
+      ]
+    },
+    {
+      "name": "non-ASCII digits aren't native",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "tickets": [
+          {
+            "id": "t201",
+            "key": "HELLOHARNESS-١",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t202",
+            "key": "HELLOHARNESS-+1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t203",
+            "key": "HELLOHARNESS- 1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ]
+      },
+      "output": []
+    },
+    {
+      "name": "empty",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "tickets": []
+      },
+      "output": []
+    }
+  ],
+  "previewProjectKeyCases": [
+    {
+      "name": "rename with a mirror kept",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t1",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t2",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t3",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t4",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": " hel "
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "HEL-3"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1…3 become HEL-1…3. FOO-123 keeps its key"
+      }
+    },
+    {
+      "name": "linked ticket renames, mirror kept",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t5",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t6",
+            "key": "HELLOHARNESS-4",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "MH-62"
+            }
+          },
+          {
+            "id": "t7",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-4",
+            "to": "HEL-4"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1, 4 become HEL-1, 4. FOO-123 keeps its key"
+      }
+    },
+    {
+      "name": "unchanged key",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t12",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t13",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t14",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t15",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "helloharness"
+      },
+      "output": {
+        "key": "HELLOHARNESS",
+        "error": null,
+        "changed": false,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HELLOHARNESS-4",
+          "HELLOHARNESS-5"
+        ],
+        "message": "New tickets are numbered HELLOHARNESS-4, HELLOHARNESS-5…"
+      }
+    },
+    {
+      "name": "empty draft",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t16",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t17",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t18",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t19",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": ""
+      },
+      "output": {
+        "key": "",
+        "error": "Enter a key",
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [],
+        "message": "Enter a key"
+      }
+    },
+    {
+      "name": "starts with a digit",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t20",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t21",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t22",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t23",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "2X"
+      },
+      "output": {
+        "key": "2X",
+        "error": "Must start with a letter",
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [],
+        "message": "Must start with a letter"
+      }
+    },
+    {
+      "name": "dash in draft",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t24",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t25",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t26",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t27",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "he-l"
+      },
+      "output": {
+        "key": "HE-L",
+        "error": "Letters and digits only",
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [],
+        "message": "Letters and digits only"
+      }
+    },
+    {
+      "name": "too long",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t28",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t29",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t30",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t31",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "AAAAAAAAAAAAAAAAA"
+      },
+      "output": {
+        "key": "AAAAAAAAAAAAAAAAA",
+        "error": "16 characters at most",
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [],
+        "message": "16 characters at most"
+      }
+    },
+    {
+      "name": "reserved",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t32",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t33",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t34",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t35",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "triage"
+      },
+      "output": {
+        "key": "TRIAGE",
+        "error": "TRIAGE is reserved",
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [],
+        "message": "TRIAGE is reserved"
+      }
+    },
+    {
+      "name": "used by another project",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t36",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t37",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t38",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t39",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "other"
+      },
+      "output": {
+        "key": "OTHER",
+        "error": "Already used by Other",
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "OTHER-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "OTHER-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "OTHER-3"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "OTHER-4",
+          "OTHER-5"
+        ],
+        "message": "Already used by Other"
+      }
+    },
+    {
+      "name": "rename lands on an existing ticket",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t40",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t41",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t42",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t43",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          },
+          {
+            "id": "t44",
+            "key": "HEL-2",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-2"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": "HEL-2 already exists",
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "HEL-3"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "HEL-2 already exists"
+      }
+    },
+    {
+      "name": "renamed ticket doesn't clash with itself",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "X",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "X",
+            "name": "hello-harness",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t49",
+            "key": "X-1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "Y"
+      },
+      "output": {
+        "key": "Y",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "X-1",
+            "to": "Y-1"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "Y-4",
+          "Y-5"
+        ],
+        "message": "Tickets will be numbered Y-4, Y-5…; existing X-1 becomes Y-1"
+      }
+    },
+    {
+      "name": "next numbers skip taken keys",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t54",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t55",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t56",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t57",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          },
+          {
+            "id": "t58",
+            "key": "HEL-4",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-4"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "HEL-3"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HEL-5",
+          "HEL-6"
+        ],
+        "message": "Tickets will be numbered HEL-5, HEL-6…; existing HELLOHARNESS-1…3 become HEL-1…3. FOO-123 keeps its key"
+      }
+    },
+    {
+      "name": "gaps summarized as runs",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 9
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 9
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t63",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t64",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t65",
+            "key": "HELLOHARNESS-5",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t66",
+            "key": "HELLOHARNESS-7",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "H"
+      },
+      "output": {
+        "key": "H",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "H-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "H-2"
+          },
+          {
+            "from": "HELLOHARNESS-5",
+            "to": "H-5"
+          },
+          {
+            "from": "HELLOHARNESS-7",
+            "to": "H-7"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "H-9",
+          "H-10"
+        ],
+        "message": "Tickets will be numbered H-9, H-10…; existing HELLOHARNESS-1…2, 5, 7 become H-1…2, 5, 7"
+      }
+    },
+    {
+      "name": "one native ticket becomes",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 9
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 9
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t71",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "H"
+      },
+      "output": {
+        "key": "H",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "H-3"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "H-9",
+          "H-10"
+        ],
+        "message": "Tickets will be numbered H-9, H-10…; existing HELLOHARNESS-3 becomes H-3"
+      }
+    },
+    {
+      "name": "two clashes",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t76",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t77",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t78",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t79",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          },
+          {
+            "id": "t80",
+            "key": "HEL-1",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-1"
+            }
+          },
+          {
+            "id": "t81",
+            "key": "HEL-3",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-3"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": "HEL-1, HEL-3 already exist",
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "HEL-3"
+          }
+        ],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "HEL-1, HEL-3 already exist"
+      }
+    },
+    {
+      "name": "four clashes are cut to three",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t86",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t87",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t88",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t89",
+            "key": "HELLOHARNESS-4",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t90",
+            "key": "HEL-1",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-1"
+            }
+          },
+          {
+            "id": "t91",
+            "key": "HEL-2",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-2"
+            }
+          },
+          {
+            "id": "t92",
+            "key": "HEL-3",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-3"
+            }
+          },
+          {
+            "id": "t93",
+            "key": "HEL-4",
+            "projectId": "p2",
+            "externalRef": {
+              "key": "HEL-4"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": "HEL-1, HEL-2, HEL-3… already exist",
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          },
+          {
+            "from": "HELLOHARNESS-3",
+            "to": "HEL-3"
+          },
+          {
+            "from": "HELLOHARNESS-4",
+            "to": "HEL-4"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-5",
+          "HEL-6"
+        ],
+        "message": "HEL-1, HEL-2, HEL-3… already exist"
+      }
+    },
+    {
+      "name": "several mirrors kept",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t98",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t99",
+            "key": "FOO-1",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-1"
+            }
+          },
+          {
+            "id": "t100",
+            "key": "BAR-2",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "BAR-2"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          }
+        ],
+        "kept": [
+          "FOO-1",
+          "BAR-2"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1 becomes HEL-1. 2 mirrored tickets keep their keys"
+      }
+    },
+    {
+      "name": "mirrors only, nothing renamed",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t105",
+            "key": "FOO-1",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-1"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [],
+        "kept": [
+          "FOO-1"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…. FOO-1 keeps its key"
+      }
+    },
+    {
+      "name": "no tickets at all",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…"
+      }
+    },
+    {
+      "name": "other project's tickets aren't renamed",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t114",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p2",
+            "externalRef": null
+          },
+          {
+            "id": "t115",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-2 becomes HEL-2"
+      }
+    },
+    {
+      "name": "non-numeric suffix isn't native",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t120",
+            "key": "HELLOHARNESS-1a",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t121",
+            "key": "HELLOHARNESS-",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t122",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-2 becomes HEL-2"
+      }
+    },
+    {
+      "name": "other prefix in the project isn't native",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t127",
+            "key": "OLD-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t128",
+            "key": "HELLOHARNESSX-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t129",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-2",
+            "to": "HEL-2"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-2 becomes HEL-2"
+      }
+    },
+    {
+      "name": "native tickets sort by number",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t134",
+            "key": "HELLOHARNESS-10",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t135",
+            "key": "HELLOHARNESS-9",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t136",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-9",
+            "to": "HEL-9"
+          },
+          {
+            "from": "HELLOHARNESS-10",
+            "to": "HEL-10"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1, 9…10 become HEL-1, 9…10"
+      }
+    },
+    {
+      "name": "leading zeros keep their suffix",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t141",
+            "key": "HELLOHARNESS-007",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t142",
+            "key": "HELLOHARNESS-8",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-007",
+            "to": "HEL-007"
+          },
+          {
+            "from": "HELLOHARNESS-8",
+            "to": "HEL-8"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-7…8 become HEL-7…8"
+      }
+    },
+    {
+      "name": "unchanged key skips taken next numbers",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t147",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t148",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t149",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t150",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          },
+          {
+            "id": "t151",
+            "key": "HELLOHARNESS-4",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t152",
+            "key": "HELLOHARNESS-6",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HELLOHARNESS"
+      },
+      "output": {
+        "key": "HELLOHARNESS",
+        "error": null,
+        "changed": false,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HELLOHARNESS-4",
+          "HELLOHARNESS-5"
+        ],
+        "message": "New tickets are numbered HELLOHARNESS-4, HELLOHARNESS-5…"
+      }
+    },
+    {
+      "name": "renaming ticket frees its next number",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HEL",
+          "name": "hello-harness",
+          "nextSeq": 1
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HEL",
+            "name": "hello-harness",
+            "nextSeq": 1
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t157",
+            "key": "HEL-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t158",
+            "key": "HEL-2",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": false,
+        "renames": [],
+        "kept": [],
+        "next": [
+          "HEL-1",
+          "HEL-2"
+        ],
+        "message": "New tickets are numbered HEL-1, HEL-2…"
+      }
+    },
+    {
+      "name": "unchanged with lower case",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t163",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t164",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t165",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t166",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "  HelloHarness\n"
+      },
+      "output": {
+        "key": "HELLOHARNESS",
+        "error": null,
+        "changed": false,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HELLOHARNESS-4",
+          "HELLOHARNESS-5"
+        ],
+        "message": "New tickets are numbered HELLOHARNESS-4, HELLOHARNESS-5…"
+      }
+    },
+    {
+      "name": "mirror under the project's own prefix",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t167",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t168",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "HELLOHARNESS-2"
+            }
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          }
+        ],
+        "kept": [
+          "HELLOHARNESS-2"
+        ],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1 becomes HEL-1. HELLOHARNESS-2 keeps its key"
+      }
+    },
+    {
+      "name": "another project with the same key as itself is fine when unchanged",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p3",
+            "key": "HELLOHARNESS",
+            "name": "Dup",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t173",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t174",
+            "key": "HELLOHARNESS-2",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t175",
+            "key": "HELLOHARNESS-3",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t176",
+            "key": "FOO-123",
+            "projectId": "p1",
+            "externalRef": {
+              "key": "FOO-123"
+            }
+          }
+        ],
+        "draft": "HELLOHARNESS"
+      },
+      "output": {
+        "key": "HELLOHARNESS",
+        "error": null,
+        "changed": false,
+        "renames": [],
+        "kept": [
+          "FOO-123"
+        ],
+        "next": [
+          "HELLOHARNESS-4",
+          "HELLOHARNESS-5"
+        ],
+        "message": "New tickets are numbered HELLOHARNESS-4, HELLOHARNESS-5…"
+      }
+    },
+    {
+      "name": "huge ticket number",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t177",
+            "key": "HELLOHARNESS-99999999999999999999",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t178",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-99999999999999999999",
+            "to": "HEL-99999999999999999999"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1, 100000000000000000000 become HEL-1, 100000000000000000000"
+      }
+    },
+    {
+      "name": "duplicate ticket keys",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "HELLOHARNESS",
+          "name": "hello-harness",
+          "nextSeq": 4
+        },
+        "projects": [
+          {
+            "id": "p1",
+            "key": "HELLOHARNESS",
+            "name": "hello-harness",
+            "nextSeq": 4
+          },
+          {
+            "id": "p2",
+            "key": "OTHER",
+            "name": "Other",
+            "nextSeq": 4
+          }
+        ],
+        "tickets": [
+          {
+            "id": "t183",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          },
+          {
+            "id": "t184",
+            "key": "HELLOHARNESS-1",
+            "projectId": "p1",
+            "externalRef": null
+          }
+        ],
+        "draft": "HEL"
+      },
+      "output": {
+        "key": "HEL",
+        "error": null,
+        "changed": true,
+        "renames": [
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          },
+          {
+            "from": "HELLOHARNESS-1",
+            "to": "HEL-1"
+          }
+        ],
+        "kept": [],
+        "next": [
+          "HEL-4",
+          "HEL-5"
+        ],
+        "message": "Tickets will be numbered HEL-4, HEL-5…; existing HELLOHARNESS-1, 1 become HEL-1, 1"
+      }
+    }
+  ]
+}

@@ -1,0 +1,3036 @@
+{
+  "branchChoiceCases": [
+    {
+      "name": "null is the default",
+      "input": {
+        "name": null,
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "default",
+        "name": "harness/web-4"
+      }
+    },
+    {
+      "name": "missing is the default",
+      "input": {
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "default",
+        "name": "harness/web-4"
+      }
+    },
+    {
+      "name": "blank is the default",
+      "input": {
+        "name": "  ",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "default",
+        "name": "harness/web-4"
+      }
+    },
+    {
+      "name": "NBSP-only is the default",
+      "input": {
+        "name": " ",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "default",
+        "name": "harness/web-4"
+      }
+    },
+    {
+      "name": "a listed name is existing",
+      "input": {
+        "name": "feature/x",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "existing",
+        "name": "feature/x",
+        "checkedOutAt": null
+      }
+    },
+    {
+      "name": "a listed checked-out name is existing with its path",
+      "input": {
+        "name": "main",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "existing",
+        "name": "main",
+        "checkedOutAt": "/Users/me/app"
+      }
+    },
+    {
+      "name": "unlisted, trimmed: new",
+      "input": {
+        "name": " feature/y ",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "new",
+        "name": "feature/y"
+      }
+    },
+    {
+      "name": "a bad name is invalid",
+      "input": {
+        "name": "bad name",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "invalid",
+        "name": "bad name",
+        "error": "a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+      }
+    },
+    {
+      "name": "a stale harness branch is checked out as is",
+      "input": {
+        "name": null,
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "harness/web-4",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "existing",
+        "name": "harness/web-4",
+        "checkedOutAt": null
+      }
+    },
+    {
+      "name": "the default name typed out is still the default",
+      "input": {
+        "name": "harness/web-4",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "default",
+        "name": "harness/web-4"
+      }
+    },
+    {
+      "name": "a draft picking the project directory's branch: checkout",
+      "input": {
+        "name": "main",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "checkoutPath": "/Users/me/app/"
+      },
+      "output": {
+        "kind": "checkout",
+        "name": "main",
+        "path": "/Users/me/app"
+      }
+    },
+    {
+      "name": "a draft picking a branch checked out elsewhere: existing",
+      "input": {
+        "name": "main",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "checkoutPath": "/Users/me/other"
+      },
+      "output": {
+        "kind": "existing",
+        "name": "main",
+        "checkedOutAt": "/Users/me/app"
+      }
+    },
+    {
+      "name": "a draft picking an unchecked-out branch: existing",
+      "input": {
+        "name": "feature/x",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "checkoutPath": "/Users/me/app"
+      },
+      "output": {
+        "kind": "existing",
+        "name": "feature/x",
+        "checkedOutAt": null
+      }
+    },
+    {
+      "name": "NFD name isn't the NFC branch",
+      "input": {
+        "name": "café",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "new",
+        "name": "café"
+      }
+    },
+    {
+      "name": "NEL isn't trimmed, and git takes it",
+      "input": {
+        "name": "x",
+        "defaultName": "harness/web-4",
+        "known": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/app"
+          },
+          {
+            "name": "feature/x",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ]
+      },
+      "output": {
+        "kind": "new",
+        "name": "x"
+      }
+    }
+  ],
+  "branchChoiceHintCases": [
+    {
+      "name": "default",
+      "input": {
+        "choice": {
+          "kind": "default",
+          "name": "harness/web-4"
+        },
+        "base": "develop"
+      },
+      "output": {
+        "text": "A new branch, created from develop when work starts.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "new",
+      "input": {
+        "choice": {
+          "kind": "new",
+          "name": "feature/y"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "feature/y doesn't exist yet. It will be created from main when work starts.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "existing, checked out elsewhere warns with a tildified path",
+      "input": {
+        "choice": {
+          "kind": "existing",
+          "name": "x",
+          "checkedOutAt": "/Users/me/wt/x"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Checked out in ~/wt/x. The ticket will block when it starts unless that worktree lets go of it.",
+        "tone": "warn"
+      }
+    },
+    {
+      "name": "existing, checked out outside /Users",
+      "input": {
+        "choice": {
+          "kind": "existing",
+          "name": "x",
+          "checkedOutAt": "/tmp/wt/x"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Checked out in /tmp/wt/x. The ticket will block when it starts unless that worktree lets go of it.",
+        "tone": "warn"
+      }
+    },
+    {
+      "name": "existing, free",
+      "input": {
+        "choice": {
+          "kind": "existing",
+          "name": "x",
+          "checkedOutAt": null
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "An existing branch: the ticket's worktree checks it out as is.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "existing, empty path is free",
+      "input": {
+        "choice": {
+          "kind": "existing",
+          "name": "x",
+          "checkedOutAt": ""
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "An existing branch: the ticket's worktree checks it out as is.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "invalid",
+      "input": {
+        "choice": {
+          "kind": "invalid",
+          "name": "a b",
+          "error": "no spaces"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Not a valid branch name: no spaces.",
+        "tone": "error"
+      }
+    },
+    {
+      "name": "checkout tildifies the home directory itself",
+      "input": {
+        "choice": {
+          "kind": "checkout",
+          "name": "main",
+          "path": "/Users/me"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Works directly in ~ on main, with no worktree.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "checkout under /Usersx isn't home",
+      "input": {
+        "choice": {
+          "kind": "checkout",
+          "name": "main",
+          "path": "/Usersx/me/web"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Works directly in /Usersx/me/web on main, with no worktree.",
+        "tone": "plain"
+      }
+    },
+    {
+      "name": "checkout in a home dir",
+      "input": {
+        "choice": {
+          "kind": "checkout",
+          "name": "main",
+          "path": "/Users/me/web/"
+        },
+        "base": "main"
+      },
+      "output": {
+        "text": "Works directly in ~/web/ on main, with no worktree.",
+        "tone": "plain"
+      }
+    }
+  ],
+  "branchRowsCases": [
+    {
+      "name": "no query: the default, then every branch, no new row",
+      "input": {
+        "branches": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          },
+          {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "develop",
+          "label": "develop",
+          "info": {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a query hides the default and offers the typed name last",
+      "input": {
+        "branches": [
+          {
+            "name": "medl-1223-ai-app",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "medl",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "branch",
+          "value": "medl-1223-ai-app",
+          "label": "medl-1223-ai-app",
+          "info": {
+            "name": "medl-1223-ai-app",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "medl",
+          "label": "Create medl"
+        }
+      ]
+    },
+    {
+      "name": "a query in the default's label keeps it",
+      "input": {
+        "branches": [],
+        "query": "harness",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "new",
+          "value": "harness",
+          "label": "Create harness"
+        }
+      ]
+    },
+    {
+      "name": "every word must be in the default's label",
+      "input": {
+        "branches": [],
+        "query": "new web",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ]
+    },
+    {
+      "name": "a word missing from the label hides it; spaces make it invalid",
+      "input": {
+        "branches": [],
+        "query": "new zzz",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ]
+    },
+    {
+      "name": "an exact match (after trimming) isn't offered again",
+      "input": {
+        "branches": [
+          {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          },
+          {
+            "name": "develop-2",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": " develop ",
+        "defaultLabel": "x",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "branch",
+          "value": "develop",
+          "label": "develop",
+          "info": {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "develop-2",
+          "label": "develop-2",
+          "info": {
+            "name": "develop-2",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a name git refuses is an invalid row",
+      "input": {
+        "branches": [],
+        "query": "feat..x",
+        "defaultLabel": "x",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain .."
+        }
+      ]
+    },
+    {
+      "name": "upper-case query matches the label case-insensitively",
+      "input": {
+        "branches": [],
+        "query": "HARNESS",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "new",
+          "value": "HARNESS",
+          "label": "Create HARNESS"
+        }
+      ]
+    },
+    {
+      "name": "whitespace-only query is no query",
+      "input": {
+        "branches": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": " \t ",
+        "defaultLabel": "Default",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "Default"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "NEL is not whitespace in JS",
+      "input": {
+        "branches": [],
+        "query": "",
+        "defaultLabel": "Default",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "new",
+          "value": "",
+          "label": "Create "
+        }
+      ]
+    },
+    {
+      "name": "tab-separated words",
+      "input": {
+        "branches": [],
+        "query": "new\tbranch",
+        "defaultLabel": "New branch harness/web-4",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ]
+    },
+    {
+      "name": "NFD query isn't the NFC branch",
+      "input": {
+        "branches": [
+          {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "café",
+        "defaultLabel": "Default",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "branch",
+          "value": "café",
+          "label": "café",
+          "info": {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "café",
+          "label": "Create café"
+        }
+      ]
+    },
+    {
+      "name": "NFC query matches the NFC branch",
+      "input": {
+        "branches": [
+          {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "café",
+        "defaultLabel": "Default",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "branch",
+          "value": "café",
+          "label": "café",
+          "info": {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "branch info passes through",
+      "input": {
+        "branches": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/web"
+          },
+          {
+            "name": "feat",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "",
+        "defaultLabel": "Default",
+        "newPrefix": "+ "
+      },
+      "output": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "Default"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/web"
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "feat",
+          "label": "feat",
+          "info": {
+            "name": "feat",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "pickable ids with a query",
+      "input": {
+        "branches": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "query": "ma",
+        "defaultLabel": "Default",
+        "newPrefix": "Create "
+      },
+      "output": [
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "ma",
+          "label": "Create ma"
+        }
+      ]
+    }
+  ],
+  "canChangeBranchCases": [
+    {
+      "name": "fresh worktree ticket",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "worktree exists",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "/wt/WEB-4",
+          "branch": "harness/web-4",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "done",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "done",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "opted out of a worktree",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": false,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "not git",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": false,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "project doesn't use worktrees",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "opted into a worktree",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": true,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "has a branch, project stopped using worktrees",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "x",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "no project",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": null
+      },
+      "output": false
+    },
+    {
+      "name": "no project but a branch",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "x",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": null
+      },
+      "output": true
+    },
+    {
+      "name": "empty branch is no branch",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "isGit unknown counts as git",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "workdir without a branch (project checkout)",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "/Users/me/web",
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": true,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "empty workdir doesn't count",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "",
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    }
+  ],
+  "checkoutBranchCases": [
+    {
+      "name": "the branch the project directory has",
+      "input": {
+        "branches": [
+          {
+            "name": "dev",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/tmp/wt"
+          },
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/web/"
+          }
+        ],
+        "projectPath": "/Users/me/web"
+      },
+      "output": {
+        "name": "main",
+        "lastCommitAt": 1,
+        "checkedOutAt": "/Users/me/web/"
+      }
+    },
+    {
+      "name": "first match wins",
+      "input": {
+        "branches": [
+          {
+            "name": "a",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/w"
+          },
+          {
+            "name": "b",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/w/"
+          }
+        ],
+        "projectPath": "/w"
+      },
+      "output": {
+        "name": "a",
+        "lastCommitAt": 1,
+        "checkedOutAt": "/w"
+      }
+    },
+    {
+      "name": "none listed",
+      "input": {
+        "branches": [
+          {
+            "name": "dev",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/tmp/wt"
+          },
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        ],
+        "projectPath": "/Users/me/web"
+      },
+      "output": null
+    },
+    {
+      "name": "no project path",
+      "input": {
+        "branches": [
+          {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/web"
+          }
+        ],
+        "projectPath": null
+      },
+      "output": null
+    }
+  ],
+  "inheritedBaseLabelCases": [
+    {
+      "name": "settings",
+      "input": {
+        "branch": "main",
+        "source": "settings"
+      },
+      "output": "main (app default)"
+    },
+    {
+      "name": "project",
+      "input": {
+        "branch": "develop",
+        "source": "project"
+      },
+      "output": "develop (project default)"
+    },
+    {
+      "name": "ticket",
+      "input": {
+        "branch": "release",
+        "source": "ticket"
+      },
+      "output": "release (ticket)"
+    },
+    {
+      "name": "parent",
+      "input": {
+        "branch": "harness/web-1",
+        "source": "parent"
+      },
+      "output": "harness/web-1 (parent ticket's branch)"
+    }
+  ],
+  "newTicketBranchLabelCases": [
+    {
+      "name": "lower-cases the key",
+      "input": "WEB-4",
+      "output": "New branch harness/web-4"
+    },
+    {
+      "name": "already lower",
+      "input": "web-12",
+      "output": "New branch harness/web-12"
+    }
+  ],
+  "pickableIdsCases": [
+    {
+      "name": "no query: the default, then every branch, no new row",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "develop",
+          "label": "develop",
+          "info": {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ],
+      "output": [
+        "",
+        "main",
+        "develop"
+      ]
+    },
+    {
+      "name": "a query hides the default and offers the typed name last",
+      "input": [
+        {
+          "kind": "branch",
+          "value": "medl-1223-ai-app",
+          "label": "medl-1223-ai-app",
+          "info": {
+            "name": "medl-1223-ai-app",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "medl",
+          "label": "Create medl"
+        }
+      ],
+      "output": [
+        "medl-1223-ai-app",
+        "medl"
+      ]
+    },
+    {
+      "name": "a query in the default's label keeps it",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "new",
+          "value": "harness",
+          "label": "Create harness"
+        }
+      ],
+      "output": [
+        "",
+        "harness"
+      ]
+    },
+    {
+      "name": "every word must be in the default's label",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ],
+      "output": [
+        ""
+      ]
+    },
+    {
+      "name": "a word missing from the label hides it; spaces make it invalid",
+      "input": [
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ],
+      "output": []
+    },
+    {
+      "name": "an exact match (after trimming) isn't offered again",
+      "input": [
+        {
+          "kind": "branch",
+          "value": "develop",
+          "label": "develop",
+          "info": {
+            "name": "develop",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "develop-2",
+          "label": "develop-2",
+          "info": {
+            "name": "develop-2",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ],
+      "output": [
+        "develop",
+        "develop-2"
+      ]
+    },
+    {
+      "name": "a name git refuses is an invalid row",
+      "input": [
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain .."
+        }
+      ],
+      "output": []
+    },
+    {
+      "name": "upper-case query matches the label case-insensitively",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "new",
+          "value": "HARNESS",
+          "label": "Create HARNESS"
+        }
+      ],
+      "output": [
+        "",
+        "HARNESS"
+      ]
+    },
+    {
+      "name": "whitespace-only query is no query",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "Default"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ],
+      "output": [
+        "",
+        "main"
+      ]
+    },
+    {
+      "name": "NEL is not whitespace in JS",
+      "input": [
+        {
+          "kind": "new",
+          "value": "",
+          "label": "Create "
+        }
+      ],
+      "output": [
+        ""
+      ]
+    },
+    {
+      "name": "tab-separated words",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "New branch harness/web-4"
+        },
+        {
+          "kind": "invalid",
+          "value": null,
+          "label": "Not a valid branch name: a branch name can't contain spaces, control characters or any of ~ ^ : ? * [ \\"
+        }
+      ],
+      "output": [
+        ""
+      ]
+    },
+    {
+      "name": "NFD query isn't the NFC branch",
+      "input": [
+        {
+          "kind": "branch",
+          "value": "café",
+          "label": "café",
+          "info": {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "café",
+          "label": "Create café"
+        }
+      ],
+      "output": [
+        "café",
+        "café"
+      ]
+    },
+    {
+      "name": "NFC query matches the NFC branch",
+      "input": [
+        {
+          "kind": "branch",
+          "value": "café",
+          "label": "café",
+          "info": {
+            "name": "café",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ],
+      "output": [
+        "café"
+      ]
+    },
+    {
+      "name": "branch info passes through",
+      "input": [
+        {
+          "kind": "default",
+          "value": null,
+          "label": "Default"
+        },
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": "/Users/me/web"
+          }
+        },
+        {
+          "kind": "branch",
+          "value": "feat",
+          "label": "feat",
+          "info": {
+            "name": "feat",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        }
+      ],
+      "output": [
+        "",
+        "main",
+        "feat"
+      ]
+    },
+    {
+      "name": "pickable ids with a query",
+      "input": [
+        {
+          "kind": "branch",
+          "value": "main",
+          "label": "main",
+          "info": {
+            "name": "main",
+            "lastCommitAt": 1,
+            "checkedOutAt": null
+          }
+        },
+        {
+          "kind": "new",
+          "value": "ma",
+          "label": "Create ma"
+        }
+      ],
+      "output": [
+        "main",
+        "ma"
+      ]
+    }
+  ],
+  "predictedTicketKeyCases": [
+    {
+      "name": "nothing taken",
+      "input": {
+        "key": "WEB",
+        "nextSeq": 4,
+        "taken": []
+      },
+      "output": "WEB-4"
+    },
+    {
+      "name": "skips taken keys up to the first gap",
+      "input": {
+        "key": "WEB",
+        "nextSeq": 4,
+        "taken": [
+          "WEB-4",
+          "WEB-5",
+          "WEB-7"
+        ]
+      },
+      "output": "WEB-6"
+    },
+    {
+      "name": "other projects' keys don't count",
+      "input": {
+        "key": "WEB",
+        "nextSeq": 1,
+        "taken": [
+          "API-1",
+          "WEB-2"
+        ]
+      },
+      "output": "WEB-1"
+    }
+  ],
+  "rowIdCases": [
+    {
+      "name": "default",
+      "input": {
+        "kind": "default",
+        "value": null,
+        "label": "Default"
+      },
+      "output": ""
+    },
+    {
+      "name": "branch",
+      "input": {
+        "kind": "branch",
+        "value": "main",
+        "label": "main",
+        "info": {
+          "name": "main",
+          "lastCommitAt": 1,
+          "checkedOutAt": null
+        }
+      },
+      "output": "main"
+    },
+    {
+      "name": "new",
+      "input": {
+        "kind": "new",
+        "value": "feat",
+        "label": "Create feat"
+      },
+      "output": "feat"
+    },
+    {
+      "name": "invalid",
+      "input": {
+        "kind": "invalid",
+        "value": null,
+        "label": "Not a valid branch name: x"
+      },
+      "output": null
+    }
+  ],
+  "samePathCases": [
+    {
+      "name": "trailing slash doesn't count",
+      "input": {
+        "a": "/Users/me/web/",
+        "b": "/Users/me/web"
+      },
+      "output": true
+    },
+    {
+      "name": "many trailing slashes",
+      "input": {
+        "a": "/Users/me/web///",
+        "b": "/Users/me/web"
+      },
+      "output": true
+    },
+    {
+      "name": "a prefix isn't the same",
+      "input": {
+        "a": "/Users/me/web2",
+        "b": "/Users/me/web"
+      },
+      "output": false
+    },
+    {
+      "name": "root and slashes",
+      "input": {
+        "a": "/",
+        "b": "///"
+      },
+      "output": true
+    },
+    {
+      "name": "empty is never the same",
+      "input": {
+        "a": "",
+        "b": ""
+      },
+      "output": false
+    },
+    {
+      "name": "null",
+      "input": {
+        "a": null,
+        "b": "/x"
+      },
+      "output": false
+    },
+    {
+      "name": "missing",
+      "input": {
+        "b": "/x"
+      },
+      "output": false
+    },
+    {
+      "name": "inner double slash counts",
+      "input": {
+        "a": "/a//b",
+        "b": "/a/b"
+      },
+      "output": false
+    },
+    {
+      "name": "NFC vs NFD",
+      "input": {
+        "a": "/Users/me/café",
+        "b": "/Users/me/café"
+      },
+      "output": false
+    }
+  ],
+  "ticketHasBranchCases": [
+    {
+      "name": "fresh worktree ticket",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "worktree exists",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "in_progress",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "/wt/WEB-4",
+          "branch": "harness/web-4",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "done",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "done",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "opted out of a worktree",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": false,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "not git",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": false,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "project doesn't use worktrees",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "opted into a worktree",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": true,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "has a branch, project stopped using worktrees",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "x",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "no project",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": null
+      },
+      "output": false
+    },
+    {
+      "name": "no project but a branch",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "x",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": null
+      },
+      "output": true
+    },
+    {
+      "name": "empty branch is no branch",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": "",
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "isGit unknown counts as git",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "workdir without a branch (project checkout)",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "/Users/me/web",
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": true,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": false,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "empty workdir doesn't count",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": "",
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "draft": false,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": true
+    }
+  ]
+}

@@ -1,0 +1,4533 @@
+{
+  "diffTintsCases": [
+    {
+      "name": "black, light",
+      "input": {
+        "bg": "#000000",
+        "added": "#00ff00",
+        "deleted": "#ff0000",
+        "appearance": "light"
+      },
+      "output": {
+        "add": "#001f00",
+        "del": "#1f0000"
+      }
+    },
+    {
+      "name": "black, dark",
+      "input": {
+        "bg": "#000000",
+        "added": "#00ff00",
+        "deleted": "#ff0000",
+        "appearance": "dark"
+      },
+      "output": {
+        "add": "#003300",
+        "del": "#330000"
+      }
+    },
+    {
+      "name": "pierre light on white",
+      "input": {
+        "bg": "#ffffff",
+        "added": "#0dbe4e",
+        "deleted": "#ff6762",
+        "appearance": "light"
+      },
+      "output": {
+        "add": "#e2f7ea",
+        "del": "#ffedec"
+      }
+    },
+    {
+      "name": "pierre dark on a dark sunken bg",
+      "input": {
+        "bg": "#141415",
+        "added": "#5ecc71",
+        "deleted": "#ff6762",
+        "appearance": "dark"
+      },
+      "output": {
+        "add": "#233927",
+        "del": "#432524"
+      }
+    },
+    {
+      "name": "short hex and rgb()",
+      "input": {
+        "bg": "#fff",
+        "added": "rgb(26, 127, 55)",
+        "deleted": "#cf222e",
+        "appearance": "light"
+      },
+      "output": {
+        "add": "#e4f0e7",
+        "del": "#f9e4e6"
+      }
+    },
+    {
+      "name": "rounding halves",
+      "input": {
+        "bg": "#010203",
+        "added": "#fefdfc",
+        "deleted": "#808080",
+        "appearance": "dark"
+      },
+      "output": {
+        "add": "#343435",
+        "del": "#1a1b1c"
+      }
+    }
+  ],
+  "gitColorsCases": [
+    {
+      "name": "gitDecoration wins",
+      "input": {
+        "colors": {
+          "gitDecoration.addedResourceForeground": "#00ff00",
+          "gitDecoration.deletedResourceForeground": "#ff00ff",
+          "terminal.ansiGreen": "#111111",
+          "terminal.ansiRed": "#ff0000"
+        },
+        "appearance": "light"
+      },
+      "output": {
+        "added": "#00ff00",
+        "deleted": "#ff00ff"
+      }
+    },
+    {
+      "name": "mixed sources",
+      "input": {
+        "colors": {
+          "gitDecoration.addedResourceForeground": "#00ff00",
+          "terminal.ansiGreen": "#111111",
+          "terminal.ansiRed": "#ff0000"
+        },
+        "appearance": "light"
+      },
+      "output": {
+        "added": "#00ff00",
+        "deleted": "#ff0000"
+      }
+    },
+    {
+      "name": "terminal colors",
+      "input": {
+        "colors": {
+          "terminal.ansiGreen": "#111111",
+          "terminal.ansiRed": "#222222"
+        },
+        "appearance": "dark"
+      },
+      "output": {
+        "added": "#111111",
+        "deleted": "#222222"
+      }
+    },
+    {
+      "name": "no colors, light",
+      "input": {
+        "colors": null,
+        "appearance": "light"
+      },
+      "output": {
+        "added": "#0dbe4e",
+        "deleted": "#ff6762"
+      }
+    },
+    {
+      "name": "no colors, dark",
+      "input": {
+        "colors": null,
+        "appearance": "dark"
+      },
+      "output": {
+        "added": "#5ecc71",
+        "deleted": "#ff6762"
+      }
+    },
+    {
+      "name": "empty colors, dark",
+      "input": {
+        "colors": {},
+        "appearance": "dark"
+      },
+      "output": {
+        "added": "#5ecc71",
+        "deleted": "#ff6762"
+      }
+    }
+  ],
+  "highlightCases": [
+    {
+      "name": "typescript, pierre-light",
+      "input": {
+        "code": "import { a } from \"./a\";\n\n/** Doc comment */\nexport const greet = (name: string): string => `hi ${name}`;\nlet n = 42; // trailing",
+        "lang": "typescript",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "import",
+                "color": "#D32A61"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "{",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "a",
+                "color": "#D47628"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "}",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "from",
+                "color": "#D32A61"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "\"./a\"",
+                "color": "#199F43"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "/** Doc comment */",
+                "color": "#737373"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "export",
+                "color": "#D32A61"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "const",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "greet",
+                "color": "#693ACF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "(name:",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "string",
+                "color": "#A631BE"
+              },
+              {
+                "text": "):",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "string",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=>",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "`",
+                "color": "#636363"
+              },
+              {
+                "text": "hi ",
+                "color": "#199F43"
+              },
+              {
+                "text": "${",
+                "color": "#D32A61"
+              },
+              {
+                "text": "name",
+                "color": "#D47628"
+              },
+              {
+                "text": "}",
+                "color": "#D32A61"
+              },
+              {
+                "text": "`",
+                "color": "#636363"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "n",
+                "color": "#D47628"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "42",
+                "color": "#1CA1C7"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "// trailing",
+                "color": "#737373"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "typescript, pierre-dark",
+      "input": {
+        "code": "import { a } from \"./a\";\n\n/** Doc comment */\nexport const greet = (name: string): string => `hi ${name}`;\nlet n = 42; // trailing",
+        "lang": "typescript",
+        "theme": "pierre-dark",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#fafafa",
+        "added": "#07c480",
+        "deleted": "#ff2e3f",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "import",
+                "color": "#FF678D"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "{",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "a",
+                "color": "#FFA359"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "}",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "from",
+                "color": "#FF678D"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "\"./a\"",
+                "color": "#5ECC71"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "/** Doc comment */",
+                "color": "#737373"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "export",
+                "color": "#FF678D"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "const",
+                "color": "#D568EA"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "greet",
+                "color": "#9D6AFB"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "(",
+                "color": "#636363"
+              },
+              {
+                "text": "name",
+                "color": "#A3A3A3"
+              },
+              {
+                "text": ":",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "string",
+                "color": "#D568EA"
+              },
+              {
+                "text": "):",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "string",
+                "color": "#D568EA"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=>",
+                "color": "#D568EA"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "`",
+                "color": "#636363"
+              },
+              {
+                "text": "hi ",
+                "color": "#5ECC71"
+              },
+              {
+                "text": "${",
+                "color": "#FF678D"
+              },
+              {
+                "text": "name",
+                "color": "#FFA359"
+              },
+              {
+                "text": "}",
+                "color": "#FF678D"
+              },
+              {
+                "text": "`",
+                "color": "#636363"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#D568EA"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "n",
+                "color": "#FFA359"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "42",
+                "color": "#68CDF2"
+              },
+              {
+                "text": ";",
+                "color": "#636363"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "// trailing",
+                "color": "#737373"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "tsx, one-dark-pro",
+      "input": {
+        "code": "const A = () => <div className=\"a\">{x}</div>;",
+        "lang": "tsx",
+        "theme": "one-dark-pro",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#abb2bf",
+        "added": "#8cc265",
+        "deleted": "#e05561",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "const",
+                "color": "#C678DD"
+              },
+              {
+                "text": " ",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "A",
+                "color": "#61AFEF"
+              },
+              {
+                "text": " ",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "=",
+                "color": "#56B6C2"
+              },
+              {
+                "text": " () ",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "=>",
+                "color": "#C678DD"
+              },
+              {
+                "text": " <",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "div",
+                "color": "#E06C75"
+              },
+              {
+                "text": " ",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "className",
+                "color": "#D19A66",
+                "fontStyle": 1
+              },
+              {
+                "text": "=",
+                "color": "#56B6C2"
+              },
+              {
+                "text": "\"a\"",
+                "color": "#98C379"
+              },
+              {
+                "text": ">",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "{",
+                "color": "#C678DD"
+              },
+              {
+                "text": "x",
+                "color": "#E06C75"
+              },
+              {
+                "text": "}",
+                "color": "#C678DD"
+              },
+              {
+                "text": "</",
+                "color": "#ABB2BF"
+              },
+              {
+                "text": "div",
+                "color": "#E06C75"
+              },
+              {
+                "text": ">;",
+                "color": "#ABB2BF"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "swift, github-light-default",
+      "input": {
+        "code": "struct Point: Equatable {\n    var x = 0.5\n    /* block\n       comment */\n    func moved(by d: Double) -> Point { Point(x: x + d) }\n}\nlet s = \"\"\"\nmulti\n\"\"\"",
+        "lang": "swift",
+        "theme": "github-light-default",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#1f2328",
+        "added": "#1a7f37",
+        "deleted": "#cf222e",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "struct",
+                "color": "#CF222E"
+              },
+              {
+                "text": " ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "Point",
+                "color": "#953800"
+              },
+              {
+                "text": ": ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "Equatable ",
+                "color": "#0550AE"
+              },
+              {
+                "text": "{",
+                "color": "#1F2328"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "var",
+                "color": "#CF222E"
+              },
+              {
+                "text": " x ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "=",
+                "color": "#CF222E"
+              },
+              {
+                "text": " ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "0.5",
+                "color": "#0550AE"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "/* block",
+                "color": "#6E7781"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "       comment */",
+                "color": "#6E7781"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "func",
+                "color": "#CF222E"
+              },
+              {
+                "text": " ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "moved",
+                "color": "#8250DF"
+              },
+              {
+                "text": "(",
+                "color": "#1F2328"
+              },
+              {
+                "text": "by",
+                "color": "#8250DF"
+              },
+              {
+                "text": " d: ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "Double",
+                "color": "#0550AE"
+              },
+              {
+                "text": ") ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "->",
+                "color": "#CF222E"
+              },
+              {
+                "text": " Point { ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "Point",
+                "color": "#0550AE"
+              },
+              {
+                "text": "(",
+                "color": "#1F2328"
+              },
+              {
+                "text": "x",
+                "color": "#0550AE"
+              },
+              {
+                "text": ": x ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "+",
+                "color": "#CF222E"
+              },
+              {
+                "text": " d) }",
+                "color": "#1F2328"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "}",
+                "color": "#1F2328"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#CF222E"
+              },
+              {
+                "text": " s ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "=",
+                "color": "#CF222E"
+              },
+              {
+                "text": " ",
+                "color": "#1F2328"
+              },
+              {
+                "text": "\"\"\"",
+                "color": "#0A3069"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "multi",
+                "color": "#0A3069"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "\"\"\"",
+                "color": "#0A3069"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "swift, github-dark-default",
+      "input": {
+        "code": "struct Point: Equatable {\n    var x = 0.5\n    /* block\n       comment */\n    func moved(by d: Double) -> Point { Point(x: x + d) }\n}\nlet s = \"\"\"\nmulti\n\"\"\"",
+        "lang": "swift",
+        "theme": "github-dark-default",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#e6edf3",
+        "added": "#3fb950",
+        "deleted": "#f85149",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "struct",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "Point",
+                "color": "#FFA657"
+              },
+              {
+                "text": ": ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "Equatable ",
+                "color": "#79C0FF"
+              },
+              {
+                "text": "{",
+                "color": "#E6EDF3"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "var",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " x ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "=",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "0.5",
+                "color": "#79C0FF"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "/* block",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "       comment */",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "func",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "moved",
+                "color": "#D2A8FF"
+              },
+              {
+                "text": "(",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "by",
+                "color": "#D2A8FF"
+              },
+              {
+                "text": " d: ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "Double",
+                "color": "#79C0FF"
+              },
+              {
+                "text": ") ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "->",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " Point { ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "Point",
+                "color": "#79C0FF"
+              },
+              {
+                "text": "(",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "x",
+                "color": "#79C0FF"
+              },
+              {
+                "text": ": x ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "+",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " d) }",
+                "color": "#E6EDF3"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "}",
+                "color": "#E6EDF3"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " s ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "=",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "\"\"\"",
+                "color": "#A5D6FF"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "multi",
+                "color": "#A5D6FF"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "\"\"\"",
+                "color": "#A5D6FF"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "php with embedded html, catppuccin-latte",
+      "input": {
+        "code": "<?php\nnamespace App;\n\nclass User extends Model {\n    protected $fillable = ['name'];\n    public function greet(): string { return \"Hi {$this->name}\"; }\n}\n?>\n<div class=\"x\"><?= $user->name ?></div>",
+        "lang": "php",
+        "theme": "catppuccin-latte",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#4c4f69",
+        "added": "#40a02b",
+        "deleted": "#d20f39",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "<?",
+                "color": "#179299"
+              },
+              {
+                "text": "php",
+                "color": "#4C4F69"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "namespace",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "App",
+                "color": "#DF8E1D",
+                "fontStyle": 1
+              },
+              {
+                "text": ";",
+                "color": "#7C7F93"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "class",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "User",
+                "color": "#DF8E1D",
+                "fontStyle": 1
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "extends",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "Model",
+                "color": "#DF8E1D",
+                "fontStyle": 1
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "{",
+                "color": "#7C7F93"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "protected",
+                "color": "#8839EF"
+              },
+              {
+                "text": " $fillable ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "=",
+                "color": "#179299"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "[",
+                "color": "#7C7F93"
+              },
+              {
+                "text": "'name'",
+                "color": "#40A02B"
+              },
+              {
+                "text": "];",
+                "color": "#7C7F93"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "public",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "function",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "greet",
+                "color": "#1E66F5",
+                "fontStyle": 1
+              },
+              {
+                "text": "()",
+                "color": "#7C7F93"
+              },
+              {
+                "text": ":",
+                "color": "#179299"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "string",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "{",
+                "color": "#7C7F93"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "return",
+                "color": "#8839EF"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "\"Hi ",
+                "color": "#40A02B"
+              },
+              {
+                "text": "{",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "$this",
+                "color": "#D20F39"
+              },
+              {
+                "text": "->",
+                "color": "#179299"
+              },
+              {
+                "text": "name}",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "\"",
+                "color": "#40A02B"
+              },
+              {
+                "text": ";",
+                "color": "#7C7F93"
+              },
+              {
+                "text": " ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "}",
+                "color": "#7C7F93"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "}",
+                "color": "#7C7F93"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "?>",
+                "color": "#179299"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "<",
+                "color": "#179299"
+              },
+              {
+                "text": "div ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "class",
+                "color": "#8839EF"
+              },
+              {
+                "text": "=",
+                "color": "#179299"
+              },
+              {
+                "text": "\"x\"",
+                "color": "#40A02B"
+              },
+              {
+                "text": "><?=",
+                "color": "#179299"
+              },
+              {
+                "text": " $user",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "->",
+                "color": "#179299"
+              },
+              {
+                "text": "name ",
+                "color": "#4C4F69"
+              },
+              {
+                "text": "?></",
+                "color": "#179299"
+              },
+              {
+                "text": "div",
+                "color": "#4C4F69"
+              },
+              {
+                "text": ">",
+                "color": "#179299"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "python, catppuccin-mocha (italics)",
+      "input": {
+        "code": "def fib(n: int) -> int:\n    \"\"\"Docstring\n    spans lines\"\"\"\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\n@decorator\nclass A: pass",
+        "lang": "python",
+        "theme": "catppuccin-mocha",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#cdd6f4",
+        "added": "#a6e3a1",
+        "deleted": "#f38ba8",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "def",
+                "color": "#CBA6F7"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "fib",
+                "color": "#89B4FA",
+                "fontStyle": 1
+              },
+              {
+                "text": "(",
+                "color": "#9399B2"
+              },
+              {
+                "text": "n",
+                "color": "#EBA0AC",
+                "fontStyle": 1
+              },
+              {
+                "text": ":",
+                "color": "#9399B2"
+              },
+              {
+                "text": " ",
+                "color": "#EBA0AC"
+              },
+              {
+                "text": "int",
+                "color": "#CBA6F7",
+                "fontStyle": 1
+              },
+              {
+                "text": ")",
+                "color": "#9399B2"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "->",
+                "color": "#9399B2"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "int",
+                "color": "#CBA6F7",
+                "fontStyle": 1
+              },
+              {
+                "text": ":",
+                "color": "#9399B2"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "\"\"\"Docstring",
+                "color": "#A6E3A1"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    spans lines\"\"\"",
+                "color": "#A6E3A1"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "return",
+                "color": "#CBA6F7"
+              },
+              {
+                "text": " n ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "if",
+                "color": "#CBA6F7"
+              },
+              {
+                "text": " n ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "<",
+                "color": "#94E2D5"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "2",
+                "color": "#FAB387"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "else",
+                "color": "#CBA6F7"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "fib",
+                "color": "#89B4FA"
+              },
+              {
+                "text": "(",
+                "color": "#9399B2"
+              },
+              {
+                "text": "n ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "-",
+                "color": "#94E2D5"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "1",
+                "color": "#FAB387"
+              },
+              {
+                "text": ")",
+                "color": "#9399B2"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "+",
+                "color": "#94E2D5"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "fib",
+                "color": "#89B4FA"
+              },
+              {
+                "text": "(",
+                "color": "#9399B2"
+              },
+              {
+                "text": "n ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "-",
+                "color": "#94E2D5"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "2",
+                "color": "#FAB387"
+              },
+              {
+                "text": ")",
+                "color": "#9399B2"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "@decorator",
+                "color": "#FAB387",
+                "fontStyle": 1
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "class",
+                "color": "#CBA6F7"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "A",
+                "color": "#F9E2AF",
+                "fontStyle": 1
+              },
+              {
+                "text": ":",
+                "color": "#9399B2"
+              },
+              {
+                "text": " ",
+                "color": "#CDD6F4"
+              },
+              {
+                "text": "pass",
+                "color": "#CBA6F7"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "rust, dracula",
+      "input": {
+        "code": "fn main() {\n    let v: Vec<u8> = vec![1, 2];\n    println!(\"{:?}\", v);\n}",
+        "lang": "rust",
+        "theme": "dracula",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#F8F8F2",
+        "added": "#50FA7B",
+        "deleted": "#FF5555",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "fn",
+                "color": "#FF79C6"
+              },
+              {
+                "text": " ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "main",
+                "color": "#50FA7B"
+              },
+              {
+                "text": "() {",
+                "color": "#F8F8F2"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "let",
+                "color": "#FF79C6"
+              },
+              {
+                "text": " v",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": ":",
+                "color": "#FF79C6"
+              },
+              {
+                "text": " ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "Vec",
+                "color": "#8BE9FD",
+                "fontStyle": 1
+              },
+              {
+                "text": "<",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "u8",
+                "color": "#8BE9FD",
+                "fontStyle": 1
+              },
+              {
+                "text": "> ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "=",
+                "color": "#FF79C6"
+              },
+              {
+                "text": " ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "vec!",
+                "color": "#50FA7B"
+              },
+              {
+                "text": "[",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "1",
+                "color": "#BD93F9"
+              },
+              {
+                "text": ", ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "2",
+                "color": "#BD93F9"
+              },
+              {
+                "text": "];",
+                "color": "#F8F8F2"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "    ",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "println!",
+                "color": "#50FA7B"
+              },
+              {
+                "text": "(",
+                "color": "#F8F8F2"
+              },
+              {
+                "text": "\"{:?}\"",
+                "color": "#F1FA8C"
+              },
+              {
+                "text": ", v);",
+                "color": "#F8F8F2"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "}",
+                "color": "#F8F8F2"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "shellscript, solarized-light",
+      "input": {
+        "code": "#!/bin/bash\nset -euo pipefail\nfor f in *.ts; do echo \"$f\" | grep -v test; done",
+        "lang": "shellscript",
+        "theme": "solarized-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#657B83",
+        "added": "#859900",
+        "deleted": "#dc322f",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "#!/bin/bash",
+                "color": "#93A1A1",
+                "fontStyle": 1
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "set",
+                "color": "#268BD2"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "-euo",
+                "color": "#CB4B16"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "pipefail",
+                "color": "#2AA198"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "for",
+                "color": "#859900"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "f",
+                "color": "#268BD2"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "in",
+                "color": "#859900"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "*.ts",
+                "color": "#2AA198"
+              },
+              {
+                "text": "; ",
+                "color": "#657B83"
+              },
+              {
+                "text": "do",
+                "color": "#859900"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "echo",
+                "color": "#268BD2"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "\"",
+                "color": "#2AA198"
+              },
+              {
+                "text": "$f",
+                "color": "#268BD2"
+              },
+              {
+                "text": "\"",
+                "color": "#2AA198"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "|",
+                "color": "#859900"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "grep",
+                "color": "#268BD2"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "-v",
+                "color": "#CB4B16"
+              },
+              {
+                "text": " ",
+                "color": "#657B83"
+              },
+              {
+                "text": "test",
+                "color": "#2AA198"
+              },
+              {
+                "text": "; ",
+                "color": "#657B83"
+              },
+              {
+                "text": "done",
+                "color": "#859900"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "json, nord",
+      "input": {
+        "code": "{\n  \"name\": \"harness\",\n  \"n\": 1.5,\n  \"ok\": true,\n  \"list\": [null]\n}",
+        "lang": "json",
+        "theme": "nord",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#d8dee9ff",
+        "added": "#a3be8c",
+        "deleted": "#bf616a",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "{",
+                "color": "#ECEFF4"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "  ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "name",
+                "color": "#8FBCBB"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": ":",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": " ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "harness",
+                "color": "#A3BE8C"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": ",",
+                "color": "#ECEFF4"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "  ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "n",
+                "color": "#8FBCBB"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": ":",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": " ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "1.5",
+                "color": "#B48EAD"
+              },
+              {
+                "text": ",",
+                "color": "#ECEFF4"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "  ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "ok",
+                "color": "#8FBCBB"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": ":",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": " ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "true",
+                "color": "#81A1C1"
+              },
+              {
+                "text": ",",
+                "color": "#ECEFF4"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "  ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "list",
+                "color": "#8FBCBB"
+              },
+              {
+                "text": "\"",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": ":",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": " ",
+                "color": "#D8DEE9FF"
+              },
+              {
+                "text": "[",
+                "color": "#ECEFF4"
+              },
+              {
+                "text": "null",
+                "color": "#81A1C1"
+              },
+              {
+                "text": "]",
+                "color": "#ECEFF4"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "}",
+                "color": "#ECEFF4"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "markdown with a fence, rose-pine-dawn",
+      "input": {
+        "code": "# Title\n\nSome *em* and **strong** with `code`.\n\n```ts\nconst x = 1\n```",
+        "lang": "markdown",
+        "theme": "rose-pine-dawn",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#575279",
+        "added": "#56949f",
+        "deleted": "#797593",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "#",
+                "color": "#797593",
+                "fontStyle": 2
+              },
+              {
+                "text": " ",
+                "color": "#575279",
+                "fontStyle": 2
+              },
+              {
+                "text": "Title",
+                "color": "#56949F",
+                "fontStyle": 2
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "Some ",
+                "color": "#575279"
+              },
+              {
+                "text": "*",
+                "color": "#797593",
+                "fontStyle": 1
+              },
+              {
+                "text": "em",
+                "color": "#575279",
+                "fontStyle": 1
+              },
+              {
+                "text": "*",
+                "color": "#797593",
+                "fontStyle": 1
+              },
+              {
+                "text": " and ",
+                "color": "#575279"
+              },
+              {
+                "text": "**",
+                "color": "#797593",
+                "fontStyle": 2
+              },
+              {
+                "text": "strong",
+                "color": "#575279",
+                "fontStyle": 2
+              },
+              {
+                "text": "**",
+                "color": "#797593",
+                "fontStyle": 2
+              },
+              {
+                "text": " with ",
+                "color": "#575279"
+              },
+              {
+                "text": "`",
+                "color": "#797593"
+              },
+              {
+                "text": "code",
+                "color": "#575279"
+              },
+              {
+                "text": "`",
+                "color": "#797593"
+              },
+              {
+                "text": ".",
+                "color": "#575279"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "```",
+                "color": "#797593"
+              },
+              {
+                "text": "ts",
+                "color": "#575279"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "const",
+                "color": "#286983"
+              },
+              {
+                "text": " ",
+                "color": "#575279"
+              },
+              {
+                "text": "x",
+                "color": "#575279",
+                "fontStyle": 1
+              },
+              {
+                "text": " ",
+                "color": "#575279"
+              },
+              {
+                "text": "=",
+                "color": "#286983"
+              },
+              {
+                "text": " ",
+                "color": "#575279"
+              },
+              {
+                "text": "1",
+                "color": "#D7827E"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "```",
+                "color": "#797593"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "makefile (Shiki name make), tokyo-night",
+      "input": {
+        "code": "all: build\n\nbuild:\n\t@echo \"building $(NAME)\"",
+        "lang": "makefile",
+        "theme": "tokyo-night",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#a9b1d6",
+        "added": "#449dab",
+        "deleted": "#914c54",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "all",
+                "color": "#7AA2F7"
+              },
+              {
+                "text": ":",
+                "color": "#89DDFF"
+              },
+              {
+                "text": " build",
+                "color": "#A9B1D6"
+              }
+            ]
+          },
+          {
+            "spans": []
+          },
+          {
+            "spans": [
+              {
+                "text": "build",
+                "color": "#7AA2F7"
+              },
+              {
+                "text": ":",
+                "color": "#89DDFF"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "\t",
+                "color": "#A9B1D6"
+              },
+              {
+                "text": "@",
+                "color": "#BB9AF7"
+              },
+              {
+                "text": "echo \"building ",
+                "color": "#A9B1D6"
+              },
+              {
+                "text": "$(",
+                "color": "#89DDFF"
+              },
+              {
+                "text": "NAME",
+                "color": "#C0CAF5"
+              },
+              {
+                "text": ")",
+                "color": "#89DDFF"
+              },
+              {
+                "text": "\"",
+                "color": "#A9B1D6"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unicode and emoji, one-light",
+      "input": {
+        "code": "const café = \"naïve 👋🏽 é\"; // ünïcödé\nlet 𝒳 = 1",
+        "lang": "typescript",
+        "theme": "one-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#383A42",
+        "added": "#0dbe4e",
+        "deleted": "#ff6762",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "const",
+                "color": "#A626A4"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "café",
+                "color": "#986801"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "=",
+                "color": "#0184BC"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "\"naïve 👋🏽 é\"",
+                "color": "#50A14F"
+              },
+              {
+                "text": "; ",
+                "color": "#383A42"
+              },
+              {
+                "text": "// ünïcödé",
+                "color": "#A0A1A7",
+                "fontStyle": 1
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#A626A4"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "𝒳",
+                "color": "#986801"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "=",
+                "color": "#0184BC"
+              },
+              {
+                "text": " ",
+                "color": "#383A42"
+              },
+              {
+                "text": "1",
+                "color": "#986801"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "crlf line endings",
+      "input": {
+        "code": "let a = 1\r\nlet b = 2\r\n",
+        "lang": "typescript",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "a",
+                "color": "#D47628"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "1",
+                "color": "#1CA1C7"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "let",
+                "color": "#A631BE"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "b",
+                "color": "#D47628"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "2",
+                "color": "#1CA1C7"
+              }
+            ]
+          },
+          {
+            "spans": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty block",
+      "input": {
+        "code": "",
+        "lang": "typescript",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "spans": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing newline",
+      "input": {
+        "code": "x = 1\n",
+        "lang": "python",
+        "theme": "pierre-dark",
+        "appearance": "dark",
+        "diff": false
+      },
+      "output": {
+        "fg": "#fafafa",
+        "added": "#07c480",
+        "deleted": "#ff2e3f",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "x ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "1",
+                "color": "#68CDF2"
+              }
+            ]
+          },
+          {
+            "spans": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "unbundled language",
+      "input": {
+        "code": "IDENTIFICATION DIVISION.",
+        "lang": "cobol",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": null
+    },
+    {
+      "name": "no language",
+      "input": {
+        "code": "plain",
+        "lang": null,
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": null
+    },
+    {
+      "name": "the diff language without diff: plain",
+      "input": {
+        "code": "-a\n+b",
+        "lang": "diff",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": null
+    },
+    {
+      "name": "unknown theme",
+      "input": {
+        "code": "let a = 1",
+        "lang": "typescript",
+        "theme": "no-such-theme",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": null
+    },
+    {
+      "name": "exactly the size limit",
+      "input": {
+        "repeat": "a",
+        "times": 60000,
+        "lang": "python",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "spans": [
+              {
+                "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "color": "#0A0A0A"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "one past the size limit",
+      "input": {
+        "repeat": "a",
+        "times": 60001,
+        "lang": "python",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": false
+      },
+      "output": null
+    },
+    {
+      "name": "diff: ruby by path, light",
+      "input": {
+        "code": "--- a/app.rb\n+++ b/app.rb\n@@ -1 +1 @@\n-def old = 1\n+def new = 2",
+        "lang": "diff",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": true
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "--- a/app.rb"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "+++ b/app.rb"
+              }
+            ]
+          },
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1 +1 @@"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "def",
+                "color": "#D32A61"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "old",
+                "color": "#693ACF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "1",
+                "color": "#1CA1C7"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "def",
+                "color": "#D32A61"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "new",
+                "color": "#693ACF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "2",
+                "color": "#1CA1C7"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: ruby by path, dark",
+      "input": {
+        "code": "--- a/app.rb\n+++ b/app.rb\n@@ -1 +1 @@\n-def old = 1\n+def new = 2",
+        "lang": "diff",
+        "theme": "pierre-dark",
+        "appearance": "dark",
+        "diff": true
+      },
+      "output": {
+        "fg": "#fafafa",
+        "added": "#07c480",
+        "deleted": "#ff2e3f",
+        "lines": [
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "--- a/app.rb"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "+++ b/app.rb"
+              }
+            ]
+          },
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1 +1 @@"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "def",
+                "color": "#FF678D"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "old",
+                "color": "#9D6AFB"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "1",
+                "color": "#68CDF2"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "def",
+                "color": "#FF678D"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "new",
+                "color": "#9D6AFB"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#FAFAFA"
+              },
+              {
+                "text": "2",
+                "color": "#68CDF2"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: two files in two languages, comment spanning lines",
+      "input": {
+        "code": "diff --git a/src/x.ts b/src/x.ts\nindex 1234..5678 100644\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,4 +1,4 @@\n /* a comment\n-   old text */\n+   new text */\n const a = 1;\ndiff --git a/App.swift b/App.swift\n--- a/App.swift\n+++ b/App.swift\n@@ -1,2 +1,2 @@\n-let s = \"old\"\n+let s = \"new\"\n // end\n\\ No newline at end of file",
+        "lang": "diff",
+        "theme": "github-dark-default",
+        "appearance": "dark",
+        "diff": true
+      },
+      "output": {
+        "fg": "#e6edf3",
+        "added": "#3fb950",
+        "deleted": "#f85149",
+        "lines": [
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "diff --git a/src/x.ts b/src/x.ts"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "index 1234..5678 100644"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "--- a/src/x.ts"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "+++ b/src/x.ts"
+              }
+            ]
+          },
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1,4 +1,4 @@"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "/* a comment",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "   old text */",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "   new text */",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "const",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "a",
+                "color": "#79C0FF"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "=",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "1",
+                "color": "#79C0FF"
+              },
+              {
+                "text": ";",
+                "color": "#E6EDF3"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": "d"
+              },
+              {
+                "text": "iff ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "--",
+                "color": "#FF7B72"
+              },
+              {
+                "text": "git a",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "/",
+                "color": "#FF7B72"
+              },
+              {
+                "text": "App.swift b",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "/",
+                "color": "#FF7B72"
+              },
+              {
+                "text": "App.swift",
+                "color": "#E6EDF3"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "--- a/App.swift"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "+++ b/App.swift"
+              }
+            ]
+          },
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1,2 +1,2 @@"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "let",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " s ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "=",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "\"old\"",
+                "color": "#A5D6FF"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "let",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " s ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "=",
+                "color": "#FF7B72"
+              },
+              {
+                "text": " ",
+                "color": "#E6EDF3"
+              },
+              {
+                "text": "\"new\"",
+                "color": "#A5D6FF"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "// end",
+                "color": "#8B949E"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "\\ No newline at end of file"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: no paths, fence language",
+      "input": {
+        "code": "-a = 1\n+b = 2\n c = 3",
+        "lang": "python",
+        "theme": "one-light",
+        "appearance": "light",
+        "diff": true
+      },
+      "output": {
+        "fg": "#383A42",
+        "added": "#0dbe4e",
+        "deleted": "#ff6762",
+        "lines": [
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "a = ",
+                "color": "#383A42"
+              },
+              {
+                "text": "1",
+                "color": "#986801"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "b = ",
+                "color": "#383A42"
+              },
+              {
+                "text": "2",
+                "color": "#986801"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "c = ",
+                "color": "#383A42"
+              },
+              {
+                "text": "3",
+                "color": "#986801"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: no paths, no language",
+      "input": {
+        "code": "-a = 1\n+b = 2\n c = 3",
+        "lang": null,
+        "theme": "one-light",
+        "appearance": "light",
+        "diff": true
+      },
+      "output": {
+        "fg": "#383A42",
+        "added": "#0dbe4e",
+        "deleted": "#ff6762",
+        "lines": [
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "a = 1"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "b = 2"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "c = 3"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: context line starting with an emoji",
+      "input": {
+        "code": "@@ -1,2 +1,2 @@\n👋 hello\n-x = 1\n+x = 2",
+        "lang": "python",
+        "theme": "pierre-light",
+        "appearance": "light",
+        "diff": true
+      },
+      "output": {
+        "fg": "#0a0a0a",
+        "added": "#18a46c",
+        "deleted": "#d52c36",
+        "lines": [
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1,2 +1,2 @@"
+              }
+            ]
+          },
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": ""
+              },
+              {
+                "text": "👋 hello",
+                "color": "#0A0A0A"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "x ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "1",
+                "color": "#1CA1C7"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "x ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "=",
+                "color": "#08C0EF"
+              },
+              {
+                "text": " ",
+                "color": "#0A0A0A"
+              },
+              {
+                "text": "2",
+                "color": "#1CA1C7"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "diff: crlf",
+      "input": {
+        "code": "--- a/x.py\r\n+++ b/x.py\r\n@@ -1 +1 @@\r\n-x = 1\r\n+x = 2",
+        "lang": "diff",
+        "theme": "gruvbox-dark-medium",
+        "appearance": "dark",
+        "diff": true
+      },
+      "output": {
+        "fg": "#ebdbb2",
+        "added": "#ebdbb2",
+        "deleted": "#cc241d",
+        "lines": [
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "--- a/x.py"
+              }
+            ]
+          },
+          {
+            "kind": "meta",
+            "spans": [
+              {
+                "text": "+++ b/x.py"
+              }
+            ]
+          },
+          {
+            "kind": "hunk",
+            "spans": [
+              {
+                "text": "@@ -1 +1 @@"
+              }
+            ]
+          },
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "x ",
+                "color": "#EBDBB2"
+              },
+              {
+                "text": "=",
+                "color": "#8EC07C"
+              },
+              {
+                "text": " ",
+                "color": "#EBDBB2"
+              },
+              {
+                "text": "1",
+                "color": "#D3869B"
+              }
+            ]
+          },
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "x ",
+                "color": "#EBDBB2"
+              },
+              {
+                "text": "=",
+                "color": "#8EC07C"
+              },
+              {
+                "text": " ",
+                "color": "#EBDBB2"
+              },
+              {
+                "text": "2",
+                "color": "#D3869B"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "languages": [
+    "typescript",
+    "tsx",
+    "javascript",
+    "jsx",
+    "json",
+    "jsonc",
+    "shellscript",
+    "shellsession",
+    "yaml",
+    "toml",
+    "ini",
+    "dotenv",
+    "php",
+    "blade",
+    "ruby",
+    "python",
+    "go",
+    "rust",
+    "swift",
+    "kotlin",
+    "java",
+    "c",
+    "cpp",
+    "csharp",
+    "css",
+    "scss",
+    "html",
+    "xml",
+    "markdown",
+    "sql",
+    "graphql",
+    "docker",
+    "makefile",
+    "diff"
+  ],
+  "maxChars": 60000,
+  "plainLinesCases": [
+    {
+      "name": "code lines",
+      "input": {
+        "code": "a\nbc\n\nd",
+        "diff": false
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "bc"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": ""
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "code with crlf keeps the \\r",
+      "input": {
+        "code": "a\r\nb",
+        "diff": false
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a\r"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty code",
+      "input": {
+        "code": "",
+        "diff": false
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "diff kinds and signs",
+      "input": {
+        "code": "--- a/app.rb\n+++ b/app.rb\n@@ -1 +1 @@\n-def old = 1\n+def new = 2",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "--- a/app.rb"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "+++ b/app.rb"
+            }
+          ]
+        },
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1 +1 @@"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "def old = 1"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "def new = 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "multi-file git diff",
+      "input": {
+        "code": "diff --git a/src/x.ts b/src/x.ts\nindex 1234..5678 100644\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,4 +1,4 @@\n /* a comment\n-   old text */\n+   new text */\n const a = 1;\ndiff --git a/App.swift b/App.swift\n--- a/App.swift\n+++ b/App.swift\n@@ -1,2 +1,2 @@\n-let s = \"old\"\n+let s = \"new\"\n // end\n\\ No newline at end of file",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "diff --git a/src/x.ts b/src/x.ts"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "index 1234..5678 100644"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "--- a/src/x.ts"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "+++ b/src/x.ts"
+            }
+          ]
+        },
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1,4 +1,4 @@"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "/* a comment"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "   old text */"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "   new text */"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "const a = 1;"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": "d"
+            },
+            {
+              "text": "iff --git a/App.swift b/App.swift"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "--- a/App.swift"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "+++ b/App.swift"
+            }
+          ]
+        },
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1,2 +1,2 @@"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "let s = \"old\""
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "let s = \"new\""
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "// end"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "\\ No newline at end of file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bare diff",
+      "input": {
+        "code": "-a = 1\n+b = 2\n c = 3",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "a = 1"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "b = 2"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "c = 3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "emoji context line",
+      "input": {
+        "code": "@@ -1,2 +1,2 @@\n👋 hello\n-x = 1\n+x = 2",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1,2 +1,2 @@"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": ""
+            },
+            {
+              "text": "👋 hello"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "x = 1"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "x = 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "crlf diff",
+      "input": {
+        "code": "--- a/x.py\r\n+++ b/x.py\r\n@@ -1 +1 @@\r\n-x = 1\r\n+x = 2",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "--- a/x.py"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "+++ b/x.py"
+            }
+          ]
+        },
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1 +1 @@"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "x = 1"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "x = 2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dashes inside a hunk are code",
+      "input": {
+        "code": "@@ -1,2 +1,2 @@\n--- not a header\n+++ nor this\n ctx",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ -1,2 +1,2 @@"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "-- not a header"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "++ nor this"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "ctx"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hunk without counts",
+      "input": {
+        "code": "@@ edits @@\n-a\n+b\n",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "hunk",
+          "spans": [
+            {
+              "text": "@@ edits @@"
+            }
+          ]
+        },
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "a"
+            }
+          ]
+        },
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "b"
+            }
+          ]
+        },
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": ""
+            },
+            {
+              "text": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "header lines",
+      "input": {
+        "code": "new file mode 100644\nBinary files a/x and b/x differ\nsimilarity index 90%\nrename from a\nrename to b",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "new file mode 100644"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "Binary files a/x and b/x differ"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "similarity index 90%"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "rename from a"
+            }
+          ]
+        },
+        {
+          "kind": "meta",
+          "spans": [
+            {
+              "text": "rename to b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty diff",
+      "input": {
+        "code": "",
+        "diff": true
+      },
+      "output": [
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": ""
+            },
+            {
+              "text": ""
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reuseLinesCases": [
+    {
+      "name": "no previous lines",
+      "input": {
+        "plain": [
+          {
+            "spans": [
+              {
+                "text": "a"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "b"
+              }
+            ]
+          }
+        ],
+        "prev": null
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "b"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unchanged lines keep their colors, changed and new ones stay plain",
+      "input": {
+        "plain": [
+          {
+            "spans": [
+              {
+                "text": "a"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "bc"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "d"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "spans": [
+              {
+                "text": "a",
+                "color": "#1"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "b",
+                "color": "#2"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a",
+              "color": "#1"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "bc"
+            }
+          ]
+        },
+        {
+          "spans": [
+            {
+              "text": "d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "text split across spans still matches",
+      "input": {
+        "plain": [
+          {
+            "spans": [
+              {
+                "text": "ab"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "spans": [
+              {
+                "text": "a",
+                "color": "#1"
+              },
+              {
+                "text": "b",
+                "color": "#2",
+                "fontStyle": 2
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a",
+              "color": "#1"
+            },
+            {
+              "text": "b",
+              "color": "#2",
+              "fontStyle": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a kind change isn't reused",
+      "input": {
+        "plain": [
+          {
+            "kind": "del",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "x"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": "-"
+              },
+              {
+                "text": "x",
+                "color": "#1"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "kind": "del",
+          "spans": [
+            {
+              "text": "-"
+            },
+            {
+              "text": "x"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "same kind and text is reused",
+      "input": {
+        "plain": [
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "x"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "kind": "add",
+            "spans": [
+              {
+                "text": "+"
+              },
+              {
+                "text": "x",
+                "color": "#1"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "kind": "add",
+          "spans": [
+            {
+              "text": "+"
+            },
+            {
+              "text": "x",
+              "color": "#1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "kindless previous vs a diff line",
+      "input": {
+        "plain": [
+          {
+            "kind": "ctx",
+            "spans": [
+              {
+                "text": " "
+              },
+              {
+                "text": "x"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "spans": [
+              {
+                "text": " x",
+                "color": "#1"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "kind": "ctx",
+          "spans": [
+            {
+              "text": " "
+            },
+            {
+              "text": "x"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "longer previous block",
+      "input": {
+        "plain": [
+          {
+            "spans": [
+              {
+                "text": "a"
+              }
+            ]
+          }
+        ],
+        "prev": [
+          {
+            "spans": [
+              {
+                "text": "a",
+                "color": "#1"
+              }
+            ]
+          },
+          {
+            "spans": [
+              {
+                "text": "b",
+                "color": "#2"
+              }
+            ]
+          }
+        ]
+      },
+      "output": [
+        {
+          "spans": [
+            {
+              "text": "a",
+              "color": "#1"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "syntaxThemes": [
+    "pierre-light",
+    "pierre-dark",
+    "one-light",
+    "one-dark-pro",
+    "catppuccin-latte",
+    "catppuccin-frappe",
+    "catppuccin-macchiato",
+    "catppuccin-mocha",
+    "solarized-light",
+    "solarized-dark",
+    "github-light-default",
+    "github-dark-default",
+    "dracula",
+    "nord",
+    "gruvbox-light-medium",
+    "gruvbox-dark-medium",
+    "tokyo-night",
+    "rose-pine",
+    "rose-pine-dawn"
+  ]
+}

@@ -1,0 +1,800 @@
+{
+  "checkTokenCases": [
+    {
+      "name": "trimmed",
+      "input": "  abc  ",
+      "output": {
+        "ok": true,
+        "value": "abc"
+      }
+    },
+    {
+      "name": "blank",
+      "input": "   ",
+      "output": {
+        "ok": false,
+        "error": "Enter the token"
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "ok": false,
+        "error": "Enter the token"
+      }
+    },
+    {
+      "name": "inner space kept",
+      "input": " a b ",
+      "output": {
+        "ok": true,
+        "value": "a b"
+      }
+    },
+    {
+      "name": "newlines trimmed",
+      "input": "\ntok\t",
+      "output": {
+        "ok": true,
+        "value": "tok"
+      }
+    }
+  ],
+  "displayHostCases": [
+    {
+      "name": "http",
+      "input": "http://100.64.0.2:7717",
+      "output": "100.64.0.2:7717"
+    },
+    {
+      "name": "https",
+      "input": "https://mac.local/harness",
+      "output": "mac.local/harness"
+    },
+    {
+      "name": "upper-case scheme kept",
+      "input": "HTTP://h",
+      "output": "HTTP://h"
+    },
+    {
+      "name": "no scheme",
+      "input": "h:1",
+      "output": "h:1"
+    },
+    {
+      "name": "only the leading scheme",
+      "input": "http://http://h",
+      "output": "http://h"
+    }
+  ],
+  "normalizeBaseUrlCases": [
+    {
+      "name": "host:port gets http",
+      "input": " 100.64.0.2:7717 ",
+      "output": {
+        "ok": true,
+        "value": "http://100.64.0.2:7717"
+      }
+    },
+    {
+      "name": "mixed-case host, trailing slash",
+      "input": "Marks-Mac.local:7717/",
+      "output": {
+        "ok": true,
+        "value": "http://marks-mac.local:7717"
+      }
+    },
+    {
+      "name": "scheme and host lower-cased, query and fragment dropped",
+      "input": "HTTPS://Host/harness//?q=1#f",
+      "output": {
+        "ok": true,
+        "value": "https://host/harness"
+      }
+    },
+    {
+      "name": "leading zeros in port",
+      "input": "http://h:07717",
+      "output": {
+        "ok": true,
+        "value": "http://h:7717"
+      }
+    },
+    {
+      "name": "plain http",
+      "input": "http://100.107.188.66:7717",
+      "output": {
+        "ok": true,
+        "value": "http://100.107.188.66:7717"
+      }
+    },
+    {
+      "name": "https MagicDNS with trailing slash",
+      "input": "https://macbookpro.tail061e5.ts.net:7717/",
+      "output": {
+        "ok": true,
+        "value": "https://macbookpro.tail061e5.ts.net:7717"
+      }
+    },
+    {
+      "name": "ipv6",
+      "input": "http://[fd7a:115c::1]:7717",
+      "output": {
+        "ok": true,
+        "value": "http://[fd7a:115c::1]:7717"
+      }
+    },
+    {
+      "name": "ipv6 upper-case",
+      "input": "http://[FD7A::1]",
+      "output": {
+        "ok": true,
+        "value": "http://[fd7a::1]"
+      }
+    },
+    {
+      "name": "ipv6 with bad characters",
+      "input": "http://[fd7a::g]:1",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "bare host",
+      "input": "mac.local",
+      "output": {
+        "ok": true,
+        "value": "http://mac.local"
+      }
+    },
+    {
+      "name": "bare host with path",
+      "input": "mac.local/harness/",
+      "output": {
+        "ok": true,
+        "value": "http://mac.local/harness"
+      }
+    },
+    {
+      "name": "trailing dot host",
+      "input": "http://mac.local.:7717",
+      "output": {
+        "ok": true,
+        "value": "http://mac.local.:7717"
+      }
+    },
+    {
+      "name": "path case kept",
+      "input": "http://h/Harness/Path",
+      "output": {
+        "ok": true,
+        "value": "http://h/Harness/Path"
+      }
+    },
+    {
+      "name": "only slashes path",
+      "input": "http://h///",
+      "output": {
+        "ok": true,
+        "value": "http://h"
+      }
+    },
+    {
+      "name": "fragment only",
+      "input": "http://h#x",
+      "output": {
+        "ok": true,
+        "value": "http://h"
+      }
+    },
+    {
+      "name": "query only",
+      "input": "http://h?x=1",
+      "output": {
+        "ok": true,
+        "value": "http://h"
+      }
+    },
+    {
+      "name": "port 1",
+      "input": "http://h:1",
+      "output": {
+        "ok": true,
+        "value": "http://h:1"
+      }
+    },
+    {
+      "name": "port 65535",
+      "input": "http://h:65535",
+      "output": {
+        "ok": true,
+        "value": "http://h:65535"
+      }
+    },
+    {
+      "name": "port 0",
+      "input": "http://h:0",
+      "output": {
+        "ok": false,
+        "error": "The port must be between 1 and 65535"
+      }
+    },
+    {
+      "name": "port 65536",
+      "input": "http://h:65536",
+      "output": {
+        "ok": false,
+        "error": "The port must be between 1 and 65535"
+      }
+    },
+    {
+      "name": "huge port",
+      "input": "http://h:99999999999999999999",
+      "output": {
+        "ok": false,
+        "error": "The port must be between 1 and 65535"
+      }
+    },
+    {
+      "name": "empty port",
+      "input": "http://h:",
+      "output": {
+        "ok": false,
+        "error": "The port must be between 1 and 65535"
+      }
+    },
+    {
+      "name": "non-numeric port",
+      "input": "http://h:ab",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "two colons",
+      "input": "http://h:1:2",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "ftp",
+      "input": "ftp://h",
+      "output": {
+        "ok": false,
+        "error": "Only http:// and https:// URLs are supported"
+      }
+    },
+    {
+      "name": "mailto",
+      "input": "mailto:me@x.y",
+      "output": {
+        "ok": false,
+        "error": "Only http:// and https:// URLs are supported"
+      }
+    },
+    {
+      "name": "javascript scheme",
+      "input": "javascript:alert(1)",
+      "output": {
+        "ok": false,
+        "error": "Only http:// and https:// URLs are supported"
+      }
+    },
+    {
+      "name": "host:port looks like a scheme but has a digit",
+      "input": "localhost:7717",
+      "output": {
+        "ok": true,
+        "value": "http://localhost:7717"
+      }
+    },
+    {
+      "name": "scheme-like word without digit",
+      "input": "localhost:abc",
+      "output": {
+        "ok": false,
+        "error": "Only http:// and https:// URLs are supported"
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "ok": false,
+        "error": "Enter the service URL, e.g. http://100.64.0.2:7717"
+      }
+    },
+    {
+      "name": "only whitespace",
+      "input": "   \n",
+      "output": {
+        "ok": false,
+        "error": "Enter the service URL, e.g. http://100.64.0.2:7717"
+      }
+    },
+    {
+      "name": "http with no host",
+      "input": "http://",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "user info",
+      "input": "http://user:pw@h",
+      "output": {
+        "ok": false,
+        "error": "The URL can't contain a user name or password"
+      }
+    },
+    {
+      "name": "underscore host",
+      "input": "http://bad_host:1",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "exclamation host",
+      "input": "http://bad!:1",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "host starting with hyphen",
+      "input": "http://-h",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "host ending with hyphen",
+      "input": "http://h-",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "empty label",
+      "input": "http://a..b",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "non-ASCII host",
+      "input": "http://café.local",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "Kelvin sign lower-cases to k",
+      "input": "http://K.local",
+      "output": {
+        "ok": true,
+        "value": "http://k.local"
+      }
+    },
+    {
+      "name": "newline inside host",
+      "input": "http://h\n:1",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "space inside host",
+      "input": "http://h h",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "bracket without ipv6",
+      "input": "http://[h]",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "unclosed bracket",
+      "input": "http://[fd7a::1",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "digits-only host",
+      "input": "http://1234",
+      "output": {
+        "ok": true,
+        "value": "http://1234"
+      }
+    },
+    {
+      "name": "whitespace inside path kept",
+      "input": "http://h/a b/",
+      "output": {
+        "ok": true,
+        "value": "http://h/a b"
+      }
+    }
+  ],
+  "pairParamsCases": [
+    {
+      "name": "array url takes the first",
+      "input": {
+        "url": [
+          "http://h:7717/",
+          "http://x"
+        ],
+        "token": "t&u"
+      },
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://h:7717",
+          "token": "t&u"
+        }
+      }
+    },
+    {
+      "name": "missing url",
+      "input": {
+        "token": "t"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "null url",
+      "input": {
+        "url": null,
+        "token": "t"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "empty array url",
+      "input": {
+        "url": [],
+        "token": "t"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "missing token",
+      "input": {
+        "url": "http://h"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no token"
+      }
+    },
+    {
+      "name": "empty token",
+      "input": {
+        "url": "http://h",
+        "token": ""
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no token"
+      }
+    },
+    {
+      "name": "array token",
+      "input": {
+        "url": "http://h",
+        "token": [
+          "a",
+          "b"
+        ]
+      },
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://h",
+          "token": "a"
+        }
+      }
+    },
+    {
+      "name": "ftp url",
+      "input": {
+        "url": "ftp://h",
+        "token": "t"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    },
+    {
+      "name": "host:port",
+      "input": {
+        "url": "h:7717",
+        "token": "t"
+      },
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    },
+    {
+      "name": "token with percent",
+      "input": {
+        "url": "http://h",
+        "token": "50%"
+      },
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://h",
+          "token": "50%"
+        }
+      }
+    },
+    {
+      "name": "whitespace token kept",
+      "input": {
+        "url": "http://h",
+        "token": " t "
+      },
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://h",
+          "token": " t "
+        }
+      }
+    }
+  ],
+  "parsePairLinkCases": [
+    {
+      "name": "desktop QR",
+      "input": "harness://pair?url=http%3A%2F%2F100.107.188.66%3A7717&token=a1b2c3",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://100.107.188.66:7717",
+          "token": "a1b2c3"
+        }
+      }
+    },
+    {
+      "name": "MagicDNS host, trailing slash, https",
+      "input": "harness://pair?url=https%3A%2F%2Fmacbookpro.tail061e5.ts.net%3A7717%2F&token=t",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "https://macbookpro.tail061e5.ts.net:7717",
+          "token": "t"
+        }
+      }
+    },
+    {
+      "name": "ipv6",
+      "input": "harness://pair?url=http%3A%2F%2F%5Bfd7a%3A115c%3A%3A1%5D%3A7717&token=t",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://[fd7a:115c::1]:7717",
+          "token": "t"
+        }
+      }
+    },
+    {
+      "name": "surrounding whitespace",
+      "input": "  harness://pair?url=http%3A%2F%2Fh%3A7717&token=t\n",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://h:7717",
+          "token": "t"
+        }
+      }
+    },
+    {
+      "name": "token with URL-significant characters",
+      "input": "harness://pair?url=http%3A%2F%2F10.0.0.5%3A7717&token=abc%2B%2F%3D%26x%20y%25",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://10.0.0.5:7717",
+          "token": "abc+/=&x y%"
+        }
+      }
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "ok": false,
+        "error": "Not a Harness pairing code"
+      }
+    },
+    {
+      "name": "https link",
+      "input": "https://example.com/pair?url=x&token=y",
+      "output": {
+        "ok": false,
+        "error": "Not a Harness pairing code"
+      }
+    },
+    {
+      "name": "other harness route",
+      "input": "harness://settings?url=http%3A%2F%2Fh&token=t",
+      "output": {
+        "ok": false,
+        "error": "Not a Harness pairing code"
+      }
+    },
+    {
+      "name": "no query",
+      "input": "harness://pair",
+      "output": {
+        "ok": false,
+        "error": "Not a Harness pairing code"
+      }
+    },
+    {
+      "name": "no url",
+      "input": "harness://pair?token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "no token",
+      "input": "harness://pair?url=http%3A%2F%2Fh%3A7717",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no token"
+      }
+    },
+    {
+      "name": "empty token",
+      "input": "harness://pair?url=http%3A%2F%2Fh%3A7717&token=",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no token"
+      }
+    },
+    {
+      "name": "empty url",
+      "input": "harness://pair?url=&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "bad escape",
+      "input": "harness://pair?url=%E0%A4%A&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code is damaged (bad encoding). Show a fresh QR code on the Mac."
+      }
+    },
+    {
+      "name": "bad escape in token",
+      "input": "harness://pair?url=http%3A%2F%2Fh&token=%zz",
+      "output": {
+        "ok": false,
+        "error": "The pairing code is damaged (bad encoding). Show a fresh QR code on the Mac."
+      }
+    },
+    {
+      "name": "invalid UTF-8 escape",
+      "input": "harness://pair?url=%E0%A4&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    },
+    {
+      "name": "javascript url",
+      "input": "harness://pair?url=javascript%3Aalert(1)&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    },
+    {
+      "name": "file url",
+      "input": "harness://pair?url=file%3A%2F%2F%2Fetc%2Fpasswd&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    },
+    {
+      "name": "user info",
+      "input": "harness://pair?url=http%3A%2F%2Fuser%3Apw%40h&token=t",
+      "output": {
+        "ok": false,
+        "error": "The URL can't contain a user name or password"
+      }
+    },
+    {
+      "name": "port out of range",
+      "input": "harness://pair?url=http%3A%2F%2Fh%3A99999&token=t",
+      "output": {
+        "ok": false,
+        "error": "The port must be between 1 and 65535"
+      }
+    },
+    {
+      "name": "bad host",
+      "input": "harness://pair?url=http%3A%2F%2Fbad_host!%3A1&token=t",
+      "output": {
+        "ok": false,
+        "error": "That doesn't look like a host name or IP address"
+      }
+    },
+    {
+      "name": "upper-case scheme normalized",
+      "input": "harness://pair?url=HTTP%3A%2F%2FMAC.local%2F&token=t",
+      "output": {
+        "ok": true,
+        "value": {
+          "baseUrl": "http://mac.local",
+          "token": "t"
+        }
+      }
+    },
+    {
+      "name": "url found via has() but token param empty after url",
+      "input": "harness://pair?token=&url=http%3A%2F%2Fh",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no token"
+      }
+    },
+    {
+      "name": "url key inside another value",
+      "input": "harness://pair?x=a&url=&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code has no service URL"
+      }
+    },
+    {
+      "name": "http with no host",
+      "input": "harness://pair?url=http%3A%2F%2F&token=t",
+      "output": {
+        "ok": false,
+        "error": "The pairing code's service URL isn't an http(s) address"
+      }
+    }
+  ]
+}

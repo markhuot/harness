@@ -27,6 +27,15 @@
         "vite": "^7.1.0",
       },
     },
+    "ios": {
+      "name": "@harness/ios",
+      "version": "1.0.0",
+      "devDependencies": {
+        "@harness/shared": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "~5.9.0",
+      },
+    },
     "mobile": {
       "name": "@harness/mobile",
       "version": "1.0.0",
@@ -396,6 +405,8 @@
     "@expo/xcpretty": ["@expo/xcpretty@4.4.5", "", { "dependencies": { "@babel/code-frame": "^7.20.0", "chalk": "^4.1.0", "js-yaml": "^4.1.0" }, "bin": { "excpretty": "build/cli.js" } }, "sha512-J3eL4n4h5QTwfD0SIz8OIk6/+sOL/hFZAMacgCM07UNlxBQfJipEpIC2AQxvGkbYeStByJ0TVhQAJo+DeNgaSQ=="],
 
     "@harness/app": ["@harness/app@workspace:app"],
+
+    "@harness/ios": ["@harness/ios@workspace:ios"],
 
     "@harness/mobile": ["@harness/mobile@workspace:mobile"],
 

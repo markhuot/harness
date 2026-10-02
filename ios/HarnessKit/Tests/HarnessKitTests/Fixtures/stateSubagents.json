@@ -1,0 +1,1630 @@
+{
+  "durationCases": [
+    {
+      "name": "59s",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 59000
+      },
+      "output": "59s"
+    },
+    {
+      "name": "1m 0s",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 60000
+      },
+      "output": "1m 0s"
+    },
+    {
+      "name": "1h 2m",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 3720000
+      },
+      "output": "1h 2m"
+    },
+    {
+      "name": "running uses now",
+      "input": {
+        "startedAt": 1000,
+        "endedAt": null,
+        "now": 6000
+      },
+      "output": "5s"
+    },
+    {
+      "name": "negative clamps",
+      "input": {
+        "startedAt": 5000,
+        "endedAt": 1000
+      },
+      "output": "0s"
+    },
+    {
+      "name": "rounds half up",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 59500
+      },
+      "output": "1m 0s"
+    },
+    {
+      "name": "just under a minute rounds to 1m",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 59600
+      },
+      "output": "1m 0s"
+    },
+    {
+      "name": "days stay in hours",
+      "input": {
+        "startedAt": 0,
+        "endedAt": 90000000
+      },
+      "output": "25h 0m"
+    }
+  ],
+  "groupCases": [
+    {
+      "name": "running first, finished newest first",
+      "input": [
+        {
+          "id": "old-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task old-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": 2,
+          "updatedAt": 10
+        },
+        {
+          "id": "run2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task run2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 5,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "new-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task new-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "failed",
+          "result": null,
+          "startedAt": 3,
+          "endedAt": 9,
+          "updatedAt": 10
+        },
+        {
+          "id": "run1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task run1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 10
+        }
+      ],
+      "output": {
+        "running": [
+          {
+            "id": "run2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task run2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 5,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "run1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task run1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 4,
+            "endedAt": null,
+            "updatedAt": 10
+          }
+        ],
+        "finished": [
+          {
+            "id": "new-done",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task new-done",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "failed",
+            "result": null,
+            "startedAt": 3,
+            "endedAt": 9,
+            "updatedAt": 10
+          },
+          {
+            "id": "old-done",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task old-done",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "succeeded",
+            "result": null,
+            "startedAt": 1,
+            "endedAt": 2,
+            "updatedAt": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "finished without endedAt sort by start; ties keep order",
+      "input": [
+        {
+          "id": "s1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "stopped",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "s2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": 4,
+          "updatedAt": 10
+        },
+        {
+          "id": "s3",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s3",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "failed",
+          "result": null,
+          "startedAt": 7,
+          "endedAt": null,
+          "updatedAt": 10
+        }
+      ],
+      "output": {
+        "running": [],
+        "finished": [
+          {
+            "id": "s3",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task s3",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "failed",
+            "result": null,
+            "startedAt": 7,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "s1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task s1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "stopped",
+            "result": null,
+            "startedAt": 4,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "s2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task s2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "succeeded",
+            "result": null,
+            "startedAt": 1,
+            "endedAt": 4,
+            "updatedAt": 10
+          }
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "live entries go to the sub-agent's transcript, not the session's",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.appended",
+                "entry": {
+                  "id": "e1",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 1,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e1"
+                  },
+                  "createdAt": 1,
+                  "subagentId": null
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.appended",
+                "entry": {
+                  "id": "e2",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 2,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e2"
+                  },
+                  "createdAt": 2,
+                  "subagentId": "a"
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.appended",
+                "entry": {
+                  "id": "e3",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 3,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e3"
+                  },
+                  "createdAt": 3
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "transcript",
+              "args": [
+                "s1"
+              ],
+              "output": {
+                "ids": [
+                  "e1",
+                  "e3"
+                ],
+                "loaded": false
+              }
+            },
+            {
+              "fn": "subagentTranscript",
+              "args": [
+                "s1",
+                "a"
+              ],
+              "output": {
+                "seqs": [
+                  2
+                ],
+                "loaded": false
+              }
+            },
+            {
+              "fn": "subagentTranscript",
+              "args": [
+                "s1",
+                "b"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {
+              "s1": {
+                "entries": [
+                  {
+                    "id": "e1",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 1,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e1"
+                    },
+                    "createdAt": 1,
+                    "subagentId": null
+                  },
+                  {
+                    "id": "e3",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 3,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e3"
+                    },
+                    "createdAt": 3
+                  }
+                ],
+                "loaded": false
+              },
+              "s1/a": {
+                "entries": [
+                  {
+                    "id": "e2",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 2,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e2"
+                    },
+                    "createdAt": 2,
+                    "subagentId": "a"
+                  }
+                ],
+                "loaded": false
+              }
+            },
+            "subagents": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a sub-agent backfill merges with live entries and marks only that transcript loaded",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.appended",
+                "entry": {
+                  "id": "e5",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 5,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e5"
+                  },
+                  "createdAt": 5,
+                  "subagentId": "a"
+                }
+              }
+            },
+            {
+              "type": "transcript",
+              "sessionId": "s1",
+              "subagentId": "a",
+              "entries": [
+                {
+                  "id": "e2",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 2,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e2"
+                  },
+                  "createdAt": 2,
+                  "subagentId": "a"
+                },
+                {
+                  "id": "e5",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 5,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e5"
+                  },
+                  "createdAt": 5,
+                  "subagentId": "a"
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentTranscript",
+              "args": [
+                "s1",
+                "a"
+              ],
+              "output": {
+                "seqs": [
+                  2,
+                  5
+                ],
+                "loaded": true
+              }
+            },
+            {
+              "fn": "transcript",
+              "args": [
+                "s1"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {
+              "s1/a": {
+                "entries": [
+                  {
+                    "id": "e2",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 2,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e2"
+                    },
+                    "createdAt": 2,
+                    "subagentId": "a"
+                  },
+                  {
+                    "id": "e5",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 5,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e5"
+                    },
+                    "createdAt": 5,
+                    "subagentId": "a"
+                  }
+                ],
+                "loaded": true
+              }
+            },
+            "subagents": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "sub-agent text doesn't clear the session agent's streaming preview",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s1",
+                "runId": "r1",
+                "text": "Hel"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.appended",
+                "entry": {
+                  "id": "e1",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "seq": 1,
+                  "role": "assistant",
+                  "content": {
+                    "type": "text",
+                    "text": "e1"
+                  },
+                  "createdAt": 1,
+                  "subagentId": "a"
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s1"
+              ],
+              "output": [
+                {
+                  "runId": "r1",
+                  "text": "Hel"
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {
+              "s1/a": {
+                "entries": [
+                  {
+                    "id": "e1",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "seq": 1,
+                    "role": "assistant",
+                    "content": {
+                      "type": "text",
+                      "text": "e1"
+                    },
+                    "createdAt": 1,
+                    "subagentId": "a"
+                  }
+                ],
+                "loaded": false
+              }
+            },
+            "subagents": {},
+            "deltas": {
+              "s1": {
+                "r1": "Hel"
+              }
+            },
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "upserts keep start order; a stale copy doesn't overwrite a newer one",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "b",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task b",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 20,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 5,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentsOf",
+              "args": [
+                "s1"
+              ],
+              "output": [
+                "a",
+                "b"
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "succeeded",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 30
+                }
+              }
+            },
+            {
+              "type": "detail",
+              "detail": {
+                "ticket": {
+                  "id": "t",
+                  "key": "T-1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t",
+                  "description": "",
+                  "status": "planning",
+                  "sessionId": "s1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "session": {
+                  "id": "s1",
+                  "key": "S1",
+                  "kind": "ticket",
+                  "ticketId": "t",
+                  "driver": "dummy",
+                  "cwd": "/",
+                  "title": "",
+                  "triageStatus": null,
+                  "outcome": null,
+                  "busy": false,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "summaries": [],
+                "runs": [],
+                "dependents": [],
+                "children": [],
+                "subagents": [
+                  {
+                    "id": "a",
+                    "sessionId": "s1",
+                    "runId": "r1",
+                    "parentId": null,
+                    "description": "Task a",
+                    "agentType": "general-purpose",
+                    "prompt": "",
+                    "status": "running",
+                    "result": null,
+                    "startedAt": 10,
+                    "endedAt": null,
+                    "updatedAt": 15
+                  }
+                ]
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentById",
+              "args": [
+                "s1",
+                "a"
+              ],
+              "output": "succeeded"
+            },
+            {
+              "fn": "subagentsOf",
+              "args": [
+                "s1"
+              ],
+              "output": [
+                "a",
+                "b"
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "subagents",
+              "sessionId": "s1",
+              "subagents": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "failed",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 30
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentById",
+              "args": [
+                "s1",
+                "a"
+              ],
+              "output": "failed"
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t": {
+                "id": "t",
+                "key": "T-1",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t",
+                "description": "",
+                "status": "planning",
+                "sessionId": "s1",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "sessions": {
+              "s1": {
+                "id": "s1",
+                "key": "S1",
+                "kind": "ticket",
+                "ticketId": "t",
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": false,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "runs": {},
+            "summaries": {
+              "s1": []
+            },
+            "transcripts": {},
+            "subagents": {
+              "s1": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "failed",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 30
+                },
+                {
+                  "id": "b",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task b",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 20,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              ]
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {
+              "t": []
+            },
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the list is unknown until a detail says; a detail without sub-agents (older service) leaves it unknown",
+      "steps": [
+        {
+          "actions": [],
+          "probes": [
+            {
+              "fn": "subagentsOf",
+              "args": [
+                "s1"
+              ],
+              "output": null
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "detail",
+              "detail": {
+                "ticket": {
+                  "id": "t",
+                  "key": "T-1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t",
+                  "description": "",
+                  "status": "planning",
+                  "sessionId": "s1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "session": {
+                  "id": "s1",
+                  "key": "S1",
+                  "kind": "ticket",
+                  "ticketId": "t",
+                  "driver": "dummy",
+                  "cwd": "/",
+                  "title": "",
+                  "triageStatus": null,
+                  "outcome": null,
+                  "busy": false,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "summaries": [],
+                "runs": [],
+                "dependents": [],
+                "children": []
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentsOf",
+              "args": [
+                "s1"
+              ],
+              "output": null
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "detail",
+              "detail": {
+                "ticket": {
+                  "id": "t",
+                  "key": "T-1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t",
+                  "description": "",
+                  "status": "planning",
+                  "sessionId": "s1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "session": {
+                  "id": "s1",
+                  "key": "S1",
+                  "kind": "ticket",
+                  "ticketId": "t",
+                  "driver": "dummy",
+                  "cwd": "/",
+                  "title": "",
+                  "triageStatus": null,
+                  "outcome": null,
+                  "busy": false,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "summaries": [],
+                "runs": [],
+                "dependents": [],
+                "children": [],
+                "subagents": []
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentsOf",
+              "args": [
+                "s1"
+              ],
+              "output": []
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t": {
+                "id": "t",
+                "key": "T-1",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t",
+                "description": "",
+                "status": "planning",
+                "sessionId": "s1",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "sessions": {
+              "s1": {
+                "id": "s1",
+                "key": "S1",
+                "kind": "ticket",
+                "ticketId": "t",
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": false,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "runs": {},
+            "summaries": {
+              "s1": []
+            },
+            "transcripts": {},
+            "subagents": {
+              "s1": []
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {
+              "t": []
+            },
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "an all-stale sub-agents action leaves a known list alone",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 9
+                }
+              }
+            },
+            {
+              "type": "subagents",
+              "sessionId": "s1",
+              "subagents": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "failed",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 1
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentById",
+              "args": [
+                "s1",
+                "a"
+              ],
+              "output": "running"
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {},
+            "subagents": {
+              "s1": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task a",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 9
+                }
+              ]
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "path walks up to the top-level agent and survives a cycle",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "top",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task top",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "mid",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "top",
+                  "description": "Task mid",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "leaf",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "mid",
+                  "description": "Task leaf",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "x",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "y",
+                  "description": "Task x",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "subagent.upserted",
+                "subagent": {
+                  "id": "y",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "x",
+                  "description": "Task y",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "subagentPath",
+              "args": [
+                "s1",
+                "leaf"
+              ],
+              "output": [
+                "top",
+                "mid",
+                "leaf"
+              ]
+            },
+            {
+              "fn": "subagentPath",
+              "args": [
+                "s1",
+                "x"
+              ],
+              "output": [
+                "y",
+                "x"
+              ]
+            },
+            {
+              "fn": "subagentPath",
+              "args": [
+                "s1",
+                "missing"
+              ],
+              "output": []
+            },
+            {
+              "fn": "subagentPath",
+              "args": [
+                "nope",
+                "leaf"
+              ],
+              "output": []
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {},
+            "subagents": {
+              "s1": [
+                {
+                  "id": "leaf",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "mid",
+                  "description": "Task leaf",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                },
+                {
+                  "id": "mid",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "top",
+                  "description": "Task mid",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                },
+                {
+                  "id": "top",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": null,
+                  "description": "Task top",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                },
+                {
+                  "id": "x",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "y",
+                  "description": "Task x",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                },
+                {
+                  "id": "y",
+                  "sessionId": "s1",
+                  "runId": "r1",
+                  "parentId": "x",
+                  "description": "Task y",
+                  "agentType": "general-purpose",
+                  "prompt": "",
+                  "status": "running",
+                  "result": null,
+                  "startedAt": 10,
+                  "endedAt": null,
+                  "updatedAt": 10
+                }
+              ]
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    }
+  ],
+  "statusLabel": {
+    "running": "Running",
+    "succeeded": "Done",
+    "failed": "Failed",
+    "stopped": "Stopped"
+  },
+  "titleCases": [
+    {
+      "name": "blank description falls back to the type",
+      "input": {
+        "description": "  ",
+        "agentType": "Explore"
+      },
+      "output": "Explore"
+    },
+    {
+      "name": "nothing at all",
+      "input": {
+        "description": "",
+        "agentType": null
+      },
+      "output": "Sub-agent"
+    },
+    {
+      "name": "description trimmed",
+      "input": {
+        "description": "  Scan the repo ",
+        "agentType": "Explore"
+      },
+      "output": "Scan the repo"
+    },
+    {
+      "name": "empty type",
+      "input": {
+        "description": "",
+        "agentType": ""
+      },
+      "output": "Sub-agent"
+    }
+  ],
+  "typeLabelCases": [
+    {
+      "name": "hidden when it is the title",
+      "input": {
+        "description": "",
+        "agentType": "Explore"
+      },
+      "output": null
+    },
+    {
+      "name": "shown",
+      "input": {
+        "description": "Scan",
+        "agentType": "Explore"
+      },
+      "output": "Explore"
+    },
+    {
+      "name": "no type",
+      "input": {
+        "description": "Scan",
+        "agentType": null
+      },
+      "output": null
+    }
+  ]
+}

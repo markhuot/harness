@@ -1,0 +1,273 @@
+{
+  "commandLineCases": [
+    {
+      "name": "bare command",
+      "input": {
+        "command": "watch-jira --project=PLAYR --once | jq -c '.[]'"
+      },
+      "output": "watch-jira --project=PLAYR --once | jq -c '.[]'"
+    },
+    {
+      "name": "bare command, empty args",
+      "input": {
+        "command": "ls -la",
+        "args": []
+      },
+      "output": "ls -la"
+    },
+    {
+      "name": "login zsh shows the line",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-lc",
+          "while true; do curl -s 'x y'; sleep 60; done"
+        ]
+      },
+      "output": "while true; do curl -s 'x y'; sleep 60; done"
+    },
+    {
+      "name": "bash -c shows the line",
+      "input": {
+        "command": "/bin/bash",
+        "args": [
+          "-c",
+          "echo $HOME"
+        ]
+      },
+      "output": "echo $HOME"
+    },
+    {
+      "name": "bare sh name",
+      "input": {
+        "command": "sh",
+        "args": [
+          "-c",
+          "make test"
+        ]
+      },
+      "output": "make test"
+    },
+    {
+      "name": "bare zsh name",
+      "input": {
+        "command": "zsh",
+        "args": [
+          "-lc",
+          "ls"
+        ]
+      },
+      "output": "ls"
+    },
+    {
+      "name": "nested shell path",
+      "input": {
+        "command": "/opt/homebrew/bin/bash",
+        "args": [
+          "-lc",
+          "it's fine"
+        ]
+      },
+      "output": "it's fine"
+    },
+    {
+      "name": "fish isn't a shell here",
+      "input": {
+        "command": "/usr/bin/fish",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "/usr/bin/fish -c ls"
+    },
+    {
+      "name": "dash isn't either",
+      "input": {
+        "command": "/bin/dash",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "/bin/dash -c ls"
+    },
+    {
+      "name": "name ending in sh",
+      "input": {
+        "command": "/usr/bin/ssh",
+        "args": [
+          "-c",
+          "host"
+        ]
+      },
+      "output": "/usr/bin/ssh -c host"
+    },
+    {
+      "name": "zsh suffix without slash",
+      "input": {
+        "command": "myzsh",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "myzsh -c ls"
+    },
+    {
+      "name": "shell with trailing newline",
+      "input": {
+        "command": "/bin/zsh\n",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "'/bin/zsh\n' -c ls"
+    },
+    {
+      "name": "shell name with suffix",
+      "input": {
+        "command": "/bin/zsh5",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "/bin/zsh5 -c ls"
+    },
+    {
+      "name": "-l alone is argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-l",
+          "ls"
+        ]
+      },
+      "output": "/bin/zsh -l ls"
+    },
+    {
+      "name": "-cl is argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-cl",
+          "ls"
+        ]
+      },
+      "output": "/bin/zsh -cl ls"
+    },
+    {
+      "name": "-ic is argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-ic",
+          "ls"
+        ]
+      },
+      "output": "/bin/zsh -ic ls"
+    },
+    {
+      "name": "-c with a trailing newline is argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-c\n",
+          "ls"
+        ]
+      },
+      "output": "/bin/zsh '-c\n' ls"
+    },
+    {
+      "name": "three args stay argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-lc",
+          "ls",
+          "extra"
+        ]
+      },
+      "output": "/bin/zsh -lc ls extra"
+    },
+    {
+      "name": "one arg stays argv",
+      "input": {
+        "command": "/bin/zsh",
+        "args": [
+          "-lc"
+        ]
+      },
+      "output": "/bin/zsh -lc"
+    },
+    {
+      "name": "empty line shown as is",
+      "input": {
+        "command": "/bin/sh",
+        "args": [
+          "-c",
+          ""
+        ]
+      },
+      "output": ""
+    },
+    {
+      "name": "legacy argv quoted",
+      "input": {
+        "command": "node",
+        "args": [
+          "~/Sites/Jira/watch-jira.js",
+          "--project",
+          "FOO BAR",
+          "it's"
+        ]
+      },
+      "output": "node ~/Sites/Jira/watch-jira.js --project 'FOO BAR' 'it'\\''s'"
+    },
+    {
+      "name": "legacy command with space",
+      "input": {
+        "command": "/Applications/My Tool/run",
+        "args": [
+          "a b"
+        ]
+      },
+      "output": "'/Applications/My Tool/run' 'a b'"
+    },
+    {
+      "name": "trailing slash then name",
+      "input": {
+        "command": "/bin//sh",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "ls"
+    },
+    {
+      "name": "combining mark after the name",
+      "input": {
+        "command": "/bin/sh́",
+        "args": [
+          "-c",
+          "ls"
+        ]
+      },
+      "output": "'/bin/sh́' -c ls"
+    },
+    {
+      "name": "combining mark after the flag",
+      "input": {
+        "command": "/bin/sh",
+        "args": [
+          "-ć",
+          "ls"
+        ]
+      },
+      "output": "/bin/sh '-ć' ls"
+    }
+  ]
+}

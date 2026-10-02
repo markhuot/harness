@@ -1,0 +1,525 @@
+{
+  "codeKindCases": [
+    {
+      "name": "diff fence",
+      "input": {
+        "fence": "diff",
+        "text": "just words"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "patch fence",
+      "input": {
+        "fence": "patch",
+        "text": "+a"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "untagged hunk",
+      "input": {
+        "fence": "",
+        "text": "@@ -1,2 +1,2 @@\n-a\n+b"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "untagged header pair",
+      "input": {
+        "fence": "",
+        "text": "--- a/x.ts\n+++ b/x.ts\n-a\n+b"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "untagged diff --git",
+      "input": {
+        "fence": "",
+        "text": "diff --git a/x b/x\nindex 1..2"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "tagged language wins",
+      "input": {
+        "fence": "ts",
+        "text": "@@ -1,2 +1,2 @@\n-a\n+b"
+      },
+      "output": "code"
+    },
+    {
+      "name": "udiff fence",
+      "input": {
+        "fence": "UDIFF",
+        "text": ""
+      },
+      "output": "diff"
+    },
+    {
+      "name": "whitespace fence is untagged",
+      "input": {
+        "fence": "  ",
+        "text": "@@ -1 +1 @@"
+      },
+      "output": "diff"
+    },
+    {
+      "name": "untagged prose",
+      "input": {
+        "fence": "",
+        "text": "hello\n- world"
+      },
+      "output": "code"
+    },
+    {
+      "name": "text fence",
+      "input": {
+        "fence": "text",
+        "text": "@@ -1 +1 @@"
+      },
+      "output": "code"
+    }
+  ],
+  "codeLanguageCases": [
+    {
+      "name": "ts",
+      "input": "ts",
+      "output": "typescript"
+    },
+    {
+      "name": "upper-case JS",
+      "input": "JS",
+      "output": "javascript"
+    },
+    {
+      "name": "zsh",
+      "input": "zsh",
+      "output": "shellscript"
+    },
+    {
+      "name": "bash",
+      "input": "bash",
+      "output": "shellscript"
+    },
+    {
+      "name": "yml",
+      "input": "yml",
+      "output": "yaml"
+    },
+    {
+      "name": "padded php",
+      "input": " php ",
+      "output": "php"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "text"
+    },
+    {
+      "name": "txt",
+      "input": "txt",
+      "output": "text"
+    },
+    {
+      "name": "patch",
+      "input": "patch",
+      "output": "diff"
+    },
+    {
+      "name": "c#",
+      "input": "c#",
+      "output": "csharp"
+    },
+    {
+      "name": "c++",
+      "input": "c++",
+      "output": "cpp"
+    },
+    {
+      "name": "mdx",
+      "input": "mdx",
+      "output": "mdx"
+    },
+    {
+      "name": "console",
+      "input": "console",
+      "output": "shellsession"
+    },
+    {
+      "name": "dockerfile",
+      "input": "Dockerfile",
+      "output": "docker"
+    },
+    {
+      "name": "unknown passes through lowercased",
+      "input": "Haskell",
+      "output": "haskell"
+    },
+    {
+      "name": "only whitespace",
+      "input": " \t\n ",
+      "output": "text"
+    },
+    {
+      "name": "NBSP trims",
+      "input": " ts ",
+      "output": "typescript"
+    },
+    {
+      "name": "NEL does not trim",
+      "input": "ts",
+      "output": "ts"
+    },
+    {
+      "name": "inner space kept",
+      "input": "ts x",
+      "output": "ts x"
+    },
+    {
+      "name": "unicode lowercases",
+      "input": "ÜBER",
+      "output": "über"
+    }
+  ],
+  "looksLikeDiffCases": [
+    {
+      "name": "markdown list",
+      "input": "- one\n- two\n+ three",
+      "output": false
+    },
+    {
+      "name": "heading underline",
+      "input": "--- a heading underline\nnot a +++ line",
+      "output": false
+    },
+    {
+      "name": "bare @@ prose",
+      "input": "@@ not a hunk @@",
+      "output": false
+    },
+    {
+      "name": "real hunk",
+      "input": "@@ -1,2 +1,2 @@\n-a\n+b",
+      "output": true
+    },
+    {
+      "name": "hunk without counts",
+      "input": "@@ -1 +1 @@",
+      "output": true
+    },
+    {
+      "name": "hunk with context",
+      "input": "@@ -10,3 +10,4 @@ function f() {",
+      "output": true
+    },
+    {
+      "name": "hunk missing space",
+      "input": "@@ -1,2 +1,2@@",
+      "output": false
+    },
+    {
+      "name": "hunk later in the text",
+      "input": "intro\n\n@@ -3 +3 @@\n-x",
+      "output": true
+    },
+    {
+      "name": "header pair",
+      "input": "--- a/x.ts\n+++ b/x.ts",
+      "output": true
+    },
+    {
+      "name": "header pair with CRLF",
+      "input": "--- a/x.ts\r\n+++ b/x.ts",
+      "output": true
+    },
+    {
+      "name": "--- last line",
+      "input": "text\n--- a/x",
+      "output": false
+    },
+    {
+      "name": "diff --git",
+      "input": "diff --git a/x b/x",
+      "output": true
+    },
+    {
+      "name": "diff --git without trailing space",
+      "input": "diff --git",
+      "output": false
+    },
+    {
+      "name": "+++ before ---",
+      "input": "+++ b/x\n--- a/x",
+      "output": false
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": false
+    },
+    {
+      "name": "hunk with leading space",
+      "input": " @@ -1 +1 @@",
+      "output": false
+    }
+  ],
+  "normalizePatchCases": [
+    {
+      "name": "bare snippet",
+      "input": {
+        "text": "-old\n+new\n+more\n same"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,3 @@\n-old\n+new\n+more\n same\n"
+    },
+    {
+      "name": "miscounted and bare hunks",
+      "input": {
+        "text": "@@ -10,9 +10,1 @@ function f() {\n a\n-b\n+c\n@@ @@\n-x\n+y\n+z",
+        "name": "f.php"
+      },
+      "output": "diff --git a/f.php b/f.php\n--- a/f.php\n+++ b/f.php\n@@ -10,2 +10,2 @@ function f() {\n a\n-b\n+c\n@@ -12,1 +12,2 @@\n-x\n+y\n+z\n"
+    },
+    {
+      "name": "context without leading space",
+      "input": {
+        "text": "@@ -1,1 +1,1 @@\nkeep\n\n-a\n+b"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,3 +1,3 @@\n keep\n \n-a\n+b\n"
+    },
+    {
+      "name": "multi-file",
+      "input": {
+        "text": "diff --git a/a.ts b/a.ts\nindex 1..2 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -5,3 +5,3 @@\n-x\n+y\ndiff --git a/b.ts b/b.ts\n--- a/b.ts\n+++ b/b.ts\n@@ @@\n+new\n--- /dev/null\n+++ b/c.yml\n@@ -0,0 +1 @@\n+c: 1"
+      },
+      "output": "diff --git a/a.ts b/a.ts\nindex 1..2 100644\n--- a/a.ts\n+++ b/a.ts\n@@ -5,1 +5,1 @@\n-x\n+y\ndiff --git a/b.ts b/b.ts\n--- a/b.ts\n+++ b/b.ts\n@@ -1,0 +1,1 @@\n+new\ndiff --git a/c.yml b/c.yml\n--- /dev/null\n+++ b/c.yml\n@@ -0,0 +1,1 @@\n+c: 1\n"
+    },
+    {
+      "name": "CRLF and trailing newlines",
+      "input": {
+        "text": "-a\r\n+b\r\n\r\n\n"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "empty text",
+      "input": {
+        "text": ""
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,1 @@\n \n"
+    },
+    {
+      "name": "only newlines",
+      "input": {
+        "text": "\n\n"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,1 @@\n \n"
+    },
+    {
+      "name": "custom name",
+      "input": {
+        "text": "+x",
+        "name": "notes.md"
+      },
+      "output": "diff --git a/notes.md b/notes.md\n--- a/notes.md\n+++ b/notes.md\n@@ -1,0 +1,1 @@\n+x\n"
+    },
+    {
+      "name": "header pair without diff --git",
+      "input": {
+        "text": "--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b"
+      },
+      "output": "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "header with timestamps",
+      "input": {
+        "text": "--- a/x.ts\t2024-01-01 10:00\n+++ b/x.ts\t2024-01-02 10:00\n@@ -1 +1 @@\n-a\n+b"
+      },
+      "output": "diff --git a/x.ts b/x.ts\n--- a/x.ts\t2024-01-01 10:00\n+++ b/x.ts\t2024-01-02 10:00\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "deleted file named by old path",
+      "input": {
+        "text": "--- a/gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x"
+      },
+      "output": "diff --git a/gone.py b/gone.py\n--- a/gone.py\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-x\n"
+    },
+    {
+      "name": "both /dev/null uses the name",
+      "input": {
+        "text": "--- /dev/null\n+++ /dev/null\n@@ @@\n+x",
+        "name": "n.txt"
+      },
+      "output": "diff --git a/n.txt b/n.txt\n--- /dev/null\n+++ /dev/null\n@@ -1,0 +1,1 @@\n+x\n"
+    },
+    {
+      "name": "paths without a/ b/",
+      "input": {
+        "text": "--- old.txt\n+++ new.txt\n@@ @@\n-a\n+b"
+      },
+      "output": "diff --git a/old.txt b/old.txt\n--- old.txt\n+++ new.txt\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "commit message before the header kept",
+      "input": {
+        "text": "commit abc\nAuthor: me\n\n--- a/x\n+++ b/x\n@@ @@\n-a\n+b"
+      },
+      "output": "commit abc\nAuthor: me\n\ndiff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,1 +1,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "lines before the first hunk under a header",
+      "input": {
+        "text": "--- a/x\n+++ b/x\nstray\n-a"
+      },
+      "output": "diff --git a/x b/x\n--- a/x\n+++ b/x\nstray\n-a\n"
+    },
+    {
+      "name": "lines before a hunk in a headerless snippet",
+      "input": {
+        "text": " a\n-b\n@@ -9 +9 @@\n-c\n+d"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,1 @@\n a\n-b\n@@ -9,1 +9,1 @@\n-c\n+d\n"
+    },
+    {
+      "name": "loose hunk with start only",
+      "input": {
+        "text": "@@ -4 +7 @@\n a\n-b"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -4,2 +7,1 @@\n a\n-b\n"
+    },
+    {
+      "name": "loose hunk without minus",
+      "input": {
+        "text": "@@ 4 7 @@\n a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -4,1 +7,1 @@\n a\n"
+    },
+    {
+      "name": "loose hunk with only new start",
+      "input": {
+        "text": "@@ +7 @@\n+a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,0 +7,1 @@\n+a\n"
+    },
+    {
+      "name": "loose hunk with only old start",
+      "input": {
+        "text": "@@ -7 @@\n-a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -7,1 +1,0 @@\n-a\n"
+    },
+    {
+      "name": "loose hunk without spaces",
+      "input": {
+        "text": "@@-3+5@@\n-a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,1 @@\n @@-3+5@@\n-a\n"
+    },
+    {
+      "name": "loose hunk keeps context text",
+      "input": {
+        "text": "@@ @@ class Foo\n+a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,0 +1,1 @@ class Foo\n+a\n"
+    },
+    {
+      "name": "hunk header with extra spaces",
+      "input": {
+        "text": "@@   -2,1   +2,1   @@\n-a\n+b"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -2,1 +2,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "hunk with tabs",
+      "input": {
+        "text": "@@\t-2\t+3\t@@\n-a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -2,1 +3,0 @@\n-a\n"
+    },
+    {
+      "name": "not a hunk: trailing junk in counts",
+      "input": {
+        "text": "@@ -1,2,3 +1 @@\n-a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,1 @@\n @@ -1,2,3 +1 @@\n-a\n"
+    },
+    {
+      "name": "not a hunk: letters",
+      "input": {
+        "text": "@@ abc @@\n-a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,1 @@\n @@ abc @@\n-a\n"
+    },
+    {
+      "name": "empty hunk then another",
+      "input": {
+        "text": "@@ -1 +1 @@\n@@ @@\n+a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,0 +1,0 @@\n@@ -1,0 +1,1 @@\n+a\n"
+    },
+    {
+      "name": "leading zeros",
+      "input": {
+        "text": "@@ -007,1 +010,1 @@\n-a\n+b"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -7,1 +10,1 @@\n-a\n+b\n"
+    },
+    {
+      "name": "lone CR in hunk context is not a hunk",
+      "input": {
+        "text": "@@ @@ x\ry\n+a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,2 @@\n @@ @@ x\ry\n+a\n"
+    },
+    {
+      "name": "U+2028 in hunk context is not a hunk",
+      "input": {
+        "text": "@@ @@ x y\n+a"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,2 @@\n @@ @@ x y\n+a\n"
+    },
+    {
+      "name": "no newline marker is not counted",
+      "input": {
+        "text": "@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,1 +1,1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file\n"
+    },
+    {
+      "name": "blank lines become context",
+      "input": {
+        "text": "@@ @@\n-a\n\n+b"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,2 @@\n-a\n \n+b\n"
+    },
+    {
+      "name": "dashes inside a hunk start a new file",
+      "input": {
+        "text": "--- a/x\n+++ b/x\n@@ @@\n---\n+++ y\n-a"
+      },
+      "output": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,1 @@\n---\n+++ y\n-a\n"
+    },
+    {
+      "name": "two files restart numbering",
+      "input": {
+        "text": "--- a/x\n+++ b/x\n@@ -5 +5 @@\n-a\n--- a/y\n+++ b/y\n@@ @@\n-b"
+      },
+      "output": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -5,1 +5,0 @@\n-a\ndiff --git a/y b/y\n--- a/y\n+++ b/y\n@@ -1,1 +1,0 @@\n-b\n"
+    },
+    {
+      "name": "next hunk continues from the previous",
+      "input": {
+        "text": "@@ -1 +1 @@\n a\n a\n-b\n@@ @@\n c"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,3 +1,2 @@\n a\n a\n-b\n@@ -4,1 +3,1 @@\n c\n"
+    },
+    {
+      "name": "emoji and combining marks",
+      "input": {
+        "text": "@@ @@\n-café\n+café 😀\n ü"
+      },
+      "output": "diff --git a/snippet b/snippet\n--- a/snippet\n+++ b/snippet\n@@ -1,2 +1,2 @@\n-café\n+café 😀\n ü\n"
+    }
+  ]
+}

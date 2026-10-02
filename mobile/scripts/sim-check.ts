@@ -33,8 +33,9 @@
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
-//      New session sheet scrolls to its last button above it. Needs the simulator's software
-//      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
+//      New session sheet scrolls to its last button above it; keyboard-*.png. A headless simulator
+//      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
+//      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
 //   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
 //      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
@@ -50,11 +51,20 @@
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
 //      checks and the modes above tap at iPhone coordinates, so they don't run here.
 //
-//   Every run prints its slowest steps and writes them all to mobile/build/screens/timings.json.
+//   --native: drives the native SwiftUI app (ios/) instead of the React Native one. It builds with
+//      `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build into ios/build/dd; no
+//      expo prebuild or pods), installs ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app
+//      (--app= still overrides) and saves to mobile/build/screens-native/ (screens-ipad-native/ with
+//      --ipad), so the RN app's shots stay put. Same bundle id, links and checks. It runs on the shared
+//      harness-shared simulator under its lock like any other run, e.g. `--native --only=connect`;
+//      --udid still names a specific existing device.
+//
 //   It stops before starting when the disk has less than 5 GiB free, and removes its temp dirs
 //   ($TMPDIR/harness-sim-home-*, harness-sim-projects-*) however it ends, unless --keep.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
+//   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
+//
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad] [--native]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -72,8 +82,10 @@ const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.spli
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
-const shots = join(here, "build", ipad ? "screens-ipad" : "screens");
-const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
+/** --native: the SwiftUI app in ios/ instead of the React Native one here. */
+const native = flag("native");
+const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}${native ? "-native" : ""}`);
+const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? (native ? join(repoRoot, "ios", "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app") : join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app"));
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
@@ -212,22 +224,48 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
 /**
+ * Taps a header item by its label when AXe can see it (the native app's toolbar items), else at the
+ * point where it sits in RN's header (RN's glass header buttons aren't in AXe's tree).
+ */
+async function tapHeader(udid: string, label: string | ((l: string) => boolean), at: { x: number; y: number }) {
+  const match = typeof label === "string" ? (l: string) => l === label : label;
+  const el = await until(`header ${label}`, () => findElement(udid, match), 1500).catch(() => null);
+  const x = el ? el.frame.x + el.frame.width / 2 : at.x;
+  const y = el ? el.frame.y + el.frame.height / 2 : at.y;
+  await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--udid", udid);
+}
+/**
+ * Closes an open menu without choosing anything: RN's action sheet by its Cancel, a native Menu by
+ * its "Dismiss context menu" backdrop. The backdrop covers the whole screen, so its center can sit
+ * under one of the menu's rows; tap near its bottom edge, below any menu that opens from the top.
+ */
+async function dismissMenu(udid: string) {
+  const el = await until("menu backdrop or Cancel", () => findElement(udid, (l) => l === "Cancel" || l === "Dismiss context menu"), 8000);
+  const x = Math.round(el.frame.x + el.frame.width / 2);
+  const y = Math.round(el.AXLabel === "Cancel" ? el.frame.y + el.frame.height / 2 : el.frame.y + el.frame.height - 60);
+  await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
+}
+/**
  * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
  * sits in the upper middle of the screen. Elements scrolled far out of view may be missing from
  * the tree, so it swipes a fixed distance until one shows up, then just far enough. One above the
  * screen (or under the header) is scrolled back down to.
+ *
+ * A ticket's hero hides while its tab scrolls forward and comes back on scrolling back, which moves
+ * the tab body another ~240pt. The swipes aim at 420 (forward) and 220 (back), so the element lands
+ * inside the 140–520 band whether or not the hero toggles.
  */
 async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
   for (let i = 0; i < tries; i++) {
     const el = await findElement(udid, match);
     if (el && el.frame.y >= 140 && el.frame.y <= 520) return;
     if (el && el.frame.y < 140) {
-      const by = Math.min(420, Math.round(300 - el.frame.y));
+      const by = Math.min(420, Math.round(220 - el.frame.y));
       await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(300 + by), "--duration", "0.8", "--udid", udid);
       await Bun.sleep(400);
       continue;
     }
-    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 300)) : 380;
+    const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 420)) : 380;
     await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
     await Bun.sleep(400);
   }
@@ -382,6 +420,9 @@ async function shootBoth(udid: string, name: string, redrawn: () => Promise<unkn
 async function install(udid: string) {
   await simctl("terminate", udid, BUNDLE).catch(() => {});
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
+  // The native Debug build (Harness Dev) registers harness:// too, and iOS may hand it the pair link
+  // and every deep link after it. The shared simulator can have one left from a dev loop.
+  await sh(["xcrun", "simctl", "uninstall", udid, `${BUNDLE}.dev`], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, appPath);
   await appearance(udid, "light");
@@ -749,7 +790,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     throw new Error("couldn't open the Done column");
   };
   const boardMenu = async () => {
-    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await tapHeader(udid, "Board options", { x: 308, y: 84 });
     await tapWhere(udid, "Show child tickets");
   };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
@@ -772,9 +813,13 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     return true;
   });
   await check("the Done column scrolls into older pages", async () => {
-    // Reading the tree (every loaded card) costs more than a swipe, so look after every few.
+    // Reading the tree (every loaded card) costs more than a swipe, so look after every few. A lazy
+    // list (the native app) only has the cards on screen in the tree, and a few flicks can carry it
+    // past `deep`, so any card at least as old (past the first page) counts.
+    const older = [...p.history.slice(0, -59), p.needle].map((t) => `${t.key} `);
     for (let i = 0; i < 45; i += 3) {
-      if (await has(`${deep.key} `)) return `${deep.key} after ${i} swipes`;
+      const seen = (await labels(udid)).find((l) => older.some((k) => l.startsWith(k)));
+      if (seen) return `${seen.split(" ")[0]} (≥ 60th newest) after ${i} swipes`;
       for (let j = 0; j < 3; j++) await swipeUp();
       await Bun.sleep(300);
     }
@@ -956,12 +1001,57 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   });
 }
 
-/** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
+/**
+ * A preference in the simulated device's own data (so no other simulator changes): reads it, and
+ * writes a bool or deletes it when `value` is given. Returns the value it found ("1", "0" or null
+ * when unset) so the run can put it back.
+ */
+async function devicePref(udid: string, domain: string, key: string, value?: "0" | "1" | null): Promise<string | null> {
+  const was = (await sh(["xcrun", "simctl", "spawn", udid, "defaults", "read", domain, key], { allowFail: true })) || null;
+  if (value === null) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "delete", domain, key], { allowFail: true });
+  else if (value !== undefined) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "write", domain, key, "-bool", value === "1" ? "YES" : "NO"]);
+  return was === "1" || was === "0" ? was : null;
+}
+const KEYBOARD_PREFS = "com.apple.keyboard.preferences";
+
+/**
+ * --keyboard: the composer and a sheet's last control stay above the on-screen keyboard.
+ *
+ * A headless simulator always has a hardware keyboard, and iOS then minimizes the software one to a
+ * bar: the run turns the device's AutomaticMinimizationEnabled off, and puts it back afterwards.
+ * Text goes in by tapping the on-screen keys, since AXe's typing is hardware key events.
+ */
 async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
-  // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
+  const minimize = await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", "0");
+  try {
+    await keyboardChecksWithSoftwareKeyboard(udid, p);
+  } finally {
+    await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", minimize as "0" | "1" | null);
+  }
+}
+
+async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  // Types by tapping the on-screen keys (letters, space, return). AXe's `type` and `key` send
+  // hardware key events, which put iOS in hardware-keyboard mode for the rest of the run.
+  const typeOnKeys = async (text: string) => {
+    const keys = (await nodes(udid)).filter((n) => n.AXLabel && (/^[a-zA-Z]$/.test(n.AXLabel) || /^(space|return|new line)$/i.test(n.AXLabel)));
+    const at = (label: string) => keys.find((k) => k.AXLabel!.toLowerCase() === label);
+    for (const ch of text) {
+      const k = ch === " " ? at("space") : ch === "\n" ? (at("return") ?? at("new line")) : at(ch.toLowerCase());
+      if (!k) throw new Error(`no key for ${JSON.stringify(ch)} on the keyboard`);
+      await axe("tap", "-x", String(Math.round(k.frame.x + k.frame.width / 2)), "-y", String(Math.round(k.frame.y + k.frame.height / 2)), "--udid", udid);
+    }
+  };
+  // The keyboard's top edge: the top letter row ("q"), or the predictive bar sitting right on it
+  // (suggested words, Passwords) when there is one. A suggested "I" is a single-letter label too, so
+  // the letter row is found by its "q" key, not as the highest single letter.
   const keyboardTop = async () => {
-    const keys = (await nodes(udid)).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
-    return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
+    const all = await nodes(udid);
+    if (all.filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "")).length < 10) return null;
+    const q = all.find((n) => n.AXLabel === "q" || n.AXLabel === "Q");
+    if (!q) return null;
+    const bar = all.filter((n) => n.frame.y < q.frame.y - 4 && n.frame.y > q.frame.y - 70 && Math.abs(n.frame.y + n.frame.height - q.frame.y) <= 12);
+    return Math.min(q.frame.y, ...bar.map((n) => n.frame.y)) - 8;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
 
@@ -970,7 +1060,8 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
   // the keyboard, which blurs the field.
   const switchShown = async () => (await labels(udid)).includes("Move to in progress");
   const dismiss = async (top: number) => {
-    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
+    // Start in the list just above the composer (the native hero and tab strip reach y≈325).
+    await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 150)), "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
     await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
   };
   await check("the composer's switch shows while writing", async () => {
@@ -983,7 +1074,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     await until("keyboard up", keyboardTop, 8000);
-    await axe("type", "Draft", "--udid", udid);
+    await typeOnKeys("draft");
     await dismiss(top);
     await Bun.sleep(400);
     if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
@@ -1032,8 +1123,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     // Near its last line puts the cursor at the end of the text.
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
-    for (let i = 0; i < 16; i++) await axe("key", "40", "--udid", udid); // return
-    await axe("type", "End of the prompt.", "--udid", udid);
+    await typeOnKeys("\n".repeat(16) + "end of the prompt");
     await Bun.sleep(900);
     await shot(udid, "keyboard-prompt");
     const field = await findElement(udid, isField);
@@ -1376,7 +1466,8 @@ function screens(s: Seeded): Screen[] {
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
-      after: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(400)),
+      // RN's action sheet has Cancel; the native app's menu closes with a tap outside it.
+      after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
     },
     {
       name: "approve-custom",
@@ -1509,7 +1600,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       await check("composer answers a blocked ticket", async () => {
         await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));
         await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-        await axe("type", "Use Happy Cog", "--udid", udid);
+        // A message to a blocked ticket is a chat; the dummy picks the work back up only when told to.
+        await axe("type", "Use Happy Cog [dummy:unblock]", "--udid", udid);
         await tapWhere(udid, "Send");
         const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
         return `${t.key} → ${t.status}`;
@@ -1556,7 +1648,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         });
         await shot(udid, "card-tap-detail-light");
         // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
-        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+        await tapHeader(udid, (l) => l === "Back" || l === "Board", { x: 32, y: 89 });
         await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
         lastUrl.set(udid, BOARD);
         await shot(udid, "card-tap-back-light");
@@ -1633,7 +1725,11 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         // Typing left the editor scrolled to the end of the long work prompt, above the button.
         await scrollTo(udid, (l) => l === "Reset to built-in");
         await tapWhere(udid, "Reset to built-in");
-        await tapWhere(udid, "Reset"); // the confirm alert
+        // The confirm alert: its buttons are in the AX tree before it takes taps (the native app's
+        // alert drops a tap that lands during its presentation), so let it settle first.
+        await until("confirm alert", () => findElement(udid, (l) => l === "Reset"), 5000);
+        await Bun.sleep(600);
+        await tapWhere(udid, "Reset");
         await until("override cleared", async () => (await override("system.work")) === null, 8000);
         await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
         moved(udid);
@@ -1668,8 +1764,15 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       };
       await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
         await openModels();
+        // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
+        // Code's models) can leave its rows unrealized and out of AXe's tree.
+        await tapWhere(udid, "Search models");
+        await axe("type", "slow", "--udid", udid);
         await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
-        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000).catch(async (e) => {
+          await shot(udid, "model-pick-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
         await openModels();
         await tapWhere(udid, (l) => l.startsWith("Default"));
         const cleared = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === null, 8000);
@@ -1690,6 +1793,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
         await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
+        // Wait for the sheet to settle: a row tapped while it slides in can miss.
+        await approveMenuUp(udid);
         await tapWhere(udid, "Approve and take no action");
         const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
         if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
@@ -1771,6 +1876,12 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
 // ---------------------------------------------------------------- build
 async function buildApp() {
   if (flag("no-build") && existsSync(appPath)) return;
+  if (native) {
+    // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
+    console.log("building the native app, Release (simulator)…");
+    await sh(["bun", join(repoRoot, "ios", "Tools", "build.ts"), "sim"], { cwd: repoRoot });
+    return;
+  }
   // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
   // module, so regenerate it whenever it doesn't link every native dependency.
   if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {

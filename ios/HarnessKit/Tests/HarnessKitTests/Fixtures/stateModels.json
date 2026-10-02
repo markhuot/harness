@@ -1,0 +1,7153 @@
+{
+  "decodeChoiceCases": [
+    {
+      "name": "empty",
+      "input": "",
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "driver only (no separator)",
+      "input": "claude-code",
+      "output": {
+        "driver": "claude-code",
+        "model": null
+      }
+    },
+    {
+      "name": "driver default",
+      "input": "a\u0001",
+      "output": {
+        "driver": "a",
+        "model": null
+      }
+    },
+    {
+      "name": "driver and model",
+      "input": "a\u0001m:1",
+      "output": {
+        "driver": "a",
+        "model": "m:1"
+      }
+    },
+    {
+      "name": "model with a separator inside",
+      "input": "a\u0001b\u0001c",
+      "output": {
+        "driver": "a",
+        "model": "b\u0001c"
+      }
+    },
+    {
+      "name": "empty driver",
+      "input": "\u0001m",
+      "output": {
+        "driver": "",
+        "model": "m"
+      }
+    },
+    {
+      "name": "only a separator",
+      "input": "\u0001",
+      "output": {
+        "driver": "",
+        "model": null
+      }
+    },
+    {
+      "name": "emoji model",
+      "input": "a\u0001🧪",
+      "output": {
+        "driver": "a",
+        "model": "🧪"
+      }
+    }
+  ],
+  "driverModelChoicesCases": [
+    {
+      "name": "signed-in drivers become groups",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (Claude Code · Sonnet)"
+      }
+    },
+    {
+      "name": "one signed-in driver: flat list",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": false
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Opus)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": null,
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Opus"
+      }
+    },
+    {
+      "name": "flat list resolving to another driver names it",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": false
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "anthropic-api",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Anthropic API · Sonnet 5)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": null,
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (Anthropic API · Sonnet 5)"
+      }
+    },
+    {
+      "name": "picked driver not signed in stays listed",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "codex",
+            "label": "Codex",
+            "options": [
+              {
+                "value": "codex\u0001luna",
+                "label": "Luna"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Codex · Luna"
+      }
+    },
+    {
+      "name": "driver without a model gets its default entry",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default (Sonnet)"
+              },
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default (Sonnet)"
+      }
+    },
+    {
+      "name": "unknown model kept as custom",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": "claude-x-1"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              },
+              {
+                "value": "claude-code\u0001claude-x-1",
+                "label": "claude-x-1 (custom)"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code · claude-x-1 (custom)"
+      }
+    },
+    {
+      "name": "onlyDriver, resolving there",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "onlyDriver": "claude-code"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": null,
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Opus"
+      }
+    },
+    {
+      "name": "onlyDriver elsewhere: no Default",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "anthropic-api",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "onlyDriver": "anthropic-api"
+        }
+      },
+      "output": {
+        "default": null,
+        "groups": [
+          {
+            "driver": "anthropic-api",
+            "label": null,
+            "options": [
+              {
+                "value": "anthropic-api\u0001",
+                "label": "Anthropic API default (Sonnet 5)"
+              },
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Anthropic API default (Sonnet 5)"
+      }
+    },
+    {
+      "name": "onlyDriver not signed in",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "onlyDriver": "codex"
+        }
+      },
+      "output": {
+        "default": null,
+        "groups": [
+          {
+            "driver": "codex",
+            "label": null,
+            "options": [
+              {
+                "value": "codex\u0001luna",
+                "label": "Luna"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Luna"
+      }
+    },
+    {
+      "name": "onlyDriver unknown to the list",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "gone",
+          "model": "m"
+        },
+        "resolved": {
+          "driver": "gone",
+          "model": null
+        },
+        "opts": {
+          "onlyDriver": "gone"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default"
+        },
+        "groups": [
+          {
+            "driver": "gone",
+            "label": null,
+            "options": [
+              {
+                "value": "gone\u0001m",
+                "label": "m (custom)"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "m (custom)"
+      }
+    },
+    {
+      "name": "onlyDriver empty string",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "gone",
+          "model": "m"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "onlyDriver": ""
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (Claude Code · Sonnet)"
+      }
+    },
+    {
+      "name": "inheritedModel names the driver default",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "resolved": {
+          "driver": "anthropic-api",
+          "model": null
+        },
+        "opts": {
+          "inheritedModels": {
+            "claude-code": "opus"
+          }
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Anthropic API · Sonnet 5)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default (Opus)"
+              },
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default (Opus)"
+      }
+    },
+    {
+      "name": "inheritedModel unknown id shown by id",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "inheritedModels": {
+            "claude-code": "claude-x-9"
+          }
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · claude-x-9)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default (claude-x-9)"
+              },
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default (claude-x-9)"
+      }
+    },
+    {
+      "name": "inheritedModel null falls back to list default",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "inheritedModels": {
+            "claude-code": null
+          }
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default (Sonnet)"
+              },
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default (Sonnet)"
+      }
+    },
+    {
+      "name": "resolved with a model",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Opus)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (Claude Code · Opus)"
+      }
+    },
+    {
+      "name": "resolved driver with no models loaded",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {},
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "codex",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Codex)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": []
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": []
+          }
+        ],
+        "selectedLabel": "Default (Codex)"
+      }
+    },
+    {
+      "name": "resolved unknown driver",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "mystery",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (mystery)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (mystery)"
+      }
+    },
+    {
+      "name": "no resolved driver",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": null,
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default"
+      }
+    },
+    {
+      "name": "empty resolved driver",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "",
+          "model": "x"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default"
+      }
+    },
+    {
+      "name": "custom defaultLabel",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "opts": {
+          "defaultLabel": "Same as work"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Same as work (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Same as work (Claude Code · Sonnet)"
+      }
+    },
+    {
+      "name": "custom defaultLabel, nothing to name",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": null,
+          "model": null
+        },
+        "opts": {
+          "defaultLabel": "Inherit"
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Inherit"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Inherit"
+      }
+    },
+    {
+      "name": "picked model on a multi-driver list",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "anthropic-api",
+          "model": "claude-sonnet-5"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Anthropic API · Sonnet 5"
+      }
+    },
+    {
+      "name": "picked unknown driver is appended",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "gone",
+          "model": "m"
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "gone",
+            "label": "gone",
+            "options": [
+              {
+                "value": "gone\u0001m",
+                "label": "m (custom)"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "gone · m (custom)"
+      }
+    },
+    {
+      "name": "picked unknown driver without model",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "gone",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "gone",
+            "label": "gone",
+            "options": [
+              {
+                "value": "gone\u0001",
+                "label": "gone default"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "gone default"
+      }
+    },
+    {
+      "name": "no drivers at all",
+      "input": {
+        "drivers": [],
+        "models": {},
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": null,
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default"
+        },
+        "groups": [],
+        "selectedLabel": "Default"
+      }
+    },
+    {
+      "name": "no drivers, picked one",
+      "input": {
+        "drivers": [],
+        "models": {},
+        "value": {
+          "driver": "x",
+          "model": null
+        },
+        "resolved": {
+          "driver": "x",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default"
+        },
+        "groups": [
+          {
+            "driver": "x",
+            "label": null,
+            "options": [
+              {
+                "value": "x\u0001",
+                "label": "x default"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "x default"
+      }
+    },
+    {
+      "name": "unavailable but signed in is hidden",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          },
+          {
+            "id": "gemini",
+            "name": "Gemini",
+            "available": false,
+            "authenticated": true
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": null,
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Default (Claude Code · Sonnet)"
+      }
+    },
+    {
+      "name": "empty model is a driver default",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": ""
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default (Sonnet)"
+              },
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default (Sonnet)"
+      }
+    },
+    {
+      "name": "default entry without a list default",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "opus",
+              "name": "Opus"
+            },
+            {
+              "id": "sonnet",
+              "name": "Sonnet",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "codex",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code · Sonnet)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "codex",
+            "label": "Codex",
+            "options": [
+              {
+                "value": "codex\u0001",
+                "label": "Codex default"
+              },
+              {
+                "value": "codex\u0001luna",
+                "label": "Luna"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Codex default"
+      }
+    },
+    {
+      "name": "model with an empty name",
+      "input": {
+        "drivers": [
+          {
+            "id": "claude-code",
+            "name": "Claude Code",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "anthropic-api",
+            "name": "Anthropic API",
+            "available": true,
+            "authenticated": true
+          },
+          {
+            "id": "codex",
+            "name": "Codex",
+            "available": true,
+            "authenticated": false
+          }
+        ],
+        "models": {
+          "claude-code": [
+            {
+              "id": "anon",
+              "name": "",
+              "default": true
+            }
+          ],
+          "anthropic-api": [
+            {
+              "id": "claude-sonnet-5",
+              "name": "Sonnet 5",
+              "default": true
+            }
+          ],
+          "codex": [
+            {
+              "id": "luna",
+              "name": "Luna"
+            }
+          ]
+        },
+        "value": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "default": {
+          "value": "",
+          "label": "Default (Claude Code)"
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001",
+                "label": "Claude Code default"
+              },
+              {
+                "value": "claude-code\u0001anon",
+                "label": ""
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "options": [
+              {
+                "value": "anthropic-api\u0001claude-sonnet-5",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "selectedLabel": "Claude Code default"
+      }
+    }
+  ],
+  "encodeChoiceCases": [
+    {
+      "name": "Default",
+      "input": {
+        "driver": null,
+        "model": null
+      },
+      "output": ""
+    },
+    {
+      "name": "driver and model",
+      "input": {
+        "driver": "a",
+        "model": "m:1"
+      },
+      "output": "a\u0001m:1"
+    },
+    {
+      "name": "driver default",
+      "input": {
+        "driver": "a",
+        "model": null
+      },
+      "output": "a\u0001"
+    },
+    {
+      "name": "empty driver is Default",
+      "input": {
+        "driver": "",
+        "model": "m"
+      },
+      "output": ""
+    },
+    {
+      "name": "model without driver is Default",
+      "input": {
+        "driver": null,
+        "model": "m"
+      },
+      "output": ""
+    },
+    {
+      "name": "empty model",
+      "input": {
+        "driver": "a",
+        "model": ""
+      },
+      "output": "a\u0001"
+    }
+  ],
+  "entityCases": [
+    {
+      "name": "project 0 × settings 0",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 0 × settings 1",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 0 × settings 2",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 0 × settings 3",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 0 × settings 4",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "anthropic-api",
+          "defaultModels": {
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 0 × settings 5",
+      "input": {
+        "project": {
+          "id": "prj_8f2c1a",
+          "key": "NYTIMES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": true,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": "develop",
+          "completionAction": "pr",
+          "completionActions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "pullRequestHost": "github.com",
+          "color": "blue",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 0",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 1",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": null,
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 2",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 3",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 4",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "anthropic-api",
+        "resolved": {
+          "driver": "anthropic-api",
+          "model": null
+        },
+        "ticketChoice": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "anthropic-api",
+          "model": null
+        },
+        "inheritedTicket": null,
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "anthropic-api",
+          "defaultModels": {
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 1 × settings 5",
+      "input": {
+        "project": {
+          "id": "prj_00a1",
+          "key": "SCRATCH",
+          "name": "scratch",
+          "path": "/tmp/scratch",
+          "nextSeq": 1,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "useWorktrees": false,
+          "requireHumanReview": false,
+          "autoComplete": true,
+          "permissionMode": null,
+          "color": null,
+          "createdAt": 1759190400000,
+          "updatedAt": 1759190400000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": null,
+          "model": null
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku"
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 0",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 1",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 2,
+          "permissionMode": "read_only",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKey": null
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 2",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "anthropic-api",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 3",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 4",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "anthropic-api",
+          "maxConcurrentRuns": 1,
+          "permissionMode": "ask",
+          "classifier": "off",
+          "defaultModels": {},
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": null,
+          "model": null
+        },
+        "settingsPatch": {
+          "defaultDriver": "anthropic-api",
+          "defaultModels": {
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "project 2 × settings 5",
+      "input": {
+        "project": {
+          "id": "prj_notes",
+          "key": "NOTES",
+          "name": "New York Times",
+          "path": "/Users/mark/Sites/nytimes",
+          "nextSeq": 42,
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": "claude-sonnet-4-5"
+          },
+          "useWorktrees": true,
+          "isGit": false,
+          "requireHumanReview": true,
+          "autoComplete": false,
+          "permissionMode": "ask",
+          "baseBranch": null,
+          "completionAction": "custom",
+          "completionActions": [
+            "custom"
+          ],
+          "pullRequestHost": null,
+          "color": "#ff8800",
+          "createdAt": 1759190400000,
+          "updatedAt": 1759276800000
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": null,
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          },
+          "anthropicApiKeySet": true
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": null,
+          "model": null
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "projectPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "haiku",
+            "anthropic-api": null
+          }
+        },
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "no project, settings 0",
+      "input": {
+        "project": null,
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "anthropic-api": null
+          },
+          "reviewModels": {
+            "claude-code": null
+          },
+          "watcherDriver": "anthropic-api",
+          "watcherModels": {
+            "anthropic-api": "claude-haiku-4-5",
+            "claude-code": null
+          },
+          "anthropicApiKey": "sk-ant-api03-redacted",
+          "baseBranch": "main",
+          "listen": {
+            "mode": "tailscale"
+          },
+          "prompts": {
+            "system.intro": "You are {{agentName}}.",
+            "run.review": null
+          }
+        },
+        "ticket": {
+          "driver": "claude-code",
+          "model": "opus"
+        }
+      },
+      "output": {
+        "projectDriver": "claude-code",
+        "resolved": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "ticketPatch": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "inheritedTicket": "opus",
+        "projectChoice": null,
+        "projectPatch": null,
+        "settingsChoice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "settingsPatch": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": null,
+            "anthropic-api": null
+          }
+        }
+      }
+    },
+    {
+      "name": "nothing",
+      "input": {
+        "project": null,
+        "settings": null,
+        "ticket": {
+          "driver": "x",
+          "model": null
+        }
+      },
+      "output": {
+        "projectDriver": "",
+        "resolved": {
+          "driver": null,
+          "model": null
+        },
+        "ticketChoice": {
+          "driver": "x",
+          "model": null
+        },
+        "ticketPatch": {
+          "model": null
+        },
+        "inheritedTicket": null,
+        "projectChoice": null,
+        "projectPatch": null,
+        "settingsChoice": null,
+        "settingsPatch": null
+      }
+    }
+  ],
+  "filterChoiceGroupsCases": [
+    {
+      "name": "blank query keeps all",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "  "
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        },
+        {
+          "driver": "openrouter",
+          "label": "OpenRouter",
+          "options": [
+            {
+              "value": "openrouter\u0001openai/gpt-4o",
+              "label": "GPT-4o"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty query keeps all",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": ""
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        },
+        {
+          "driver": "openrouter",
+          "label": "OpenRouter",
+          "options": [
+            {
+              "value": "openrouter\u0001openai/gpt-4o",
+              "label": "GPT-4o"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "driver + model words",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "claude op"
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "by model id",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "openai"
+      },
+      "output": [
+        {
+          "driver": "openrouter",
+          "label": "OpenRouter",
+          "options": [
+            {
+              "value": "openrouter\u0001openai/gpt-4o",
+              "label": "GPT-4o"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "case-insensitive",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "SONNET"
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "words split across drivers",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "opus router"
+      },
+      "output": []
+    },
+    {
+      "name": "flat group matches through driverNames",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": null,
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "query": "claude",
+        "driverNames": {
+          "claude-code": "Claude Code"
+        }
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": null,
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flat group without driverNames: driver id",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": null,
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          }
+        ],
+        "query": "claude-code"
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": null,
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            },
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tabs and newlines separate words",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "\tclaude\n5.5 "
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NBSP separates words",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "claude sonnet"
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001sonnet",
+              "label": "Sonnet 5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "NEL doesn't separate words",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "claudesonnet"
+      },
+      "output": []
+    },
+    {
+      "name": "combining mark query",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "café"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "x\u0001café",
+              "label": "Café"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "precomposed doesn't match decomposed",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "café"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "x\u0001café",
+              "label": "Café"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "final sigma lower-cases",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "οδος"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "x\u0001sigma",
+              "label": "ΟΔΟΣ"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Kelvin sign lower-cases to k",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "kelvin"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "x\u0001kelvin",
+              "label": "Kelvin"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dotted I lower-cases to i + combining dot",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "i̇stanbul"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "",
+              "label": "Default (İstanbul)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "label words with umlauts",
+      "input": {
+        "groups": [
+          {
+            "driver": "x",
+            "label": "Ünïcode",
+            "options": [
+              {
+                "value": "x\u0001café",
+                "label": "Café"
+              },
+              {
+                "value": "x\u0001sigma",
+                "label": "ΟΔΟΣ"
+              },
+              {
+                "value": "x\u0001kelvin",
+                "label": "Kelvin"
+              },
+              {
+                "value": "",
+                "label": "Default (İstanbul)"
+              }
+            ]
+          }
+        ],
+        "query": "ÜNÏ"
+      },
+      "output": [
+        {
+          "driver": "x",
+          "label": "Ünïcode",
+          "options": [
+            {
+              "value": "x\u0001café",
+              "label": "Café"
+            },
+            {
+              "value": "x\u0001sigma",
+              "label": "ΟΔΟΣ"
+            },
+            {
+              "value": "x\u0001kelvin",
+              "label": "Kelvin"
+            },
+            {
+              "value": "",
+              "label": "Default (İstanbul)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no match leaves nothing",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "gpt-5"
+      },
+      "output": []
+    },
+    {
+      "name": "a word matching across the joined label/model boundary",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "5.5 opus"
+      },
+      "output": [
+        {
+          "driver": "claude-code",
+          "label": "Claude Code",
+          "options": [
+            {
+              "value": "claude-code\u0001opus",
+              "label": "Opus 5.5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "matches the separator-free model id",
+      "input": {
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "options": [
+              {
+                "value": "claude-code\u0001opus",
+                "label": "Opus 5.5"
+              },
+              {
+                "value": "claude-code\u0001sonnet",
+                "label": "Sonnet 5"
+              }
+            ]
+          },
+          {
+            "driver": "openrouter",
+            "label": "OpenRouter",
+            "options": [
+              {
+                "value": "openrouter\u0001openai/gpt-4o",
+                "label": "GPT-4o"
+              }
+            ]
+          }
+        ],
+        "query": "gpt-4o openai/gpt-4o"
+      },
+      "output": [
+        {
+          "driver": "openrouter",
+          "label": "OpenRouter",
+          "options": [
+            {
+              "value": "openrouter\u0001openai/gpt-4o",
+              "label": "GPT-4o"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "inheritedModelCases": [
+    {
+      "name": "ticket: project's model",
+      "input": {
+        "driver": "claude-code",
+        "level": "ticket",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": "sonnet"
+    },
+    {
+      "name": "project: settings' model",
+      "input": {
+        "driver": "claude-code",
+        "level": "project",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": "opus"
+    },
+    {
+      "name": "settings: nothing above",
+      "input": {
+        "driver": "claude-code",
+        "level": "settings",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "ticket: falls through to settings",
+      "input": {
+        "driver": "dummy",
+        "level": "ticket",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": "dummy-slow"
+    },
+    {
+      "name": "ticket: unknown driver",
+      "input": {
+        "driver": "anthropic-api",
+        "level": "ticket",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "ticket: no project or settings",
+      "input": {
+        "driver": "claude-code",
+        "level": "ticket",
+        "project": null,
+        "settings": null
+      },
+      "output": null
+    },
+    {
+      "name": "ticket: empty project model falls through",
+      "input": {
+        "driver": "empty",
+        "level": "ticket",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": "fallback"
+    },
+    {
+      "name": "project: null settings entry",
+      "input": {
+        "driver": "nulled",
+        "level": "project",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "opus",
+            "dummy": "dummy-slow",
+            "empty": "fallback",
+            "nulled": null
+          }
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "project: ignores the project's own model",
+      "input": {
+        "driver": "claude-code",
+        "level": "project",
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "empty": ""
+          }
+        },
+        "settings": null
+      },
+      "output": null
+    }
+  ],
+  "modelNameCases": [
+    {
+      "name": "listed id → name",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "id": "sonnet"
+      },
+      "output": "Sonnet 5"
+    },
+    {
+      "name": "unlisted id → the id",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "id": "haiku"
+      },
+      "output": "haiku"
+    },
+    {
+      "name": "no list → the id",
+      "input": {
+        "models": null,
+        "id": "opus"
+      },
+      "output": "opus"
+    },
+    {
+      "name": "empty name is kept (not nullish)",
+      "input": {
+        "models": [
+          {
+            "id": "x",
+            "name": ""
+          }
+        ],
+        "id": "x"
+      },
+      "output": ""
+    },
+    {
+      "name": "first match wins",
+      "input": {
+        "models": [
+          {
+            "id": "x",
+            "name": "One"
+          },
+          {
+            "id": "x",
+            "name": "Two"
+          }
+        ],
+        "id": "x"
+      },
+      "output": "One"
+    },
+    {
+      "name": "empty id",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "id": ""
+      },
+      "output": ""
+    }
+  ],
+  "modelOptionsCases": [
+    {
+      "name": "inherited names the default",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "inherited": "sonnet"
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Sonnet 5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "no inherited: the list's default",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "inherited id not in the list: shown by id",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "inherited": "claude-x-1"
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (claude-x-1)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "custom current value",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": "claude-opus-4-1"
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        },
+        {
+          "value": "claude-opus-4-1",
+          "label": "claude-opus-4-1 (custom)"
+        }
+      ]
+    },
+    {
+      "name": "no list, custom value",
+      "input": {
+        "models": null,
+        "value": "haiku"
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default"
+        },
+        {
+          "value": "haiku",
+          "label": "haiku (custom)"
+        }
+      ]
+    },
+    {
+      "name": "listed value isn't duplicated",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": "sonnet"
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "plainDefault keeps the label",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "defaultLabel": "Same as work",
+          "plainDefault": true
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Same as work"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "plainDefault false still names it",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "defaultLabel": "Same as work",
+          "plainDefault": false
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Same as work (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "custom defaultLabel with inherited",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "defaultLabel": "Inherit",
+          "inherited": "opus"
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Inherit (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "empty inherited is falsy: list default",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "inherited": ""
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "null inherited: list default",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "inherited": null
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "empty value isn't custom",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": ""
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "no default in list",
+      "input": {
+        "models": [
+          {
+            "id": "a",
+            "name": "A"
+          }
+        ],
+        "value": null
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default"
+        },
+        {
+          "value": "a",
+          "label": "A"
+        }
+      ]
+    },
+    {
+      "name": "default with an empty name",
+      "input": {
+        "models": [
+          {
+            "id": "a",
+            "name": "",
+            "default": true
+          }
+        ],
+        "value": null
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default"
+        },
+        {
+          "value": "a",
+          "label": " · default"
+        }
+      ]
+    },
+    {
+      "name": "default: false isn't marked",
+      "input": {
+        "models": [
+          {
+            "id": "a",
+            "name": "A",
+            "default": false
+          }
+        ],
+        "value": "a"
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default"
+        },
+        {
+          "value": "a",
+          "label": "A"
+        }
+      ]
+    },
+    {
+      "name": "empty defaultLabel",
+      "input": {
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ],
+        "value": null,
+        "opts": {
+          "defaultLabel": ""
+        }
+      },
+      "output": [
+        {
+          "value": "",
+          "label": " (Opus 5.5)"
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5.5 · default"
+        },
+        {
+          "value": "sonnet",
+          "label": "Sonnet 5"
+        }
+      ]
+    },
+    {
+      "name": "empty list",
+      "input": {
+        "models": [],
+        "value": null
+      },
+      "output": [
+        {
+          "value": "",
+          "label": "Default"
+        }
+      ]
+    }
+  ],
+  "projectChoiceCases": [
+    {
+      "name": "pinned driver with its model",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "pinned driver without a model",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "model for the settings driver",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "opus"
+      }
+    },
+    {
+      "name": "model for another driver: Default",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "codex": "luna"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "no settings: Default",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": null
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "empty model for the settings driver: Default",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {
+            "claude-code": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "pinned driver, empty model",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": ""
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "empty pinned driver falls through",
+      "input": {
+        "project": {
+          "defaultDriver": "",
+          "defaultModels": {
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "opus"
+      }
+    }
+  ],
+  "projectChoicePatchCases": [
+    {
+      "name": "keeps only that driver's model",
+      "input": {
+        "choice": {
+          "driver": "claude-code",
+          "model": "haiku"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "claude-code",
+        "defaultModels": {
+          "codex": null,
+          "claude-code": "haiku"
+        }
+      }
+    },
+    {
+      "name": "Default clears everything",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": null,
+        "defaultModels": {
+          "codex": null,
+          "claude-code": null
+        }
+      }
+    },
+    {
+      "name": "driver default",
+      "input": {
+        "choice": {
+          "driver": "gemini",
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "gemini",
+        "defaultModels": {
+          "codex": null,
+          "claude-code": null,
+          "gemini": null
+        }
+      }
+    },
+    {
+      "name": "no stored models",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {}
+        }
+      },
+      "output": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "codex": "luna"
+        }
+      }
+    },
+    {
+      "name": "empty driver",
+      "input": {
+        "choice": {
+          "driver": "",
+          "model": "x"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "",
+        "defaultModels": {
+          "codex": null,
+          "claude-code": null
+        }
+      }
+    }
+  ],
+  "projectDriverCases": [
+    {
+      "name": "the project's own",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "codex"
+    },
+    {
+      "name": "else the settings'",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "claude-code"
+    },
+    {
+      "name": "nothing: empty",
+      "input": {
+        "project": null,
+        "settings": null
+      },
+      "output": ""
+    },
+    {
+      "name": "empty project driver falls through",
+      "input": {
+        "project": {
+          "defaultDriver": "",
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": "claude-code"
+    },
+    {
+      "name": "no settings",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": null
+      },
+      "output": "codex"
+    },
+    {
+      "name": "empty settings driver",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "",
+          "defaultModels": {}
+        }
+      },
+      "output": ""
+    }
+  ],
+  "sep": "\u0001",
+  "settingsChoiceCases": [
+    {
+      "name": "default driver with a model",
+      "input": {
+        "defaultDriver": "claude-code",
+        "defaultModels": {
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "default driver without one: Default",
+      "input": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "claude-code": "sonnet"
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "null entry: Default",
+      "input": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "codex": null
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "empty entry: Default",
+      "input": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "codex": ""
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    }
+  ],
+  "settingsChoicePatchCases": [
+    {
+      "name": "driver default",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": null
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "codex": "luna"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "claude-code": null,
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "driver and model",
+      "input": {
+        "choice": {
+          "driver": "codex",
+          "model": "luna-2"
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "codex": "luna"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "codex",
+        "defaultModels": {
+          "claude-code": null,
+          "codex": "luna-2"
+        }
+      }
+    },
+    {
+      "name": "Default keeps the driver",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "codex": "luna"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "claude-code",
+        "defaultModels": {
+          "claude-code": null,
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "Default keeps a stray model",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": "stray"
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "codex": "luna"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "claude-code",
+        "defaultModels": {
+          "claude-code": "stray",
+          "codex": null
+        }
+      }
+    },
+    {
+      "name": "empty driver isn't nullish",
+      "input": {
+        "choice": {
+          "driver": "",
+          "model": "x"
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet",
+            "codex": "luna"
+          }
+        }
+      },
+      "output": {
+        "defaultDriver": "",
+        "defaultModels": {
+          "claude-code": null,
+          "codex": null
+        }
+      }
+    }
+  ],
+  "ticketChoiceCases": [
+    {
+      "name": "project driver, no model: Default",
+      "input": {
+        "ticket": {
+          "driver": "codex",
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "project driver with model",
+      "input": {
+        "ticket": {
+          "driver": "codex",
+          "model": "luna"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "another driver without a model is a pick",
+      "input": {
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": null
+      }
+    },
+    {
+      "name": "empty model on the project driver: Default",
+      "input": {
+        "ticket": {
+          "driver": "codex",
+          "model": ""
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "settings driver via plain project",
+      "input": {
+        "ticket": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "no project or settings, empty driver",
+      "input": {
+        "ticket": {
+          "driver": "",
+          "model": null
+        },
+        "project": null,
+        "settings": null
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "empty model elsewhere keeps the empty model",
+      "input": {
+        "ticket": {
+          "driver": "claude-code",
+          "model": ""
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": ""
+      }
+    }
+  ],
+  "ticketChoicePatchCases": [
+    {
+      "name": "Default moves back to the project driver",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": null
+      }
+    },
+    {
+      "name": "a pick",
+      "input": {
+        "choice": {
+          "driver": "claude-code",
+          "model": "opus"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "opus"
+      }
+    },
+    {
+      "name": "Default with nothing to move to",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": null
+        },
+        "project": null,
+        "settings": null
+      },
+      "output": {
+        "model": null
+      }
+    },
+    {
+      "name": "driver default pick",
+      "input": {
+        "choice": {
+          "driver": "claude-code",
+          "model": null
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": null
+      }
+    },
+    {
+      "name": "Default keeps a stray model",
+      "input": {
+        "choice": {
+          "driver": null,
+          "model": "stray"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "stray"
+      }
+    },
+    {
+      "name": "empty driver isn't nullish: model cleared",
+      "input": {
+        "choice": {
+          "driver": "",
+          "model": "x"
+        },
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "model": null
+      }
+    }
+  ],
+  "ticketModelBadgeCases": [
+    {
+      "name": "no model",
+      "input": {
+        "model": null,
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ]
+      },
+      "output": null
+    },
+    {
+      "name": "empty model",
+      "input": {
+        "model": "",
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ]
+      },
+      "output": null
+    },
+    {
+      "name": "known model",
+      "input": {
+        "model": "sonnet",
+        "models": [
+          {
+            "id": "opus",
+            "name": "Opus 5.5",
+            "default": true
+          },
+          {
+            "id": "sonnet",
+            "name": "Sonnet 5"
+          }
+        ]
+      },
+      "output": "Sonnet 5"
+    },
+    {
+      "name": "no list",
+      "input": {
+        "model": "haiku",
+        "models": null
+      },
+      "output": "haiku"
+    }
+  ],
+  "ticketResolvedChoiceCases": [
+    {
+      "name": "project driver and its model",
+      "input": {
+        "project": {
+          "defaultDriver": "codex",
+          "defaultModels": {
+            "codex": "luna",
+            "claude-code": "opus"
+          }
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "codex",
+        "model": "luna"
+      }
+    },
+    {
+      "name": "settings driver and model",
+      "input": {
+        "project": {
+          "defaultDriver": null,
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "nothing: Default",
+      "input": {
+        "project": null,
+        "settings": null
+      },
+      "output": {
+        "driver": null,
+        "model": null
+      }
+    },
+    {
+      "name": "project driver without a model inherits settings' entry",
+      "input": {
+        "project": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "claude-code",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "driver with no model anywhere",
+      "input": {
+        "project": {
+          "defaultDriver": "gemini",
+          "defaultModels": {}
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {
+            "claude-code": "sonnet"
+          }
+        }
+      },
+      "output": {
+        "driver": "gemini",
+        "model": null
+      }
+    }
+  ]
+}
