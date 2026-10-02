@@ -1,7 +1,7 @@
 // The highlight corpus for the native app's parity fixtures (shared/fixtures/cases/highlight.ts):
 // a few languages in light and dark themes, diffs, an unknown language, the size limit.
 
-import { MAX_HIGHLIGHT_CHARS } from "../../../mobile/src/lib/highlight";
+import { MAX_HIGHLIGHT_CHARS } from "./highlight";
 import type { ThemeAppearance } from "../../../shared/src/themes";
 
 export interface HighlightInput {

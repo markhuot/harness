@@ -1,5 +1,5 @@
-// Syntax highlighting for code blocks: Shiki's core with its JavaScript regex engine (Hermes has no
-// WASM for Oniguruma), so tokens come out as plain data the UI turns into nested <Text> spans.
+// Syntax highlighting for code blocks: Shiki's core with its JavaScript regex engine (JavaScriptCore
+// in the app gets no WASM for Oniguruma), so tokens come out as plain data SwiftUI turns into spans.
 // Grammars and themes are separate modules imported on first use: the bundle carries them, but
 // none is evaluated until a block in that language or theme shows up.
 //

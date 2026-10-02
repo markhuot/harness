@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
-import { acquire, checkDisk, ensureDevice, freeGiB, SHARED_DEVICE, type Device } from "../../mobile/Tools/sim";
+import { acquire, checkDisk, ensureDevice, freeGiB, SHARED_DEVICE, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");

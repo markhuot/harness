@@ -6,10 +6,16 @@
   "scripts": {
     "test": "bun test ./Tools",
     "typecheck": "tsc --noEmit -p .",
-    "fixtures": "bun ../shared/scripts/export-fixtures.ts"
+    "fixtures": "bun ../shared/scripts/export-fixtures.ts",
+    "sim-check": "bun Tools/sim-check.ts"
   },
   "devDependencies": {
     "@harness/shared": "workspace:*",
+    "@pierre/theme": "2.0.0",
+    "@shikijs/core": "4.4.3",
+    "@shikijs/engine-javascript": "4.4.3",
+    "@shikijs/langs": "4.4.3",
+    "@shikijs/themes": "4.4.3",
     "@types/bun": "latest",
     "typescript": "~5.9.0"
   }

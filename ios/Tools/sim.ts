@@ -2,12 +2,12 @@
 // it. Every simulator runs on the iOS 27.0 runtime: this never picks another runtime and never
 // downloads one. See CLAUDE.md → Simulators.
 //
-//   bun mobile/Tools/sim.ts ensure [--device=name] [--ipad]      find or create the device (iOS 27.0), boot it, print its UDID
-//   bun mobile/Tools/sim.ts with-lock [--device=name] [--ipad] [--timeout=minutes] -- <command…>
+//   bun ios/Tools/sim.ts ensure [--device=name] [--ipad]      find or create the device (iOS 27.0), boot it, print its UDID
+//   bun ios/Tools/sim.ts with-lock [--device=name] [--ipad] [--timeout=minutes] -- <command…>
 //                                                                 wait for the device, run the command with SIM_UDID set, let go
-//   bun mobile/Tools/sim.ts shutdown [--device=name]             shut the device down once nobody holds it
-//   bun mobile/Tools/sim.ts status                               the device and who holds its lock
-//   bun mobile/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5)
+//   bun ios/Tools/sim.ts shutdown [--device=name]             shut the device down once nobody holds it
+//   bun ios/Tools/sim.ts status                               the device and who holds its lock
+//   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5)
 //
 // The device is "harness-shared" (an iPhone 18 Pro) unless --device names another. Locks are files
 // under ~/.harness/tmp/sim-locks (HARNESS_SIM_LOCK_DIR overrides it). Each records the holder's PID

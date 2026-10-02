@@ -5,7 +5,7 @@
 // what an iOS app's JSContext runs (apps get no JIT; Highlighter.swift turns the regex JIT off for the
 // simulator and the Mac too), matches Oniguruma. The fixtures describe the interpreter.
 
-import { highlight } from "../../../mobile/src/lib/highlight";
+import { highlight } from "./highlight";
 import { asyncCases } from "../../../shared/fixtures/case";
 import { codeOf, HIGHLIGHT_INPUTS, type HighlightInput } from "./corpus";
 import { wellFormed } from "./wellFormed";
