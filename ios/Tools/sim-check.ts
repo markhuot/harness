@@ -27,9 +27,10 @@
 //      them), the Done column scrolls into older pages, and the board's search field finds the
 //      unloaded done ticket; paging-*.png
 //
-//   --stick: a ticket with a long brief and a long transcript; swipes the Transcript tab and checks it
-//      follows new content at the bottom, stays put once scrolled up, and follows again after
-//      scrolling back down; the Summaries tab opens at the bottom and follows; the ticket's hero
+//   --stick: a ticket with a long spec, a long transcript and a long Activity feed (messages sent
+//      with log: true, so they and the agent's answers go into Activity); swipes the Transcript tab
+//      and checks it follows new content at the bottom, stays put once scrolled up, and follows again
+//      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
 //      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
@@ -38,14 +39,15 @@
 //      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
 //      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
-//   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
-//      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
-//      in the transcript); typing `/co` in New session on a claude-code project (the fake CLI) lists
-//      its commands, a tap completes one, and the CLI gets the prompt as typed; mentions-*.png
+//   --mentions: in New session's Spec field and the ticket composer, typing `@…` lists the project's
+//      files, tapping one completes it, and the run the spec starts gets the file attached ("Attached
+//      @…" in the transcript); typing `/co` in New session on a claude-code project (the fake CLI)
+//      lists its commands, a tap completes one, and the CLI gets the spec as typed; mentions-*.png
 //
-//   --attachments (needs ffmpeg): a summary with a tall and a wide PNG, an H.264 clip and a PNG that
-//      won't decode; checks every thumbnail shows, a tap opens the viewer on that attachment, swiping
-//      pages, Close and swipe-down close it; attachments-*.png
+//   --attachments (needs ffmpeg): a spec with a tall and a wide PNG and an H.264 clip inline (stored
+//      by update_spec), plus an attachment: reference to a file that doesn't exist; checks every
+//      inline image shows in the Spec tab, a tap opens the viewer on that attachment, swiping pages,
+//      Close and swipe-down close it; attachments-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
@@ -64,7 +66,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
+import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
@@ -529,7 +531,7 @@ const instructionsField = (l: string) => l.startsWith("Completion instructions")
 const approveMenuUp = (udid: string) => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000).then(() => Bun.sleep(400));
 
 /**
- * A brief like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
+ * A spec like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
  * fenced command. In a user bubble that shrank to fit, each of those laid out hundreds to thousands
  * of points tall (see scrollsSideways in src/ui/Markdown.tsx), and the message buried the replies.
  */
@@ -548,7 +550,7 @@ const TABLE_BRIEF = [
   "|---|---|---|",
   "| 21 screens, light and dark | about 300 s | Every shot is a `coldOpen`: terminate, cold launch (about 4 s), then wait for the accessibility tree to stay unchanged for 800 ms (each `describe-ui` takes about 0.4 s). Then a fixed 1 s sleep (3.5 s for browser, 2.5 s for changes), then `running()`. That's 42 cold launches. |",
   "| Seeding | tens of seconds | The dummy driver streams at 40 ms per word, about 3× its default. `settle(browse)` allows up to 90 s. `Bun.sleep(1500)` at the end. |",
-  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Summaries test the same hook twice. |",
+  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Activity test the same hook twice. |",
   "",
   "Measure with:",
   "```",
@@ -680,7 +682,7 @@ async function seed() {
     api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" }),
     api<Project>("POST", "/projects", { path: join(scratch, "harness-site"), name: "harness-site", key: "SITE", defaultDriver: "dummy" }),
   ]);
-  const create = (projectId: string, prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId, prompt, driver: "dummy", start: true, ...extra });
+  const create = (projectId: string, spec: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId, spec, driver: "dummy", start: true, ...extra });
 
   // In creation order, so the keys stay GREET-1… and SITE-1…
   const hello = await create(project.id, "hello world");
@@ -706,11 +708,11 @@ async function seed() {
   // Another quick ask, which the review checks approve: approving alone lands it.
   const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
   // A New session saved as a draft: a dashed card in Planning that reopens in the editor, never run.
-  const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
-  // Briefs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
+  const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
+  // Specs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
   const code = await create(other.id, CODE_BRIEF, { skipAgentReview: true });
   const diff = await create(other.id, DIFF_BRIEF, { skipAgentReview: true });
-  // A brief with a relative file link, which opens in the ticket's own worktree.
+  // A spec with a relative file link, which opens in the ticket's own worktree.
   // The link is a paragraph of its own, so a tap near the paragraph's start lands on it.
   const fileLink = await create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true });
   // Two stages of one Jira issue: both linked to the remote ID JIRA-62, so each card and header shows
@@ -738,8 +740,9 @@ async function seed() {
 
   const [, ch] = await Promise.all([
     // Then a reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
+    // Logged, as from the Spec or Activity tab, so it and the answer show in Activity too.
     settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
-      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
+      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n"), log: true }))
       .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
@@ -779,7 +782,7 @@ async function seed() {
 async function seedPaging() {
   mkdirSync(join(scratch, "archive"), { recursive: true });
   const project = await api<Project>("POST", "/projects", { path: join(scratch, "archive"), name: "archive", key: "ARCH", defaultDriver: "dummy" });
-  const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: false, ...extra });
+  const create = (spec: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: false, ...extra });
   const finish = (t: Ticket) => api<Ticket>("PATCH", `/tickets/${t.key}`, { status: "done" });
   // Oldest first: the haystack ticket finishes before everything else, so it sits pages deep.
   const needle = await create("Needle in the haystack: rotate the signing certificate");
@@ -869,20 +872,22 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   await shootBoth(udid, "paging-search");
 }
 
-/** --stick: one ticket whose brief and transcript are both taller than the screen. */
+/** --stick: one ticket whose spec, transcript and Activity are all taller than the screen. */
 const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
 /** The line over the composer ("Stays in review unless…"), which isn't one of the list's rows. */
 const COMPOSER_HINTS = new Set((["planning", "in_progress", "blocked", "review", "done"] as const).flatMap((status) => [false, true].map((busy) => composerHint({ status, busy }))));
 async function sayStick(key: string, n: number) {
-  await api("POST", `/tickets/${key}/messages`, { text: stickText(n) });
-  // The ticket stays in review, so it looks settled before the run starts: wait for the reply.
+  // Logged, like a message from the Spec or Activity tab: it and the agent's answer go into
+  // Activity (and the chat run into the transcript), so both tabs grow.
+  await api("POST", `/tickets/${key}/messages`, { text: stickText(n), log: true });
+  // The ticket stays in review, so it looks settled before the run starts: wait for the answer.
   const reply = `You said: "Stick ${n}:`;
-  await until(`${key} replies to message ${n}`, async () => (await api<{ body: string }[]>("GET", `/tickets/${encodeURIComponent(key)}/summaries`)).some((s) => s.body.includes(reply)), 60000, 100);
+  await until(`${key} replies to message ${n}`, async () => (await api<ActivityEntry[]>("GET", `/tickets/${encodeURIComponent(key)}/activity`)).some((e) => e.kind === "answer" && e.body.includes(reply)), 60000, 100);
   return settle(key, (t) => !t.busy);
 }
-/** A project with a few files and one ticket in review (brief `prompt`), for --stick, --keyboard and --mentions. */
-async function seedTicket(key: string, prompt: string, files: Record<string, string> = {}) {
+/** A project with a few files and one ticket in review (its spec `spec`), for --stick, --keyboard and --mentions. */
+async function seedTicket(key: string, spec: string, files: Record<string, string> = {}) {
   await settings();
   const dir = join(scratch, key.toLowerCase());
   mkdirSync(dir, { recursive: true });
@@ -891,7 +896,7 @@ async function seedTicket(key: string, prompt: string, files: Record<string, str
     writeFileSync(join(dir, path), text);
   }
   const project = await api<Project>("POST", "/projects", { path: dir, name: key.toLowerCase(), key, defaultDriver: "dummy" });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt, driver: "dummy", start: true });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: true });
   await settle(ticket.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
   return { project, ticket };
 }
@@ -901,7 +906,7 @@ async function seedStick() {
   return s;
 }
 
-/** --stick: real swipes on the Transcript and Summaries tabs. */
+/** --stick: real swipes on the Transcript and Activity tabs. */
 async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>) {
   const key = p.ticket.key;
   const H = (await tree(udid))[0]!.frame.height;
@@ -909,7 +914,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   // in progress", moveSwitchLabel in shared/state/format).
   async function listView() {
     const all = await nodes(udid);
-    const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Summaries"));
+    const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Activity"));
     const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Move to in progress" || n.AXLabel === "Re-open and move to in progress");
     const top = tab ? tab.frame.y + tab.frame.height : 100;
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
@@ -957,12 +962,13 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
 
   let n = 3;
   // Every message ends with its chat run (a message leaves the ticket in review, so no reviewer
-  // run follows): its last transcript row and the agent's reply as the last summary.
+  // run follows): its last transcript row, and the agent's answer as the last Activity entry (the
+  // answer's bubble reads "Agent, <time>, (dummy chat) You said…").
   // Transcript (a FlatList with estimated rows, where UIKit moves the offset by itself) gets every
-  // check; Summaries uses the same hook, whose gating is unit-tested, so it gets the first two.
+  // check; Activity uses the same hook, whose gating is unit-tested, so it gets the first two.
   const tabs: [string, (l: string) => boolean, boolean][] = [
     ["transcript", (l) => l.startsWith("Run finished (chat)"), true],
-    ["summaries", (l) => l.startsWith("(dummy chat) You said"), false],
+    ["activity", (l) => l.includes("(dummy chat) You said"), false],
   ];
   for (const [tab, last, all] of tabs) {
     await check(`${tab} opens at the bottom`, async () => {
@@ -992,7 +998,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
       return `${await until("at the bottom", () => atBottom(last), 10000)} (back down in ${flicks} flicks)`;
     });
   }
-  await shot(udid, "stick-summaries");
+  await shot(udid, "stick-activity");
 
   // The hero (title, badges, the review buttons) scrolls out of the way with the tab body, and
   // the tab strip moves up into its place (lib/heroCollapse has the rules, unit-tested).
@@ -1185,11 +1191,13 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     const d = await api<TicketDetail>("GET", `/tickets/${key}`);
     return (await api<TranscriptEntry[]>("GET", `/sessions/${d.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
   };
+  /** The spec as typed in New session: revision 1 (the dummy's run adds a Status section after it). */
+  const typed = async (key: string) => (await api<SpecRevision>("GET", `/tickets/${encodeURIComponent(key)}/spec/revisions/1`)).body;
 
   // (Picking a folder keeps the list open inside it: insertMention and mentionCaret's unit tests.)
   await check("New session: @READ lists README.md, a tap completes it, the run gets the file", async () => {
-    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Prompt")));
-    await tapWhere(udid, (l) => l.startsWith("Prompt"));
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
+    await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "Summarize @READ", "--udid", udid);
     await until("README.md suggested", () => has("README.md"), 8000);
     await Bun.sleep(300);
@@ -1200,9 +1208,10 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     moved(udid);
     // The draft is saved while it's typed; wait for it to launch.
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key && !x.draft), 10000);
-    if (t.description !== "Summarize @README.md") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    const spec = await typed(t.key);
+    if (spec !== "Summarize @README.md") throw new Error(`spec is ${JSON.stringify(spec)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
-    return `${t.key}: ${t.description}`;
+    return `${t.key}: ${spec}`;
   });
 
   await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
@@ -1226,8 +1235,8 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   });
 
   await check("New session: /co lists the agent's commands, a tap completes one, the CLI gets it as typed", async () => {
-    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.slash.id)}`, (l) => l.some((x) => x.startsWith("Prompt")));
-    await tapWhere(udid, (l) => l.startsWith("Prompt"));
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.slash.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
+    await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "/co", "--udid", udid);
     // The first lookup starts the (fake) CLI.
     await until("/code-walk suggested", () => has("/code-walk"), 15000);
@@ -1241,7 +1250,8 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await tapWhere(udid, "Start session");
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
-    if (t.description !== "/code-walk this branch") throw new Error(`brief is ${JSON.stringify(t.description)}`);
+    const spec = await typed(t.key);
+    if (spec !== "/code-walk this branch") throw new Error(`spec is ${JSON.stringify(spec)}`);
     const sent = await until(
       "the agent's prompt",
       async () =>
@@ -1254,34 +1264,55 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
       15000,
     );
     if (!sent.startsWith("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
-    return `${t.key}: ${t.description}`;
+    return `${t.key}: ${spec}`;
   });
 }
 
-/** --attachments: a ticket whose summary carries real images, a video and one file that won't decode. */
+/**
+ * --attachments: a ticket whose spec shows real images and a video inline, and one attachment that
+ * won't load. The dummy's /tools directive calls update_spec on the fresh ticket's revision 1 with
+ * markdown images of local files (relative to the project folder, its workdir), which the service
+ * stores and rewrites to attachment:<id>. update_spec refuses a file whose bytes don't match its
+ * extension, so the one that fails to load is an attachment: reference to an id that doesn't exist:
+ * attachment: srcs are kept as written, and the viewer shows its failure page for it.
+ */
 async function seedAttachments() {
   await settings();
   const dir = join(scratch, "media");
   mkdirSync(join(dir, "shots"), { recursive: true });
   const ff = (...a: string[]) => sh(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", ...a], { cwd: dir });
-  // A tall phone screenshot, a wide one, a short H.264 clip, and a PNG that's only its header.
+  // A tall phone screenshot, a wide one and a short H.264 clip.
   await Promise.all([
     ff("-f", "lavfi", "-i", "testsrc2=size=1179x2556:rate=1", "-frames:v", "1", "shots/phone.png"),
     ff("-f", "lavfi", "-i", "smptehdbars=size=1600x900:rate=1", "-frames:v", "1", "shots/wide.png"),
     ff("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "4", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-movflags", "+faststart", "shots/flow.mp4"),
   ]);
-  writeFileSync(join(dir, "shots/broken.png"), Buffer.concat([readFileSync(join(dir, "shots/wide.png")).subarray(0, 64)]));
   const project = await api<Project>("POST", "/projects", { path: dir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
-  const files = ["phone.png", "wide.png", "flow.mp4", "broken.png"].map((f) => join(dir, "shots", f));
-  const call = { name: "post_summary", input: { summary: "Here's the new greeting screen, before and after, plus a recording of the flow.", attachments: files } };
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Show the greeting screen\n/tools ${JSON.stringify([call])}`, driver: "dummy", start: true });
+  // In viewer order (1 of 4 … 4 of 4); the alt text is the file name, which the app's labels use.
+  const stored = ["phone.png", "wide.png", "flow.mp4"];
+  const spec = [
+    "Show the greeting screen",
+    "",
+    "Here's the new greeting screen, before and after, plus a recording of the flow.",
+    "",
+    ...stored.flatMap((f) => [`![${f}](shots/${f})`, ""]),
+    "![broken.png](attachment:att_missing)",
+  ].join("\n");
+  const call = { name: "update_spec", input: { spec, note: "Screenshots and a recording of the greeting screen", base_revision: 1 } };
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `Show the greeting screen\n/tools ${JSON.stringify([call])}`, driver: "dummy", start: true });
+  // After the call, the dummy adds a Status section (edit_spec) and submits; the review approves.
   await settle(ticket.key, (t) => t.status === "review" && !t.busy);
-  const summaries = await api<{ attachments: unknown[] }[]>("GET", `/tickets/${encodeURIComponent(ticket.key)}/summaries`);
-  if (!summaries.some((s) => s.attachments.length === files.length)) throw new Error(`no summary with ${files.length} attachments`);
+  const d = await api<TicketDetail>("GET", `/tickets/${encodeURIComponent(ticket.key)}`);
+  const srcs = [...d.ticket.spec.matchAll(/!\[([^\]]*)\]\(attachment:([^)\s]+)\)/g)].map((m) => ({ alt: m[1]!, id: m[2]! }));
+  const rewritten = srcs.filter((s) => stored.includes(s.alt) && s.id !== "att_missing");
+  if (rewritten.length !== stored.length || !srcs.some((s) => s.alt === "broken.png" && s.id === "att_missing")) {
+    throw new Error(`the spec doesn't show ${stored.length} stored attachments and the missing one: ${JSON.stringify(d.ticket.spec)}`);
+  }
+  if (d.ticket.spec.includes("](shots/")) throw new Error(`a local src wasn't rewritten: ${JSON.stringify(d.ticket.spec)}`);
   return { project, ticket };
 }
 
-/** --attachments: thumbnails in the Summaries tab, then the viewer (open, page, close, swipe down), in one visit. */
+/** --attachments: inline images in the Spec tab, then the viewer (open, page, close, swipe down), in one visit. */
 async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>) {
   const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
   const counter = (n: number) => (l: string) => l.startsWith(`${n} of 4`);
@@ -1289,28 +1320,35 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   const closed = () => until("viewer closed", async () => !(await viewerOpen()), 5000);
   const swipeLeft = () => axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
   const swipeDown = () => axe("swipe", "--start-x", "200", "--start-y", "330", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
-  /** Opens the viewer from a thumbnail; its fade-in swallows gestures for a moment. */
+  /**
+   * Opens the viewer from an inline image; its fade-in swallows gestures for a moment. The spec
+   * stacks the images (the phone shot is up to 480 pt tall), so the one asked for is scrolled into
+   * view first and tapped near its top, clear of the composer.
+   */
   const open = async (label: string, n: number) => {
     if (await viewerOpen()) await tapWhere(udid, "Close").then(closed);
-    await tapWhere(udid, label);
+    await scrollTo(udid, (l) => l === label);
+    const el = await until(`element ${label}`, () => findElement(udid, (l) => l === label), 5000);
+    const y = el.frame.y + Math.min(el.frame.height / 2, 60);
+    await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(y)), "--udid", udid);
     await until(`viewer on ${n} of 4`, () => has(counter(n)), 5000);
     await Bun.sleep(800);
   };
 
-  await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=summaries`, (l) => l.includes("Image phone.png"));
+  await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=spec`, (l) => l.includes("Image phone.png"));
   await Bun.sleep(1200); // let the images and the video's first frame load
-  await check("every attachment has a thumbnail", async () => {
+  await check("every attachment shows inline in the spec", async () => {
     const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png"];
     const l = await labels(udid);
     const missing = want.filter((w) => !l.includes(w));
     if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     return want.join(", ");
   });
-  await shootBoth(udid, "attachments-thumbnails");
-  await check("tapping a thumbnail opens the viewer on it; swiping pages; Close closes", async () => {
+  await shootBoth(udid, "attachments-inline");
+  await check("tapping an inline image opens the viewer on it; swiping pages; Close closes", async () => {
     await open("Image wide.png", 2);
-    // The viewer is black in both themes. The video and the broken file sit past the screen edge in
-    // the row, so page to them here.
+    // The viewer is black in both themes. The video and the broken file sit further down the spec,
+    // so page to them here.
     await shootBoth(udid, "attachments-viewer-image");
     await appearance(udid, "light");
     await swipeLeft();
@@ -1400,7 +1438,7 @@ async function toggleSidebar(udid: string, show: boolean) {
 /** The ticket --ipad's ticket-window check opened a window for. */
 let windowKey = "";
 /** A ticket screen for `key` is up: its key and its tab strip. */
-const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Summaries") && l.includes("Details");
+const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Spec") && l.includes("Details");
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
@@ -1417,13 +1455,15 @@ function screens(s: Seeded): Screen[] {
           after: (udid) => simctl("openurl", udid, "harness://projects").then(() => until("sidebar shown again", async () => sidebarShown(await labels(udid)), 8000)),
         }
       : { name: "projects", url: "harness://projects" },
-    { name: "ticket-summaries", url: `harness://ticket/${k(s.hello)}?tab=summaries` },
+    { name: "ticket-spec", url: `harness://ticket/${k(s.hello)}?tab=spec` },
+    // The logged reply (seed) and the agent's answer read as a conversation under the notes and submits.
+    { name: "ticket-activity", url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("(dummy chat) You said")) },
     { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
     { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
     { name: "ticket-transcript-tables", url: `harness://ticket/${k(s.tables)}?tab=transcript`, ready: (l) => l.some((x) => x.startsWith("Run finished (review)")) },
-    // The brief's fenced code: plain at first, colored once its grammar has loaded.
-    { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=summaries`, wait: 1500 },
-    { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=summaries`, wait: 1500 },
+    // The spec's fenced code: plain at first, colored once its grammar has loaded.
+    { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500 },
+    { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=spec`, wait: 1500 },
     // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
     { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
@@ -1617,7 +1657,7 @@ function screens(s: Seeded): Screen[] {
               // A closed window doesn't stop tickets opening: open a ticket's window, close it
               // (More → Delete ticket destroys the window's scene, as its close control does), then
               // the next ticket still gets a window. Throwaway tickets, so other screens keep theirs.
-              const [gone, next] = await Promise.all(["Close this window", "Open after a close"].map((prompt) => api<Ticket>("POST", "/tickets", { projectId: s.project.id, prompt, driver: "dummy", start: false })));
+              const [gone, next] = await Promise.all(["Close this window", "Open after a close"].map((spec) => api<Ticket>("POST", "/tickets", { projectId: s.project.id, spec, driver: "dummy", start: false })));
               await simctl("openurl", udid, `harness://ticket/${k(gone!)}`);
               await until(`${gone!.key}'s window up`, async () => ticketShown(await labels(udid), gone!.key), 10000);
               await tapWhere(udid, "More");
@@ -1699,7 +1739,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
   const chain = (seconds: number, run: (udid: string) => Promise<void>) => ({ seconds, run });
   return [
     chain(4, async (udid) => {
-      await check("a brief with wide tables leaves the replies after it on screen", async () => {
+      await check("a spec with wide tables leaves the replies after it on screen", async () => {
         const last = (l: string) => l.startsWith("Run finished (review)");
         await goto(udid, `harness://ticket/${k(s.tables)}?tab=transcript`, (l) => l.some(last));
         const all = await nodes(udid);
@@ -1927,7 +1967,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
         if (!runs.some((r) => r.kind === "complete" && r.status === "succeeded")) throw new Error("no completion run landed it");
         await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("Re-open"));
-        // A Complete button ("Complete", "Complete and …"), not the completion run's "Completed." summary.
+        // A Complete button ("Complete", "Complete and …"), not the completion run's "Completed." note.
         const stray = (await labels(udid)).filter((l) => l === "Complete" || l.startsWith("Complete ") || l === "More ways to complete");
         if (stray.length) throw new Error(`still offers ${stray.join(", ")}`);
         return `${t.key} → ${t.status} after one approval`;
@@ -1940,9 +1980,9 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
     chain(6, async (udid) => {
-      await check("a relative file link in a brief opens the file viewer in the ticket's folder, at its lines", async () => {
+      await check("a relative file link in a spec opens the file viewer in the ticket's folder, at its lines", async () => {
         const label = "greetingFor fallback";
-        await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=summaries`, (l) => l.includes(label));
+        await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=spec`, (l) => l.includes(label));
         // The paragraph is as wide as the card and the link only its first words: tap near its start.
         const el = await until("the link", () => findElement(udid, (l) => l === label), 8000);
         await axe("tap", "-x", String(Math.round(el.frame.x + 30)), "-y", String(Math.round(el.frame.y + el.frame.height / 2)), "--udid", udid);
