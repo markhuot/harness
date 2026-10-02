@@ -81,6 +81,20 @@ describe("dummy driver", () => {
     expect(deltas.join("")).toBe(texts(events)[0]!);
   });
 
+  test("work default replaces an existing Status section's body instead of adding to it", async () => {
+    const { req, ops } = makeReq("work", "Changes were requested by the reviewer agent.");
+    const spec = ["# Goal", "Blue header", "", "## Status", "* Old status", "* Older line", "", "## Open questions", "None"];
+    ops.readSpec = async () => `Revision 4 (current).\n${spec.map((l, i) => `${String(i + 1).padStart(4)}\t${l}`).join("\n")}`;
+    const { error } = await collect(driver, req);
+    expect(error).toBeNull();
+    const edit = ops.calls.find((c) => c.method === "editSpec")!.args[0];
+    expect(edit).toEqual({
+      baseRevision: 4,
+      note: "Status: The dummy driver addressed the review notes.",
+      edits: [{ start_line: 5, end_line: 6, new_text: "* The dummy driver addressed the review notes.", expected: "* Old status\n* Older line" }],
+    });
+  });
+
   test("work default: greeting, post_note, the spec's Status, then submit_for_review, state last", async () => {
     const { req, ops } = makeReq("work", "fix the bug");
     const { events, error } = await collect(driver, req);

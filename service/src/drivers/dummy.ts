@@ -216,18 +216,29 @@ export class DummyDriver implements Driver {
       spec.rev = Number(/^Revision (\d+)/.exec(head)?.[1] ?? 1);
       spec.lines = rest.map((l) => l.replace(/^\s*\d+\t/, ""));
     }
-    // Bring the spec's Status up to date the way an agent should: one edit_spec that adds a line
-    // under "## Status" (adding the section when the spec has none).
+    // Bring the spec's Status up to date the way the prompts ask: one edit_spec that replaces the
+    // "## Status" section's body (up to the next heading) with the current state, or adds the
+    // section when the spec has none. It never appends a second copy of what's already there.
     async function* status(text: string): AsyncGenerator<DriverEvent> {
       const spec = { rev: 1, lines: [] as string[] };
       yield* readSpec(spec);
-      const end = spec.lines.length;
-      const hasStatus = spec.lines.some((l) => l.trim() === "## Status");
-      yield* call("edit_spec", {
-        base_revision: spec.rev,
-        note: `Status: ${text}`,
-        edits: [{ start_line: end + 1, end_line: end, new_text: hasStatus ? `* ${text}` : `\n## Status\n* ${text}` }],
-      });
+      const head = spec.lines.findIndex((l) => l.trim() === "## Status");
+      let edit: Record<string, unknown>;
+      if (head < 0) {
+        const end = spec.lines.length;
+        edit = { start_line: end + 1, end_line: end, new_text: `\n## Status\n* ${text}` };
+      } else {
+        const next = spec.lines.findIndex((l, i) => i > head && /^#{1,2} /.test(l));
+        const last = next < 0 ? spec.lines.length : next; // 1-based last line of the body = index of the next heading
+        // Keep the blank line before the next heading.
+        const bodyEnd = next >= 0 && spec.lines[next - 1]?.trim() === "" ? last - 1 : last;
+        const body = spec.lines.slice(head + 1, bodyEnd);
+        edit =
+          body.length > 0
+            ? { start_line: head + 2, end_line: bodyEnd, new_text: `* ${text}`, expected: body.join("\n") }
+            : { start_line: head + 2, end_line: head + 1, new_text: `* ${text}` };
+      }
+      yield* call("edit_spec", { base_revision: spec.rev, note: `Status: ${text}`, edits: [edit] });
     }
     // Spec first, in its own call, then the submit with a note on this round.
     async function* submit(note: string): AsyncGenerator<DriverEvent> {
@@ -437,7 +448,8 @@ export class DummyDriver implements Driver {
           }
         } else {
           yield* call("post_note", { note: `Dummy work done for: ${firstLine(prompt) || "(empty prompt)"}` });
-          yield* submit("The dummy driver finished the work.");
+          // A round of requested changes says what that round did, so its Status (and note) differ.
+          yield* submit(prompt.startsWith("Changes were requested") ? "The dummy driver addressed the review notes." : "The dummy driver finished the work.");
         }
         break;
       }

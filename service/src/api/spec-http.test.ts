@@ -74,9 +74,13 @@ describe("spec + Activity end to end (dummy driver)", () => {
       { rev: 1, author: "system", runKind: null, note: "Created", approvedBaseline: false },
       { rev: 2, author: "agent", runKind: "plan", note: "Plan drafted", approvedBaseline: true },
       { rev: 3, author: "agent", runKind: "work", note: "Status: The dummy driver finished the work.", approvedBaseline: false },
-      { rev: 4, author: "agent", runKind: "work", note: "Status: The dummy driver finished the work.", approvedBaseline: false },
+      { rev: 4, author: "agent", runKind: "work", note: "Status: The dummy driver addressed the review notes.", approvedBaseline: false },
     ]);
-    expect(t.spec).toContain("## Status\n* The dummy driver finished the work.\n* The dummy driver finished the work.");
+    // Each round replaced the Status section rather than appending to it.
+    expect(t.spec).toContain("## Status\n* The dummy driver addressed the review notes.");
+    expect(t.spec.match(/^## Status$/gm)).toHaveLength(1);
+    expect(t.spec.match(/addressed the review notes/g)).toHaveLength(1);
+    expect(t.spec).not.toContain("finished the work");
 
     // Activity: typed entries, each review with its round and the commit it saw.
     const kinds = done.activity.map((e) => e.kind);
@@ -86,7 +90,7 @@ describe("spec + Activity end to end (dummy driver)", () => {
     expect(round2!.meta).toMatchObject({ by: "agent", round: 2 });
     expect(round1!.meta.commit).toMatch(/^[0-9a-f]{40}$/);
     // The fix round's submit note covers just that round.
-    expect(done.activity.filter((e) => e.kind === "submitted").at(-1)!.body).toBe("The dummy driver finished the work.");
+    expect(done.activity.filter((e) => e.kind === "submitted").map((e) => e.body)).toEqual(["The dummy driver finished the work.", "The dummy driver addressed the review notes."]);
 
     // The second review is the delta prompt: round 1's commit and notes, diff from that commit.
     const reviews = done.runs.filter((r) => r.kind === "review");
