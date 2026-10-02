@@ -37,6 +37,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPhone, the board's New session button sits in its own glass again, beside the search field
   instead of inside it.
+- When a watcher's update is meant for a ticket that's already done (new review comments on a pull
+  request whose ticket finished, say), triage now re-opens that ticket with the update. The ticket
+  gets its worktree back and goes through review again. Before, the update went to the done
+  ticket as a chat, which failed with "Working directory does not exist" once the ticket's
+  worktree had been cleaned up, while the Inbox still showed it as sent.
+- Messaging a done ticket whose worktree was cleaned up now answers from the project folder
+  instead of failing with "Working directory does not exist".
+- Agents that look up an Inbox key (`TRIAGE-12`) with `get_ticket` are now told it's an Inbox
+  item and pointed to `list_inbox`, which can now find a single item by its key.
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
   a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
   kept Chrome busy until it was quit.

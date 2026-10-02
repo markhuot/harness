@@ -145,6 +145,8 @@ describe("project key", () => {
     try {
       await expect(client.createProject({ path: dir, key: "my-app" })).rejects.toMatchObject({ status: 400 });
       await expect(client.createProject({ path: dir, key: "9LIVES" })).rejects.toMatchObject({ status: 400 });
+      // Inbox items are keyed TRIAGE-n, and get_ticket points those at list_inbox.
+      await expect(client.createProject({ path: dir, key: "triage" })).rejects.toMatchObject({ status: 400 });
       const p = await client.createProject({ path: dir, key: "hel" });
       expect(p.key).toBe("HEL");
       await expect(client.createProject({ path: other, key: "HEL" })).rejects.toMatchObject({ status: 409 });

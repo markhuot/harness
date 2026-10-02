@@ -597,8 +597,12 @@ output that qualifies) or `decline_work`. `dispatch_ticket`'s `key` is the item'
   key happens to equal the remote ID isn't the same work. The outcome is
   `Dispatched to MH-124 (MH-62) in MH`.
 - `ticket_key` (the current key or an alias; drafts don't count) posts the description to that
-  ticket as a message (`Sent update to existing MH-123`). Adding `key` links a ticket that has no
-  remote ID yet (`Linked MH-123 to MH-62 and sent update`). A ticket that already carries a
+  ticket as a message (`Sent update to existing MH-123`). A done ticket is re-opened with it
+  instead, as a human message with `move: true` would (`Re-opened MH-123 with the update`): triage
+  only dispatches work, and a done ticket's chat run can't do any, since the complete run may
+  have removed its worktree and nothing would review or land the result. Re-opening recreates the
+  worktree. Adding `key` links a ticket that has no remote ID yet (`Linked MH-123 to MH-62 and
+  sent update`, or `… and re-opened it with the update`). A ticket that already carries a
   different remote ID is refused.
 - Neither creates a new, unlinked ticket with the next key.
 
@@ -640,7 +644,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
-| `list_inbox` | all | `{ status?: TriageStatus[], source?, limit?, include_output? }` → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
+| `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
