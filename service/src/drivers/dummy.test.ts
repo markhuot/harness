@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { rmSync } from "node:fs";
+import { confineOutputPath, readTaskOutput } from "../task-output";
 import { outputTitle, type Project, type RunKind } from "@harness/shared";
 import { triagePrompt as buildTriagePrompt } from "../orchestrator/prompts";
 import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
@@ -129,6 +131,23 @@ describe("dummy driver", () => {
     };
     expect(await count("/agents")).toBe(2);
     expect(await count("/agents 99")).toBe(5);
+  });
+
+  test("/bgtask 6: a background Bash task whose output file fills as it runs, then finishes", async () => {
+    const { req, ops } = makeReq("work", "/bgtask 6");
+    const { events, error } = await collect(driver, req);
+    expect(error).toBeNull();
+    const reports = events.filter((e) => e.type === "subagent").map((e) => (e as Extract<DriverEvent, { type: "subagent" }>).subagent);
+    expect(reports.map((r) => [r.id, r.kind ?? null, r.status])).toEqual([
+      ["dummy_task_run_1", "bash", "running"],
+      ["dummy_task_run_1", null, "succeeded"],
+    ]);
+    const path = reports[0]!.outputPath!;
+    expect(confineOutputPath(path)).not.toBeNull();
+    expect(readTaskOutput(path, undefined, true).text).toBe("line 1\nline 2\nline 3\nline 4\nline 5\nline 6\n");
+    expect(calls(events).find((c) => c.name === "Bash")!.input).toMatchObject({ run_in_background: true, description: "Count to 6" });
+    expect(ops.calls.map((c) => c.method)).toEqual(["submitForReview"]);
+    rmSync(dirname(path), { recursive: true, force: true });
   });
 
   test("/block calls block with the question and does not submit", async () => {

@@ -45,7 +45,7 @@ enum BoardProbe {
         "boardColumns", "canLoadMoreDone", "canLoadMoreSearch", "childrenOf", "composerProject", "conductorsNeedingChildren",
         "defaultDriverOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "latestSummary",
         "liveDelta", "matchesQuery", "needsFirstDonePage", "searchColumns", "searchStatusText", "sortedProjects",
-        "subagentById", "subagentPath", "subagentTranscript", "subagentsOf", "ticketByKey", "ticketLinkable",
+        "subagentById", "subagentPath", "subagentTranscript", "subagentsOf", "taskOutputOf", "ticketByKey", "ticketLinkable",
         "ticketsForProject", "transcript", "triageSessions", "unresolvedKeys",
     ].sorted()
 
@@ -103,6 +103,9 @@ enum BoardProbe {
         case "subagentTranscript":
             guard let t = s.subagentTranscript(try arg(0), try arg(1)) else { return .null }
             return .object(["seqs": .array(t.entries.map { .number(Double($0.seq)) }), "loaded": .bool(t.loaded)])
+        case "taskOutputOf":
+            guard let o = s.taskOutputOf(try arg(0), try arg(1)) else { return .null }
+            return try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(o))
         case "transcript":
             guard let t = s.transcripts[try arg(0, String.self)] else { return .null }
             return .object(["ids": strings(t.entries.map(\.id)), "loaded": .bool(t.loaded)])
@@ -271,19 +274,69 @@ struct SubagentScenarioTests {
         #expect(Subagents.statusLabel(.unknown("paused")) == "paused")
     }
 
+    @Test func taskConstants() throws {
+        let kinds = try Fixture.value("stateSubagents", "taskKindLabel", as: [String: String].self)
+        #expect(Dictionary(uniqueKeysWithValues: Subagents.taskKindLabel.map { ($0.key.rawValue, $0.value) }) == kinds)
+        #expect(try Fixture.value("stateSubagents", "taskOutputKeepChars", as: Int.self) == BoardState.taskOutputKeepChars)
+        #expect(try Fixture.value("stateSubagents", "taskOutputPollMs", as: Double.self) == Subagents.taskOutputPollMs)
+    }
+
+    static func fold(_ outs: [TaskOutput]) -> TaskOutputState? {
+        var s = BoardState.initial
+        for o in outs { s.reduce(.taskOutput(sessionId: "s1", subagentId: "c1", output: o)) }
+        return s.taskOutputOf("s1", "c1")
+    }
+
+    static func slice(_ text: String, _ start: Int = 0) -> TaskOutput {
+        let end = start + text.utf8.count
+        return TaskOutput(text: text, start: start, end: end, size: end, done: false, available: true)
+    }
+
+    @Test("past the keep limit, the oldest lines are dropped at a line break, counting UTF-16 code units")
+    func keepLimit() throws {
+        let keep = BoardState.taskOutputKeepChars
+        // 100 UTF-16 units a line, but 99 Characters: counting Characters would keep too much.
+        let line = "😀" + String(repeating: "x", count: 97) + "\n"
+        let big = String(repeating: line, count: keep / 100 + 5)
+        let t = try #require(Self.fold([Self.slice(big)]))
+        #expect(t.truncated)
+        #expect(t.text.utf16.count <= keep)
+        #expect(t.text.utf16.count % 100 == 0)
+        #expect(t.text.hasPrefix("😀"))
+        #expect(t.end == big.utf8.count)
+    }
+
+    @Test("with no line break near the cut, it cuts mid-line at exactly the limit")
+    func keepLimitMidLine() throws {
+        let keep = BoardState.taskOutputKeepChars
+        let t = try #require(Self.fold([Self.slice("a\n"), Self.slice(String(repeating: "y", count: keep + 10), 2)]))
+        #expect(t.text.utf16.count == keep)
+        #expect(t.text.allSatisfy { $0 == "y" })
+        #expect(t.truncated)
+    }
+
     struct LabelInput: Decodable, Sendable {
         let description: String
         let agentType: String?
+        let kind: SubagentKind?
+        let command: String?
     }
 
     @Test(arguments: Fixture.cases("stateSubagents", "titleCases", input: LabelInput.self, output: String.self))
     func title(_ c: Fixture.Case<LabelInput, String>) {
-        #expect(Subagents.title(description: c.input.description, agentType: c.input.agentType) == c.output)
+        #expect(Subagents.title(description: c.input.description, agentType: c.input.agentType, kind: c.input.kind, command: c.input.command) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateSubagents", "typeLabelCases", input: LabelInput.self, output: String?.self))
     func typeLabel(_ c: Fixture.Case<LabelInput, String?>) {
-        #expect(Subagents.typeLabel(description: c.input.description, agentType: c.input.agentType) == c.output)
+        #expect(Subagents.typeLabel(description: c.input.description, agentType: c.input.agentType, kind: c.input.kind) == c.output)
+    }
+
+    struct KindInput: Decodable, Sendable { let kind: SubagentKind? }
+
+    @Test(arguments: Fixture.cases("stateSubagents", "openLabelCases", input: KindInput.self, output: String.self))
+    func openLabel(_ c: Fixture.Case<KindInput, String>) {
+        #expect(Subagents.openLabel(c.input.kind) == c.output)
     }
 
     struct DurationInput: Decodable, Sendable {
@@ -297,8 +350,8 @@ struct SubagentScenarioTests {
         #expect(Subagents.duration(startedAt: c.input.startedAt, endedAt: c.input.endedAt, now: c.input.now ?? 0) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("stateSubagents", "groupCases", input: [Subagent].self, output: Subagents.Groups.self))
-    func group(_ c: Fixture.Case<[Subagent], Subagents.Groups>) {
-        #expect(Subagents.group(c.input) == c.output)
+    @Test(arguments: Fixture.cases("stateSubagents", "sortCases", input: [Subagent].self, output: [Subagent].self))
+    func sort(_ c: Fixture.Case<[Subagent], [Subagent]>) {
+        #expect(Subagents.sort(c.input).map(\.id) == c.output.map(\.id))
     }
 }

@@ -1,7 +1,7 @@
 // Driver contract. A driver turns one "run" (a prompt in the context of a session)
 // into a stream of events. Drivers never touch the DB; the orchestrator persists events.
 
-import type { CommandMatch, DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentStatus } from "@harness/shared";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 import type { RunInput } from "./input";
 
@@ -22,6 +22,12 @@ export interface SubagentReport {
   prompt?: string;
   status?: SubagentStatus;
   result?: string | null;
+  /** A background task instead of an agent (set by the first report; default "agent") */
+  kind?: SubagentKind;
+  /** A background task's command */
+  command?: string | null;
+  /** The file the task's output is written to, on this machine (never sent to clients) */
+  outputPath?: string | null;
 }
 
 /**

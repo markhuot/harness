@@ -21,6 +21,7 @@ import type {
   BranchInfo,
   Project,
   Subagent,
+  TaskOutput,
   PromptEntry,
   PublicSettings,
   ServerMessage,
@@ -251,6 +252,11 @@ export class HarnessClient {
   }
   subagents(sessionId: string) {
     return this.request<Subagent[]>("GET", `/sessions/${sessionId}/subagents`);
+  }
+  /** A background task's output: the tail, or with `offset` what came after it (TaskOutput) */
+  taskOutput(sessionId: string, subagentId: string, offset?: number) {
+    const q = offset === undefined ? "" : `?offset=${offset}`;
+    return this.request<TaskOutput>("GET", `/sessions/${sessionId}/subagents/${encodeURIComponent(subagentId)}/output${q}`);
   }
 
   // Watchers

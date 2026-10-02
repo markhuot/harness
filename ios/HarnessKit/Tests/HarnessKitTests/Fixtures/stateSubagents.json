@@ -66,223 +66,32 @@
       "output": "25h 0m"
     }
   ],
-  "groupCases": [
+  "openLabelCases": [
     {
-      "name": "running first, finished newest first",
-      "input": [
-        {
-          "id": "old-done",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task old-done",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "succeeded",
-          "result": null,
-          "startedAt": 1,
-          "endedAt": 2,
-          "updatedAt": 10
-        },
-        {
-          "id": "run2",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task run2",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "running",
-          "result": null,
-          "startedAt": 5,
-          "endedAt": null,
-          "updatedAt": 10
-        },
-        {
-          "id": "new-done",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task new-done",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "failed",
-          "result": null,
-          "startedAt": 3,
-          "endedAt": 9,
-          "updatedAt": 10
-        },
-        {
-          "id": "run1",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task run1",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "running",
-          "result": null,
-          "startedAt": 4,
-          "endedAt": null,
-          "updatedAt": 10
-        }
-      ],
-      "output": {
-        "running": [
-          {
-            "id": "run2",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task run2",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "running",
-            "result": null,
-            "startedAt": 5,
-            "endedAt": null,
-            "updatedAt": 10
-          },
-          {
-            "id": "run1",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task run1",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "running",
-            "result": null,
-            "startedAt": 4,
-            "endedAt": null,
-            "updatedAt": 10
-          }
-        ],
-        "finished": [
-          {
-            "id": "new-done",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task new-done",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "failed",
-            "result": null,
-            "startedAt": 3,
-            "endedAt": 9,
-            "updatedAt": 10
-          },
-          {
-            "id": "old-done",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task old-done",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "succeeded",
-            "result": null,
-            "startedAt": 1,
-            "endedAt": 2,
-            "updatedAt": 10
-          }
-        ]
-      }
+      "name": "agent",
+      "input": {
+        "kind": "agent"
+      },
+      "output": "Open transcript"
     },
     {
-      "name": "finished without endedAt sort by start; ties keep order",
-      "input": [
-        {
-          "id": "s1",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task s1",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "stopped",
-          "result": null,
-          "startedAt": 4,
-          "endedAt": null,
-          "updatedAt": 10
-        },
-        {
-          "id": "s2",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task s2",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "succeeded",
-          "result": null,
-          "startedAt": 1,
-          "endedAt": 4,
-          "updatedAt": 10
-        },
-        {
-          "id": "s3",
-          "sessionId": "s1",
-          "runId": "r1",
-          "parentId": null,
-          "description": "Task s3",
-          "agentType": "general-purpose",
-          "prompt": "",
-          "status": "failed",
-          "result": null,
-          "startedAt": 7,
-          "endedAt": null,
-          "updatedAt": 10
-        }
-      ],
-      "output": {
-        "running": [],
-        "finished": [
-          {
-            "id": "s3",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task s3",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "failed",
-            "result": null,
-            "startedAt": 7,
-            "endedAt": null,
-            "updatedAt": 10
-          },
-          {
-            "id": "s1",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task s1",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "stopped",
-            "result": null,
-            "startedAt": 4,
-            "endedAt": null,
-            "updatedAt": 10
-          },
-          {
-            "id": "s2",
-            "sessionId": "s1",
-            "runId": "r1",
-            "parentId": null,
-            "description": "Task s2",
-            "agentType": "general-purpose",
-            "prompt": "",
-            "status": "succeeded",
-            "result": null,
-            "startedAt": 1,
-            "endedAt": 4,
-            "updatedAt": 10
-          }
-        ]
-      }
+      "name": "older service (no kind)",
+      "input": {},
+      "output": "Open transcript"
+    },
+    {
+      "name": "bash",
+      "input": {
+        "kind": "bash"
+      },
+      "output": "Open output"
+    },
+    {
+      "name": "monitor",
+      "input": {
+        "kind": "monitor"
+      },
+      "output": "Open output"
     }
   ],
   "scenarios": [
@@ -443,6 +252,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -581,6 +391,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -673,6 +484,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "Hel"
@@ -982,6 +794,7 @@
                 }
               ]
             },
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1200,6 +1013,7 @@
             "subagents": {
               "s1": []
             },
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1299,6 +1113,385 @@
                   "updatedAt": 9
                 }
               ]
+            },
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a task's output: the first read replaces, the next appends, a repeat only updates done",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "line 1\n",
+                "start": 0,
+                "end": 7,
+                "size": 7,
+                "done": false,
+                "available": true
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "line 1\n",
+                "end": 7,
+                "size": 7,
+                "done": false,
+                "available": true,
+                "truncated": false
+              }
+            },
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "other"
+              ],
+              "output": null
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "liné 2\n",
+                "start": 7,
+                "end": 15,
+                "size": 15,
+                "done": false,
+                "available": true
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "line 1\nliné 2\n",
+                "end": 15,
+                "size": 15,
+                "done": false,
+                "available": true,
+                "truncated": false
+              }
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "liné 2\n",
+                "start": 7,
+                "end": 15,
+                "size": 15,
+                "done": true,
+                "available": true
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "line 1\nliné 2\n",
+                "end": 15,
+                "size": 15,
+                "done": true,
+                "available": true,
+                "truncated": false
+              }
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {
+              "s1/c1": {
+                "text": "line 1\nliné 2\n",
+                "end": 15,
+                "size": 15,
+                "done": true,
+                "available": true,
+                "truncated": false
+              }
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a task's output after a gap (a burst bigger than one read) starts over, truncated",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "a\n",
+                "start": 0,
+                "end": 2,
+                "size": 2,
+                "done": false,
+                "available": true
+              }
+            },
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "z\n",
+                "start": 900000,
+                "end": 900002,
+                "size": 900002,
+                "done": false,
+                "available": true
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "z\n",
+                "end": 900002,
+                "size": 900002,
+                "done": false,
+                "available": true,
+                "truncated": true
+              }
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {
+              "s1/c1": {
+                "text": "z\n",
+                "end": 900002,
+                "size": 900002,
+                "done": false,
+                "available": true,
+                "truncated": true
+              }
+            },
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "a tail that doesn't start at 0 is truncated; output that's gone keeps what was loaded",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "tail\n",
+                "start": 40,
+                "end": 45,
+                "size": 45,
+                "done": false,
+                "available": true
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "tail\n",
+                "end": 45,
+                "size": 45,
+                "done": false,
+                "available": true,
+                "truncated": true
+              }
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c1",
+              "output": {
+                "text": "",
+                "start": 45,
+                "end": 45,
+                "size": 0,
+                "done": true,
+                "available": false
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c1"
+              ],
+              "output": {
+                "text": "tail\n",
+                "end": 45,
+                "size": 45,
+                "done": true,
+                "available": true,
+                "truncated": true
+              }
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "taskOutput",
+              "sessionId": "s1",
+              "subagentId": "c2",
+              "output": {
+                "text": "",
+                "start": 0,
+                "end": 0,
+                "size": 0,
+                "done": false,
+                "available": false
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "taskOutputOf",
+              "args": [
+                "s1",
+                "c2"
+              ],
+              "output": {
+                "text": "",
+                "end": 0,
+                "size": 0,
+                "done": false,
+                "available": false,
+                "truncated": false
+              }
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "summaries": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {
+              "s1/c1": {
+                "text": "tail\n",
+                "end": 45,
+                "size": 45,
+                "done": true,
+                "available": true,
+                "truncated": true
+              },
+              "s1/c2": {
+                "text": "",
+                "end": 0,
+                "size": 0,
+                "done": false,
+                "available": false,
+                "truncated": false
+              }
             },
             "deltas": {},
             "watchers": {},
@@ -1545,6 +1738,7 @@
                 }
               ]
             },
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1561,12 +1755,234 @@
       ]
     }
   ],
+  "sortCases": [
+    {
+      "name": "latest update first, running or not",
+      "input": [
+        {
+          "id": "old-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task old-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": 2,
+          "updatedAt": 2
+        },
+        {
+          "id": "run2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task run2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 5,
+          "endedAt": null,
+          "updatedAt": 5
+        },
+        {
+          "id": "new-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task new-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "failed",
+          "result": null,
+          "startedAt": 3,
+          "endedAt": 9,
+          "updatedAt": 9
+        },
+        {
+          "id": "task",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task task",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 7,
+          "kind": "bash",
+          "command": "make"
+        }
+      ],
+      "output": [
+        {
+          "id": "new-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task new-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "failed",
+          "result": null,
+          "startedAt": 3,
+          "endedAt": 9,
+          "updatedAt": 9
+        },
+        {
+          "id": "task",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task task",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 7,
+          "kind": "bash",
+          "command": "make"
+        },
+        {
+          "id": "run2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task run2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 5,
+          "endedAt": null,
+          "updatedAt": 5
+        },
+        {
+          "id": "old-done",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task old-done",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": 2,
+          "updatedAt": 2
+        }
+      ]
+    },
+    {
+      "name": "ties go to the later start",
+      "input": [
+        {
+          "id": "s1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "stopped",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 8
+        },
+        {
+          "id": "s2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": null,
+          "updatedAt": 8
+        },
+        {
+          "id": "s3",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s3",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 7,
+          "endedAt": null,
+          "updatedAt": 8
+        }
+      ],
+      "output": [
+        {
+          "id": "s3",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s3",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 7,
+          "endedAt": null,
+          "updatedAt": 8
+        },
+        {
+          "id": "s1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "stopped",
+          "result": null,
+          "startedAt": 4,
+          "endedAt": null,
+          "updatedAt": 8
+        },
+        {
+          "id": "s2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task s2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "succeeded",
+          "result": null,
+          "startedAt": 1,
+          "endedAt": null,
+          "updatedAt": 8
+        }
+      ]
+    }
+  ],
   "statusLabel": {
     "running": "Running",
     "succeeded": "Done",
     "failed": "Failed",
     "stopped": "Stopped"
   },
+  "taskKindLabel": {
+    "bash": "Bash",
+    "monitor": "Monitor"
+  },
+  "taskOutputKeepChars": 524288,
+  "taskOutputPollMs": 1000,
   "titleCases": [
     {
       "name": "blank description falls back to the type",
@@ -1599,6 +2015,46 @@
         "agentType": ""
       },
       "output": "Sub-agent"
+    },
+    {
+      "name": "a task's description",
+      "input": {
+        "description": "Run the tests",
+        "agentType": null,
+        "kind": "bash",
+        "command": "bun test"
+      },
+      "output": "Run the tests"
+    },
+    {
+      "name": "a task without one falls back to its command",
+      "input": {
+        "description": " ",
+        "agentType": null,
+        "kind": "monitor",
+        "command": " tail -f log "
+      },
+      "output": "tail -f log"
+    },
+    {
+      "name": "a task with neither",
+      "input": {
+        "description": "",
+        "agentType": null,
+        "kind": "bash",
+        "command": null
+      },
+      "output": "Background task"
+    },
+    {
+      "name": "an explicit agent kind",
+      "input": {
+        "description": "",
+        "agentType": "Explore",
+        "kind": "agent",
+        "command": null
+      },
+      "output": "Explore"
     }
   ],
   "typeLabelCases": [
@@ -1625,6 +2081,24 @@
         "agentType": null
       },
       "output": null
+    },
+    {
+      "name": "a Bash task",
+      "input": {
+        "description": "Run the tests",
+        "agentType": null,
+        "kind": "bash"
+      },
+      "output": "Bash"
+    },
+    {
+      "name": "a Monitor",
+      "input": {
+        "description": "",
+        "agentType": null,
+        "kind": "monitor"
+      },
+      "output": "Monitor"
     }
   ]
 }

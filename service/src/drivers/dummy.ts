@@ -3,6 +3,9 @@
 
 import type { DriverInfo, ModelInfo } from "@harness/shared";
 import type { ToolResult } from "../tools/types";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { dummyTaskOutputDir } from "../task-output";
 import { executeTool, type Driver, type DriverEvent, type RunRequest } from "./types";
 
 export interface DummyState {
@@ -111,7 +114,7 @@ function watcherRule(prompt: string): RegExp | null {
   }
 }
 
-const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools|agents|child)\b[ \t]*([^\n]*)/;
+const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools|agents|bgtask|child)\b[ \t]*([^\n]*)/;
 /** conductorUpdatePrompt: the orchestrator telling a parent (of either kind) that children changed. */
 const CHILD_UPDATES = /^(Child ticket updates:|Check on your children)/;
 
@@ -365,6 +368,35 @@ export class DummyDriver implements Driver {
           }
           yield* say(`The ${count} sub-agent${count === 1 ? "" : "s"} finished.`);
           yield* call("submit_for_review", { summary: `Ran ${count} sub-agent${count === 1 ? "" : "s"}.` });
+        } else if (directive === "bgtask") {
+          // `/bgtask [n]`: a background Bash command the way claude-code reports one (DESIGN.md
+          // "Background tasks"): the call, its "Command running in background" result, a task
+          // report naming its output file, n lines written to that file, then its notification.
+          const lines = Math.min(500, Math.max(1, Number.parseInt(arg, 10) || 20));
+          const id = `dummy_task_${req.runId}`;
+          const dir = join(dummyTaskOutputDir(), req.runId);
+          mkdirSync(dir, { recursive: true });
+          const outputPath = join(dir, `${id}.output`);
+          writeFileSync(outputPath, "");
+          const command = `for i in $(seq ${lines}); do echo "line $i"; sleep 1; done`;
+          const description = `Count to ${lines}`;
+          yield { type: "tool_call", callId: id, name: "Bash", input: { command, description, run_in_background: true } };
+          yield {
+            type: "tool_result",
+            callId: id,
+            name: "Bash",
+            result: { content: [{ type: "text", text: `Command running in background with ID: ${id}. Output is being written to: ${outputPath}` }] },
+          };
+          yield { type: "subagent", subagent: { id, kind: "bash", description, command, status: "running", outputPath } };
+          yield* say("Counting in the background.");
+          for (let i = 1; i <= lines; i++) {
+            await sleep(delay * 20, req.signal);
+            check();
+            appendFileSync(outputPath, i % 5 === 0 ? `\u001b[32mline ${i}\u001b[0m\n` : `line ${i}\n`);
+          }
+          yield { type: "subagent", subagent: { id, status: "succeeded", result: `Background command "${description}" completed (exit code 0)` } };
+          yield* say(`Counted to ${lines}.`);
+          yield* call("submit_for_review", { summary: `Ran a background task that counted to ${lines}.` });
         } else if (directive === "bash") {
           if (hasTool("bash")) {
             const out: { result?: ToolResult } = {};

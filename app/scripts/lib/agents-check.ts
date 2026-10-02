@@ -1,8 +1,9 @@
 // Sub-agents end-to-end: a dummy `/agents 3` ticket runs two sub-agents, the second starting a
-// nested third. The ticket's Agents tab lists them live, a row opens that sub-agent's transcript
-// (with its breadcrumb), and the session transcript's Agent rows link to theirs.
+// nested third. The ticket's Agents & tasks tab lists them live, a row opens that sub-agent's
+// transcript (with its breadcrumb), and the session transcript's Agent rows link to theirs. Then a
+// `/bgtask` ticket's background Bash command: its row, its output growing live, and its link.
 // Used by scripts/real-service.ts and scripts/agents.ts.
-import type { Project, Subagent, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import type { Project, Subagent, TaskOutput, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { until, type launchApp } from "./drive";
 
 type App = Awaited<ReturnType<typeof launchApp>>;
@@ -28,7 +29,8 @@ export async function checkAgentsTab({ api, app, check, shot, project }: { api: 
   check("Agents tab appears (live) while a sub-agent runs", live);
   await js(`document.querySelector('.tab[data-tab="agents"]').click()`);
   await until("agent rows", () => exists(".agent-row"));
-  check("a running sub-agent sits under Running", await exists('[data-group="running"] .agent-row[data-status="running"]'));
+  check("a running sub-agent is listed as running", await exists('.agent-row[data-kind="agent"][data-status="running"]'));
+  check("one list, no Running / Finished sections", !(await exists(".agents-tab .children-group")));
   await shot("agents-1-running");
 
   const detail = await until(
@@ -44,10 +46,13 @@ export async function checkAgentsTab({ api, app, check, shot, project }: { api: 
   check("the service recorded three sub-agents, one nested", !!nested && subs.filter((s) => !s.parentId).length === 2, subs.map((s) => `${s.description}<${s.parentId ?? "-"}>`).join(", "));
 
   const rows = await until("three finished rows", async () => {
-    const r = await js<string[]>(`[...document.querySelectorAll('[data-group="finished"] .agent-row')].map(e => e.dataset.status + ":" + e.querySelector(".child-title").textContent)`);
-    return r.length === 3 ? r : null;
+    const r = await js<string[]>(`[...document.querySelectorAll('.agent-row')].map(e => e.dataset.status + ":" + e.querySelector(".child-title").textContent)`);
+    return r.length === 3 && r.every((x) => x.startsWith("succeeded:")) ? r : null;
   });
-  check("the Agents tab lists all three as done, live", rows.every((r) => r.startsWith("succeeded:")), rows.join(" | "));
+  check("the Agents tab lists all three as done, live", rows.length === 3, rows.join(" | "));
+  const order = await js<string[]>(`[...document.querySelectorAll('.agent-row')].map(e => e.dataset.agent)`);
+  const latest = [...subs].sort((a, b) => b.updatedAt - a.updatedAt || b.startedAt - a.startedAt).map((s) => s.id);
+  check("the list puts the latest updated first", order.join() === latest.join(), order.join());
   check("the tab counts them", (await js<string>(`document.querySelector('.tab[data-tab="agents"] .count')?.textContent ?? ""`)) === "3");
   check("the nested one says who started it", (await js<string>(`document.querySelector('.agent-row[data-agent="${nested.id}"] .agent-via')?.textContent ?? ""`)).includes("Sub-task 2"));
   await shot("agents-2-list");
@@ -63,7 +68,7 @@ export async function checkAgentsTab({ api, app, check, shot, project }: { api: 
   check("the route addresses the sub-agent", (await js<string>(`location.hash`)).endsWith(`/agent:${nested.id}`));
   check("the Agents tab stays highlighted", await exists('.tab.on[data-tab="agents"]'));
   const crumbs = await js<string>(`document.querySelector(".agent-crumbs")?.textContent ?? ""`);
-  check("the breadcrumb goes through its parent", crumbs.includes("Agents") && crumbs.includes("Sub-task 2"), crumbs);
+  check("the breadcrumb goes through its parent", crumbs.includes("Agents & tasks") && crumbs.includes("Sub-task 2"), crumbs);
   await js(`document.querySelector(".agent-prompt-toggle").click()`);
   await shot("agents-3-subagent");
 
@@ -89,4 +94,72 @@ export async function checkAgentsTab({ api, app, check, shot, project }: { api: 
 
   const api404 = await api<TranscriptEntry[]>("GET", `/sessions/${t.sessionId}/transcript?after=0&subagent=${encodeURIComponent(nested.id)}`);
   check("the API serves the sub-agent's transcript", api404.length > 0 && api404.every((e) => e.subagentId === nested.id));
+
+  await checkBackgroundTask({ api, app, check, shot, project });
+}
+
+/** `/bgtask 8`: a background Bash command writing a line every 20 dummy delays, then finishing. */
+async function checkBackgroundTask({ api, app, check, shot, project }: { api: Api; app: App; check: Check; shot: (name: string) => Promise<void>; project: Project }) {
+  const { js, exists, go } = app;
+  const lines = 8;
+  const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Count in the background /bgtask ${lines}`, driver: "dummy", start: true });
+  await go(`#/board/${project.id}/ticket/${t.key}/summaries`);
+
+  const live = await until("Agents & tasks tab with a running task", () => js<boolean>(`!!document.querySelector('.tab[data-tab="agents"] .live-dot')`), 20000);
+  check("the tab appears (live) while a background task runs", live);
+  check("the tab is called Agents & tasks", (await js<string>(`document.querySelector('.tab[data-tab="agents"]').firstChild.textContent`)) === "Agents & tasks");
+  await js(`document.querySelector('.tab[data-tab="agents"]').click()`);
+  const row = await until("running task row", () => js<{ id: string; chip: string; title: string } | null>(`(() => {
+    const r = document.querySelector('.agent-row[data-kind="bash"][data-status="running"]');
+    return r && { id: r.dataset.agent, chip: r.querySelector(".badge")?.textContent ?? "", title: r.querySelector(".child-title").textContent };
+  })()`));
+  check("the task row shows a Bash chip and its description", row.chip === "Bash" && row.title === `Count to ${lines}`, `${row.chip} · ${row.title}`);
+  check("the row shows the command under the title", (await js<string>(`document.querySelector('.agent-row[data-agent="${row.id}"] .child-summary')?.textContent ?? ""`)).includes(`seq ${lines}`));
+  await shot("tasks-1-list-running");
+
+  // Its output view: the command, then the output growing while it runs.
+  await js(`document.querySelector('.agent-row[data-agent="${row.id}"]').click()`);
+  await until("task view", () => exists(".task-view"));
+  check("the route addresses the task", (await js<string>(`location.hash`)).endsWith(`/agent:${row.id}`));
+  check("the back crumb says Agents & tasks", (await js<string>(`document.querySelector(".task-view .agent-crumbs")?.textContent ?? ""`)).trim() === "Agents & tasks");
+  check("the view shows the command", (await js<string>(`document.querySelector(".task-command")?.textContent ?? ""`)).includes(`seq ${lines}`));
+  const outLines = () => js<string[]>(`(document.querySelector(".task-output-text")?.textContent ?? "").split("\\n").filter(Boolean)`);
+  const first = await until("some output", async () => {
+    const l = await outLines();
+    return l.length > 0 && l.length < lines ? l : null;
+  }, 20000);
+  const grown = await until("the output grows", async () => {
+    const l = await outLines();
+    return l.length > first.length ? l : null;
+  }, 10000);
+  const stillRunning = await exists('.task-view .agent-title .spinner');
+  check("the output grows while the task runs", stillRunning && grown.length > first.length, `${first.length} → ${grown.length} lines`);
+  await shot("tasks-2-output-running");
+
+  await until("task done", () => exists('.task-view .agent-status[data-status="succeeded"]'), 30000);
+  const done = await until("all the output", async () => {
+    const l = await outLines();
+    return l.length === lines ? l : null;
+  }, 5000);
+  check("when it's done the whole output stays", done[0] === "line 1" && done[lines - 1] === `line ${lines}`, done.join(" | "));
+  check("the output has no ANSI escapes", !done.some((l) => l.includes("\u001b") || l.includes("[32m")));
+  check("the result shows under the output", (await js<string>(`document.querySelector(".task-result")?.textContent ?? ""`)).includes("completed (exit code 0)"));
+  const pinned = await js<boolean>(`(() => { const el = document.querySelector(".task-output"); return el.scrollHeight - el.clientHeight - el.scrollTop < 4; })()`);
+  check("the output pane sits at the bottom", pinned);
+  await shot("tasks-3-output-done");
+
+  await js(`document.querySelector('.task-view [data-testid="agents-back"]').click()`);
+  await until("back to the list", () => exists(`.agent-row[data-agent="${row.id}"][data-status="succeeded"]`));
+  await shot("tasks-4-list-done");
+
+  // The transcript's Bash row links to the output.
+  await go(`#/board/${project.id}/ticket/${t.key}/transcript`);
+  const link = await until("Open output link", () => js<string | null>(`document.querySelector('.t-tool-agent[data-agent="${row.id}"] .btn')?.textContent ?? null`));
+  check("the transcript's Bash row links to its output", link.trim() === "Open output", link);
+  await js(`document.querySelector('.t-tool-agent[data-agent="${row.id}"] .btn').click()`);
+  const opened = await until("task view from the transcript", () => exists(".task-view .task-output-text"));
+  check("Open output opens the task's output", opened && (await js<string>(`location.hash`)).endsWith(`/agent:${row.id}`));
+
+  const served = await api<TaskOutput>("GET", `/sessions/${t.sessionId}/subagents/${encodeURIComponent(row.id)}/output`);
+  check("the API serves the task's output", served.done && served.text.includes(`line ${lines}`));
 }

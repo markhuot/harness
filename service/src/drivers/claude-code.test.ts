@@ -4,7 +4,7 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, realpa
 import { basename, join } from "node:path";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
-import { buildClaudeArgs, carrySession, claudeProjectDir, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
+import { buildClaudeArgs, carrySession, claudeProjectDir, claudeTaskOutputPath, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
 import { RunInput, type DriverEvent, type RunRequest } from "./types";
 import { tempDir } from "@harness/shared/testing";
 
@@ -462,6 +462,100 @@ describe("StreamJsonParser background tasks", () => {
     // The mode downgrade is reported on the first turn only.
     expect(first.filter((e) => e.type === "status")).toHaveLength(1);
     expect(second.filter((e) => e.type === "status")).toHaveLength(0);
+  });
+});
+
+// HARNESS-164: background Bash commands and Monitors are listed with the sub-agents as tasks.
+describe("StreamJsonParser background task rows", () => {
+  const reports = (evs: DriverEvent[]) => evs.filter((e) => e.type === "subagent").map((e) => (e as Extract<DriverEvent, { type: "subagent" }>).subagent);
+  const run = (p: StreamJsonParser, msgs: unknown[]) => reports(msgs.flatMap((m) => p.handle(m)));
+
+  test("a background command is a task with its command and output file, finished by its notification", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    const started = run(p, [bashCall("c1", "bun test", { run_in_background: true, description: "Run the tests" }), taskStarted("b1", "c1", "bun test"), toolResult("c1", BG("b1"))]);
+    expect(started).toEqual([
+      { id: "c1", kind: "bash", description: "Run the tests", command: "bun test", status: "running", outputPath: "/tmp/x/tasks/b1.output" },
+    ]);
+    const done = run(p, [{ ...taskDone("b1", "c1"), output_file: "/tmp/x/tasks/b1.output", summary: "Background command \"Run the tests\" completed (exit code 0)" }]);
+    expect(done).toEqual([{ id: "c1", status: "succeeded", outputPath: "/tmp/x/tasks/b1.output", result: 'Background command "Run the tests" completed (exit code 0)' }]);
+  });
+
+  test("a foreground call, even a long one with a task, never becomes a task row", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    expect(run(p, [bashCall("c2", "composer show"), taskStarted("b2", "c2", "Show deps"), toolResult("c2", "php ^8.2"), taskDone("b2", "c2")])).toEqual([]);
+  });
+
+  test("a command moved to the background by its timeout becomes a task then; the task's description stands in for a missing one", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    expect(run(p, [bashCall("c1", "bun test"), taskStarted("b1", "c1", "Run suites")])).toEqual([]);
+    expect(run(p, [toolResult("c1", TIMED_OUT("b1"))])).toEqual([
+      { id: "c1", kind: "bash", description: "Run suites", command: "bun test", status: "running", outputPath: "/tmp/x/tasks/b1.output" },
+    ]);
+    expect(run(p, [{ type: "system", subtype: "task_updated", task_id: "b1", patch: { status: "killed" } }])).toEqual([{ id: "c1", status: "stopped" }]);
+  });
+
+  test("task_started that says it's backgrounded reports the task before the result; the result adds its path", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    const early = run(p, [bashCall("c1", "sleep 9", { run_in_background: true }), { ...taskStarted("b1", "c1", "sleep 9"), is_backgrounded: true }]);
+    expect(early).toEqual([{ id: "c1", kind: "bash", description: "sleep 9", command: "sleep 9", status: "running" }]);
+    expect(run(p, [toolResult("c1", BG("b1"))])).toEqual([{ id: "c1", outputPath: "/tmp/x/tasks/b1.output" }]);
+  });
+
+  test("a Monitor's output file is next to an earlier task's, else in the CLI's layout for the cwd", () => {
+    const p = new StreamJsonParser(null, null, "/Users/me/my.app");
+    p.handle(init("sess-9"));
+    const monitor = (id: string, task: string) => [
+      { type: "assistant", message: { content: [{ type: "tool_use", id, name: "Monitor", input: { command: "tail -f log", description: "Watch the log" } }] } },
+      taskStarted(task, id, "Watch the log"),
+      toolResult(id, `Monitor started (task ${task}, expires in 30m unless the source ends first).`),
+    ];
+    const [first] = run(p, monitor("m1", "bm1"));
+    expect(first).toMatchObject({ id: "m1", kind: "monitor", command: "tail -f log" });
+    expect(first!.outputPath).toBe(claudeTaskOutputPath("/Users/me/my.app", "sess-9", "bm1"));
+    expect(first!.outputPath).toMatch(/\/claude-\d+\/-Users-me-my-app\/sess-9\/tasks\/bm1\.output$/);
+    run(p, [bashCall("c1", "make", { run_in_background: true }), taskStarted("b1", "c1", "make"), toolResult("c1", BG("b1"))]);
+    expect(run(p, monitor("m2", "bm2"))[0]!.outputPath).toBe("/tmp/x/tasks/bm2.output");
+  });
+
+  // Recorded from claude 2.1.286 (trimmed): both report is_backgrounded at task_started, and the
+  // terminal task_updated comes before the task_notification that carries the summary.
+  test("recorded: a background Bash and a Monitor, from start to notification", () => {
+    const p = new StreamJsonParser(null, null, "/private/tmp/h164-real");
+    p.handle(init("0780a3b2"));
+    const dir = "/private/tmp/claude-502/-private-tmp-h164-real/0780a3b2/tasks";
+    const evs = run(p, [
+      bashCall("toolu_B", "sh count.sh", { description: "Count to five", run_in_background: true }),
+      { type: "system", subtype: "task_started", task_id: "bvh", tool_use_id: "toolu_B", description: "Count to five", is_backgrounded: true, task_type: "local_bash" },
+      toolResult("toolu_B", `Command running in background with ID: bvh. Output is being written to: ${dir}/bvh.output. You will be notified when it completes. To check interim output, use Read on that file path.`),
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_M", name: "Monitor", input: { command: "sh ticks.sh", description: "Ticks", timeout_ms: 300000 } }] } },
+      { type: "system", subtype: "task_started", task_id: "bao", tool_use_id: "toolu_M", description: "Ticks", is_backgrounded: true, task_type: "local_bash" },
+      toolResult("toolu_M", "Monitor started (task bao, expires in 5m unless the source ends first; you get one notice at expiry — re-arm if you still need the watch)."),
+      { type: "system", subtype: "task_updated", task_id: "bao", patch: { status: "completed", end_time: 1 } },
+      { type: "system", subtype: "task_notification", task_id: "bao", tool_use_id: "toolu_M", status: "completed", output_file: `${dir}/bao.output`, summary: 'Monitor "Ticks" stream ended' },
+    ]);
+    expect(evs).toEqual([
+      { id: "toolu_B", kind: "bash", description: "Count to five", command: "sh count.sh", status: "running" },
+      { id: "toolu_B", outputPath: `${dir}/bvh.output` },
+      { id: "toolu_M", kind: "monitor", description: "Ticks", command: "sh ticks.sh", status: "running" },
+      { id: "toolu_M", outputPath: `${dir}/bao.output` },
+      { id: "toolu_M", status: "succeeded" },
+      { id: "toolu_M", status: "succeeded", outputPath: `${dir}/bao.output`, result: 'Monitor "Ticks" stream ended' },
+    ]);
+  });
+
+  test("a sub-agent's own background command isn't one of the session's tasks", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "d", prompt: "p" } }] } });
+    const inner = run(p, [
+      { type: "assistant", parent_tool_use_id: "a1", message: { content: [{ type: "tool_use", id: "c9", name: "Bash", input: { command: "make", run_in_background: true } }] } },
+      { type: "user", parent_tool_use_id: "a1", message: { content: [{ type: "tool_result", tool_use_id: "c9", content: BG("b9") }] } },
+    ]);
+    expect(inner).toEqual([]);
   });
 });
 

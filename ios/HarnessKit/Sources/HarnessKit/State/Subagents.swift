@@ -1,8 +1,8 @@
 import Foundation
 
-// Port of shared/src/state/subagents.ts: sub-agents an agent started inside its session
-// (DESIGN.md "Sub-agents"), selectors and labels for the ticket's Agents tab and the sub-agent
-// transcript view.
+// Port of shared/src/state/subagents.ts: sub-agents an agent started inside its session, and the
+// background tasks it left running (DESIGN.md "Sub-agents", "Background tasks"): selectors and
+// labels for the ticket's Agents & tasks tab, the sub-agent transcript view and the task output view.
 
 public enum Subagents {
     public static let statusLabel: [SubagentStatus: String] = [
@@ -17,23 +17,52 @@ public enum Subagents {
         statusLabel[status] ?? status.rawValue
     }
 
-    /// What a sub-agent row is called: its task description, else its agent type.
-    public static func title(description: String, agentType: String?) -> String {
+    public static let taskKindLabel: [SubagentKind: String] = [
+        .bash: "Bash",
+        .monitor: "Monitor",
+    ]
+
+    /// A background task (a Bash command, a Monitor), not an agent.
+    public static func isTask(_ kind: SubagentKind?) -> Bool {
+        kind == .bash || kind == .monitor
+    }
+
+    public static func isTask(_ s: Subagent) -> Bool { isTask(s.kind) }
+
+    /// What a row is called: its task description, else its command (a task) or agent type.
+    public static func title(description: String, agentType: String?, kind: SubagentKind? = nil, command: String? = nil) -> String {
         let d = JSCompat.trim(description)
         if !d.isEmpty { return d }
+        if isTask(kind) {
+            let cmd = command.map(JSCompat.trim) ?? ""
+            return cmd.isEmpty ? "Background task" : cmd
+        }
         if let agentType, !agentType.isEmpty { return agentType }
         return "Sub-agent"
     }
 
-    public static func title(_ s: Subagent) -> String { title(description: s.description, agentType: s.agentType) }
+    public static func title(_ s: Subagent) -> String {
+        title(description: s.description, agentType: s.agentType, kind: s.kind, command: s.command.optional)
+    }
 
-    /// "Explore" · "general-purpose" chip text; nil when it would just repeat the title.
-    public static func typeLabel(description: String, agentType: String?) -> String? {
+    /// "Explore" · "general-purpose" · "Bash" chip text; nil when it would just repeat the title.
+    public static func typeLabel(description: String, agentType: String?, kind: SubagentKind? = nil) -> String? {
+        if let kind, isTask(kind) { return taskKindLabel[kind] }
         guard let agentType, !agentType.isEmpty, !JSCompat.trim(description).isEmpty else { return nil }
         return agentType
     }
 
-    public static func typeLabel(_ s: Subagent) -> String? { typeLabel(description: s.description, agentType: s.agentType) }
+    public static func typeLabel(_ s: Subagent) -> String? { typeLabel(description: s.description, agentType: s.agentType, kind: s.kind) }
+
+    /// The transcript link on the tool row that started it.
+    public static func openLabel(_ kind: SubagentKind?) -> String {
+        isTask(kind) ? "Open output" : "Open transcript"
+    }
+
+    public static func openLabel(_ s: Subagent) -> String { openLabel(s.kind) }
+
+    /// How often a client polls a running task's output while its view is open (ms).
+    public static let taskOutputPollMs: Double = 1000
 
     /// 42s, 3m 5s, 1h 2m: how long it ran (so far, while running).
     public static func duration(startedAt: Timestamp, endedAt: Timestamp?, now: Timestamp = Date().timeIntervalSince1970 * 1000) -> String {
@@ -48,17 +77,14 @@ public enum Subagents {
         duration(startedAt: s.startedAt, endedAt: s.endedAt, now: now)
     }
 
-    public struct Groups: Codable, Sendable, Equatable {
-        public var running: [Subagent]
-        public var finished: [Subagent]
-    }
-
-    /// Running sub-agents first (oldest first), then finished ones, newest first.
-    public static func group(_ list: [Subagent]) -> Groups {
-        let running = list.filter { $0.status == .running }
-        // Stable, like Array.prototype.sort: equal end times keep the list's order.
-        let finished = list.filter { $0.status != .running }.sorted { ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
-        return Groups(running: running, finished: finished)
+    /// The Agents & tasks list: sub-agents and tasks together, the latest updated first, ties to the
+    /// later start. Stable, like Array.prototype.sort: full ties keep the list's order.
+    public static func sort(_ list: [Subagent]) -> [Subagent] {
+        list.enumerated().sorted { a, b in
+            if a.element.updatedAt != b.element.updatedAt { return a.element.updatedAt > b.element.updatedAt }
+            if a.element.startedAt != b.element.startedAt { return a.element.startedAt > b.element.startedAt }
+            return a.offset < b.offset
+        }.map(\.element)
     }
 }
 
@@ -75,6 +101,11 @@ extension BoardState {
     /// A sub-agent's transcript as loaded so far (nil before its backfill or first entry).
     public func subagentTranscript(_ sessionId: String, _ id: String) -> TranscriptState? {
         transcripts[Self.transcriptKey(sessionId, id)]
+    }
+
+    /// A background task's output as loaded so far (nil before the first read).
+    public func taskOutputOf(_ sessionId: String, _ id: String) -> TaskOutputState? {
+        taskOutputs[Self.transcriptKey(sessionId, id)]
     }
 
     /// The chain of sub-agents from the top down to `id` (for a nested agent's breadcrumb).

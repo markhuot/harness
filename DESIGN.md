@@ -731,7 +731,7 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
-| Board | a ticket's sub-agents and their transcripts (Agents tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
+| Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
@@ -803,6 +803,8 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   `decline_work`), so a dev server left running doesn't hold the run open, and when the result
   is an error. A wait posts a status line and has no time limit (a monitor or an import can
   run for days; `backgroundWaitMs` sets one, counted from the latest turn's end, for tests). The
+  background Bash commands and Monitors it waits on are listed on the ticket's Agents & tasks tab
+  with their output ("Sub-agents" → "Background tasks"). The
   work prompt tells the agent to pair a long background job with a check-in timer (a background
   `sleep`) so it wakes periodically instead of sitting silent; a human can stop the run. `total_cost_usd` is cumulative across turns, so each `usage` is charged
   the difference from the previous result. Before this, a work run whose agent ended its turn
@@ -1006,7 +1008,8 @@ watcher id, so a model edit applies to the watcher's next run. `watcher.models` 
 
 A sub-agent is an agent a run's agent starts inside its own session (Claude Code's `Agent` tool,
 `Task` on older CLIs), not a ticket. It shares the session and the run, and it reports back to
-the agent that started it. The apps show them on the ticket's **Agents** tab.
+the agent that started it. The apps show them on the ticket's **Agents & tasks** tab, together with
+the run's background tasks (see "Background tasks" below).
 
 **Driver contract** (`service/src/drivers/types.ts`, driver-agnostic). A driver that runs
 sub-agents reports each one with `{ type: "subagent", subagent: SubagentReport }`: an id unique
@@ -1039,8 +1042,9 @@ default: the tool result only says `Async agent launched…`, and the outcome ar
 `system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
 `task_id`, mapped from `task_started`), inside the same `claude -p` process (the CLI takes
 another turn after the notification). A foreground agent's tool result is its outcome.
-`task_started` for other task types (background Bash, Monitor) doesn't make a sub-agent, but
-the driver tracks it as a running task (see "Drivers"). Only conversation messages
+`task_started` for other task types (background Bash, Monitor) doesn't make a sub-agent: the
+driver tracks it as a running task (see "Drivers"), and one that stays in the background is a
+background task (below). Only conversation messages
 (`assistant` / `user`) under a `parent_tool_use_id` are a sub-agent's output: anything else is
 the tool's own progress, like the `tool_progress` heartbeat a Bash call sends every 30 s while
 it runs, and is dropped. Output from a sub-agent the parser didn't see start creates one called
@@ -1049,12 +1053,67 @@ it runs, and is dropped. Output from a sub-agent the parser didn't see start cre
 
 **Apps** (`@harness/shared/state` `subagents.ts`, `tabs.ts`). State keeps `subagents[sessionId]`
 and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).
-The Agents tab exists only once the session has a sub-agent: until then (and on a session
-without any) the tab is hidden, and `agents` or `agent:<id>` fall back to Summaries, while the
-requested tab is kept so a deep link opens when the sub-agents arrive. It lists running sub-agents first, then finished ones newest first. A row opens the tab
-`agent:<id>`: that sub-agent's transcript, with its task above it and a breadcrumb back through
-its parents. An unknown id falls back to the list. In every transcript, a tool row that started a
-sub-agent links to its transcript.
+The Agents & tasks tab (route id `agents`) exists only once the session has a sub-agent or a
+background task: until then (and on a session without any) the tab is hidden, and `agents` or
+`agent:<id>` fall back to Summaries, while the requested tab is kept so a deep link opens when
+they arrive. It lists sub-agents and tasks in one list, the latest updated first
+(`sortSubagents`: `updatedAt` desc, then `startedAt` desc). A row opens the tab `agent:<id>`: a
+sub-agent's transcript, with its task above it and a breadcrumb back through its parents, or a
+task's output view. An unknown id falls back to the list. In every transcript, a tool row that
+started a sub-agent links to its transcript ("Open transcript"), and one that started a task to
+its output ("Open output").
+
+#### Background tasks
+
+A background task is a Bash command or a Monitor the agent left running: `Bash` with
+`run_in_background`, a Bash call the CLI moved to the background after its 120 s timeout, or a
+`Monitor`. A foreground call never is one, even a long one the CLI reports with `task_started`,
+since the transcript already shows it. Tasks are `subagents` rows of their own `kind` (`bash` or
+`monitor`; `agent` for sub-agents, absent from older services), so they reuse the sub-agents'
+store, events, stop-at-run-end, tab, count, live dot and `agent:<id>` routes. They have no
+transcript of their own. Older apps list them like a sub-agent with an empty transcript.
+
+**claude-code** (verified against claude 2.1.286). The parser reports a Bash or Monitor call as a
+task once it knows it's in the background: `task_started` says `is_backgrounded: true`, or the
+tool result is a "Command running in background with ID: …", "…moved to the background (ID: …)"
+or "Monitor started (task …" notice. The task's id is the call's id; its `description` is the
+call's `description` input, else the `task_started` description, else the command; `command` is
+the input's. The output file comes from the result's "Output is being written to: <path>" or the
+`task_notification`'s `output_file`. A Monitor's result names only its task, so its file is taken
+to be next to an earlier task's (`<dir>/<task>.output`), else in the CLI's layout,
+`<CLAUDE_CODE_TMPDIR or /tmp>/claude-<uid>/<cwd, non-alphanumerics as "-">/<session>/tasks/<task>.output`.
+`task_notification` (or a terminal `task_updated`, found by task id) sets its status through
+the same mapping as an agent's, with the notification's `summary` as `result`. A sub-agent's own
+background commands aren't the session's tasks.
+
+**Store** (migration 22). `subagents` gains `kind`, `command`, `output_path` (service-side only;
+clients see `hasOutput`) and the kept output: `output` holds the raw tail of the file (up to
+256 KB) from byte `output_start` of `output_size`. The output path is set once and never moved.
+When a task finishes (a finishing report, a run's stop, a stale run's recovery), the orchestrator
+copies the tail of its file into `output`, because the CLI's files live in /tmp and don't survive
+a cleanup or a reboot. A later report takes it again while the file is there: the CLI sends the
+terminal `task_updated` before the `task_notification`, and the file's last line ("[exited with
+code 0]") may land in between.
+
+**Output** (`service/src/task-output.ts`). `GET /sessions/:id/subagents/:subagentId/output?offset=N`
+→ `TaskOutput { text, start, end, size, done, available }` (offsets in bytes; 404 for an unknown
+id or a sub-agent, 400 for an offset that isn't a whole number). Without `offset` it sends the
+tail, up to 256 KB; with one, what follows it, skipping ahead to the tail when more than 256 KB
+came in since (a gap: `start` > the offset asked for). A running task's read stops before a
+UTF-8 character or a terminal escape sequence that's cut off, so the next read picks it up, and
+a tail starting mid-file skips to a whole character. Escape sequences are stripped from the text.
+Once the task has finished it reads from the kept tail. The path the stream named must resolve
+(realpath, so symlinks count) inside `claude-<uid>` under /tmp, `$CLAUDE_CODE_TMPDIR` or the OS
+temp folder; anything else reads as `available: false`.
+
+**Apps.** Output isn't pushed over the socket: the service would still have to poll the file and
+send every chunk to every client. A task's view reads the tail when it opens, then polls with
+`offset = end` every `TASK_OUTPUT_POLL_MS` (1 s) while the task runs, and once more when it
+finishes. State keeps it in `taskOutputs[transcriptKey(session, id)]` (`mergeTaskOutput`): a slice
+starting where the text ends is appended, a repeated one only updates `done`, and anything else
+(the first read, a gap) replaces it, marked `truncated` when it doesn't start at 0. A client keeps
+at most `TASK_OUTPUT_KEEP_CHARS` (512 K characters), dropping the oldest lines past it. The view
+shows the command, the output (following the end until the user scrolls up), and the result.
 
 ### Prompt overrides
 
@@ -1100,7 +1159,7 @@ Directives are read from the run prompt:
 | Kind | Behaviour |
 | --- | --- |
 | plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/bgtask [n]` → a background `Bash` call (`run_in_background`) with its "Command running in background" result and a `bash` task report whose output file (under `/tmp/claude-<uid>/harness-dummy/<run>/`) gets `line 1`…`line n` (default 20, at most 500), one every 20× the word delay, every fifth in color, then the task's `succeeded` report and `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
 | chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
 | complete | text + `post_summary("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
@@ -1133,7 +1192,7 @@ POST   /tickets/:key/start | /messages {text, move?} | /review | /reopen | /comp
 GET    /tickets/:key/summaries   → Summary[] (each with attachments)
 GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
-GET    /sessions/:id/subagents   → Subagent[]
+GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1

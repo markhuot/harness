@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,7 @@ import { mp4, png } from "../testing/media";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { git as runGit } from "../orchestrator/worktree";
 import { parseRange, serveFile } from "./http";
+import { dummyTaskOutputDir } from "../task-output";
 
 let harness: Harness | null = null;
 afterEach(async () => {
@@ -130,6 +131,24 @@ describe("http api", () => {
     } finally {
       socket.close();
     }
+  });
+
+  test("a background task over REST: listed with the ticket, its output read by offset; 400 for a bad offset, 404 for an agent", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, prompt: "/bgtask 3" });
+    await h.orchestrator.idle();
+    const detail = await client.getTicket(t.key);
+    onTempCleanup(() => rmSync(join(dummyTaskOutputDir(), detail.runs[0]!.id), { recursive: true, force: true }));
+    const [task] = detail.subagents!;
+    expect(task).toMatchObject({ kind: "bash", status: "succeeded", description: "Count to 3", hasOutput: true });
+    const all = await client.taskOutput(t.sessionId, task!.id);
+    expect(all).toMatchObject({ text: "line 1\nline 2\nline 3\n", start: 0, done: true, available: true });
+    expect((await client.taskOutput(t.sessionId, task!.id, 7)).text).toBe("line 2\nline 3\n");
+    const status = async (path: string) => (await fetch(`${h.url}${path}`, { headers: { Authorization: `Bearer ${h.token}` } })).status;
+    expect(await status(`/sessions/${t.sessionId}/subagents/${task!.id}/output?offset=-1`)).toBe(400);
+    expect(await status(`/sessions/${t.sessionId}/subagents/${task!.id}/output?offset=1.5`)).toBe(400);
+    expect(await status(`/sessions/${t.sessionId}/subagents/nope/output`)).toBe(404);
   });
 
   test("block, reply, cancel and patch over REST", async () => {

@@ -4,8 +4,8 @@
 // its hash route; the phone keeps them in navigation params.
 
 /**
- * "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" lists the
- * session's sub-agents; it exists only once the session has any.
+ * "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" (Agents &
+ * tasks) lists the session's sub-agents and background tasks; it exists only once there are any.
  */
 export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "agents" | "browser" | "details";
 /** Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>". */
@@ -16,7 +16,7 @@ export const TAB_LABEL: Record<BuiltinTicketTab, string> = {
   summaries: "Summaries",
   children: "Tickets",
   transcript: "Transcript",
-  agents: "Agents",
+  agents: "Agents & tasks",
   browser: "Browser",
   details: "Details",
 };
@@ -55,7 +55,10 @@ export function isTicketTab(t: string | undefined | null): t is TicketTab {
   return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t) || AGENT_TAB.test(t));
 }
 
-/** Whether the tab strip shows Agents: only once the session has sub-agents to list. */
+/** The live dot's tooltip on the Agents & tasks tab. */
+export const AGENTS_LIVE_LABEL = "A sub-agent or task is running";
+
+/** Whether the tab strip shows Agents & tasks: only once the session has sub-agents or tasks to list. */
 export function showsAgentsTab(subagents: { id: string }[] | null | undefined): boolean {
   return (subagents?.length ?? 0) > 0;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { Session, Subagent, TicketDetail, TranscriptEntry } from "../index";
-import { initialState, reducer, transcriptKey, type Action, type State } from "./reducer";
-import { groupSubagents, subagentById, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel } from "./subagents";
+import type { Session, Subagent, TaskOutput, TicketDetail, TranscriptEntry } from "../index";
+import { initialState, reducer, TASK_OUTPUT_KEEP_CHARS, transcriptKey, type Action, type State } from "./reducer";
+import { isTask, sortSubagents, subagentById, subagentOpenLabel, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel, taskOutputOf } from "./subagents";
 import { effectiveTab, isTicketTab, parseSubagentTab, showsAgentsTab, subagentTabRoute, tabStripTab } from "./tabs";
 
 const sub = (id: string, over: Partial<Subagent> = {}): Subagent => ({
@@ -128,15 +128,25 @@ describe("sub-agent labels", () => {
     expect(subagentDuration({ startedAt: 5000, endedAt: 1000 })).toBe("0s");
   });
 
-  test("running first (oldest first), then finished newest first", () => {
-    const g = groupSubagents([
-      sub("old-done", { status: "succeeded", startedAt: 1, endedAt: 2 }),
-      sub("run2", { startedAt: 5 }),
-      sub("new-done", { status: "failed", startedAt: 3, endedAt: 9 }),
-      sub("run1", { startedAt: 4 }),
+  test("one list, the latest updated first; ties go to the later start", () => {
+    const list = sortSubagents([
+      sub("old-done", { status: "succeeded", startedAt: 1, endedAt: 2, updatedAt: 2 }),
+      sub("run", { startedAt: 5, updatedAt: 5 }),
+      sub("new-done", { status: "failed", startedAt: 3, endedAt: 9, updatedAt: 9 }),
+      sub("tie-early", { startedAt: 1, updatedAt: 5 }),
     ]);
-    expect(g.running.map((s) => s.id)).toEqual(["run2", "run1"]);
-    expect(g.finished.map((s) => s.id)).toEqual(["new-done", "old-done"]);
+    expect(list.map((s) => s.id)).toEqual(["new-done", "run", "tie-early", "old-done"]);
+  });
+
+  test("a task is titled by its description, then its command, and chipped with its kind", () => {
+    const task = { description: "", agentType: null, kind: "monitor" as const, command: "tail -f log" };
+    expect(isTask(task)).toBe(true);
+    expect(isTask({ kind: undefined })).toBe(false);
+    expect(subagentTitle(task)).toBe("tail -f log");
+    expect(subagentTitle({ ...task, command: null })).toBe("Background task");
+    expect(subagentTypeLabel(task)).toBe("Monitor");
+    expect(subagentOpenLabel(task)).toBe("Open output");
+    expect(subagentOpenLabel({})).toBe("Open transcript");
   });
 
   test("path walks up to the top-level agent and survives a cycle", () => {
@@ -144,5 +154,45 @@ describe("sub-agent labels", () => {
     expect(subagentPath(s, "s1", "leaf").map((a) => a.id)).toEqual(["top", "mid", "leaf"]);
     expect(subagentPath(s, "s1", "x").map((a) => a.id)).toEqual(["y", "x"]);
     expect(subagentPath(s, "s1", "missing")).toEqual([]);
+  });
+});
+
+describe("task output", () => {
+  const out = (text: string, start: number, over: Partial<TaskOutput> = {}): TaskOutput => ({
+    text,
+    start,
+    end: start + Buffer.byteLength(text),
+    size: start + Buffer.byteLength(text),
+    done: false,
+    available: true,
+    ...over,
+  });
+  const fold = (...outs: TaskOutput[]) => outs.reduce<State>((s, output) => reducer(s, { type: "taskOutput", sessionId: "s1", subagentId: "c1", output }), initialState);
+
+  test("appends a slice that starts where the text ends; a repeated poll keeps the same state object", () => {
+    const s = fold(out("a\n", 0), out("é\n", 2));
+    expect(taskOutputOf(s, "s1", "c1")).toEqual({ text: "a\né\n", end: 5, size: 5, done: false, available: true, truncated: false });
+    expect(reducer(s, { type: "taskOutput", sessionId: "s1", subagentId: "c1", output: out("é\n", 2) })).toBe(s);
+  });
+
+  test("a gap replaces the text and marks it truncated", () => {
+    expect(taskOutputOf(fold(out("a\n", 0), out("z\n", 10)), "s1", "c1")).toMatchObject({ text: "z\n", end: 12, truncated: true });
+  });
+
+  test("past the keep limit, the oldest lines are dropped at a line break", () => {
+    const line = "x".repeat(99) + "\n";
+    const big = line.repeat(TASK_OUTPUT_KEEP_CHARS / 100 + 5);
+    const t = taskOutputOf(fold(out(big, 0)), "s1", "c1")!;
+    expect(t.truncated).toBe(true);
+    expect(t.text.length).toBeLessThanOrEqual(TASK_OUTPUT_KEEP_CHARS);
+    expect(t.text.startsWith("x")).toBe(true);
+    expect(t.text.length % 100).toBe(0);
+    expect(t.end).toBe(Buffer.byteLength(big));
+  });
+
+  test("output that's gone keeps what was loaded; none loaded is unavailable", () => {
+    const gone = { text: "", start: 2, end: 2, size: 0, done: true, available: false };
+    expect(taskOutputOf(fold(out("a\n", 0), gone), "s1", "c1")).toMatchObject({ text: "a\n", done: true, available: true });
+    expect(taskOutputOf(fold(gone), "s1", "c1")).toMatchObject({ text: "", available: false, done: true });
   });
 });

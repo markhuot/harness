@@ -1,9 +1,10 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket's Agents tab: the sub-agents its agent started inside its
-/// session, running ones first, then finished ones, newest first. A row opens the sub-agent's
-/// `agent:<id>` tab on the hosting ticket screen. Only shown once the session has sub-agents
+/// The ticket's Agents & tasks tab: the sub-agents its agent started inside its session and the
+/// background tasks (Bash commands, Monitors) it left running, in one list, the latest updated
+/// first. A row opens its `agent:<id>` tab on the hosting ticket screen: a sub-agent's transcript
+/// (SubagentView) or a task's output (TaskOutputView). Only shown once the session has any
 /// (Tabs.effectiveTab falls back to Summaries until then).
 struct AgentsTabView: View {
     let ticket: Ticket
@@ -14,25 +15,17 @@ struct AgentsTabView: View {
 
     var body: some View {
         let state = store.state
-        let sections = AgentsLogic.sections(state.subagentsOf(ticket.sessionId) ?? [])
-        let running = sections.contains { $0.id == "running" }
+        let list = AgentsLogic.list(state.subagentsOf(ticket.sessionId) ?? [])
+        let running = list.contains { $0.status == .running }
         ScrollView {
             TimelineView(.periodic(from: .now, by: AgentsLogic.tickSeconds(running: running))) { ctx in
                 let now = ctx.date.timeIntervalSince1970 * 1000
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(sections) { s in
-                        VStack(alignment: .leading, spacing: 7) {
-                            HStack(spacing: 7) {
-                                Text(s.label).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(c.text)
-                                Text("\(s.items.count)").font(.scaled(size: 13)).foregroundStyle(c.text3)
-                            }
-                            .padding(.horizontal, 2)
-                            .accessibilityElement(children: .combine)
-                            Card {
-                                ForEach(Array(s.items.enumerated()), id: \.element.id) { i, a in
-                                    AgentsRow(agent: a, parent: a.parentId.flatMap { state.subagentById(ticket.sessionId, $0) }, now: now, first: i == 0) {
-                                        openTab?(Tabs.subagentTabRoute(a.id))
-                                    }
+                    if !list.isEmpty {
+                        Card {
+                            ForEach(Array(list.enumerated()), id: \.element.id) { i, a in
+                                AgentsRow(agent: a, parent: a.parentId.flatMap { state.subagentById(ticket.sessionId, $0) }, now: now, first: i == 0) {
+                                    openTab?(Tabs.subagentTabRoute(a.id))
                                 }
                             }
                         }
@@ -47,7 +40,7 @@ struct AgentsTabView: View {
     }
 }
 
-/// A sub-agent's status: a spinner while it runs, else check / x / stop on its tone.
+/// A sub-agent's or task's status: a spinner while it runs, else check / x / stop on its tone.
 struct AgentsStatusMark: View {
     let status: SubagentStatus
     @Environment(\.palette) private var c
@@ -68,7 +61,7 @@ struct AgentsStatusMark: View {
     }
 }
 
-/// The agent type chip ("Explore"), mono on an outlined badge.
+/// The type chip ("Explore", or "Bash" / "Monitor" for a task), mono on an outlined badge.
 struct AgentsTypeBadge: View {
     let type: String
     @Environment(\.palette) private var c
@@ -105,8 +98,16 @@ private struct AgentsRow: View {
                     Icon("chevronRight", size: 13).foregroundStyle(c.text3)
                 }
                 if !preview.isEmpty {
-                    Text(Markdown.plainText(preview)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                    // A task's command (or its result) is shell text, not markdown.
+                    Group {
+                        if Subagents.isTask(a) {
+                            Text(preview).font(.mono(12.5))
+                        } else {
+                            Text(Markdown.plainText(preview)).font(.scaled(size: 13))
+                        }
+                    }
+                    .foregroundStyle(c.text2).lineLimit(2)
+                    .multilineTextAlignment(.leading)
                 }
                 if type != nil || parent != nil {
                     FlowLayout(spacing: 6) {

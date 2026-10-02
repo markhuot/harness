@@ -23,6 +23,28 @@ public struct TranscriptState: Codable, Sendable, Equatable {
     }
 }
 
+/// A background task's output as loaded: the text so far and where to read on from (reducer.ts
+/// TaskOutputState).
+public struct TaskOutputState: Codable, Sendable, Equatable {
+    public var text: String
+    /// Byte offset the text ends at: the next poll's `offset`
+    public var end: Int
+    public var size: Int
+    public var done: Bool
+    public var available: Bool
+    /// Earlier output isn't shown (the service sent only the tail, or the client trimmed it)
+    public var truncated: Bool
+
+    public init(text: String, end: Int, size: Int, done: Bool, available: Bool, truncated: Bool) {
+        self.text = text
+        self.end = end
+        self.size = size
+        self.done = done
+        self.available = available
+        self.truncated = truncated
+    }
+}
+
 /// Done paging per board scope (paging.ts DonePaging).
 public struct DonePaging: Codable, Sendable, Equatable {
     /// Server count of done tickets in this scope, adjusted by live events since
@@ -86,6 +108,8 @@ public struct BoardState: Codable, Sendable, Equatable {
     public var transcripts: [String: TranscriptState]
     /// Sub-agents per sessionId, oldest first (from the ticket detail + subagent.upserted)
     public var subagents: [String: [Subagent]]
+    /// Background tasks' output as polled so far, keyed by transcriptKey(sessionId, subagentId)
+    public var taskOutputs: [String: TaskOutputState]
     /// In-flight streaming assistant text: deltas[sessionId][runId]
     public var deltas: [String: [String: String]]
     public var watchers: [String: Watcher]
@@ -110,6 +134,7 @@ public struct BoardState: Codable, Sendable, Equatable {
         connected: Bool = false, ready: Bool = false, projects: [String: Project] = [:], tickets: [String: Ticket] = [:],
         sessions: [String: Session] = [:], runs: [String: Run] = [:], summaries: [String: [Summary]] = [:],
         transcripts: [String: TranscriptState] = [:], subagents: [String: [Subagent]] = [:],
+        taskOutputs: [String: TaskOutputState] = [:],
         deltas: [String: [String: String]] = [:], watchers: [String: Watcher] = [:], settings: PublicSettings? = nil,
         drivers: [DriverInfo] = [], donePaging: [String: DonePaging] = [:], search: SearchState? = nil,
         keyAliases: [String: String] = [:], missingKeys: [String: Bool] = [:], childrenLoaded: [String: Bool] = [:],
@@ -124,6 +149,7 @@ public struct BoardState: Codable, Sendable, Equatable {
         self.summaries = summaries
         self.transcripts = transcripts
         self.subagents = subagents
+        self.taskOutputs = taskOutputs
         self.deltas = deltas
         self.watchers = watchers
         self.settings = settings
@@ -190,6 +216,8 @@ public enum BoardAction: Codable, Sendable, Equatable {
     /// A transcript backfill: the session agent's, or with `subagentId` one sub-agent's
     case transcript(sessionId: String, subagentId: Patch<String> = .absent, entries: [TranscriptEntry])
     case subagents(sessionId: String, subagents: [Subagent])
+    /// A slice of a background task's output (GET …/output), appended to what's loaded
+    case taskOutput(sessionId: String, subagentId: String, output: TaskOutput)
     case summaries(sessionId: String, summaries: [Summary])
     case drivers([DriverInfo])
     /// A done page request for `scope` went out
@@ -218,6 +246,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
         case .missingKeys: "missingKeys"
         case .transcript: "transcript"
         case .subagents: "subagents"
+        case .taskOutput: "taskOutput"
         case .summaries: "summaries"
         case .drivers: "drivers"
         case .donePageRequest: "donePage.request"
@@ -232,7 +261,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
 
     private enum Key: String, CodingKey {
         case type, event, snapshot, connected, detail, requestedKey, tickets, keys, sessionId, subagentId, entries
-        case subagents, summaries, drivers, scope, page, append, cursor, error, q
+        case subagents, summaries, drivers, scope, page, append, cursor, error, q, output
     }
 
     public init(from decoder: any Decoder) throws {
@@ -253,6 +282,10 @@ public enum BoardAction: Codable, Sendable, Equatable {
                 entries: try c.decode([TranscriptEntry].self, forKey: .entries))
         case "subagents":
             self = .subagents(sessionId: try c.decode(String.self, forKey: .sessionId), subagents: try c.decode([Subagent].self, forKey: .subagents))
+        case "taskOutput":
+            self = .taskOutput(
+                sessionId: try c.decode(String.self, forKey: .sessionId), subagentId: try c.decode(String.self, forKey: .subagentId),
+                output: try c.decode(TaskOutput.self, forKey: .output))
         case "summaries":
             self = .summaries(sessionId: try c.decode(String.self, forKey: .sessionId), summaries: try c.decode([Summary].self, forKey: .summaries))
         case "drivers": self = .drivers(try c.decode([DriverInfo].self, forKey: .drivers))
@@ -295,6 +328,10 @@ public enum BoardAction: Codable, Sendable, Equatable {
         case let .subagents(sessionId, subagents):
             try c.encode(sessionId, forKey: .sessionId)
             try c.encode(subagents, forKey: .subagents)
+        case let .taskOutput(sessionId, subagentId, output):
+            try c.encode(sessionId, forKey: .sessionId)
+            try c.encode(subagentId, forKey: .subagentId)
+            try c.encode(output, forKey: .output)
         case let .summaries(sessionId, summaries):
             try c.encode(sessionId, forKey: .sessionId)
             try c.encode(summaries, forKey: .summaries)

@@ -495,13 +495,23 @@ kbd {
 }
 
 /* Tabs */
+/* A strip too narrow for its tabs scrolls sideways rather than wrapping a label ("Agents & tasks").
+   The rule is an inset shadow, so the current tab's underline still covers it inside the scroller. */
 .tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 -1px 0 var(--border);
   padding: 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 .tab {
+  flex: none;
+  white-space: nowrap;
   border: 0;
   background: none;
   padding: 9px 10px 8px;
@@ -509,7 +519,6 @@ kbd {
   font-weight: 500;
   color: var(--text-3);
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   display: inline-flex;
   align-items: center;
   gap: 6px;

@@ -74,6 +74,17 @@ struct HarnessClientURLTests {
         #expect(path(t) == "/sessions/ses_1/transcript?after=3")
     }
 
+    @Test func taskOutputTailOrOffsetAndEncodedId() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("TaskOutput")))
+        let out = try await client(t).taskOutput("ses_1", subagentId: "toolu_1")
+        #expect(path(t) == "/sessions/ses_1/subagents/toolu_1/output")
+        #expect(out.end == 12 && out.available)
+        _ = try await client(t).taskOutput("ses_1", subagentId: "a/b c", offset: 0)
+        #expect(path(t) == "/sessions/ses_1/subagents/a%2Fb%20c/output?offset=0")
+        _ = try await client(t).taskOutput("ses_1", subagentId: "toolu_1", offset: 4096)
+        #expect(path(t) == "/sessions/ses_1/subagents/toolu_1/output?offset=4096")
+    }
+
     @Test func listModelsRefreshAndEncodedDriver() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("DriverModels")))
         _ = try await client(t).listModels("my driver", refresh: true)

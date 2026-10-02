@@ -231,6 +231,21 @@ public enum SubagentStatus: OpenEnum {
     }
 }
 
+/// agent: a sub-agent; bash / monitor: a background task (a Bash command, a Monitor)
+public enum SubagentKind: OpenEnum {
+    case agent, bash, monitor
+    case unknown(String)
+    public static let allKnown: [Self] = [.agent, .bash, .monitor]
+    public var rawValue: String {
+        switch self {
+        case .agent: "agent"
+        case .bash: "bash"
+        case .monitor: "monitor"
+        case let .unknown(r): r
+        }
+    }
+}
+
 public enum SummaryAuthor: OpenEnum {
     case agent, human, system
     case unknown(String)

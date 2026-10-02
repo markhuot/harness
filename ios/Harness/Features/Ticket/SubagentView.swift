@@ -51,12 +51,12 @@ struct SubagentView: View {
                 } label: {
                     HStack(spacing: 3) {
                         Icon("chevronLeft", size: 14).foregroundStyle(c.accent)
-                        Text("Agents").font(.scaled(size: 14.5)).foregroundStyle(c.accent)
+                        Text(Tabs.tabLabel[.agents] ?? "Agents & tasks").font(.scaled(size: 14.5)).foregroundStyle(c.accent)
                     }
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Back to Agents")
+                .accessibilityLabel("Back to \(Tabs.tabLabel[.agents] ?? "Agents & tasks")")
                 ForEach(path.dropLast()) { p in
                     Button {
                         openTab?(Tabs.subagentTabRoute(p.id))

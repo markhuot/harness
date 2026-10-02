@@ -1,5 +1,6 @@
 // Sub-agents end-to-end against a REAL daemon (temp HARNESS_HOME, random port; never ~/.harness):
-// a dummy `/agents 3` ticket, its Agents tab, a sub-agent's transcript, in light and dark.
+// a dummy `/agents 3` ticket, its Agents & tasks tab, a sub-agent's transcript, then a `/bgtask`
+// ticket's background Bash task and its output view, in light and dark.
 //
 //   bun run build && bun scripts/agents.ts [screenshotDir]
 import { mkdirSync, readFileSync } from "node:fs";

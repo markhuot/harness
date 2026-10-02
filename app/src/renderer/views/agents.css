@@ -1,4 +1,5 @@
-/* Agents tab (sub-agents) and a sub-agent's transcript view. Rows reuse the Tickets tab's
+/* Agents & tasks tab (sub-agents, background tasks), a sub-agent's transcript view and a task's
+   output view. Rows reuse the Tickets tab's
    .children-group / .child-row styles (components/conductor.css). */
 .agents-tab {
   overflow-y: auto;
@@ -6,6 +7,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.agent-row .child-summary.mono {
+  font-size: 11.5px;
 }
 .agent-row .badge {
   flex: none;
@@ -130,6 +134,60 @@
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
   mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+
+/* A background task: its command under the title, then its output filling the rest. */
+.task-command {
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 7.5em;
+  overflow: auto;
+}
+.task-output {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-sunken);
+}
+.task-output-text {
+  margin: 0;
+  padding: 10px 16px 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.task-note {
+  padding: 10px 16px 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.task-output[data-state="empty"] .task-note,
+.task-output[data-state="unavailable"] .task-note {
+  padding: 32px 16px;
+  text-align: center;
+}
+.task-output .t-error {
+  margin: 10px 16px 0;
+}
+.task-result {
+  flex: none;
+  max-height: 30%;
+  overflow-y: auto;
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.task-result .t-label {
+  margin-bottom: 2px;
 }
 
 /* An Agent / Task tool row in a transcript: its sub-agent and a link to its transcript. */

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Subagent, SubagentStatus } from "@harness/shared";
+import type { Subagent, SubagentKind, SubagentStatus } from "@harness/shared";
 import type { SubagentReport } from "../drivers/types";
 import { now } from "./util";
 
@@ -16,6 +16,12 @@ interface SubagentRow {
   started_at: number;
   ended_at: number | null;
   updated_at: number;
+  kind: string;
+  command: string | null;
+  output_path: string | null;
+  output: string | null;
+  output_start: number | null;
+  output_size: number | null;
 }
 
 const toSubagent = (r: SubagentRow): Subagent => ({
@@ -31,7 +37,18 @@ const toSubagent = (r: SubagentRow): Subagent => ({
   startedAt: r.started_at,
   endedAt: r.ended_at,
   updatedAt: r.updated_at,
+  kind: r.kind as SubagentKind,
+  command: r.command,
+  hasOutput: r.output_path !== null || r.output !== null,
 });
+
+/** A background task's output as the service keeps it (never sent to clients as is). */
+export interface TaskOutputSource {
+  /** The file the CLI writes it to */
+  path: string | null;
+  /** The tail kept when the task ended: `text` starts at byte `start` of `size` */
+  snapshot: { text: string; start: number; size: number } | null;
+}
 
 /** What a driver reports about a sub-agent; absent fields keep their stored value. */
 export type SubagentPatch = SubagentReport;
@@ -63,8 +80,8 @@ export class SubagentRepo {
       const status = patch.status ?? "running";
       this.db
         .query(
-          `INSERT INTO subagents (session_id, id, run_id, parent_id, description, agent_type, prompt, status, result, started_at, ended_at, updated_at)
-           VALUES ($sessionId, $id, $runId, $parentId, $description, $agentType, $prompt, $status, $result, $t, $endedAt, $t)`,
+          `INSERT INTO subagents (session_id, id, run_id, parent_id, description, agent_type, prompt, status, result, started_at, ended_at, updated_at, kind, command, output_path)
+           VALUES ($sessionId, $id, $runId, $parentId, $description, $agentType, $prompt, $status, $result, $t, $endedAt, $t, $kind, $command, $outputPath)`,
         )
         .run({
           sessionId,
@@ -78,6 +95,9 @@ export class SubagentRepo {
           result: patch.result ?? null,
           t,
           endedAt: FINISHED.includes(status) ? t : null,
+          kind: patch.kind ?? "agent",
+          command: patch.command ?? null,
+          outputPath: patch.outputPath ?? null,
         });
       return this.get(sessionId, patch.id);
     }
@@ -92,15 +112,23 @@ export class SubagentRepo {
       status,
       result: patch.result !== undefined && patch.result !== null && (!finished || prev.result === null) ? patch.result : prev.result,
       endedAt: prev.endedAt ?? (FINISHED.includes(status) ? t : null),
+      command: prev.command ?? patch.command ?? null,
     };
-    const same = (["parentId", "description", "agentType", "prompt", "status", "result", "endedAt"] as const).every((k) => next[k] === prev[k]);
+    const prevPath = this.outputPath(sessionId, prev.id);
+    const outputPath = prevPath ?? patch.outputPath ?? null;
+    const same =
+      (["parentId", "description", "agentType", "prompt", "status", "result", "endedAt", "command"] as const).every((k) => next[k] === prev[k]) &&
+      outputPath === prevPath;
     if (same) return null;
     this.db
       .query(
         `UPDATE subagents SET parent_id = $parentId, description = $description, agent_type = $agentType, prompt = $prompt,
-           status = $status, result = $result, ended_at = $endedAt, updated_at = $t WHERE session_id = $sessionId AND id = $id`,
+           status = $status, result = $result, ended_at = $endedAt, command = $command, output_path = $outputPath, updated_at = $t
+         WHERE session_id = $sessionId AND id = $id`,
       )
       .run({
+        command: next.command ?? null,
+        outputPath,
         sessionId,
         id: prev.id,
         parentId: next.parentId,
@@ -113,6 +141,28 @@ export class SubagentRepo {
         t,
       });
     return this.get(sessionId, prev.id);
+  }
+
+  private outputPath(sessionId: string, id: string): string | null {
+    const r = this.db.query("SELECT output_path FROM subagents WHERE session_id = $sessionId AND id = $id").get({ sessionId, id }) as { output_path: string | null } | null;
+    return r?.output_path ?? null;
+  }
+
+  /** Where a background task's output is (null for an unknown id or an agent). */
+  outputSource(sessionId: string, id: string): TaskOutputSource | null {
+    const r = this.db.query("SELECT * FROM subagents WHERE session_id = $sessionId AND id = $id").get({ sessionId, id }) as SubagentRow | null;
+    if (!r || r.kind === "agent") return null;
+    return {
+      path: r.output_path,
+      snapshot: r.output === null ? null : { text: r.output, start: r.output_start ?? 0, size: r.output_size ?? r.output_start ?? 0 },
+    };
+  }
+
+  /** Keep the tail of a finished task's output (its file may not outlive the CLI's /tmp). */
+  saveOutput(sessionId: string, id: string, snapshot: { text: string; start: number; size: number }) {
+    this.db
+      .query("UPDATE subagents SET output = $text, output_start = $start, output_size = $size WHERE session_id = $sessionId AND id = $id")
+      .run({ sessionId, id, ...snapshot });
   }
 
   /** Mark a run's sub-agents that are still running as stopped (the run ended); returns them. */

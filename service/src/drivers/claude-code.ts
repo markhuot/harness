@@ -3,8 +3,8 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentStatus, ToolResultContent } from "@harness/shared";
+import { dirname, join } from "node:path";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
 
@@ -328,6 +328,31 @@ const ASYNC_LAUNCH = /^\s*Async agent launched/i;
  * "Monitor started (task …".
  */
 const IN_BACKGROUND = /^\s*(Command (running in background|did not complete .* moved to the background)|Monitor started)/i;
+/** Where a background task's output goes, from its tool result ("Output is being written to: …") */
+const OUTPUT_PATH = /Output is being written to: (\S+?\.output)\b/;
+/** The task id in a Monitor's result ("Monitor started (task bm, …") */
+const MONITOR_TASK = /Monitor started \(task ([\w-]+)/i;
+/** The tools whose calls can keep running in the background as tasks (DESIGN.md "Background tasks") */
+const TASK_TOOLS: Record<string, SubagentKind> = { Bash: "bash", Monitor: "monitor" };
+
+/**
+ * The file the CLI writes a task's output to when it doesn't say (a Monitor's result names only
+ * its task): `<tmp>/claude-<uid>/<cwd>/<session>/tasks/<task>.output`, claude 2.1.286.
+ */
+/** `cwd` resolved the way the CLI sees it (/private/var, not /var), or as given when it can't be. */
+function realCwd(cwd: string): string {
+  try {
+    return realpathSync(cwd);
+  } catch {
+    return cwd;
+  }
+}
+
+export function claudeTaskOutputPath(cwd: string, sessionId: string, taskId: string): string {
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  return join(process.env.CLAUDE_CODE_TMPDIR || "/tmp", `claude-${uid}`, slug, sessionId, "tasks", `${taskId}.output`);
+}
 
 /** task_notification / task_updated status → SubagentStatus (running for anything unfinished). */
 function taskStatus(status: unknown): SubagentStatus | null {
@@ -384,6 +409,14 @@ export class StreamJsonParser {
   private tasks = new Map<string, string>();
   /** Tool call id → the CLI task running it (any task type) */
   private taskCalls = new Map<string, string>();
+  /** CLI task id → the tool call it runs (any task type; task_updated names only the task) */
+  private callOfTask = new Map<string, string>();
+  /** Background tasks (Bash, Monitor) reported so far (their tool call ids) */
+  private bgTasks = new Set<string>();
+  /** Tool call id → the description its task_started gave */
+  private taskDescriptions = new Map<string, string>();
+  /** The CLI's tasks folder for this session, from the first output path a result named */
+  private tasksDir: string | null = null;
 
   /**
    * @param baseline the resumed session and its cumulative cost before this run (from state)
@@ -393,6 +426,8 @@ export class StreamJsonParser {
   constructor(
     private readonly baseline: { sessionId: string; costUsd: number } | null = null,
     private readonly permission: { requested: string; mode: PermissionMode } | null = null,
+    /** The CLI's (resolved) working directory, to find a Monitor's output file */
+    private readonly cwd: string | null = null,
   ) {
     this.costBase = baseline;
   }
@@ -403,6 +438,37 @@ export class StreamJsonParser {
   /** Prior cumulative cost of the current session (0 unless it is resumed or ran a turn already). */
   private priorCost(): number {
     return this.costBase && this.costBase.sessionId === this.sessionId ? this.costBase.costUsd : 0;
+  }
+
+  /** Report a Bash or Monitor call as a background task (once; later calls add its output path). */
+  private reportTask(callId: string, events: DriverEvent[], outputPath?: string) {
+    const kind = TASK_TOOLS[this.toolNames.get(callId) ?? ""];
+    if (!kind) return;
+    if (this.bgTasks.has(callId)) {
+      if (outputPath) events.push({ type: "subagent", subagent: { id: callId, outputPath } });
+      return;
+    }
+    this.bgTasks.add(callId);
+    const input = (this.toolInputs.get(callId) ?? {}) as Record<string, unknown>;
+    const command = str(input.command) ?? null;
+    events.push({
+      type: "subagent",
+      subagent: {
+        id: callId,
+        kind,
+        description: str(input.description) || this.taskDescriptions.get(callId) || command || "",
+        command,
+        status: "running",
+        ...(outputPath ? { outputPath } : {}),
+      },
+    });
+  }
+
+  /** A task's output file when its result didn't name it: next to the others, else the CLI's layout. */
+  private outputPathFor(taskId: string): string | undefined {
+    if (this.tasksDir) return join(this.tasksDir, `${taskId}.output`);
+    if (this.cwd && this.sessionId) return claudeTaskOutputPath(this.cwd, this.sessionId, taskId);
+    return undefined;
   }
 
   handle(msg: any): DriverEvent[] {
@@ -434,13 +500,23 @@ export class StreamJsonParser {
       case "system":
         if (msg.subtype === "task_started" && typeof msg.task_id === "string") {
           this.runningTasks.set(msg.task_id, str(msg.description) ?? msg.task_id);
-          if (typeof msg.tool_use_id === "string") this.taskCalls.set(msg.tool_use_id, msg.task_id);
+          if (typeof msg.tool_use_id === "string") {
+            this.taskCalls.set(msg.tool_use_id, msg.task_id);
+            this.callOfTask.set(msg.task_id, msg.tool_use_id);
+          }
         } else if (msg.subtype === "task_notification" || (msg.subtype === "task_updated" && taskStatus(msg.patch?.status))) {
           if (typeof msg.task_id === "string") this.runningTasks.delete(msg.task_id);
         }
-        if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string") {
+        if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string" && TASK_TOOLS[this.toolNames.get(msg.tool_use_id) ?? ""]) {
+          // A Bash or Monitor call: a background task once it's known to be in the background
+          // (task_started says so, or its result does). A long foreground call is a task to the
+          // CLI too, but the transcript already shows it.
           const callId = msg.tool_use_id;
-          // Background Bash commands are tasks too; only agents are sub-agents.
+          if (typeof msg.description === "string") this.taskDescriptions.set(callId, msg.description);
+          if (msg.is_backgrounded === true) this.reportTask(callId, events);
+        } else if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string") {
+          const callId = msg.tool_use_id;
+          // Only agents are sub-agents.
           if (!this.subagents.has(callId) && msg.task_type !== "local_agent") break;
           if (typeof msg.task_id === "string") this.tasks.set(msg.task_id, callId);
           this.subagents.add(callId);
@@ -449,8 +525,22 @@ export class StreamJsonParser {
             subagent: { id: callId, description: str(msg.description), agentType: str(msg.subagent_type), prompt: str(msg.prompt) },
           });
         } else if (msg.subtype === "task_notification" || msg.subtype === "task_updated") {
-          const callId = str(msg.tool_use_id) ?? (typeof msg.task_id === "string" ? this.tasks.get(msg.task_id) : undefined);
+          const callId = str(msg.tool_use_id) ?? (typeof msg.task_id === "string" ? (this.tasks.get(msg.task_id) ?? this.callOfTask.get(msg.task_id)) : undefined);
           const status = taskStatus(msg.subtype === "task_updated" ? msg.patch?.status : msg.status);
+          if (callId && this.bgTasks.has(callId)) {
+            const outputPath = str(msg.output_file) || undefined;
+            if (!status && !outputPath) break;
+            events.push({
+              type: "subagent",
+              subagent: {
+                id: callId,
+                ...(status ? { status } : {}),
+                ...(outputPath ? { outputPath } : {}),
+                ...(status && typeof msg.summary === "string" && msg.summary ? { result: msg.summary } : {}),
+              },
+            });
+            break;
+          }
           if (!callId || !this.subagents.has(callId) || !status) break;
           events.push({ type: "subagent", subagent: { id: callId, status, ...(typeof msg.summary === "string" ? { result: msg.summary } : {}) } });
         } else if (msg.subtype === "init") {
@@ -527,6 +617,12 @@ export class StreamJsonParser {
           // to the background (run_in_background, a Bash timeout, an async agent).
           const task = this.taskCalls.get(callId);
           if (task && !subagentId && !ASYNC_LAUNCH.test(text) && !IN_BACKGROUND.test(text)) this.runningTasks.delete(task);
+          const path = OUTPUT_PATH.exec(text)?.[1];
+          if (path) this.tasksDir ??= dirname(path);
+          if (!subagentId && !block.is_error && TASK_TOOLS[name] && IN_BACKGROUND.test(text)) {
+            const monitorTask = MONITOR_TASK.exec(text)?.[1] ?? task;
+            this.reportTask(callId, events, path ?? (TASK_TOOLS[name] === "monitor" && monitorTask ? this.outputPathFor(monitorTask) : undefined));
+          }
           if (this.subagents.has(callId) && !ASYNC_LAUNCH.test(text)) {
             events.push({ type: "subagent", subagent: { id: callId, status: block.is_error ? "failed" : "succeeded", result: text } });
           }
@@ -761,7 +857,7 @@ export class ClaudeCodeDriver implements Driver {
     const parser = new StreamJsonParser(resume ? { sessionId: resume, costUsd: typeof priorCost === "number" ? priorCost : 0 } : null, {
       requested: planGrants(req, settings).permissionMode,
       mode: req.permissionMode ?? settings.permissionMode,
-    });
+    }, realCwd(req.cwd));
 
     // stdin stays open while the turn runs. Closing it lets the CLI exit after the current
     // turn and kills any background task still running.

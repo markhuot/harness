@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
+  AGENTS_LIVE_LABEL,
   childrenOf,
   COMPOSER_PLACEHOLDER,
   composerHint,
@@ -16,6 +17,8 @@ import {
   parseSubagentTab,
   pluginTabRoute,
   showsAgentsTab,
+  isTask,
+  subagentById,
   subagentsOf,
   subagentTabRoute,
   TAB_LABEL,
@@ -39,7 +42,7 @@ import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
-import { AgentsTab, SubagentView } from "./AgentsTab";
+import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
@@ -248,6 +251,7 @@ export function TicketDetail({
   const wantPlugin = parsePluginTab(paneTab);
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
   const openAgent = parseSubagentTab(tab);
+  const openedTask = openAgent ? isTask(subagentById(state, ticket.sessionId, openAgent) ?? {}) : false;
   const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
@@ -273,7 +277,7 @@ export function TicketDetail({
             {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
             {t === "agents" && (subagents?.length ?? 0) > 0 && <span className="count">{subagents!.length}</span>}
-            {t === "agents" && agentsRunning && <span className="live-dot" title="A sub-agent is running" />}
+            {t === "agents" && agentsRunning && <span className="live-dot" title={AGENTS_LIVE_LABEL} />}
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
@@ -293,7 +297,12 @@ export function TicketDetail({
         {tab === "children" && <ChildrenTab ticket={ticket} />}
         {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
         {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
-        {openAgent && <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />}
+        {openAgent &&
+          (openedTask ? (
+            <TaskView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} />
+          ) : (
+            <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />
+          ))}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
         {tab === "details" && <TicketDetails ticket={ticket} related={related} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}

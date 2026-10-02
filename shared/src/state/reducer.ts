@@ -9,6 +9,7 @@ import type {
   Run,
   Session,
   Subagent,
+  TaskOutput,
   Summary,
   Ticket,
   TicketDetail,
@@ -45,6 +46,8 @@ export interface State {
   transcripts: Record<string, TranscriptState>;
   /** Sub-agents per sessionId, oldest first (from the ticket detail + subagent.upserted) */
   subagents: Record<string, Subagent[]>;
+  /** Background tasks' output as polled so far, keyed by transcriptKey(sessionId, subagentId) */
+  taskOutputs: Record<string, TaskOutputState>;
   /** In-flight streaming assistant text: deltas[sessionId][runId] */
   deltas: Record<string, Record<string, string>>;
   watchers: Record<string, Watcher>;
@@ -76,6 +79,7 @@ export const initialState: State = {
   summaries: {},
   transcripts: {},
   subagents: {},
+  taskOutputs: {},
   deltas: {},
   watchers: {},
   settings: null,
@@ -113,6 +117,8 @@ export type Action =
   /** A transcript backfill: the session agent's, or with `subagentId` one sub-agent's */
   | { type: "transcript"; sessionId: string; subagentId?: string | null; entries: TranscriptEntry[] }
   | { type: "subagents"; sessionId: string; subagents: Subagent[] }
+  /** A slice of a background task's output (GET …/output), appended to what's loaded */
+  | { type: "taskOutput"; sessionId: string; subagentId: string; output: TaskOutput }
   | { type: "summaries"; sessionId: string; summaries: Summary[] }
   | { type: "drivers"; drivers: DriverInfo[] }
   | PagingAction;
@@ -182,6 +188,46 @@ function mergeSubagents(state: State, sessionId: string, incoming: Subagent[]): 
   });
   if (!fresh.length && prev.length) return state.subagents;
   return { ...state.subagents, [sessionId]: mergeById(prev, fresh, subagentOrder) };
+}
+
+/** A background task's output as loaded: the text so far and where to read on from. */
+export interface TaskOutputState {
+  text: string;
+  /** Byte offset the text ends at: the next poll's `offset` */
+  end: number;
+  size: number;
+  done: boolean;
+  available: boolean;
+  /** Earlier output isn't shown (the service sent only the tail, or the client trimmed it) */
+  truncated: boolean;
+}
+
+/** The most output text a client keeps for one task; older lines are dropped past it. */
+export const TASK_OUTPUT_KEEP_CHARS = 512 * 1024;
+
+/**
+ * Fold a slice into the task's output: a slice that starts where the loaded text ends is appended;
+ * one that's already covered (a repeated poll) only updates `done`; anything else (the first read,
+ * or a gap after a burst) replaces it.
+ */
+export function mergeTaskOutput(prev: TaskOutputState | undefined, out: TaskOutput): TaskOutputState {
+  if (!out.available) {
+    return prev ? { ...prev, done: out.done, available: prev.text !== "" } : { text: "", end: out.end, size: 0, done: out.done, available: false, truncated: false };
+  }
+  let next: TaskOutputState;
+  if (prev?.available && out.start === prev.end) {
+    next = { ...prev, text: prev.text + out.text, end: out.end, size: out.size, done: out.done };
+  } else if (prev?.available && out.start < prev.end && out.end <= prev.end) {
+    return prev.done === out.done ? prev : { ...prev, done: out.done };
+  } else {
+    next = { text: out.text, end: out.end, size: out.size, done: out.done, available: true, truncated: out.start > 0 };
+  }
+  if (next.text.length > TASK_OUTPUT_KEEP_CHARS) {
+    const cut = next.text.length - TASK_OUTPUT_KEEP_CHARS;
+    const nl = next.text.indexOf("\n", cut);
+    next = { ...next, text: next.text.slice(nl >= 0 && nl - cut < 4096 ? nl + 1 : cut), truncated: true };
+  }
+  return next;
 }
 
 function clearDelta(deltas: State["deltas"], sessionId: string, runId: string | null): State["deltas"] {
@@ -333,6 +379,12 @@ export function reducer(state: State, action: Action): State {
       return { ...state, transcripts: mergeTranscript(state, transcriptKey(action.sessionId, action.subagentId), action.entries, true) };
     case "subagents":
       return { ...state, subagents: mergeSubagents(state, action.sessionId, action.subagents) };
+    case "taskOutput": {
+      const key = transcriptKey(action.sessionId, action.subagentId);
+      const prev = state.taskOutputs[key];
+      const next = mergeTaskOutput(prev, action.output);
+      return next === prev ? state : { ...state, taskOutputs: { ...state.taskOutputs, [key]: next } };
+    }
     case "summaries":
       return {
         ...state,

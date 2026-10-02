@@ -377,6 +377,10 @@ export interface TranscriptEntry {
  * A sub-agent an agent started inside its own session (Claude Code's Agent / Task tool), not a
  * ticket. Drivers report them with the "subagent" driver event; its conversation is the session's
  * transcript entries carrying its id as `subagentId` (DESIGN.md "Sub-agents").
+ *
+ * A background task (a Bash command or Monitor the agent left running, `kind` "bash" or
+ * "monitor") is reported the same way. It has no conversation: its output is read with
+ * GET /sessions/:id/subagents/:subagentId/output (TaskOutput).
  */
 export interface Subagent {
   /** The id of the tool call that started it (unique within the session) */
@@ -398,10 +402,39 @@ export interface Subagent {
   startedAt: number;
   endedAt: number | null;
   updatedAt: number;
+  /** "agent" (absent from older services), or the kind of background task */
+  kind?: SubagentKind;
+  /** A background task's command (null for agents) */
+  command?: string | null;
+  /** A background task has output to read (GET …/output) */
+  hasOutput?: boolean;
 }
 
 /** stopped: its run ended (cancelled, failed, or the driver never reported an outcome) */
 export type SubagentStatus = "running" | "succeeded" | "failed" | "stopped";
+
+/** agent: a sub-agent; bash / monitor: a background task (a Bash command, a Monitor) */
+export type SubagentKind = "agent" | "bash" | "monitor";
+
+/**
+ * A slice of a background task's output (GET /sessions/:id/subagents/:subagentId/output). Offsets
+ * count bytes of the output. Without `offset` the route sends the tail (up to 256 KB); with one, the
+ * output after it, skipping ahead to the tail when more than that came in since (`start` > the
+ * offset asked for: a gap). Text is UTF-8 with terminal escapes removed.
+ */
+export interface TaskOutput {
+  text: string;
+  /** Where `text` starts in the output */
+  start: number;
+  /** Where it ends: pass it back as `offset` to read on */
+  end: number;
+  /** The output's size so far */
+  size: number;
+  /** The task finished: the output won't grow */
+  done: boolean;
+  /** false when there's no output to read (the file is gone, or the driver never said where it is) */
+  available: boolean;
+}
 
 export type ToolResultContent =
   | { type: "text"; text: string }
