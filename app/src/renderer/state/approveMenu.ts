@@ -1,5 +1,5 @@
-// The Approve (and Complete) split button: its primary choice and its menu, from the shared
-// completion options (shared/src/completion.ts). The component only renders these and runs them.
+// The Approve split button: its primary choice and its menu, from the shared completion options
+// (shared/src/completion.ts). The component only renders these and runs them.
 
 import {
   APPROVE_NO_ACTION_LABEL,
@@ -8,12 +8,7 @@ import {
   completionOptions,
   type CompletionAction,
   type CompletionOptions,
-  type Project,
-  type Ticket,
 } from "@harness/shared";
-
-/** "approve": the human review isn't in yet. "complete": both reviews passed, completion is manual. */
-export type LandMode = "approve" | "complete";
 
 /**
  * What picking a choice does: `run` sends the action right away (no instructions); `sheet` opens the
@@ -34,47 +29,35 @@ export interface LandMenu {
   noAction: LandChoice;
 }
 
-/** An Approve… label for the Complete button: "Approve and merge" → "Complete and merge". */
-const asComplete = (label: string) => label.replace(/^Approve\b/, "Complete");
-
 /**
- * The split button for `ticket`. Approving: the primary runs the preselected action, and a plain
- * "Approve" (custom preselected) runs custom without instructions, a light wrap-up; in the menu
- * "Approve and…" asks for them. `base` is the ticket's effective base branch: a ticket working on
- * it offers no merge or pull request. Completing: the primary opens the sheet (optional instructions for
- * the preselected action), as the Complete button always did.
+ * The split button for `ticket`. The primary runs the preselected action, and a plain "Approve"
+ * (custom preselected) runs custom without instructions, a light wrap-up; in the menu "Approve
+ * and…" asks for them. `base` is the ticket's effective base branch: a ticket working on it offers
+ * no merge or pull request.
  */
 export function landMenu(
-  mode: LandMode,
   ticket: Parameters<typeof completionOptions>[0],
   project: Parameters<typeof completionOptions>[1],
   parent?: Parameters<typeof completionOptions>[2],
   base?: string | null,
 ): LandMenu {
   const opts = completionOptions(ticket, project, parent, base);
-  const label = (l: string) => (mode === "complete" ? asComplete(l) : l);
-  const primaryLabel = mode === "complete" && opts.defaultAction === "custom" ? "Complete" : label(approveLabel(opts));
-  const primary: LandChoice =
-    mode === "complete"
-      ? { kind: "sheet", action: opts.defaultAction, required: false, label: primaryLabel }
-      : { kind: "run", action: opts.defaultAction, label: primaryLabel };
+  const primary: LandChoice = { kind: "run", action: opts.defaultAction, label: approveLabel(opts) };
   const items = opts.actions.map((action): LandChoice =>
-    action === "custom" ? { kind: "sheet", action, required: true, label: label(COMPLETION_ACTION_LABELS.custom) } : { kind: "run", action, label: label(COMPLETION_ACTION_LABELS[action]) },
+    action === "custom" ? { kind: "sheet", action, required: true, label: COMPLETION_ACTION_LABELS.custom } : { kind: "run", action, label: COMPLETION_ACTION_LABELS[action] },
   );
-  return { opts, primary, items, noAction: { kind: "none", label: label(APPROVE_NO_ACTION_LABEL) } };
+  return { opts, primary, items, noAction: { kind: "none", label: APPROVE_NO_ACTION_LABEL } };
 }
 
 /**
- * The split button as palette commands: the primary (ticket.approve / ticket.complete, labeled as
- * the button reads; completing opens the sheet, hence the "…"), then each menu choice by action
- * (ticket.land.merge, .pr, .cleanup, .custom), leaving out the one the primary already names. "Take no action"
- * is ticket.approveNoAction.
+ * The split button as palette commands: the primary (ticket.approve, labeled as the button reads),
+ * then each menu choice by action (ticket.land.merge, .pr, .cleanup, .custom), leaving out the one
+ * the primary already names. "Take no action" is ticket.approveNoAction.
  */
-export function landCommands(menu: LandMenu, mode: LandMode): { primary: string; others: Partial<Record<CompletionAction, LandChoice>> } {
-  const primary = mode === "complete" ? `${menu.primary.label}…` : menu.primary.label;
+export function landCommands(menu: LandMenu): { primary: string; others: Partial<Record<CompletionAction, LandChoice>> } {
   const others: Partial<Record<CompletionAction, LandChoice>> = {};
   for (const c of menu.items) if (c.kind !== "none" && c.label !== menu.primary.label) others[c.action] = c;
-  return { primary, others };
+  return { primary: menu.primary.label, others };
 }
 
 /** A pull request link's short label: "PR #42" from a …/pull/42 (GitHub) or …/merge_requests/42 URL, else "PR". */

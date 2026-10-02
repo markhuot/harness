@@ -298,8 +298,36 @@ try {
     return t.humanReview === "approved" && t;
   });
   check("approving before the agent review leaves the ticket in review", waiting.status === "review" && waiting.agentReview === "pending", JSON.stringify(waiting));
+  // Approved and waiting on the agent: nothing to press (this is where a Complete button used to sit).
+  const actionsWhileWaiting = await until("approved actions", async () => {
+    const labels = await js<string[]>(`[...document.querySelectorAll(".actions button")].map(b => b.textContent.trim())`);
+    return !labels.some((l) => l.startsWith("Approve")) && labels;
+  });
+  check("an approved ticket shows no Approve or Complete while the agent review runs", !!actionsWhileWaiting && !actionsWhileWaiting.some((l) => l.startsWith("Complete")), String(actionsWhileWaiting));
   const earlyDone = await until("early done", async () => (await earlyT()).status === "done", 10000);
   check("the agent's approval then completes the ticket by itself", earlyDone);
+
+  // 4b'. Cancelling the completion puts the approval back: Approve shows again and lands it.
+  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Cancel my completion" });
+  const stoppedT = async () => (await api<{ ticket: EarlyT & { busy: boolean } }>("GET", `/tickets/${stopped.key}`)).ticket;
+  await until("stopped ticket agent-approved", async () => {
+    const t = await stoppedT();
+    return t.status === "review" && t.agentReview === "approved" && !t.busy;
+  }, 15000);
+  await js(`location.hash = "#/board/all/ticket/${stopped.key}"`);
+  await until("approve split", () => exists("[data-testid=approve-primary]"));
+  await js(`document.querySelector("[data-testid=approve-primary]").click()`);
+  await until("completion running", async () => (await stoppedT()).busy);
+  await until("cancel run button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Cancel run"))`));
+  await clickText(".actions button", "Cancel run");
+  const approvalBack = await until("approval back", async () => {
+    const t = await stoppedT();
+    return t.humanReview === "pending" && t;
+  });
+  check("cancelling the completion leaves the ticket in review with the approval open", approvalBack.status === "review" && approvalBack.agentReview === "approved", JSON.stringify(approvalBack));
+  check("Approve shows again after a cancelled completion", !!(await until("approve again", () => exists("[data-testid=approve-primary]"))));
+  await js(`document.querySelector("[data-testid=approve-primary]").click()`);
+  check("approving again lands it", await until("stopped done", async () => (await stoppedT()).status === "done", 10000));
 
   // 4c. The Approve split button: its menu follows the checkout (a gh remote: merge / PR / …; plain
   // git: no PR; no git: a plain Approve), "Approve and…" asks for instructions, "Approve and take
@@ -964,14 +992,14 @@ try {
     check("approval child shows the tool it waits on", notes["HARNESS-8"] === "Needs approval: Bash|waiting onHARNESS-2", notes["HARNESS-8"]);
     check("blocked child shows its question and done dep", notes["HARNESS-7"]!.startsWith("Which Apple Developer team") && notes["HARNESS-7"]!.endsWith("|afterHARNESS-5"), notes["HARNESS-7"]);
 
-    // A child's conductor approves and lands it: Approve (and Complete) read as usual but are off,
-    // the menu too, and the palette doesn't offer them.
-    const landState = (mode: string) =>
+    // A child's conductor approves and lands it: Approve reads as usual but is off, the menu too,
+    // and the palette doesn't offer it.
+    const landState = () =>
       js<{ label: string; disabled: boolean; menu: boolean; title: string }>(
-        `(() => { const p = document.querySelector("[data-testid=${mode}-primary]"); return p && { label: p.textContent.trim(), disabled: p.disabled, menu: document.querySelector("[data-testid=${mode}-menu]").disabled, title: p.title }; })()`,
+        `(() => { const p = document.querySelector("[data-testid=approve-primary]"); return p && { label: p.textContent.trim(), disabled: p.disabled, menu: document.querySelector("[data-testid=approve-menu]").disabled, title: p.title }; })()`,
       );
     await js(`location.hash = "#/board/all/ticket/HARNESS-10"`);
-    const managedApprove = await until("conductor child approve", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-10"`)) && landState("approve"));
+    const managedApprove = await until("conductor child approve", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-10"`)) && landState());
     check(
       "a conductor child's Approve reads Approve and merge, disabled with its menu, saying the conductor manages it",
       !!managedApprove && managedApprove.label === "Approve and merge" && managedApprove.disabled && managedApprove.menu && managedApprove.title === "Conductor managed: HARNESS-1 approves and lands this ticket",
@@ -979,13 +1007,12 @@ try {
     );
     await screenshot("/tmp/harness-160-conductor-child-approve.png");
     await js(`location.hash = "#/board/all/ticket/HARNESS-2"`);
-    const managedComplete = await until("conductor child complete", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-2"`)) && landState("complete"));
+    const managedReady = await until("ready conductor child", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-2"`)) && landState());
     check(
-      "a ready conductor child's Complete is disabled with its menu, saying the conductor manages it",
-      !!managedComplete && managedComplete.disabled && managedComplete.menu && managedComplete.title.startsWith("Conductor managed: HARNESS-1"),
-      JSON.stringify(managedComplete),
-    );
-    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+      "a ready conductor child keeps its Approve, disabled with its menu, saying the conductor manages it",
+      !!managedReady && managedReady.disabled && managedReady.menu && managedReady.title.startsWith("Conductor managed: HARNESS-1"),
+      JSON.stringify(managedReady),
+    );    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
     await until("back on the conductor's tickets", async () => (await rowKeys()).length >= 7);
 
     // Live: a new child (ticket.upserted) appears, and a status change regroups an existing one.

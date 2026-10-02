@@ -136,15 +136,16 @@ you answer.
 - Once both reviews approve, a final agent step runs on its own, lands the work the way you
   chose, and moves the ticket to Done. **Approve and take no action** is the way to approve
   without landing anything. To hold the work back for now, leave the ticket in Review until
-  you're ready to approve it.
+  you're ready to approve it. If that final step is cancelled or cut off by a restart, the
+  ticket goes back to waiting on your approval, and approving again lands it.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.
   Any ticket can become one: ask a ticket's agent for child tickets and it creates them
   under itself, then reviews and completes them the same way. Children branch from the
   conductor's branch and merge back into it, so the goal lands in one piece when you approve the
-  conductor. A child's Approve and Complete buttons stay off while its conductor runs, because the
-  conductor approves and lands it.
+  conductor. A child's Approve button stays off while its conductor runs, because the conductor
+  approves and lands it.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in

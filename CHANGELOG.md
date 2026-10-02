@@ -15,11 +15,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Settings → Drivers to open its sign-in and review model. On iPhone and iPad, tap a driver to
   open its own screen. The Anthropic API key moved from General into the Anthropic API driver.
 - The default model now sits right below the driver list, and the separate Models section is gone.
-- A conductor's child tickets no longer show "Approve and merge into <branch>". Their Approve and
-  Complete buttons read as usual ("Approve and merge") but are turned off, menu included. On the
-  Mac, the tooltip says the ticket is conductor managed. On iPhone and iPad, a note under the
-  buttons says so. The conductor approves and lands its children itself. Once the conductor is
-  done, the buttons work again.
+- A conductor's child tickets no longer show "Approve and merge into <branch>". Their Approve
+  button reads as usual ("Approve and merge") but is turned off, menu included. On the Mac, the
+  tooltip says the ticket is conductor managed. On iPhone and iPad, a note under the button says
+  so. The conductor approves and lands its children itself. Once the conductor is done, the
+  button works again, and approving a child the conductor had already approved lands it.
 
 ### Removed
 
@@ -31,6 +31,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   reviewer approves it, so turn that switch on if you want to sign off yourself. Update the
   iPhone and iPad app along with the Mac: older versions can't read projects from the new
   service.
+- The **Complete** button, its menu and its sheet are gone from tickets on the Mac, iPhone and
+  iPad, along with the ⌘K "Complete…" command. Approve is the only way to land a ticket. If its
+  final step is cancelled or cut off by a restart, the ticket goes back to waiting on your
+  approval, with your earlier choice preselected, and approving again lands it. Tickets that were
+  sitting approved and waiting on Complete when you update go back to waiting on Approve.
 
 ### Fixed
 

@@ -1616,6 +1616,11 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "cancel": {
           const r = activeRun(t.sessionId);
           if (r) finishRun(r, "cancelled");
+          // Mirrors Orchestrator.completionStopped: a stopped completion puts the approval back.
+          if (r?.kind === "complete" && t.status === "review" && t.humanReview === "approved") {
+            t.humanReview = "pending";
+            appendEntry(t.sessionId, r.id, "system", { type: "status", text: "Completion cancelled: approve again to land it" });
+          }
           t.busy = false;
           upsertTicket(t);
           return ok(t);

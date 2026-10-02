@@ -1,52 +1,42 @@
-// The ticket's Approve / Complete split button (how the approved work lands) and the sheet that
-// asks for completion instructions. The choices come from state/approveMenu.ts.
+// The ticket's Approve split button (how the approved work lands) and the sheet that asks for
+// completion instructions. The choices come from state/approveMenu.ts.
 
 import { useState } from "react";
 import { keyLabel, type CompletionAction, type Ticket } from "@harness/shared";
-import { Icon, type IconName } from "./Icon";
+import { Icon } from "./Icon";
 import { MenuButton, MOD, Modal } from "./bits";
-import type { LandChoice, LandMenu, LandMode } from "../state/approveMenu";
+import type { LandChoice, LandMenu } from "../state/approveMenu";
 
 export function LandButton({
   menu,
-  mode,
-  icon,
-  primaryClass = "btn-primary",
-  disabled = false,
   locked = false,
   title,
   onChoose,
 }: {
   menu: LandMenu;
-  mode: LandMode;
-  icon: IconName;
-  primaryClass?: string;
-  /** The primary half and the menu's action choices; the take-no-action choice stays available. */
-  disabled?: boolean;
   /** Everything disabled, the menu too: a conductor approves and lands the ticket (`title` says so). */
   locked?: boolean;
   title?: string;
   onChoose: (choice: LandChoice) => void;
 }) {
-  const noun = mode === "approve" ? "approve" : "complete";
   return (
-    <div className="split-btn" role="group" aria-label={mode === "approve" ? "Approve" : "Complete"} title={locked ? title : undefined} data-testid={`${mode}-split`}>
-      <button className={`btn ${primaryClass} split-btn-main`} disabled={disabled || locked} title={title} onClick={() => onChoose(menu.primary)} data-testid={`${mode}-primary`}>
-        <Icon name={icon} strokeWidth={mode === "approve" ? 2.25 : undefined} /> {menu.primary.label}
+    <div className="split-btn" role="group" aria-label="Approve" title={locked ? title : undefined} data-testid="approve-split">
+      <button className="btn btn-primary split-btn-main" disabled={locked} title={title} onClick={() => onChoose(menu.primary)} data-testid="approve-primary">
+        <Icon name="check" strokeWidth={2.25} /> {menu.primary.label}
       </button>
       <MenuButton
         className="split-btn-more"
-        menuClassName={`land-menu land-menu-${mode}`}
+        menuClassName="land-menu land-menu-approve"
         align="left"
         trigger={(toggle, open) => (
           <button
-            className={`btn ${primaryClass} split-btn-chevron`}
+            className="btn btn-primary split-btn-chevron"
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={`Other ways to ${noun}`}
-            title={locked ? title : `Other ways to ${noun}`}
+            aria-label="Other ways to approve"
+            title={locked ? title : "Other ways to approve"}
             disabled={locked}
-            data-testid={`${mode}-menu`}
+            data-testid="approve-menu"
             onClick={toggle}
           >
             <Icon name="chevronDown" strokeWidth={2.25} />
@@ -56,7 +46,7 @@ export function LandButton({
         {(close) => (
           <>
             {menu.items.map((c) => (
-              <button key={c.label} role="menuitem" disabled={disabled} data-action={c.kind === "none" ? "none" : c.action} onClick={() => (close(), onChoose(c))}>
+              <button key={c.label} role="menuitem" data-action={c.kind === "none" ? "none" : c.action} onClick={() => (close(), onChoose(c))}>
                 <Icon name={c.kind !== "none" && c.action === "pr" ? "branch" : c.kind !== "none" && c.action === "cleanup" ? "trash" : c.kind === "sheet" ? "edit" : "check"} /> {c.label}
               </button>
             ))}
@@ -73,7 +63,6 @@ export function LandButton({
 
 /** The sheet a `sheet` choice opens. */
 export interface LandSheetState {
-  mode: LandMode;
   action: CompletionAction;
   required: boolean;
 }
@@ -108,12 +97,11 @@ export function LandSheet({
     setBusy(false);
     if (ok) onClose();
   };
-  const verb = sheet.mode === "approve" ? "Approve" : "Complete";
   return (
     <Modal onClose={onClose}>
       <div className="modal-head">
         <strong>
-          {verb} {keyLabel(ticket)}
+          Approve {keyLabel(ticket)}
         </strong>
       </div>
       <div className="modal-body" data-testid="land-sheet" data-action={sheet.action}>
@@ -136,7 +124,7 @@ export function LandSheet({
           Cancel
         </button>
         <button className="btn btn-primary" disabled={blocked} onClick={submit}>
-          {verb} <span className="kbd">{MOD}↩</span>
+          Approve <span className="kbd">{MOD}↩</span>
         </button>
       </div>
     </Modal>
