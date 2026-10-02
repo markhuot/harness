@@ -33,8 +33,8 @@ try {
   await until("board", () => js<boolean>(`!!document.querySelector(".card")`), 15000);
 
   const leaf = (id: string, content: object) => ({ type: "leaf", id, content });
-  const A = leaf("a", { kind: "ticket", ticketKey: "NYTIMES-4", tab: "summaries" });
-  const C = leaf("c", { kind: "ticket", ticketKey: "NYTIMES-5", tab: "summaries" });
+  const A = leaf("a", { kind: "ticket", ticketKey: "NYTIMES-4", tab: "spec" });
+  const C = leaf("c", { kind: "ticket", ticketKey: "NYTIMES-5", tab: "spec" });
   const layout = (sizes: number[], children = [leaf("b", { kind: "board" }), A, C]) => ({ root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId: null, zoomedId: null });
   const setPanes = async (st: object) => {
     await js(`localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": st } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`);

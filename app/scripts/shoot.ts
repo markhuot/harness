@@ -61,7 +61,7 @@ const layout = (l: object) =>
 // The pane store follows storage events too. Board | tickets, each ticket in its own pane, on the
 // All projects board ("*": every board has its own panes).
 const board = { type: "leaf", id: "b", content: { kind: "board" } };
-const ticketPane = (id: string, ticketKey: string, tab = "summaries") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
+const ticketPane = (id: string, ticketKey: string, tab = "spec") => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab } });
 const panes = (children: object[], sizes: number[], focusedId: string) =>
   `localStorage.setItem("harness.panes", ${JSON.stringify(JSON.stringify({ scopes: { "*": { root: { type: "split", id: "r", dir: "row", children, sizes }, focusedId, zoomedId: null } } }))}); dispatchEvent(new StorageEvent("storage", { key: "harness.panes" }))`;
 // Starts dragging a card and holds it over a pane (fx/fy of the way across it) so the drop preview

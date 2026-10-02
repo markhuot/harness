@@ -55,7 +55,7 @@ try {
     s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
   await type(".new-session-prompt", "hello world");
   await cmdEnter();
-  const created = await until("ticket created", async () => (await api<Ticket[]>("GET", "/tickets")).find((t) => t.description.includes("hello world")));
+  const created = await until("ticket created", async () => (await api<Ticket[]>("GET", "/tickets")).find((t) => t.spec.includes("hello world")));
   check("composer created a dummy ticket", created.driver === "dummy", `${created.key} driver=${created.driver}`);
 
   // --- 2. Live stream with caret while in progress.
@@ -80,14 +80,14 @@ try {
   const persisted = await until("streamed text replaced by entry", async () => !(await exists(".t-assistant.streaming")) && (await exists(".t-assistant")));
   check("streaming preview replaced by the persisted message", persisted);
   const toolRows = await js<string[]>(`[...document.querySelectorAll(".t-tool-name")].map(e => e.textContent)`);
-  check("tool calls render in the transcript", toolRows.some((n) => /submit_for_review|post_summary/.test(n)), toolRows.join(","));
+  check("tool calls render in the transcript", toolRows.some((n) => /submit_for_review|post_note/.test(n)), toolRows.join(","));
   await shot("2-transcript");
 
-  // --- 4. Summaries tab, then Approve → the complete run starts by itself → Done.
-  await go(`#/board/${project.id}/ticket/${created.key}`);
-  await until("summaries", () => exists(".summary"));
-  const summaryText = await js<string>(`document.querySelector(".summary-list")?.textContent ?? ""`);
-  check("agent summaries render", summaryText.length > 10, summaryText.slice(0, 80));
+  // --- 4. Activity tab, then Approve → the complete run starts by itself → Done.
+  await go(`#/board/${project.id}/ticket/${created.key}/activity`);
+  await until("activity", () => exists(".activity-list"));
+  const activityText = await js<string>(`document.querySelector(".activity-list")?.textContent ?? ""`);
+  check("the ticket's Activity renders", activityText.length > 10, activityText.slice(0, 80));
   await shot("3-review");
   check("Approve clicked", await until("Approve button", () => clickText(".actions button", "Approve")));
   const done = await until("ticket done", async () => (await api<TicketDetail>("GET", `/tickets/${created.key}`)).ticket.status === "done", 30000);
@@ -102,7 +102,7 @@ try {
   await shot("5-done");
 
   // --- 5. Browser: a /browse ticket drives real headless Chrome; JPEG frames render.
-  const browse = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "/browse https://example.com", driver: "dummy", start: true });
+  const browse = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "/browse https://example.com", driver: "dummy", start: true });
   await go(`#/board/${project.id}/ticket/${browse.key}/browser`);
   const frame = await until(
     "browser frame drawn",
@@ -131,7 +131,7 @@ try {
   await checkAgentsTab({ api, app, check, shot, project });
 
   // --- 8. A plain task ticket asked for a child conducts it: badge, rollup and Tickets tab, live.
-  const parent = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Audit the PRs /child Rebase the PR", driver: "dummy", start: true });
+  const parent = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Audit the PRs /child Rebase the PR", driver: "dummy", start: true });
   await go(`#/board/${project.id}/ticket/${parent.key}`);
   const kid = await until("child created", async () => (await api<TicketDetail>("GET", `/tickets/${parent.key}`)).children[0], 15000);
   check("the task ticket's child has it as parent", kid.parentId === parent.id && kid.title === "Rebase the PR", `${kid.key} parent=${kid.parentId}`);

@@ -22,7 +22,7 @@ export async function checkBrowserTabs(opts: { api: Api; app: App; check: Check;
     { name: "browser_open", input: { url: page("Gamma", "#33c"), new_tab: true } },
     { name: "browser_eval", input: { expression: "document.title", tab: 2 } },
   ];
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `/tools ${JSON.stringify(calls)}`, driver: "dummy", start: true });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `/tools ${JSON.stringify(calls)}`, driver: "dummy", start: true });
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
 
   const chips = () => js<string[]>(`[...document.querySelectorAll(".browser-tab-select")].map(e => e.textContent.trim())`);

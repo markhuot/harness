@@ -166,7 +166,7 @@ try {
 
     // A live completion goes to the top and counts.
     const nyId = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!.id;
-    const liveT = await api<{ key: string }>("POST", "/tickets", { projectId: nyId, prompt: "Ship the live completion check", start: false });
+    const liveT = await api<{ key: string }>("POST", "/tickets", { projectId: nyId, spec: "Ship the live completion check", start: false });
     await api("PATCH", `/tickets/${liveT.key}`, { status: "done" });
     const top = await until("live completion prepends", async () => {
       const k = await doneKeys();
@@ -283,7 +283,7 @@ try {
   // 4b. Approving before the agent review is in: the ticket waits in review, and the agent's
   // approval then completes it with no Complete step.
   const nyProject = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!;
-  const early = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Approve before the agent review" });
+  const early = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Approve before the agent review" });
   type EarlyT = { status: string; agentReview: string; humanReview: string };
   const earlyT = async () => (await api<{ ticket: EarlyT }>("GET", `/tickets/${early.key}`)).ticket;
   await until("early ticket in review, agent review running", async () => {
@@ -308,7 +308,7 @@ try {
   check("the agent's approval then completes the ticket by itself", earlyDone);
 
   // 4b'. Cancelling the completion puts the approval back: Approve shows again and lands it.
-  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Cancel my completion" });
+  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Cancel my completion" });
   const stoppedT = async () => (await api<{ ticket: EarlyT & { busy: boolean } }>("GET", `/tickets/${stopped.key}`)).ticket;
   await until("stopped ticket agent-approved", async () => {
     const t = await stoppedT();
@@ -340,10 +340,10 @@ try {
     const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: "/tmp/smoke-plain-git", key: "PLAIN", name: "plain-git" });
     check("a git project without a PR host offers merge, cleanup and custom", plain.completionActions?.join(",") === "merge,cleanup,custom", String(plain.completionActions));
     const [ghT, plainT, siteT] = await Promise.all(
-      [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, prompt: "Land me" })),
+      [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, spec: "Land me" })),
     );
     // A ticket that ran in the project checkout: no branch of its own to merge or open a PR from.
-    const checkoutT = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Land me in place", useWorktree: false });
+    const checkoutT = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Land me in place", useWorktree: false });
     for (const t of [ghT!, plainT!, siteT!, checkoutT]) {
       await until(`${t.key} ready for human review`, async () => {
         const x = await getT(t.key);
@@ -487,7 +487,7 @@ try {
   // 5. New session (DESIGN.md "Drafts"): ⌘N opens a New session pane beside the board; nothing is
   // saved until it has something in it, then it's a draft ticket (planning, no run) edited in the
   // same pane; Close asks Save / Discard; ⌘↩ starts it, ⇧⌘↩ plans it first.
-  type DT = { key: string; title: string; status: string; draft?: boolean; driver: string; model: string | null; permissionMode: string | null; useWorktree: boolean | null; description: string };
+  type DT = { key: string; title: string; status: string; draft?: boolean; driver: string; model: string | null; permissionMode: string | null; useWorktree: boolean | null; spec: string };
   const allTickets = () => api<DT[]>("GET", "/tickets");
   const draftList = async () => (await allTickets()).filter((t) => t.draft);
   const cmdN = () => app!.key("n", "KeyN", 78, 4);
@@ -666,7 +666,7 @@ try {
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   await until("saved and closed", async () => !(await exists(`[data-pane-id="${printId}"]`)));
   const kept = (await api<{ ticket: DT }>("GET", `/tickets/${printDraft.key}`)).ticket;
-  check("Close → Save draft keeps it", kept.draft === true && kept.description === "Add a print stylesheet for recipe cards", JSON.stringify({ draft: kept.draft }));
+  check("Close → Save draft keeps it", kept.draft === true && kept.spec === "Add a print stylesheet for recipe cards", JSON.stringify({ draft: kept.draft }));
   await js(`document.querySelector('.card[data-key="${printDraft.key}"]').focus()`);
   await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
@@ -687,14 +687,14 @@ try {
   const tossed = await until("draft discarded", async () => !(await allTickets()).some((t) => t.key === toss.key));
   check("Close → Discard draft deletes it and closes the pane", tossed && !(await exists(`[data-pane-id="${tossId}"]`)));
 
-  // ⇧⌘↩ plans first: planning, not a draft, on Summaries.
+  // ⇧⌘↩ plans first: planning, not a draft, on the Spec.
   const planId = await newCompose();
   await typeIn(planId, "Plan the paywall migration");
   await app!.key("Enter", "Enter", 13, 4 | 8);
   const planned = await until("planned", async () => (await allTickets()).find((t) => t.title.includes("paywall migration") && t.draft === false));
   check("⇧⌘↩ submits it to plan first (planning)", planned.status === "planning", `${planned.key} ${planned.status}`);
   const planTab = await until("planned pane", () => js<string | null>(`document.querySelector('${inPane(planId, ".tabs [aria-selected=true]")}')?.dataset.tab ?? null`));
-  check("…and its pane shows the summaries", planTab === "summaries", String(planTab));
+  check("…and its pane shows the spec", planTab === "spec", String(planTab));
   await js(`document.querySelector('${inPane(planId, "[data-testid=pane-close]")}').click()`);
 
   // Picking the project directory's own branch means no worktree (useWorktree false).
@@ -730,7 +730,7 @@ try {
   const rl = await savedDraft(rlId, "Reload mid-debounce");
   await typeIn(rlId, "Reload mid-debounce, then keep this");
   await js(`location.reload()`);
-  const survived = await until("edit saved across the reload", async () => (await api<{ ticket: DT }>("GET", `/tickets/${rl.key}`)).ticket.description === "Reload mid-debounce, then keep this");
+  const survived = await until("edit saved across the reload", async () => (await api<{ ticket: DT }>("GET", `/tickets/${rl.key}`)).ticket.spec === "Reload mid-debounce, then keep this");
   check("an edit made just before a reload is saved anyway", survived);
   await until("app back after reload", () => exists(".board-pane .card"), 15000);
   await api("DELETE", `/tickets/${rl.key}`);
@@ -770,7 +770,7 @@ try {
   check("mid-run the Model combobox keeps the ticket's driver (its models only, no Default)", busyRows.join(",") === "Dummy Fast,Dummy Slow", busyRows.join(","));
   await comboClose();
   // Between runs: a planning ticket on Dummy lists every driver, and Default moves it back to the project's.
-  const idle = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Pick a model between runs", start: false, driver: "dummy", model: "dummy-slow" });
+  const idle = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Pick a model between runs", start: false, driver: "dummy", model: "dummy-slow" });
   await until("plan run finished", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${idle.key}`)).ticket.busy, 15000);
   await js(`location.hash = "#/board/all/ticket/${idle.key}/details"`);
   await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=driver-model-select]")`));
@@ -1069,7 +1069,7 @@ try {
     await until("back on the conductor's tickets", async () => (await rowKeys()).length >= 7);
 
     // Live: a new child (ticket.upserted) appears, and a status change regroups an existing one.
-    const fresh = await api<CT>("POST", "/tickets", { projectId: hxId, parentId: conductor.id, prompt: "Write the release notes", start: false, dependsOn: ["HARNESS-7"] });
+    const fresh = await api<CT>("POST", "/tickets", { projectId: hxId, parentId: conductor.id, spec: "Write the release notes", start: false, dependsOn: ["HARNESS-7"] });
     const grown = await until("new child row", async () => {
       const k = await rowKeys();
       return k.length === 8 && (await tabCount()) === "8" && k;
@@ -1098,21 +1098,23 @@ try {
     const plainTab = await until("plain ticket tabs", () =>
       js<string>(`location.hash.includes("HARNESS-6") && document.querySelector(".tab.on")?.dataset.tab`),
     );
-    check("plain tickets have no Tickets tab (the route falls back to Summaries)", plainTab === "summaries" && !(await exists(".tab[data-tab=children]")), plainTab);
+    check("plain tickets have no Tickets tab (the route falls back to the Spec)", plainTab === "spec" && !(await exists(".tab[data-tab=children]")), plainTab);
 
-    // With no tab asked for, a ticket opens on Summaries when it has some, and on the Transcript when not.
+    // With no tab asked for, every ticket opens on its Spec, whether or not it has Activity yet.
     const openedTab = (key: string) => until(`${key} opening tab`, () => js<string>(`document.querySelector(".detail-key")?.textContent === "${key}" && document.querySelector(".tab.on")?.dataset.tab`));
     await js(`location.hash = "#/board/all/ticket/HARNESS-4"`);
-    check("a ticket with summaries opens on Summaries", (await openedTab("HARNESS-4")) === "summaries");
+    check("a ticket with Activity opens on the Spec", (await openedTab("HARNESS-4")) === "spec");
     await js(`location.hash = "#/board/all/ticket/HARNESS-3"`);
-    const emptyTab = await until("HARNESS-3 on Transcript", () => js<string>(`document.querySelector(".detail-key")?.textContent === "HARNESS-3" && document.querySelector(".tab.on")?.dataset.tab === "transcript" && "transcript"`)).catch(() => null);
-    check("a ticket without summaries opens on the Transcript", emptyTab === "transcript", String(emptyTab));
-    await js(`document.querySelector(".tab[data-tab=summaries]").click()`);
+    check("a ticket without Activity opens on the Spec too", (await openedTab("HARNESS-3")) === "spec");
+    await js(`document.querySelector(".tab[data-tab=activity]").click()`);
     await Bun.sleep(300);
-    check("clicking Summaries on it stays there", (await js<string>(`document.querySelector(".tab.on")?.dataset.tab`)) === "summaries");
+    check("clicking Activity on it stays there", (await js<string>(`document.querySelector(".tab.on")?.dataset.tab`)) === "activity");
+    // An old link to the Summaries tab opens the Spec.
+    await js(`location.hash = "#/board/all/ticket/HARNESS-4/summaries"`);
+    check("an old …/summaries link opens the Spec", (await openedTab("HARNESS-4")) === "spec");
 
     // Empty conductor.
-    const empty = await api<CT>("POST", "/tickets", { projectId: hxId, kind: "conductor", prompt: "Plan the 1.0 launch", start: false });
+    const empty = await api<CT>("POST", "/tickets", { projectId: hxId, kind: "conductor", spec: "Plan the 1.0 launch", start: false });
     await js(`location.hash = "#/board/all/ticket/${empty.key}/children"`);
     const emptyText = await until("children empty state", () => js<string>(`document.querySelector("[data-testid=children-empty]")?.textContent ?? ""`));
     check("empty conductor explains there are no tickets yet", emptyText.includes("The conductor hasn't created any tickets yet."), emptyText);
@@ -1317,7 +1319,7 @@ try {
     check("double-clicking the divider makes the panes equal", near(await width(".pane-ticket"), ws / 2) && near(await width(".pane-board"), ws / 2), `${await width(".pane-board")} | ${await width(".pane-ticket")}`);
 
     // Two tickets side by side (stored state), the hash mirroring the focused one; zoom; close.
-    const ticketLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "summaries" } });
+    const ticketLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "spec" } });
     await setPanes({
       root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, ticketLeaf("t1", "NYTIMES-4"), ticketLeaf("t2", "NYTIMES-3")], sizes: [0.4, 0.3, 0.3] },
       focusedId: "t2",
@@ -1548,7 +1550,7 @@ try {
     // arrows) stays inside the window, and no titlebar runs into the pane next to it. Then a pane
     // stacked at the bottom opens its menu upward, still inside the window.
     await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-    const tLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "summaries" } });
+    const tLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "spec" } });
     await setPanes({
       root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, tLeaf("n1", "NYTIMES-4"), tLeaf("n2", "NYTIMES-3"), tLeaf("n3", "NYTIMES-1")], sizes: [0.25, 0.25, 0.25, 0.25] },
       focusedId: "n3",
@@ -1674,7 +1676,7 @@ try {
 
     // Stored sizes are clamped to the panes' minimums when laid out: a sliver renders at 360px.
     await setPanes({
-      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "leaf", id: "t1", content: { kind: "ticket", ticketKey: "NYTIMES-4", tab: "summaries" } }], sizes: [0.97, 0.03] },
+      root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "leaf", id: "t1", content: { kind: "ticket", ticketKey: "NYTIMES-4", tab: "spec" } }], sizes: [0.97, 0.03] },
       focusedId: null,
       zoomedId: null,
     });
@@ -1786,8 +1788,8 @@ try {
 
     // ⇧⌘] / ⇧⌘[ walk the tabs and wrap; a digit jumps to that tab.
     const tabs = await js<string[]>(`[...document.querySelectorAll(".pane.active .tabs [role=tab]")].map(t => t.dataset.tab ?? t.dataset.pluginTab)`);
-    // Settle the opening tab first: a ticket without summaries moves on to its Transcript.
-    await until("opening tab", async () => (await active()).tab !== "summaries" || (await exists(".pane.active .tab[data-tab=summaries] .count")));
+    // Every ticket opens on its Spec.
+    await until("opening tab", async () => (await active()).tab === "spec");
     const t0 = (await active()).tab;
     await press.nextTab();
     const t1 = await until("next tab", async () => ((await active()).tab !== t0 ? (await active()).tab : null)).catch(() => null);
@@ -2032,18 +2034,19 @@ try {
     await setPanes(boardOnly);
   }
 
-  // 6d. Transcript and summaries stay scrolled to the bottom until the user scrolls up, and pick
-  // it back up when they return. A short window makes a few messages overflow.
+  // 6d. Transcript and Activity stay scrolled to the bottom until the user scrolls up, and pick
+  // it back up when they return. A short window makes a few messages overflow. The messages are
+  // logged (as from the Spec tab), so each one and its answer land in Activity too.
   {
     const { go } = app;
     await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 560, deviceScaleFactor: 1, mobile: false });
-    const say = (n: number) => api("POST", "/tickets/NYTIMES-1/messages", { text: `Stick check ${n}. ` + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10) });
+    const say = (n: number) => api("POST", "/tickets/NYTIMES-1/messages", { text: `Stick check ${n}. ` + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10), log: true });
     const metrics = (sel: string) =>
       js<{ top: number; gap: number; overflow: boolean }>(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
         return { top: Math.round(el.scrollTop), gap: Math.round(el.scrollHeight - el.scrollTop - el.clientHeight), overflow: el.scrollHeight > el.clientHeight + 100 }; })()`);
     const scrollTo = (sel: string, top: string) => js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.scrollTop = ${top}; })()`);
     const shows = (sel: string, text: string) => js<boolean>(`!!document.querySelector(${JSON.stringify(sel)})?.textContent.includes(${JSON.stringify(text)})`);
-    const summaryCount = () => js<number>(`document.querySelectorAll(".summaries .summary").length`);
+    const entryCount = () => js<number>(`document.querySelectorAll(".activity .activity-entry").length`);
 
     await go("#/board/all/ticket/NYTIMES-1/transcript");
     await until("transcript", () => exists(".transcript"));
@@ -2073,27 +2076,27 @@ try {
     const shrunk = await metrics(".transcript");
     check("a shorter window keeps a pinned transcript at the bottom", shrunk.gap <= 1, JSON.stringify(shrunk));
 
-    await go("#/board/all/ticket/NYTIMES-1/summaries");
-    await until("summaries", () => exists(".summaries .summary"));
-    await Bun.sleep(3000); // message 6's summary
-    const opened = await metrics(".summaries");
-    check("summaries open scrolled to the newest", opened.overflow && opened.gap <= 1, JSON.stringify(opened));
-    await scrollTo(".summaries", "20");
+    await go("#/board/all/ticket/NYTIMES-1/activity");
+    await until("activity", () => exists(".activity .activity-entry"));
+    await Bun.sleep(3000); // message 6's answer
+    const opened = await metrics(".activity");
+    check("Activity opens scrolled to the newest", opened.overflow && opened.gap <= 1, JSON.stringify(opened));
+    await scrollTo(".activity", "20");
     await Bun.sleep(150);
-    let before = await summaryCount();
+    let before = await entryCount();
     await say(7);
-    await until("summary 7", async () => (await summaryCount()) > before, 6000);
+    await until("entry for message 7", async () => (await entryCount()) > before, 6000);
     await Bun.sleep(150);
-    const sAway = await metrics(".summaries");
-    check("summaries stay put while the user is scrolled up", sAway.top === 20, JSON.stringify(sAway));
-    await scrollTo(".summaries", "el.scrollHeight");
+    const sAway = await metrics(".activity");
+    check("Activity stays put while the user is scrolled up", sAway.top === 20, JSON.stringify(sAway));
+    await scrollTo(".activity", "el.scrollHeight");
     await Bun.sleep(150);
-    before = await summaryCount();
+    before = await entryCount();
     await say(8);
-    await until("summary 8", async () => (await summaryCount()) > before, 6000);
+    await until("entry for message 8", async () => (await entryCount()) > before, 6000);
     await Bun.sleep(150);
-    const sBack = await metrics(".summaries");
-    check("summaries follow a new summary once back at the bottom", sBack.gap <= 1, JSON.stringify(sBack));
+    const sBack = await metrics(".activity");
+    check("Activity follows a new entry once back at the bottom", sBack.gap <= 1, JSON.stringify(sBack));
 
     await cdp("Emulation.clearDeviceMetricsOverride");
     await go("#/board/all");
