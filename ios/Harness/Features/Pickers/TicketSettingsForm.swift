@@ -331,8 +331,7 @@ private struct TicketRemoteIdRow: View {
     var body: some View {
         let _ = latest.set((ticket, onPatch))
         let ref = ticket.externalRef
-        let source = ref.flatMap { $0.source != "manual" ? "From \($0.source)" : nil }
-        TicketSettingsRow(label: "Remote ID", hint: source ?? "Shown in place of the key") {
+        TicketSettingsRow(label: "Remote ID", hint: "Shown in place of the key") {
             TextField("", text: $key, prompt: Text("e.g. JIRA-62").foregroundStyle(c.text3))
                 .font(.mono(13.5))
                 .foregroundStyle(c.text)

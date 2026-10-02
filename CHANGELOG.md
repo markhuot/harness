@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+
+- Cards linked to a remote ID no longer carry a badge naming where the link came from ("manual",
+  "jira" or a watcher's name). The remote ID still shows in place of the ticket's key. The ticket's
+  details and settings no longer mention the source either.
+
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 
 ### Changed

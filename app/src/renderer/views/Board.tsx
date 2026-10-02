@@ -409,12 +409,6 @@ const TicketCard = memo(function TicketCard({
             {pullRequestLabel(t.pullRequestUrl)}
           </span>
         )}
-        {t.externalRef && (
-          <span className="badge" title={`Mirrored from ${t.externalRef.source}`}>
-            <Icon name="link" />
-            {t.externalRef.source}
-          </span>
-        )}
       </div>
       <div className="card-title">{t.title || "Untitled"}</div>
 

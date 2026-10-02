@@ -123,11 +123,6 @@ public enum TicketDetailLogic {
         return "Linked to remote ID \(t.key)"
     }
 
-    /// The External row's source: "set by hand" or "via jira".
-    public static func externalSource(_ ref: ExternalRef) -> String {
-        ref.source == "manual" ? "set by hand" : "via \(ref.source)"
-    }
-
     /// The toast after a settings patch: linking or unlinking a remote ID says so.
     public static func patchToast(_ patch: UpdateTicketBody) -> String? {
         switch patch.externalRef {

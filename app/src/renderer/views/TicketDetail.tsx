@@ -407,7 +407,7 @@ function DetailHeader({
     <div className="detail-head">
       <div className="view-header detail-titlebar">
         <PaneGrip paneId={paneId} chip={k} label={label} title={ticket.title} />
-        <span className="detail-key selectable" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} (via ${ticket.externalRef.source}) · ticket ${k}` : undefined}>
+        <span className="detail-key selectable" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} · ticket ${k}` : undefined}>
           <TicketKey ticket={ticket} />
         </span>
         <StatusPill status={ticket.status} />
