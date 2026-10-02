@@ -42,9 +42,10 @@ test("every orientation on iPhone and iPad, and no full-screen lock (Stage Manag
   expect(String(spec.settings.base.TARGETED_DEVICE_FAMILY)).toBe("1,2");
 });
 
-// iPad windows: each has its own Router. A slide-over ticket dragged out carries an NSUserActivity,
+// iPad windows: each has its own Router. WindowDirectory.openTicket opens a ticket's prominent window
+// with a scene activation request carrying an NSUserActivity (also used to restore it on relaunch),
 // and iPadOS opens a new window only for a type listed here, so it must match the Swift constant.
-test("several windows, and the dragged-out ticket's activity type is listed", () => {
+test("several windows, and the ticket window's activation activity type is listed", () => {
   expect(plist.UIApplicationSceneManifest.UIApplicationSupportsMultipleScenes).toBe(true);
   const swift = readFileSync(join(import.meta.dir, "../HarnessKit/Sources/HarnessKit/Shell/TicketWindow.swift"), "utf8");
   const activityType = swift.match(/static let activityType = "([^"]+)"/)?.[1];

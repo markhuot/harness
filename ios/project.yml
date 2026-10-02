@@ -78,7 +78,8 @@ targets:
         # (ARCHITECTURE.md § App shell, Windows). iPhone keeps one window regardless.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
-        # The activity a slide-over ticket carries when it's dragged out into its own window
+        # The activity WindowDirectory.openTicket's scene activation request carries to open a ticket
+        # in its prominent window, which also brings the ticket back on relaunch
         # (TicketWindowValue.activityType); iPadOS opens only listed types as new windows.
         NSUserActivityTypes:
           - com.markhuot.harness.ticket
