@@ -88,8 +88,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   details and settings no longer mention the source either.
 - Agents no longer attach screenshots to individual summaries. They put them in the spec instead,
   and screenshots from older summaries show in those entries in Activity.
-- The row of attachment thumbnails under each summary on iPhone and iPad is gone. Images show
-  inline in the spec and in Activity, and still open full screen when you tap them.
+- The row of attachment thumbnails under each summary is gone on the Mac, iPhone and iPad. Images
+  show inline in the spec and in Activity, and still open full screen when you click or tap them.
 
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 

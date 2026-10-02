@@ -1504,7 +1504,7 @@ that.
   rows with the ticket, then removes the files.
 - **Apps.** The Mac and iPhone/iPad apps render spec images inline from `attachmentUrl` and show
   the Activity tab next to the Spec tab (the children of HARNESS-194 implement them).
-  `shared/src/state/attachments.ts` keeps the thumbnail sizing and lightbox stepping helpers.
+  `shared/src/state/attachments.ts` keeps the lightbox stepping helper.
 
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is

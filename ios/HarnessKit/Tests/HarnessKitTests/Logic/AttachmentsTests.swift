@@ -2,20 +2,10 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-struct ThumbnailBoxInput: Decodable, Sendable {
-    let a: AttachmentDimensions
-    let height: Double
-}
-
 struct StepAttachmentInput: Decodable, Sendable {
     let index: Int
     let delta: Int
     let count: Int
-}
-
-struct ThumbSizeCustomInput: Decodable, Sendable {
-    let a: AttachmentDimensions
-    let t: Attachments.ThumbMetrics
 }
 
 struct FitSizeInput: Decodable, Sendable {
@@ -51,42 +41,20 @@ struct DismissOnReleaseInput: Decodable, Sendable {
 }
 
 struct AttachmentConstants: Decodable {
-    let THUMB: Attachments.ThumbMetrics
     let DISMISS: Attachments.DismissThresholds
 }
 
 @Suite("Attachments")
 struct AttachmentsTests {
-    @Test("THUMB and DISMISS match the TS")
+    @Test("DISMISS matches the frozen fixture")
     func constants() throws {
         let c = try Fixture.value("attachments", "constants", as: AttachmentConstants.self)
-        #expect(Attachments.thumb == c.THUMB)
         #expect(Attachments.dismiss == c.DISMISS)
-    }
-
-    @Test(arguments: Fixture.cases("attachments", "thumbnailBoxCases", input: ThumbnailBoxInput.self, output: AttachmentSize.self))
-    func thumbnailBox(_ c: Fixture.Case<ThumbnailBoxInput, AttachmentSize>) {
-        #expect(Attachments.thumbnailBox(c.input.a, height: c.input.height) == c.output)
     }
 
     @Test(arguments: Fixture.cases("attachments", "stepAttachmentCases", input: StepAttachmentInput.self, output: Int.self))
     func stepAttachment(_ c: Fixture.Case<StepAttachmentInput, Int>) {
         #expect(Attachments.stepAttachment(index: c.input.index, delta: c.input.delta, count: c.input.count) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("attachments", "attachmentsLabelCases", input: [AttachmentKind].self, output: String.self))
-    func attachmentsLabel(_ c: Fixture.Case<[AttachmentKind], String>) {
-        #expect(Attachments.attachmentsLabel(c.input) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("attachments", "thumbSizeCases", input: AttachmentDimensions.self, output: AttachmentSize.self))
-    func thumbSize(_ c: Fixture.Case<AttachmentDimensions, AttachmentSize>) {
-        #expect(Attachments.thumbSize(c.input) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("attachments", "thumbSizeCustomCases", input: ThumbSizeCustomInput.self, output: AttachmentSize.self))
-    func thumbSizeCustom(_ c: Fixture.Case<ThumbSizeCustomInput, AttachmentSize>) {
-        #expect(Attachments.thumbSize(c.input.a, metrics: c.input.t) == c.output)
     }
 
     @Test(arguments: Fixture.cases("attachments", "fitSizeCases", input: FitSizeInput.self, output: AttachmentSize.self))
@@ -141,14 +109,12 @@ struct AttachmentsTests {
         #expect(Attachments.formatSize(.infinity) == "")
     }
 
-    @Test("Attachment overloads read its kind and pixel size")
+    @Test("The Attachment overload reads its kind and pixel size")
     func attachmentOverloads() {
         let video = Attachment(id: "1", kind: .video, mimeType: "video/mp4", name: "a.mp4", size: 1)
         let wide = Attachment(id: "2", kind: .image, mimeType: "image/png", name: "a.png", size: 1, width: 2000, height: 1000)
-        #expect(Attachments.thumbSize(video).width == 213)
-        #expect(Attachments.thumbSize(wide).width == 240)
-        #expect(Attachments.thumbnailBox(wide, height: 100).width == 200)
+        // No pixel size: a video falls back to 16:9 (an image would get 4:3).
+        #expect(Attachments.fitSize(video, in: AttachmentSize(width: 160, height: 900)) == AttachmentSize(width: 160, height: 90))
         #expect(Attachments.fitSize(wide, in: AttachmentSize(width: 390, height: 700)) == AttachmentSize(width: 390, height: 195))
-        #expect(Attachments.attachmentsLabel([video, wide, wide]) == "2 images, 1 video")
     }
 }

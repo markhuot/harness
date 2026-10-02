@@ -1,8 +1,8 @@
 import Foundation
 
-// A port of shared/src/state/attachments.ts (thumbnail boxes, lightbox stepping, the count label),
-// plus the iPhone's own layout: thumbnail sizes in the spec, fitting, paging and
-// swipe-to-close in the full-screen viewer. Pure layout math: points in, points out.
+// A port of shared/src/state/attachments.ts (lightbox stepping), plus the iPhone's own layout:
+// fitting, paging and swipe-to-close in the full-screen viewer. Pure layout math: points in,
+// points out.
 //
 // FileViewer.formatSize and Attachments.formatSize are deliberately different (one keeps
 // "3.0 MB", the other reads "3 MB" and promotes 1023.96 KB to "1 MB"), so both exist.
@@ -45,73 +45,18 @@ public struct AttachmentSize: Codable, Equatable, Sendable {
 public enum Attachments {
     // MARK: - shared/src/state/attachments.ts
 
-    /// The widest and tallest a thumbnail may be relative to its height, so a panorama or a phone-tall screenshot stays a thumbnail.
-    private static let minAspect = 0.5
-    private static let maxAspect = 2.5
-    /// Unknown dimensions (a video, or an image whose header wasn't parsed) get a 4:3 box.
-    private static let defaultAspect = 4.0 / 3.0
-
-    /// The box a thumbnail takes at `height` points tall: its own aspect ratio when the service
-    /// knew the dimensions (so nothing shifts when it loads), clamped to 1:2..5:2; 4:3 otherwise.
-    public static func thumbnailBox(_ a: AttachmentDimensions, height: Double) -> AttachmentSize {
-        let aspect = a.known ? min(maxAspect, max(minAspect, a.width! / a.height!)) : defaultAspect
-        return AttachmentSize(width: JSCompat.round(height * aspect), height: height)
-    }
-
-    public static func thumbnailBox(_ a: Attachment, height: Double) -> AttachmentSize {
-        thumbnailBox(AttachmentDimensions(a), height: height)
-    }
-
     /// The lightbox index after moving `delta` from `index` among `count` attachments, wrapping at both ends.
     public static func stepAttachment(index: Int, delta: Int, count: Int) -> Int {
         if count <= 0 { return 0 }
         return (((index + delta) % count) + count) % count
     }
 
-    /// "2 images", "1 video", "1 image, 2 videos", or "" when there are none. Anything that isn't
-    /// an image counts as a video.
-    public static func attachmentsLabel(_ kinds: [AttachmentKind]) -> String {
-        let images = kinds.filter { $0 == .image }.count
-        let videos = kinds.count - images
-        func part(_ n: Int, _ word: String) -> String { n == 0 ? "" : "\(n) \(word)\(n == 1 ? "" : "s")" }
-        return [part(images, "image"), part(videos, "video")].filter { !$0.isEmpty }.joined(separator: ", ")
-    }
-
-    public static func attachmentsLabel(_ list: [Attachment]) -> String {
-        attachmentsLabel(list.map(\.kind))
-    }
-
     // MARK: - iPhone layout (frozen fixtures)
-
-    /// Thumbnail row height; widths follow each attachment's aspect ratio within these bounds.
-    public struct ThumbMetrics: Codable, Equatable, Sendable {
-        public var height: Double
-        public var minWidth: Double
-        public var maxWidth: Double
-
-        public init(height: Double, minWidth: Double, maxWidth: Double) {
-            self.height = height
-            self.minWidth = minWidth
-            self.maxWidth = maxWidth
-        }
-    }
-
-    public static let thumb = ThumbMetrics(height: 120, minWidth: 72, maxWidth: 240)
 
     /// Width / height, when both are known and positive; otherwise a default per kind (video 16:9, image 4:3).
     public static func aspectOf(_ a: AttachmentDimensions) -> Double {
         if a.known { return a.width! / a.height! }
         return a.kind == .video ? 16.0 / 9.0 : 4.0 / 3.0
-    }
-
-    /// The thumbnail's box: fixed height, width from the aspect ratio clamped so panoramas and tall shots stay tappable.
-    public static func thumbSize(_ a: AttachmentDimensions, metrics t: ThumbMetrics = thumb) -> AttachmentSize {
-        let width = JSCompat.round(min(t.maxWidth, max(t.minWidth, t.height * aspectOf(a))))
-        return AttachmentSize(width: width, height: t.height)
-    }
-
-    public static func thumbSize(_ a: Attachment, metrics t: ThumbMetrics = thumb) -> AttachmentSize {
-        thumbSize(AttachmentDimensions(a), metrics: t)
     }
 
     /// The image's size once fitted inside `box` without upscaling past its own pixels (a small
