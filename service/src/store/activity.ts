@@ -87,9 +87,11 @@ export class AttachmentRepo {
        VALUES ($id, $ticketId, $kind, $mimeType, $name, $size, $width, $height, $t)`,
     );
     const t = now();
-    for (const a of attachments) {
-      insert.run({ id: a.id, ticketId, kind: a.kind, mimeType: a.mimeType, name: a.name, size: a.size, width: a.width ?? null, height: a.height ?? null, t });
-    }
+    this.db.transaction(() => {
+      for (const a of attachments) {
+        insert.run({ id: a.id, ticketId, kind: a.kind, mimeType: a.mimeType, name: a.name, size: a.size, width: a.width ?? null, height: a.height ?? null, t });
+      }
+    })();
   }
 
   get(id: string): Attachment | null {

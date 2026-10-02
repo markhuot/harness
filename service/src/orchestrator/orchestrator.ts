@@ -3861,6 +3861,8 @@ ${numberLines(r.body)}`;
             children,
             builtinTools: driver.hasBuiltinTools,
             branches: ticket ? this.branchContext(ticket, project) : undefined,
+            activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
+            logged: active.logAnswer,
           }),
           cwd,
           model,
