@@ -669,6 +669,51 @@ kbd {
 .md li {
   margin: 2px 0;
 }
+/* Nested lists (Markdown.tsx MdList): no gap around them, and markers that change with depth. */
+.md li > .md-list {
+  margin: 2px 0 0;
+}
+ul.md-list.depth-0 {
+  list-style-type: disc;
+}
+ul.md-list.depth-1 {
+  list-style-type: circle;
+}
+ul.md-list.depth-2 {
+  list-style-type: square;
+}
+ol.md-list {
+  list-style-type: decimal;
+}
+/* An attachment in the text: fitted to the width, opening the lightbox. */
+.md-media {
+  display: inline-block;
+  position: relative;
+  max-width: 100%;
+  padding: 0;
+  vertical-align: middle;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  cursor: zoom-in;
+}
+.md-media:hover {
+  border-color: var(--border-strong);
+}
+.md-media img,
+.md-media video {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  height: auto;
+  pointer-events: none;
+}
+.md-media.is-missing {
+  width: 160px;
+  height: 90px;
+  cursor: default;
+}
 .md h1,
 .md h2,
 .md h3,

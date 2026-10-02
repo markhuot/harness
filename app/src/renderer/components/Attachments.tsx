@@ -57,7 +57,7 @@ function Thumbnail({ attachment: a, url, onOpen }: { attachment: SummaryAttachme
   );
 }
 
-function Missing({ name }: { name: string }) {
+export function Missing({ name }: { name: string }) {
   return (
     <span className="attachment-missing">
       <Icon name="image" size={16} />
@@ -67,8 +67,8 @@ function Missing({ name }: { name: string }) {
   );
 }
 
-/** One attachment at a time over the app. ← and → (or the side buttons) step through the summary's attachments; Esc or the backdrop closes. */
-function Lightbox({ list, index, onIndex, onClose }: { list: SummaryAttachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+/** One attachment at a time over the app. ← and → (or the side buttons) step through the list (a summary's attachments, or the images in a piece of markdown); Esc or the backdrop closes. */
+export function Lightbox({ list, index, onIndex, onClose }: { list: SummaryAttachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const { client } = useStore();
   // Attachments renders this only with a non-empty list.
   const a = list[Math.min(index, list.length - 1)]!;

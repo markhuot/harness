@@ -17,6 +17,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Browser tab on the Mac, iPhone and iPad has a new-tab button, and once more than one tab is
   open, a row of tabs above the page. Tap or click a tab to watch it, or close it with its ×.
   Each app keeps its own place, so you can watch one tab while the agent works in another.
+- Images and videos attached to a ticket can appear inside its text, fitted to the width. Click or
+  tap one to open it full size, then step through every image in that text. Images from other
+  websites aren't loaded. They show as a link instead.
 
 ### Changed
 
@@ -38,6 +41,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
   a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
   kept Chrome busy until it was quit.
+- Nested lists in ticket text now show their nesting. Indented items sit under the item above them
+  on the Mac, iPhone and iPad, with bullets that change by level (• ◦ ▪), and a numbered list keeps
+  the number it starts at.
 
 ### Removed
 
