@@ -111,6 +111,8 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     public var baseBranch: Patch<String>
     /// Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false.
     public var skipAgentReview: Bool?
+    /// Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default false.
+    public var skipHumanReview: Bool?
     public var dependsOn: [String]?
     public var autoStart: Bool?
     public var parentId: Patch<String>
@@ -126,7 +128,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         projectId: String, prompt: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
         model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
-        skipAgentReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
+        skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
         draft: Bool? = nil
     ) {
@@ -142,6 +144,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         self.branch = branch
         self.baseBranch = baseBranch
         self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.dependsOn = dependsOn
         self.autoStart = autoStart
         self.parentId = parentId
@@ -170,6 +173,10 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     /// Ticket.skipAgentReview. Turning it on while the ticket waits on its agent review skips that
     /// review (a queued review run is dropped); turning it off while the review is "skipped" starts one.
     public var skipAgentReview: Bool?
+    /// Ticket.skipHumanReview. Turning it on while the ticket waits on its human review approves it
+    /// (the ticket lands once its agent review passes); turning it off while a review it approved
+    /// hasn't started landing puts the human review back to pending.
+    public var skipHumanReview: Bool?
     public var dependsOn: [String]?
     public var position: Double?
     /// Link the ticket to a remote ID by hand (source "manual"), or null to unlink it
@@ -186,7 +193,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         title: String? = nil, description: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
         model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
-        dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
+        skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil
     ) {
         self.title = title
@@ -198,6 +205,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         self.baseBranch = baseBranch
         self.branch = branch
         self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.dependsOn = dependsOn
         self.position = position
         self.externalRef = externalRef

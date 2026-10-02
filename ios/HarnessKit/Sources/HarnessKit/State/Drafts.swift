@@ -33,7 +33,7 @@ public enum Drafts {
             id: "", key: key, projectId: project.id, kind: .task, title: "", description: "", status: .planning,
             sessionId: "", driver: projectDriver(project, settings), parentId: nil, childCount: 0, dependsOn: [],
             autoStart: false, agentReview: .pending, humanReview: .pending, externalRef: nil, workdir: nil, branch: nil,
-            requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: false, draft: true,
+            requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: false, skipHumanReview: false, draft: true,
             blockedReason: nil, busy: false, pendingApproval: nil, allowedTools: [], permissionMode: nil, model: nil,
             position: 0, createdAt: now, updatedAt: now
         )
@@ -56,6 +56,7 @@ public enum Drafts {
         if patch.baseBranch.isPresent { next.baseBranch = Patch(blankToNil(patch.baseBranch.optional)) }
         if patch.branch.isPresent { next.requestedBranch = Patch(blankToNil(patch.branch.optional)) }
         if let skip = patch.skipAgentReview { next.skipAgentReview = skip }
+        if let skip = patch.skipHumanReview { next.skipHumanReview = skip }
         if let deps = patch.dependsOn { next.dependsOn = deps }
         if let position = patch.position { next.position = position }
         if let kind = patch.kind { next.kind = kind }
@@ -82,6 +83,7 @@ public enum Drafts {
             && Branches.nonEmpty(t.requestedBranch.optional) == nil
             && Branches.nonEmpty(t.baseBranch.optional) == nil
             && t.skipAgentReview != true
+            && t.skipHumanReview != true
             && t.dependsOn.isEmpty
     }
 
@@ -101,6 +103,7 @@ public enum Drafts {
             branch: worktree ? Patch(t.requestedBranch.optional) : .absent,
             baseBranch: worktree ? Patch(t.baseBranch.optional) : .absent,
             skipAgentReview: t.skipAgentReview == true ? true : nil,
+            skipHumanReview: t.skipHumanReview == true ? true : nil,
             dependsOn: t.dependsOn.isEmpty ? nil : t.dependsOn,
             draft: true
         )
@@ -121,6 +124,7 @@ public enum Drafts {
         if !optionalEqual(next.requestedBranch.optional, prev.requestedBranch.optional) { p.branch = Patch(next.requestedBranch.optional) }
         if !optionalEqual(next.baseBranch.optional, prev.baseBranch.optional) { p.baseBranch = Patch(next.baseBranch.optional) }
         if (next.skipAgentReview == true) != (prev.skipAgentReview == true) { p.skipAgentReview = next.skipAgentReview == true }
+        if (next.skipHumanReview == true) != (prev.skipHumanReview == true) { p.skipHumanReview = next.skipHumanReview == true }
         if !next.dependsOn.elementsEqual(prev.dependsOn, by: Branches.jsEqual) { p.dependsOn = next.dependsOn }
         return p == UpdateTicketBody() ? nil : p
     }
@@ -316,6 +320,7 @@ public enum Drafts {
             if worktree, let base = Branches.nonEmpty(t.baseBranch.optional) { out.append("into \(base)") }
         }
         if t.skipAgentReview == true { out.append("Skip agent review") }
+        if t.skipHumanReview == true { out.append("Skip human review") }
         if !t.dependsOn.isEmpty { out.append("After \(t.dependsOn.joined(separator: ", "))") }
         return out
     }

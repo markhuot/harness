@@ -79,6 +79,8 @@ private final class FakeDraftAPI: DraftAPI {
             t.id = "t1"
             t.description = body.prompt
             t.kind = body.kind ?? .task
+            t.skipAgentReview = body.skipAgentReview == true
+            t.skipHumanReview = body.skipHumanReview == true
             t.updatedAt = stamp()
             server = t
             return t
@@ -418,6 +420,24 @@ struct DraftSyncTests {
         await DS.drain()
         #expect(f.ops == ["create"])
         #expect(f.calls.first?.create?.skipAgentReview == true)
+    }
+
+    @Test func skippingTheHumanReviewIsWorthSavingAndOnlyPatchesWhenItFlips() async {
+        let f = FakeDraftAPI()
+        let h = Harness(f)
+        h.edit(UpdateTicketBody(skipHumanReview: true))
+        #expect(!h.sync.empty)
+        await DS.drain()
+        #expect(f.ops == ["create"])
+        #expect(f.calls.first?.create?.skipHumanReview == true)
+        #expect(f.calls.first?.create?.skipAgentReview == nil)
+        h.edit(UpdateTicketBody(skipHumanReview: true))
+        await h.wait(40)
+        #expect(f.ops == ["create"])
+        h.edit(UpdateTicketBody(skipHumanReview: false))
+        await h.wait(40)
+        #expect(f.ops == ["create", "update"])
+        #expect(f.calls[1].update == UpdateTicketBody(skipHumanReview: false))
     }
 
     @Test func saveDraftThenTheSheetsCloseShareOneSave() async throws {
