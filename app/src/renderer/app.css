@@ -604,8 +604,11 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text);
   font-weight: 600;
 }
-.spec-baseline {
+.spec-baseline,
+.spec-history .switch,
+.spec-history .btn {
   flex: none;
+  white-space: nowrap;
 }
 .spec-scrub {
   display: block;
