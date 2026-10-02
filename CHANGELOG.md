@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPad, tapping a ticket opens it in a window of its own, centered over the board, so the board
+  stays where you left it. Use the window's controls (the three dots at its top) to move or resize
+  it, put it in Slide Over, or tile it next to the board. Tapping a ticket whose window is already
+  open brings that window forward. Open in New Window, in a card's menu (touch and hold) or the
+  ticket's More menu, opens a separate window, and you can keep several ticket windows open at
+  once. Links inside a ticket window open in that window, and your ticket windows come back when
+  you reopen the app. On iPhone, and in a narrow Split View, tickets open as they did before.
+
 ### Changed
 
 - On iPad, the sidebar stays on screen beside the board, Inbox or Settings, like it does on the

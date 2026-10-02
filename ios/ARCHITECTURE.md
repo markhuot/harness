@@ -17,7 +17,7 @@ narrow Split View window) it's the phone layout.
 ios/
   project.yml            XcodeGen spec (source of truth for the app target and Info.plist)
   Harness/               the app target: SwiftUI only (views, navigation, SwiftUI bridges)
-    HarnessApp.swift     @main App: creates AppModel, Router, ToastCenter, Actions (§ App shell)
+    HarnessApp.swift     @main App: creates AppModel, ToastCenter, Actions; main and ticket WindowGroups, each window with its own Router (§ Windows)
     App/                 RootView + MainTabs (the sections; DesktopShell at regular width), Destinations (Route → screen), KeychainStorage, Actions
     Features/<Area>/     one file per feature slot (§ Feature slots), plus Connect/Pair/Scan
     UI/                  the kit: badges, buttons, callouts, toasts, haptics, icons, banners
@@ -331,7 +331,7 @@ feature needs something new here, add to it without changing what's there.
   `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
   (browserState, browserNavigate, ticketTabs, settings, prompts, watchers) use `store.api`, the
   store's client as a `HarnessClient` (UI/StoreAPI.swift). Never cast `store.client` inline.
-- **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
+- **Navigation.** `Router` (HarnessKit/Shell, one per window: § Windows) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
   to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
@@ -340,14 +340,16 @@ feature needs something new here, add to it without changing what's there.
   `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
   The sidebar's rows are `SidebarRow` (HarnessKit/Shell): `SidebarRow.current(tab:boardProject:projectExists:)`
   is the highlighted row and `router.select(row, app:)` goes there (a board row saves the project
-  filter first), tested in SidebarRowTests.
-- **iPad layout:** see § iPad layout.
+  filter first), tested in SidebarRowTests. A ticket screen leaves the stack through
+  `router.removeTicket(where:)` and swaps itself with `router.replaceTicket(_:with:)`, never by
+  editing `path(router.selectedTab)`, so the same code works as a ticket window's root.
+- **iPad layout:** see § iPad layout and § Windows.
 - **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
 
   | Link | Opens |
   | --- | --- |
   | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
-  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab) |
+  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen |
@@ -413,6 +415,47 @@ only shoots portrait. For a landscape check, build once with `UIRequiresFullScre
 `UISupportedInterfaceOrientations~ipad` set to landscape only (never commit that), and rotate the
 screenshots with `sips -r 270`. AXe taps land in the wrong place in that build, so only use it for
 screens that don't tap.
+
+## Windows
+
+The iPad runs several windows (`UIApplicationSupportsMultipleScenes` in project.yml; iPhone keeps
+one). HarnessApp has two WindowGroups: the main window (`MainWindow` → RootView) and the ticket
+window (`TicketWindowRoot`, App/Windows.swift), keyed by `TicketWindowValue` (HarnessKit/Shell).
+`AppModel`, its `BoardStore`, `ToastCenter` and `Actions` are app-wide and shared by every
+window. Each window has its own `Router`, so its stack and sheets never move another window's, and
+`sceneChrome(router)` (RootView.swift) gives each one its sheets, harness:// handling, palette,
+tint, toasts and bar colors. HarnessApp forwards the app's scene phase (active while any window
+is) to the store, never a single window's.
+
+- **Opening a ticket.** At regular width with `supportsMultipleWindows`, MainTabs turns on the main
+  Router's `opensTicketsInWindows`: `router.push(.ticket…)` (a card tap, a ticket link, the Inbox's
+  dispatched ticket, New session's launch) then calls `onOpenTicket` instead of pushing.
+  `WindowDirectory.openTicket` requests a scene with `UISceneSessionActivationRequest`, an
+  NSUserActivity carrying the ticket (`TicketWindowValue.activityType`, listed in
+  NSUserActivityTypes; `targetContentIdentifier` = `sceneMatch`, which the ticket WindowGroup's
+  `handlesExternalEvents` matches) and `UIWindowSceneProminentPlacement`: the system's centered
+  window over the board, which the user moves, resizes, tiles or puts in Slide Over with the
+  window's own controls. Nothing in the app draws a panel or handles a drag for it. A ticket whose
+  window is open (WindowDirectory tracks them by key) comes forward with `router.show(route)`
+  instead. "Open in New Window" (the card's menu, the ticket's More menu) is
+  `openWindow(id: SceneID.ticket, value:)`, a standard new window. Compact width (iPhone, narrow
+  Split View) pushes as before.
+- **A ticket window's Router** has the `.ticket` scope: `root` is its ticket, pushes (sub-tickets,
+  files, triage) land on its own stack, sheets are its own, and a section link (`.tab`, such as
+  harness://board) goes to `onSectionLink`, which WindowDirectory sends to the last active main
+  window and brings forward (opening one if none is open). A deleted ticket or a draft sets
+  `closeRequested`, and the window destroys its scene. These semantics are tested in
+  RouterWindowTests.
+- **Restoring.** SwiftUI saves the WindowGroup's value with the scene only when `openWindow` gave
+  it, so TicketWindowRoot also keeps the ticket in `@SceneStorage("ticketWindow")`
+  (`TicketWindowValue.json`). A relaunch brings ticket windows back on their tickets; their stacks
+  start over at the root.
+- **External links** (`onOpenURL`) prefer a main window (`handlesExternalEvents(preferring:)` on
+  RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
+  ticket window or opens a new one.
+
+`sim-check --ipad`'s `ticket-window` check taps a card, expects its window (no board on screen),
+then sends the app home, kills and relaunches it, and expects the window back on the same ticket.
 
 ## Feature slots
 
