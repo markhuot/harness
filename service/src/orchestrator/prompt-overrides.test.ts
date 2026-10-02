@@ -78,7 +78,8 @@ const ticket = {
   key: "NYT-1",
   kind: "task",
   title: "Dark mode",
-  description: "Add it.",
+  spec: "Add it.",
+  specRevision: 3,
   status: "in_progress",
   dependsOn: [],
   branch: null,
@@ -104,8 +105,8 @@ describe("overrides in the prompt builders", () => {
   });
 
   test("promptsWith binds the overrides to every builder", () => {
-    const p = promptsWith({ "run.work_start": "Go: {{ticket}}\n{{brief}}", "system.intro": "Hi." });
-    expect(p.workStartPrompt(ticket)).toBe('Go: NYT-1 "Dark mode"\nAdd it.');
+    const p = promptsWith({ "run.work_start": "Go: {{ticket}} (r{{specRevision}})\n{{spec}}", "system.intro": "Hi." });
+    expect(p.workStartPrompt(ticket)).toBe('Go: NYT-1 "Dark mode" (r3)\nAdd it.');
     expect(p.systemPrompt({ kind: "work", project, ticket, session }).startsWith("Hi.\n\n## Context")).toBe(true);
     // conductor tickets use their own prompt id, still built-in
     expect(p.workStartPrompt({ ...ticket, kind: "conductor" })).toBe(workStartPrompt({ ...ticket, kind: "conductor" }));
@@ -184,17 +185,17 @@ describe("overrides reach runs", () => {
     h.orch.updateSettings({
       prompts: {
         "system.work": "## This run: work\nCustom rules for {{#if branch}}{{branch}}{{else}}the checkout{{/if}}.",
-        "run.work_start": "Start {{ticket}} now.\n\n## Plan\n{{brief}}",
+        "run.work_start": "Start {{ticket}} now.\n\n## Plan (revision {{specRevision}})\n{{spec}}",
       },
     });
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "Ship it", start: false });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "Ship it", start: false });
     await h.orch.startTicket(t.key);
     await h.orch.idle();
     const work = h.driver.calls.find((c) => c.kind === "work")!;
     expect(work.systemPrompt).toContain("## This run: work\nCustom rules for the checkout.");
     expect(work.systemPrompt).not.toContain("Do the work the ticket describes");
     expect(work.systemPrompt).toContain("## Ticket lifecycle"); // untouched sections stay built-in
-    expect(work.prompt).toMatch(/^Start PROJ-1 ".*" now\.\n\n## Plan\nShip it$/);
+    expect(work.prompt).toMatch(/^Start PROJ-1 ".*" now\.\n\n## Plan \(revision \d+\)\nShip it$/);
 
     const catalog = h.orch.promptCatalog();
     expect(catalog.map((e) => e.id)).toEqual([...PROMPT_IDS]);

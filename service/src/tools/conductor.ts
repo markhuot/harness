@@ -17,7 +17,7 @@ const actionProp = {
 export const reviewTicket = defineTool<{ key: string; decision: "approve" | "request_changes"; notes: string; action?: CompletionAction }>({
   name: "review_ticket",
   description:
-    "Act as the human reviewer for a child ticket that is in review. \"approve\" signs it off; \"request_changes\" sends it back to its agent with your notes. Check the ticket's summaries (get_ticket) before deciding.",
+    "Act as the human reviewer for a child ticket that is in review. \"approve\" signs it off; \"request_changes\" sends it back to its agent with your notes. Check the ticket's spec and Activity (get_ticket) before deciding.",
   inputSchema: schema(
     {
       key: keyProp,

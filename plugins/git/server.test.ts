@@ -50,7 +50,7 @@ async function makeRepo(files: Record<string, string>, branch = "main") {
 
 async function ticketFor(projectPath: string, patch: Partial<Ticket>) {
   const project = await client.createProject({ path: projectPath, key: `G${++seq}` });
-  const t = await client.createTicket({ projectId: project.id, prompt: "work", start: false });
+  const t = await client.createTicket({ projectId: project.id, spec: "work", start: false });
   h.store.tickets.update(t.id, patch as never);
   return { project: project as Project, ticket: h.store.tickets.getByKey(t.key)! };
 }

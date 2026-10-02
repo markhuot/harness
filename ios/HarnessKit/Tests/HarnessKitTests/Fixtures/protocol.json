@@ -1,4 +1,95 @@
 {
+  "ActivityEntry": [
+    {
+      "id": "act_1",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "note",
+      "author": "agent",
+      "body": "Ported the enums; **tests pass**; next: entities.",
+      "meta": {},
+      "createdAt": 1759190400000
+    },
+    {
+      "id": "act_2",
+      "sessionId": "ses_t4",
+      "ticketId": null,
+      "kind": "system",
+      "author": "system",
+      "body": "Dispatched.",
+      "meta": {},
+      "createdAt": 1759190400000
+    },
+    {
+      "id": "act_3",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "message",
+      "author": "human",
+      "body": "Looks good",
+      "meta": {},
+      "createdAt": 1759190400000
+    },
+    {
+      "id": "act_4",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "blocked",
+      "author": "agent",
+      "body": "Should HarnessEvent decode unknown kinds or drop them?",
+      "meta": {
+        "question": "Should HarnessEvent decode unknown kinds or drop them?"
+      },
+      "createdAt": 1759190400001
+    },
+    {
+      "id": "act_5",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "changes_requested",
+      "author": "agent",
+      "body": "The enum test is tautological",
+      "meta": {
+        "round": 2,
+        "commit": "9f1c2ab",
+        "by": "agent"
+      },
+      "createdAt": 1759190400002
+    },
+    {
+      "id": "act_6",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "submitted",
+      "author": "agent",
+      "body": "Ready",
+      "meta": {
+        "specRevision": 4
+      },
+      "createdAt": 1759190400003
+    }
+  ],
+  "ActivityMeta": [
+    {
+      "question": "Should HarnessEvent decode unknown kinds or drop them?"
+    },
+    {
+      "round": 2,
+      "commit": "9f1c2ab",
+      "by": "agent"
+    },
+    {
+      "round": 1,
+      "commit": null,
+      "by": "conductor"
+    },
+    {
+      "note": "The human answered",
+      "specRevision": 4,
+      "by": "human"
+    },
+    {}
+  ],
   "ApiError": [
     {
       "error": "Ticket NYTIMES-99 not found"
@@ -14,6 +105,24 @@
     {
       "decision": "deny",
       "message": "Use bun instead"
+    }
+  ],
+  "Attachment": [
+    {
+      "id": "att_1",
+      "kind": "image",
+      "mimeType": "image/png",
+      "name": "after.png",
+      "size": 48213,
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "att_2",
+      "kind": "video",
+      "mimeType": "video/mp4",
+      "name": "flow.mp4",
+      "size": 2400118
     }
   ],
   "BoundAddress": [
@@ -256,11 +365,11 @@
   "CreateTicketBody": [
     {
       "projectId": "prj_8f2c1a",
-      "prompt": "Fix the flaky login test"
+      "spec": "Fix the flaky login test"
     },
     {
       "projectId": "prj_8f2c1a",
-      "prompt": "Port the protocol",
+      "spec": "Port the protocol",
       "title": "Swift protocol",
       "kind": "conductor",
       "driver": "claude-code",
@@ -299,7 +408,7 @@
     },
     {
       "projectId": "prj_8f2c1a",
-      "prompt": "",
+      "spec": "",
       "draft": true,
       "model": null,
       "permissionMode": null,
@@ -311,7 +420,7 @@
     },
     {
       "projectId": "prj_8f2c1a",
-      "prompt": "In the checkout",
+      "spec": "In the checkout",
       "useWorktree": false
     }
   ],
@@ -547,7 +656,9 @@
         "projectId": "prj_8f2c1a",
         "kind": "conductor",
         "title": "Port the wire protocol to Swift",
-        "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+        "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+        "specRevision": 4,
+        "specBaselineRevision": 2,
         "status": "blocked",
         "sessionId": "ses_31",
         "driver": "claude-code",
@@ -702,33 +813,43 @@
       "text": "Compiling Proto"
     },
     {
-      "kind": "summary.added",
-      "summary": {
-        "id": "sum_1",
+      "kind": "activity.added",
+      "entry": {
+        "id": "act_1",
         "sessionId": "ses_31",
         "ticketId": "tkt_31",
+        "kind": "note",
         "author": "agent",
         "body": "Ported the enums; **tests pass**; next: entities.",
-        "createdAt": 1759190400000,
-        "attachments": [
-          {
-            "id": "att_1",
-            "kind": "image",
-            "mimeType": "image/png",
-            "name": "after.png",
-            "size": 48213,
-            "width": 1280,
-            "height": 800
-          },
-          {
-            "id": "att_2",
-            "kind": "video",
-            "mimeType": "video/mp4",
-            "name": "flow.mp4",
-            "size": 2400118
-          }
-        ]
+        "meta": {},
+        "createdAt": 1759190400000
       }
+    },
+    {
+      "kind": "spec.revised",
+      "ticketId": "tkt_31",
+      "rev": 4,
+      "author": "agent",
+      "note": "Status",
+      "runId": "run_7",
+      "runKind": "work",
+      "createdAt": 1759190580000
+    },
+    {
+      "kind": "spec.revised",
+      "ticketId": "tkt_31",
+      "rev": 5,
+      "author": "human",
+      "note": "Edited by hand",
+      "runId": null,
+      "runKind": null
+    },
+    {
+      "kind": "spec.revised",
+      "ticketId": "tkt_31",
+      "rev": 6,
+      "author": "agent",
+      "note": "Plan"
     },
     {
       "kind": "watcher.upserted",
@@ -931,6 +1052,15 @@
     {
       "text": "Re-open please",
       "move": true
+    },
+    {
+      "text": "Why the enum?",
+      "log": true
+    },
+    {
+      "text": "Back to work",
+      "move": true,
+      "log": false
     }
   ],
   "ModelInfo": [
@@ -1149,7 +1279,9 @@
         "projectId": "prj_8f2c1a",
         "kind": "conductor",
         "title": "Port the wire protocol to Swift",
-        "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+        "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+        "specRevision": 4,
+        "specBaselineRevision": 2,
         "status": "blocked",
         "sessionId": "ses_31",
         "driver": "claude-code",
@@ -1603,7 +1735,9 @@
           "projectId": "prj_8f2c1a",
           "kind": "conductor",
           "title": "Port the wire protocol to Swift",
-          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+          "specRevision": 4,
+          "specBaselineRevision": 2,
           "status": "blocked",
           "sessionId": "ses_31",
           "driver": "claude-code",
@@ -1842,6 +1976,75 @@
     },
     {}
   ],
+  "SpecConflict": [
+    {
+      "currentRevision": 5,
+      "spec": "## Goal\n\nChanged by the agent."
+    }
+  ],
+  "SpecDiff": [
+    {
+      "from": 1,
+      "to": 2,
+      "diff": "--- a/spec.md\n+++ b/spec.md\n@@ -0,0 +1 @@\n+## Goal\n"
+    },
+    {
+      "from": 2,
+      "to": 2,
+      "diff": ""
+    }
+  ],
+  "SpecRevision": [
+    {
+      "rev": 2,
+      "author": "agent",
+      "runId": "run_7",
+      "runKind": "plan",
+      "note": "Plan",
+      "approvedBaseline": true,
+      "createdAt": 1759190460000,
+      "body": "## Goal\n\nPort the protocol."
+    },
+    {
+      "rev": 1,
+      "author": "human",
+      "runId": null,
+      "runKind": null,
+      "note": "Created",
+      "approvedBaseline": false,
+      "createdAt": 1759190400000,
+      "body": ""
+    }
+  ],
+  "SpecRevisionInfo": [
+    {
+      "rev": 1,
+      "author": "human",
+      "runId": null,
+      "runKind": null,
+      "note": "Created",
+      "approvedBaseline": false,
+      "createdAt": 1759190400000
+    },
+    {
+      "rev": 2,
+      "author": "agent",
+      "runId": "run_7",
+      "runKind": "plan",
+      "note": "Plan",
+      "approvedBaseline": true,
+      "createdAt": 1759190460000
+    },
+    {
+      "rev": 3,
+      "author": "system",
+      "runId": null,
+      "runKind": null,
+      "note": "Restored",
+      "approvedBaseline": false,
+      "createdAt": 1759190520000
+    }
+  ],
   "Subagent": [
     {
       "id": "toolu_09",
@@ -1900,70 +2103,6 @@
       "start": false
     }
   ],
-  "Summary": [
-    {
-      "id": "sum_1",
-      "sessionId": "ses_31",
-      "ticketId": "tkt_31",
-      "author": "agent",
-      "body": "Ported the enums; **tests pass**; next: entities.",
-      "createdAt": 1759190400000,
-      "attachments": [
-        {
-          "id": "att_1",
-          "kind": "image",
-          "mimeType": "image/png",
-          "name": "after.png",
-          "size": 48213,
-          "width": 1280,
-          "height": 800
-        },
-        {
-          "id": "att_2",
-          "kind": "video",
-          "mimeType": "video/mp4",
-          "name": "flow.mp4",
-          "size": 2400118
-        }
-      ]
-    },
-    {
-      "id": "sum_2",
-      "sessionId": "ses_t4",
-      "ticketId": null,
-      "author": "system",
-      "body": "Dispatched.",
-      "createdAt": 1759190400000,
-      "attachments": []
-    },
-    {
-      "id": "sum_3",
-      "sessionId": "ses_31",
-      "ticketId": "tkt_31",
-      "author": "human",
-      "body": "Looks good",
-      "createdAt": 1759190400000,
-      "attachments": []
-    }
-  ],
-  "SummaryAttachment": [
-    {
-      "id": "att_1",
-      "kind": "image",
-      "mimeType": "image/png",
-      "name": "after.png",
-      "size": 48213,
-      "width": 1280,
-      "height": 800
-    },
-    {
-      "id": "att_2",
-      "kind": "video",
-      "mimeType": "video/mp4",
-      "name": "flow.mp4",
-      "size": 2400118
-    }
-  ],
   "TaskOutput": [
     {
       "text": "✓ 12 pass\n",
@@ -1989,7 +2128,9 @@
       "projectId": "prj_8f2c1a",
       "kind": "conductor",
       "title": "Port the wire protocol to Swift",
-      "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+      "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+      "specRevision": 4,
+      "specBaselineRevision": 2,
       "status": "blocked",
       "sessionId": "ses_31",
       "driver": "claude-code",
@@ -2064,7 +2205,7 @@
       "projectId": "prj_00a1",
       "kind": "task",
       "title": "Fix the flaky test",
-      "description": "",
+      "spec": "",
       "status": "planning",
       "sessionId": "ses_2",
       "driver": "anthropic-api",
@@ -2092,7 +2233,7 @@
       "projectId": "prj_00a1",
       "kind": "task",
       "title": "Fix the flaky test",
-      "description": "",
+      "spec": "",
       "status": "done",
       "sessionId": "ses_2",
       "driver": "anthropic-api",
@@ -2131,7 +2272,7 @@
       "projectId": "prj_00a1",
       "kind": "task",
       "title": "Fix the flaky test",
-      "description": "",
+      "spec": "",
       "status": "in_progress",
       "sessionId": "ses_2",
       "driver": "anthropic-api",
@@ -2161,7 +2302,7 @@
       "projectId": "prj_00a1",
       "kind": "task",
       "title": "Fix the flaky test",
-      "description": "",
+      "spec": "",
       "status": "review",
       "sessionId": "ses_2",
       "driver": "anthropic-api",
@@ -2190,7 +2331,7 @@
       "projectId": "prj_00a1",
       "kind": "task",
       "title": "Fix the flaky test",
-      "description": "",
+      "spec": "",
       "status": "done",
       "sessionId": "ses_2",
       "driver": "anthropic-api",
@@ -2223,7 +2364,9 @@
         "projectId": "prj_8f2c1a",
         "kind": "conductor",
         "title": "Port the wire protocol to Swift",
-        "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+        "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+        "specRevision": 4,
+        "specBaselineRevision": 2,
         "status": "blocked",
         "sessionId": "ses_31",
         "driver": "claude-code",
@@ -2306,50 +2449,74 @@
         "createdAt": 1759190400000,
         "updatedAt": 1759190460000
       },
-      "summaries": [
+      "activity": [
         {
-          "id": "sum_1",
+          "id": "act_1",
           "sessionId": "ses_31",
           "ticketId": "tkt_31",
+          "kind": "note",
           "author": "agent",
           "body": "Ported the enums; **tests pass**; next: entities.",
-          "createdAt": 1759190400000,
-          "attachments": [
-            {
-              "id": "att_1",
-              "kind": "image",
-              "mimeType": "image/png",
-              "name": "after.png",
-              "size": 48213,
-              "width": 1280,
-              "height": 800
-            },
-            {
-              "id": "att_2",
-              "kind": "video",
-              "mimeType": "video/mp4",
-              "name": "flow.mp4",
-              "size": 2400118
-            }
-          ]
+          "meta": {},
+          "createdAt": 1759190400000
         },
         {
-          "id": "sum_2",
+          "id": "act_2",
           "sessionId": "ses_t4",
           "ticketId": null,
+          "kind": "system",
           "author": "system",
           "body": "Dispatched.",
-          "createdAt": 1759190400000,
-          "attachments": []
+          "meta": {},
+          "createdAt": 1759190400000
         },
         {
-          "id": "sum_3",
+          "id": "act_3",
           "sessionId": "ses_31",
           "ticketId": "tkt_31",
+          "kind": "message",
           "author": "human",
           "body": "Looks good",
-          "createdAt": 1759190400000,
-          "attachments": []
+          "meta": {},
+          "createdAt": 1759190400000
+        },
+        {
+          "id": "act_4",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "blocked",
+          "author": "agent",
+          "body": "Should HarnessEvent decode unknown kinds or drop them?",
+          "meta": {
+            "question": "Should HarnessEvent decode unknown kinds or drop them?"
+          },
+          "createdAt": 1759190400001
+        },
+        {
+          "id": "act_5",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "changes_requested",
+          "author": "agent",
+          "body": "The enum test is tautological",
+          "meta": {
+            "round": 2,
+            "commit": "9f1c2ab",
+            "by": "agent"
+          },
+          "createdAt": 1759190400002
+        },
+        {
+          "id": "act_6",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "submitted",
+          "author": "agent",
+          "body": "Ready",
+          "meta": {
+            "specRevision": 4
+          },
+          "createdAt": 1759190400003
         }
       ],
       "runs": [
@@ -2424,7 +2591,7 @@
           "projectId": "prj_00a1",
           "kind": "task",
           "title": "Fix the flaky test",
-          "description": "",
+          "spec": "",
           "status": "planning",
           "sessionId": "ses_2",
           "driver": "anthropic-api",
@@ -2453,7 +2620,7 @@
         "projectId": "prj_00a1",
         "kind": "conductor",
         "title": "Fix the flaky test",
-        "description": "",
+        "spec": "",
         "status": "planning",
         "sessionId": "ses_2",
         "driver": "anthropic-api",
@@ -2474,7 +2641,9 @@
         "position": 0,
         "createdAt": 1759190400000,
         "updatedAt": 1759190400000,
-        "childCount": 1
+        "childCount": 1,
+        "specRevision": 1,
+        "specBaselineRevision": null
       },
       "subagents": [
         {
@@ -2550,7 +2719,7 @@
         "projectId": "prj_00a1",
         "kind": "task",
         "title": "Fix the flaky test",
-        "description": "",
+        "spec": "",
         "status": "planning",
         "sessionId": "ses_2",
         "driver": "anthropic-api",
@@ -2586,7 +2755,7 @@
         "createdAt": 1759190400000,
         "updatedAt": 1759190460000
       },
-      "summaries": [],
+      "activity": [],
       "runs": [],
       "dependents": [],
       "children": [],
@@ -2601,7 +2770,7 @@
         "projectId": "prj_00a1",
         "kind": "task",
         "title": "Fix the flaky test",
-        "description": "",
+        "spec": "",
         "status": "planning",
         "sessionId": "ses_2",
         "driver": "anthropic-api",
@@ -2637,7 +2806,7 @@
         "createdAt": 1759190400000,
         "updatedAt": 1759190460000
       },
-      "summaries": [],
+      "activity": [],
       "runs": [],
       "dependents": [],
       "children": []
@@ -2652,7 +2821,9 @@
           "projectId": "prj_8f2c1a",
           "kind": "conductor",
           "title": "Port the wire protocol to Swift",
-          "description": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+          "spec": "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+          "specRevision": 4,
+          "specBaselineRevision": 2,
           "status": "blocked",
           "sessionId": "ses_31",
           "driver": "claude-code",
@@ -2727,7 +2898,7 @@
           "projectId": "prj_00a1",
           "kind": "task",
           "title": "Fix the flaky test",
-          "description": "",
+          "spec": "",
           "status": "planning",
           "sessionId": "ses_2",
           "driver": "anthropic-api",
@@ -2954,7 +3125,9 @@
   "UpdateTicketBody": [
     {
       "title": "Renamed",
-      "description": "New brief",
+      "spec": "New brief",
+      "baseRevision": 3,
+      "specNote": "Tightened the goal",
       "status": "in_progress",
       "driver": "anthropic-api",
       "dependsOn": [],
@@ -2985,6 +3158,9 @@
     },
     {
       "status": "done"
+    },
+    {
+      "spec": "Draft brief"
     },
     {}
   ],
@@ -3119,7 +3295,8 @@
       "transcript.appended",
       "subagent.upserted",
       "transcript.delta",
-      "summary.added",
+      "activity.added",
+      "spec.revised",
       "watcher.upserted",
       "watcher.deleted",
       "settings.updated",
@@ -3261,7 +3438,27 @@
       "bash",
       "monitor"
     ],
-    "SummaryAuthor": [
+    "ActivityAuthor": [
+      "agent",
+      "human",
+      "system"
+    ],
+    "ActivityKind": [
+      "note",
+      "submitted",
+      "blocked",
+      "unblocked",
+      "review_approved",
+      "changes_requested",
+      "approved",
+      "message",
+      "answer",
+      "reopened",
+      "failed",
+      "permission",
+      "system"
+    ],
+    "SpecRevisionAuthor": [
       "agent",
       "human",
       "system"
@@ -3296,7 +3493,7 @@
       "system.children",
       "system.branches",
       "system.files",
-      "system.summaries",
+      "system.spec",
       "system.file_links",
       "system.board",
       "system.board_changes",
@@ -3487,7 +3684,7 @@
           "projectId": "prj_00a1",
           "kind": "epic",
           "title": "Fix the flaky test",
-          "description": "",
+          "spec": "",
           "status": "archived",
           "sessionId": "ses_2",
           "driver": "anthropic-api",
@@ -3526,6 +3723,21 @@
           "createdAt": 1759190400000,
           "startedAt": 1759190401000,
           "endedAt": null
+        }
+      ]
+    },
+    {
+      "type": "ActivityEntry",
+      "samples": [
+        {
+          "id": "act_9",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "deployed",
+          "author": "bot",
+          "body": "Shipped",
+          "meta": {},
+          "createdAt": 1759190400000
         }
       ]
     },

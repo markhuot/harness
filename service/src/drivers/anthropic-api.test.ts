@@ -177,8 +177,8 @@ describe("anthropic-api driver", () => {
       {
         content: [
           text("Working."),
-          toolUse("tu_1", "post_summary", { summary: "halfway" }),
-          toolUse("tu_2", "post_summary", {}), // invalid: missing summary
+          toolUse("tu_1", "post_note", { note: "halfway" }),
+          toolUse("tu_2", "post_note", {}), // invalid: missing note
           toolUse("tu_3", "nope_tool", {}),
           toolUse("tu_4", "browser_screenshot", {}),
         ],
@@ -189,7 +189,7 @@ describe("anthropic-api driver", () => {
     const { req, ops } = makeReq("work", "go");
     const { events, error } = await collect(driver, req);
     expect(error).toBeNull();
-    expect(ops.calls).toEqual([{ method: "postSummary", args: ["halfway"] }]);
+    expect(ops.calls).toEqual([{ method: "postNote", args: ["halfway"] }]);
     expect(fake.requests.length).toBe(2);
 
     const second = fake.requests[1]!.messages;
@@ -215,7 +215,7 @@ describe("anthropic-api driver", () => {
   // HARNESS-68: human messages sent mid-run join the live conversation (steering).
   test("a message sent during a tool call goes to the model with that call's results", async () => {
     const { driver, fake } = driverWith([
-      { content: [toolUse("tu_1", "post_summary", { summary: "halfway" })], stop_reason: "tool_use" },
+      { content: [toolUse("tu_1", "post_note", { note: "halfway" })], stop_reason: "tool_use" },
       { content: [text("Changing course.")], stop_reason: "end_turn" },
     ]);
     const { req } = makeReq("work", "go");
@@ -267,7 +267,7 @@ describe("anthropic-api driver", () => {
 
   test("usage is summed across iterations, including cache tokens", async () => {
     const { driver } = driverWith([
-      { content: [toolUse("a", "post_summary", { summary: "s" })], stop_reason: "tool_use", usage: { input_tokens: 100, output_tokens: 7, cache_read_input_tokens: 50 } },
+      { content: [toolUse("a", "post_note", { note: "s" })], stop_reason: "tool_use", usage: { input_tokens: 100, output_tokens: 7, cache_read_input_tokens: 50 } },
       { content: [text("ok")], stop_reason: "end_turn", usage: { input_tokens: 3, output_tokens: 2, cache_creation_input_tokens: 20 } },
     ]);
     const { events } = await collect(driver, makeReq("work", "x").req);
@@ -277,7 +277,7 @@ describe("anthropic-api driver", () => {
 
   test("state holds the full history, and resuming appends the new prompt after it", async () => {
     const first = driverWith([
-      { content: [toolUse("a", "post_summary", { summary: "s" })], stop_reason: "tool_use" },
+      { content: [toolUse("a", "post_note", { note: "s" })], stop_reason: "tool_use" },
       { content: [text("first answer")], stop_reason: "end_turn" },
     ]);
     const r1 = await collect(first.driver, makeReq("work", "one").req);
@@ -311,7 +311,7 @@ describe("anthropic-api driver", () => {
   });
 
   test(`stops after ${MAX_ITERATIONS} iterations with an error`, async () => {
-    const { driver, fake } = driverWith([{ content: [toolUse("loop", "post_summary", { summary: "again" })], stop_reason: "tool_use" }]);
+    const { driver, fake } = driverWith([{ content: [toolUse("loop", "post_note", { note: "again" })], stop_reason: "tool_use" }]);
     const { events, error } = await collect(driver, makeReq("work", "x").req);
     expect(error).toBeInstanceOf(Error);
     expect(fake.requests.length).toBe(MAX_ITERATIONS);

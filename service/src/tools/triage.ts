@@ -9,7 +9,7 @@ export const dispatchTicket = defineTool<{
   ticket_key?: string;
   url?: string;
   title: string;
-  description: string;
+  spec: string;
   start?: boolean;
   conductor?: boolean;
   branch?: string;
@@ -17,7 +17,7 @@ export const dispatchTicket = defineTool<{
 }>({
   name: "dispatch_ticket",
   description:
-    "Create a local ticket for the watcher output in the chosen project, or send an update to an existing one. When the output is about an item with a ticket-style key (e.g. \"FOO-123\"), pass it as key: that's the ticket's remote ID, shown on the board in place of its local key. Without ticket_key this always creates a new ticket with the project's next local key, linked to that remote ID, even when other tickets already carry it or a local ticket has the same key. To update an existing ticket instead, pass its local key as ticket_key: the description is posted to it as a message, and with key too, a ticket that has no remote ID yet is linked to it. The title also becomes the Inbox title. The description is the brief the working agent receives: restate the request with its link and any context you gathered. Set start true to begin work immediately, false to leave it in planning. Set conductor true for large jobs that should be split into several child tickets. When the work belongs on a branch that already exists (the head branch of an open pull request, say), set branch and base_branch both to it: the agent commits there directly, and approving only cleans up, with nothing to merge.",
+    "Create a local ticket for the watcher output in the chosen project, or send an update to an existing one. When the output is about an item with a ticket-style key (e.g. \"FOO-123\"), pass it as key: that's the ticket's remote ID, shown on the board in place of its local key. Without ticket_key this always creates a new ticket with the project's next local key, linked to that remote ID, even when other tickets already carry it or a local ticket has the same key. To update an existing ticket instead, pass its local key as ticket_key: the spec text is posted to it as a message, and with key too, a ticket that has no remote ID yet is linked to it. The title also becomes the Inbox title. The spec is what the working agent receives as the ticket's spec (revision 1): restate the request with its link, the acceptance criteria and any context you gathered. Set start true to begin work immediately, false to leave it in planning. Set conductor true for large jobs that should be split into several child tickets. When the work belongs on a branch that already exists (the head branch of an open pull request, say), set branch and base_branch both to it: the agent commits there directly, and approving only cleans up, with nothing to merge.",
   inputSchema: schema(
     {
       project_key: { type: "string", minLength: 1, description: "Key prefix of the target project, as returned by list_projects." },
@@ -28,7 +28,7 @@ export const dispatchTicket = defineTool<{
       },
       url: { type: "string", description: "Link to the external item, when the output has one." },
       title: { type: "string", minLength: 1, description: "Ticket title." },
-      description: { type: "string", minLength: 1, description: "Brief for the agent that will do the work." },
+      spec: { type: "string", minLength: 1, description: "The ticket's spec for the agent that will do the work (or, with ticket_key, the message to that ticket's agent)." },
       start: { type: "boolean", description: "Start work immediately (default false: leave in planning)." },
       conductor: { type: "boolean", description: "Create a conductor ticket that splits the work into child tickets." },
       branch: {
@@ -38,7 +38,7 @@ export const dispatchTicket = defineTool<{
       },
       base_branch: { type: "string", description: "Branch the new ticket's work merges into when it completes. Leave it out for the project's base branch." },
     },
-    ["project_key", "title", "description"],
+    ["project_key", "title", "spec"],
   ),
   async run(input, ctx) {
     const ticket = await ctx.ops.dispatchTicket(ctx, {
@@ -47,7 +47,7 @@ export const dispatchTicket = defineTool<{
       ticketKey: input.ticket_key,
       url: input.url,
       title: input.title,
-      description: input.description,
+      spec: input.spec,
       start: input.start,
       conductor: input.conductor,
       branch: input.branch?.trim() || undefined,

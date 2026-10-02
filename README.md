@@ -1,8 +1,8 @@
 # Harness
 
 An AI coding harness. A background service runs agent sessions against local project
-directories. A desktop app shows them as a live kanban board, with transcripts, summaries
-and an agent-driven browser. Every session is a Jira-style ticket (`NYTIMES-3`).
+directories. A desktop app shows them as a live kanban board, with transcripts, each ticket's
+spec and Activity, and an agent-driven browser. Every session is a Jira-style ticket (`NYTIMES-3`).
 
 The architecture, ticket lifecycle, tool list and HTTP API are in [DESIGN.md](DESIGN.md).
 
@@ -107,8 +107,14 @@ you answer.
 
 - Humans own Planning and Blocked, agents own In progress, and Review is shared.
 - **New session** (⌘N) opens a draft next to the board. **Start session** (⌘↩) skips planning,
-  and **Plan first** (⇧⌘↩) has an agent draft a plan for you to approve. A draft is saved as you
-  type and waits in Planning until you start it, and closing it asks whether to keep it.
+  and **Plan first** (⇧⌘↩) has an agent turn your request into a spec with a plan for you to
+  approve. A draft is saved as you type and waits in Planning until you start it, and closing it
+  asks whether to keep it.
+- Each ticket's **Spec** is a living document (Goal, Plan, Status, Open questions) that its agents
+  keep current. Every edit, yours or an agent's, is a revision, and pressing Start marks the one
+  you approved, so the reviewer can see what changed since. **Activity** is the ticket's short
+  timeline: agent notes, submits, questions, review decisions and approvals. A message sent from
+  the Spec or Activity tab goes into Activity along with the agent's answer.
 - New session's **Options** hold the same settings as a ticket's Details tab. To have the agent
   work right in the project folder instead of a worktree, pick the branch the folder already has
   checked out.

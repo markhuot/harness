@@ -39,7 +39,7 @@ const statuses = (h: ReturnType<typeof setup>, sessionId: string) =>
 test("a crash whose end can't be recorded stays busy only until reconcileRuns can write it", async () => {
   const h = setup();
   failFinishes(h, 2); // execute's finish and the onError retry
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /nosubmit" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /nosubmit" });
   await h.orch.idle();
 
   const [run] = h.store.runs.listBySession(t.sessionId);
@@ -59,7 +59,7 @@ test("a crash whose end can't be recorded stays busy only until reconcileRuns ca
 test("a crash is recorded as failed right away once the retry can write", async () => {
   const h = setup();
   failFinishes(h, 1);
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /nosubmit" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /nosubmit" });
   await h.orch.idle();
 
   const [run] = h.store.runs.listBySession(t.sessionId);
@@ -71,7 +71,7 @@ test("a crash is recorded as failed right away once the retry can write", async 
 test("the session takes new runs after a crash instead of piling up `running` rows", async () => {
   const h = setup();
   failFinishes(h, 1);
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "first /nosubmit" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "first /nosubmit" });
   await h.orch.idle();
   await h.orch.sendMessage(t.key, "second /nosubmit");
   await h.orch.idle();
@@ -95,7 +95,7 @@ test("a failing transcript write fails the run and closes the driver so the agen
     if (role === "assistant" && content.type === "text") throw new Error("database or disk is full");
     return append(sessionId, runId, role, content, subagentId);
   };
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
   await h.orch.idle();
 
   expect(closed).toBe(true);
@@ -106,7 +106,7 @@ test("a failing transcript write fails the run and closes the driver so the agen
 
 test("reconcileRuns leaves a live run and the run queued behind it alone", async () => {
   const h = setup();
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "long /hold /nosubmit" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "long /hold /nosubmit" });
   await Bun.sleep(5);
   await h.orch.sendMessage(t.key, "queued /nosubmit");
 
@@ -121,7 +121,7 @@ test("reconcileRuns leaves a live run and the run queued behind it alone", async
 
 test("a complete run cut off by a restart puts the approval back, and approving again lands the ticket", async () => {
   const h = setup();
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
   await h.orch.idle();
   // The previous process approved it and started the complete run, then died.
   h.store.tickets.update(t.id, { humanReview: "approved" });
@@ -139,7 +139,7 @@ test("a complete run cut off by a restart puts the approval back, and approving 
 
 test("an interrupted run of another kind leaves the human's approval alone", async () => {
   const h = setup();
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
   while (h.driver.holding === 0) await Bun.sleep(1);
   h.orch.humanReview(t.key, { decision: "approve" });
   const orphan = h.store.runs.create({ sessionId: t.sessionId, kind: "chat", driver: "fake", prompt: "p" });
@@ -153,7 +153,7 @@ test("an interrupted run of another kind leaves the human's approval alone", asy
 
 test("start() reconciles orphaned runs on a timer until stop()", async () => {
   const h = setup({ reconcileIntervalMs: 10 });
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /nosubmit" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /nosubmit" });
   await h.orch.idle();
   h.orch.start();
   // Orphaned after start(), so the startup recovery can't be what fixes it.

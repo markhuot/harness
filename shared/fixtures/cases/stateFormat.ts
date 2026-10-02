@@ -159,7 +159,7 @@ export const newSessionPlaceholderCases = cases(newSessionPlaceholder, {
 // ---------------------------------------------------------------------------
 
 export const shortToolNameCases = cases(shortToolName, {
-  "harness tool": "mcp__harness__post_summary",
+  "harness tool": "mcp__harness__post_note",
   "plain tool": "Bash",
   "server name with an underscore doesn't match": "mcp__a_b__x",
   "empty server name": "mcp____x",

@@ -193,7 +193,7 @@ export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: 
 export const browserScreenshot = defineTool<{ save_to?: string; tab?: number }>({
   name: "browser_screenshot",
   description:
-    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can attach it to post_summary or submit_for_review.",
+    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec.",
   inputSchema: schema({
     save_to: {
       type: "string",

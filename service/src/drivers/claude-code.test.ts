@@ -110,7 +110,7 @@ function argValue(argv: string[], flag: string): string | undefined {
   return i === -1 ? undefined : argv[i + 1];
 }
 
-const init = (sessionId = "sess-1") => ({ type: "system", subtype: "init", session_id: sessionId, tools: ["Bash", "mcp__harness__post_summary"] });
+const init = (sessionId = "sess-1") => ({ type: "system", subtype: "init", session_id: sessionId, tools: ["Bash", "mcp__harness__post_note"] });
 const success = (extra: Record<string, unknown> = {}) => ({
   type: "result",
   subtype: "success",
@@ -144,7 +144,7 @@ describe("buildClaudeArgs", () => {
   test("plan run forces plan mode regardless of settings", () => {
     const args = buildClaudeArgs({ ...req, kind: "plan", permissionMode: "auto" }, { ...baseSettings, permissionMode: "auto" }, null);
     expect(argValue(args, "--permission-mode")).toBe("plan");
-    // Plan mode blocks writes, but the harness server's tools (update_plan, post_summary) still run.
+    // Plan mode blocks writes, but the harness server's tools (update_spec, post_note) still run.
     expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
   });
 
@@ -155,8 +155,8 @@ describe("buildClaudeArgs", () => {
   });
 
   test("--permission-prompt-tool only when the run serves permission_prompt", () => {
-    const withTool = buildClaudeArgs({ ...req, tools: [{ name: "post_summary" }, { name: "permission_prompt" }] }, baseSettings, null);
-    const withoutTool = buildClaudeArgs({ ...req, tools: [{ name: "post_summary" }] }, baseSettings, null);
+    const withTool = buildClaudeArgs({ ...req, tools: [{ name: "post_note" }, { name: "permission_prompt" }] }, baseSettings, null);
+    const withoutTool = buildClaudeArgs({ ...req, tools: [{ name: "post_note" }] }, baseSettings, null);
     expect(argValue(withTool, "--permission-prompt-tool")).toBe("mcp__harness__permission_prompt");
     expect(withoutTool).not.toContain("--permission-prompt-tool");
   });
@@ -192,13 +192,13 @@ describe("StreamJsonParser", () => {
       { type: "stream_event", event: { type: "content_block_delta", delta: { type: "input_json_delta", partial_json: "{" } } },
       { type: "assistant", message: { content: [{ type: "thinking", thinking: "hmm" }, { type: "thinking", thinking: "" }] } },
       { type: "assistant", message: { content: [{ type: "text", text: "Hello" }] } },
-      { type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "mcp__harness__post_summary", input: { summary: "x" } }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "mcp__harness__post_note", input: { note: "x" } }] } },
       { type: "assistant", message: { content: [{ type: "tool_use", id: "tu2", name: "Bash", input: { command: "ls" } }] } },
       {
         type: "user",
         message: {
           content: [
-            { type: "tool_result", tool_use_id: "tu1", content: [{ type: "text", text: "Summary posted." }] },
+            { type: "tool_result", tool_use_id: "tu1", content: [{ type: "text", text: "Note added to Activity." }] },
             { type: "tool_result", tool_use_id: "tu2", content: "boom", is_error: true },
             { type: "tool_result", tool_use_id: "tu3", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "AAA" } }] },
           ],
@@ -212,9 +212,9 @@ describe("StreamJsonParser", () => {
       { type: "text_delta", text: "Hel" },
       { type: "thinking", text: "hmm" },
       { type: "text", text: "Hello" },
-      { type: "tool_call", callId: "tu1", name: "post_summary", input: { summary: "x" } },
+      { type: "tool_call", callId: "tu1", name: "post_note", input: { note: "x" } },
       { type: "tool_call", callId: "tu2", name: "Bash", input: { command: "ls" } },
-      { type: "tool_result", callId: "tu1", name: "post_summary", result: { content: [{ type: "text", text: "Summary posted." }] } },
+      { type: "tool_result", callId: "tu1", name: "post_note", result: { content: [{ type: "text", text: "Note added to Activity." }] } },
       { type: "tool_result", callId: "tu2", name: "Bash", result: { content: [{ type: "text", text: "boom" }], isError: true } },
       { type: "tool_result", callId: "tu3", name: "unknown", result: { content: [{ type: "image", data: "AAA", mimeType: "image/png" }] } },
       { type: "usage", inputTokens: 1110, outputTokens: 42, costUsd: 0.0123 },
@@ -446,7 +446,7 @@ describe("StreamJsonParser background tasks", () => {
     p.handle(init());
     p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "d", prompt: "p" } }] } });
     p.handle({ type: "assistant", parent_tool_use_id: "a1", message: { content: [{ type: "tool_use", id: "x", name: "mcp__harness__submit_for_review", input: {} }] } });
-    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "y", name: "mcp__harness__post_summary", input: {} }] } });
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "y", name: "mcp__harness__post_note", input: {} }] } });
     expect(p.finished).toBe(false);
     p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "z", name: "mcp__harness__block", input: { question: "?" } }] } });
     expect(p.finished).toBe(true);

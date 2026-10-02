@@ -5,7 +5,7 @@
 // the snapshot diff.
 
 import { describe, expect, test } from "bun:test";
-import type { Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
+import type { ActivityEntry, Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
 import {
   type BranchContext,
   changesRequestedPrompt,
@@ -41,7 +41,9 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
     projectId: "p1",
     kind: "task",
     title: "Add  dark\nmode",
-    description: "Add a dark theme toggle to the header.\n\n* keep `prefers-color-scheme`",
+    spec: "Add a dark theme toggle to the header.\n\n* keep `prefers-color-scheme`",
+    specRevision: 3,
+    specBaselineRevision: 2,
     status: "in_progress",
     sessionId: "s1",
     driver: "dummy",
@@ -197,6 +199,18 @@ describe("built-in system prompts", () => {
     });
   }
 
+  // The Spec and Activity section shows the last few entries; a chat says where its answer goes.
+  const recent: ActivityEntry[] = [
+    { id: "a1", sessionId: "s1", ticketId: "t1", kind: "changes_requested", author: "agent", body: "Icon is\nwrong", meta: { by: "agent", round: 1, commit: "0123456789abcdef" }, createdAt: 0 },
+    { id: "a2", sessionId: "s1", ticketId: "t1", kind: "message", author: "human", body: "Use the moon", meta: {}, createdAt: 0 },
+  ];
+  test("work with recent activity", () => {
+    expect(systemPrompt({ kind: "work", project, ticket: ticket(), session, activity: recent })).toMatchSnapshot();
+  });
+  test("chat about a blocked ticket from the Activity tab (logged)", () => {
+    expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent, logged: true })).toMatchSnapshot();
+  });
+
   test("chat without a ticket", () => {
     expect(systemPrompt({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();
   });
@@ -217,15 +231,41 @@ describe("built-in system prompts", () => {
 
 describe("built-in run prompts", () => {
   for (const kind of ["task", "conductor"] as const) {
-    for (const description of ["Do the thing.\n\n* one\n* two", "   "]) {
-      test(`workStartPrompt · ${kind} · ${JSON.stringify(description)}`, () => {
-        expect(workStartPrompt(ticket({ kind, description }))).toMatchSnapshot();
+    for (const spec of ["Do the thing.\n\n* one\n* two", "   "]) {
+      test(`workStartPrompt · ${kind} · ${JSON.stringify(spec)}`, () => {
+        expect(workStartPrompt(ticket({ kind, spec }))).toMatchSnapshot();
       });
     }
   }
 
-  test("reviewPrompt", () => {
-    expect(reviewPrompt(ticket())).toMatchSnapshot();
+  const entry = (kind: ActivityEntry["kind"], body: string, meta: ActivityEntry["meta"] = {}): ActivityEntry => ({
+    id: body,
+    sessionId: "s1",
+    ticketId: "t1",
+    kind,
+    author: kind === "message" ? "human" : "agent",
+    body,
+    meta,
+    createdAt: 0,
+  });
+  test("reviewPrompt · round 1, no baseline", () => {
+    expect(reviewPrompt(ticket({ specBaselineRevision: null }), { round: 1, earlier: [], baselineRevision: null, baselineDiff: "", activity: [] })).toMatchSnapshot();
+  });
+  test("reviewPrompt · round 1, spec untouched since the baseline", () => {
+    expect(
+      reviewPrompt(ticket(), { round: 1, earlier: [], baselineRevision: 3, baselineDiff: "", activity: [entry("note", "Toggle wired up"), entry("submitted", "Toggle done; tests pass")] }),
+    ).toMatchSnapshot();
+  });
+  test("reviewPrompt · round 2, with a baseline diff and earlier rounds", () => {
+    expect(
+      reviewPrompt(ticket(), {
+        round: 2,
+        earlier: [{ round: 1, decision: "request_changes", notes: "The toggle forgets its state.\nAlso the icon.", commit: "0123456789abcdef0123456789abcdef01234567" }],
+        baselineRevision: 2,
+        baselineDiff: "--- spec rev 2\n+++ spec rev 3\n@@ -1,1 +1,1 @@\n-Status: not started\n+Status: done",
+        activity: [entry("message", "Use localStorage"), entry("submitted", "Persisted the toggle")],
+      }),
+    ).toMatchSnapshot();
   });
 
   for (const [name, c] of Object.entries(TICKETS)) {
@@ -243,12 +283,12 @@ describe("built-in run prompts", () => {
   test("conductorUpdatePrompt · no changes", () => {
     expect(conductorUpdatePrompt([])).toMatchSnapshot();
   });
-  test("conductorUpdatePrompt · changes with and without summaries", () => {
+  test("conductorUpdatePrompt · changes with and without notes", () => {
     expect(
       conductorUpdatePrompt([
-        { key: "NYT-4", title: "Tokens  x", from: "in_progress", to: "review", summary: "Added tokens.\nTests pass." },
+        { key: "NYT-4", title: "Tokens  x", from: "in_progress", to: "review", note: "Added tokens.\nTests pass.", specRevision: 4 },
         { key: "NYT-5", title: "Toggle", from: "blocked", to: "in_progress" },
-        { key: "NYT-6", title: "Docs", from: "review", to: "done", summary: "   " },
+        { key: "NYT-6", title: "Docs", from: "review", to: "done", note: "   ", specRevision: 1 },
       ]),
     ).toMatchSnapshot();
   });
@@ -256,7 +296,7 @@ describe("built-in run prompts", () => {
   for (const by of ["agent", "human", "conductor"] as const) {
     for (const notes of ["Fix the icon.\nAnd the test.", "  "]) {
       test(`changesRequestedPrompt · ${by} · ${JSON.stringify(notes)}`, () => {
-        expect(changesRequestedPrompt(notes, by)).toMatchSnapshot();
+        expect(changesRequestedPrompt(notes, by, 5)).toMatchSnapshot();
       });
     }
   }

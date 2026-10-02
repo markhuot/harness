@@ -35,7 +35,7 @@ async function untilHolding(h: H) {
 describe("steering a running agent", () => {
   test("a message to an in-progress ticket goes into the running work run, not a new run", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Build it /hold /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Build it /hold /nosubmit" });
     await untilHolding(h);
     const [active] = h.store.runs.listBySession(t.sessionId);
     await h.orch.sendMessage(t.key, "Stop and write HELLO.md instead");
@@ -54,7 +54,7 @@ describe("steering a running agent", () => {
 
   test("a message to a planning ticket steers its plan run", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Plan the thing /hold", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Plan the thing /hold", start: false });
     await untilHolding(h);
     await h.orch.sendMessage(t.key, "Keep it to three steps");
     h.driver.release();
@@ -66,7 +66,7 @@ describe("steering a running agent", () => {
 
   test("a driver that can't steer queues the message behind the run, with a note", async () => {
     const h = setup(false);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Build it /hold /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Build it /hold /nosubmit" });
     await untilHolding(h);
     await h.orch.sendMessage(t.key, "second /nosubmit");
     expect(runs(h, t)).toEqual(["work:running", "work:queued"]);
@@ -79,7 +79,7 @@ describe("steering a running agent", () => {
 
   test("a message the run ended without taking in becomes one queued run, shown once", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Build it /hold /deaf /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Build it /hold /deaf /nosubmit" });
     await untilHolding(h);
     await h.orch.sendMessage(t.key, "Also update the README");
     expect(runs(h, t)).toEqual(["work:running"]);
@@ -94,7 +94,7 @@ describe("steering a running agent", () => {
 
   test("cancelling the run drops a message it never took in, like the rest of the queue", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Build it /hold /deaf" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Build it /hold /deaf" });
     await untilHolding(h);
     await h.orch.sendMessage(t.key, "Never mind");
     await h.orch.cancelTicket(t.key);
@@ -105,7 +105,7 @@ describe("steering a running agent", () => {
 
   test("a message to a blocked ticket steers its running chat, with the unblock note for the agent", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "hmm /hold");
     await untilHolding(h);
@@ -122,7 +122,7 @@ describe("steering a running agent", () => {
 
   test("once a chat has unblocked the ticket, a message to it (now in progress) still reaches that chat", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "Postgres /hold");
     await untilHolding(h);

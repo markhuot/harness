@@ -144,8 +144,19 @@ export interface Ticket {
   projectId: string;
   kind: TicketKind;
   title: string;
-  /** The brief / plan. Humans edit this in planning; the planning agent may update it. */
-  description: string;
+  /**
+   * The spec (DESIGN.md "Spec revisions and attachments"): a living markdown document with the
+   * goal, plan, status and open questions. Agents keep it current with edit_spec / update_spec;
+   * every write is a revision. This is the current revision's body.
+   */
+  spec: string;
+  /** The current spec revision (1 for a new ticket). Optional so older fixtures type-check. */
+  specRevision?: number;
+  /**
+   * The revision that was current when the human pressed Start (planning → work): the approved
+   * baseline the agent review diffs against. null until the ticket first starts.
+   */
+  specBaselineRevision?: number | null;
   status: TicketStatus;
   /** The session holding this ticket's transcript */
   sessionId: string;
@@ -466,12 +477,16 @@ export type ToolResultContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string }; // base64
 
-export type SummaryAuthor = "agent" | "human" | "system";
+export type ActivityAuthor = "agent" | "human" | "system";
 
 export type AttachmentKind = "image" | "video";
 
-/** A file an agent attached to a summary; served at GET /attachments/:id. */
-export interface SummaryAttachment {
+/**
+ * A ticket's image or video (DESIGN.md "Spec revisions and attachments"), referenced from its spec
+ * as `![alt](attachment:<id>)` and served at GET /attachments/:id. It lives until the ticket is
+ * deleted.
+ */
+export interface Attachment {
   id: string;
   kind: AttachmentKind;
   /** e.g. "image/png", "video/mp4" */
@@ -485,16 +500,96 @@ export interface SummaryAttachment {
   height?: number;
 }
 
-export interface Summary {
+/**
+ * What an Activity entry records (DESIGN.md "Activity"):
+ * - note: an agent's short progress note (post_note)
+ * - submitted: the work went to review (the submit note)
+ * - blocked: the agent (or a failure) asked the human something; meta.question
+ * - unblocked: the agent picked a blocked ticket back up; meta.note when it gave one
+ * - review_approved / changes_requested: an agent or conductor review decision; meta.round,
+ *   meta.commit (the HEAD it reviewed), meta.by
+ * - approved: a human (or conductor) approved the ticket
+ * - message: a human's message sent from the Spec or Activity tab (POST /messages log: true)
+ * - answer: the agent's final answer to such a message
+ * - reopened: a done ticket went back to work; the notes
+ * - failed: a run failed
+ * - permission: a tool approval was asked for or answered
+ * - system: anything else the service records (a worktree that couldn't be made, …)
+ */
+export const ACTIVITY_KINDS = [
+  "note",
+  "submitted",
+  "blocked",
+  "unblocked",
+  "review_approved",
+  "changes_requested",
+  "approved",
+  "message",
+  "answer",
+  "reopened",
+  "failed",
+  "permission",
+  "system",
+] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+/** ActivityEntry.meta: typed extras per kind. Every field is optional. */
+export interface ActivityMeta {
+  /** blocked: the question (same as the ticket's blockedReason when it was posted) */
+  question?: string;
+  /** review_approved / changes_requested: the agent review round, 1 for the first review */
+  round?: number;
+  /** review_approved / changes_requested: the commit the reviewer looked at (git rev-parse HEAD) */
+  commit?: string | null;
+  /** review_approved / changes_requested / approved: who decided */
+  by?: "agent" | "human" | "conductor";
+  /** unblocked: what resolved it */
+  note?: string;
+  /** submitted: the spec revision the work was submitted at */
+  specRevision?: number;
+}
+
+export interface ActivityEntry {
   id: string;
   sessionId: string;
   ticketId: string | null;
-  author: SummaryAuthor;
-  /** Short markdown update, e.g. "Implemented X; tests pass; next: Y" */
+  kind: ActivityKind;
+  author: ActivityAuthor;
+  /** Short markdown, e.g. "Fixed the button color; tests pass" */
   body: string;
+  meta: ActivityMeta;
   createdAt: number;
-  /** In the order the agent listed them; [] when there are none */
-  attachments: SummaryAttachment[];
+}
+
+export type SpecRevisionAuthor = "agent" | "human" | "system";
+
+/** GET /tickets/:key/spec/revisions: one revision's metadata, oldest first. */
+export interface SpecRevisionInfo {
+  rev: number;
+  author: SpecRevisionAuthor;
+  /** The run that wrote it (agent revisions), else null */
+  runId: string | null;
+  runKind: RunKind | null;
+  /** What changed, in a few words (the edit_spec / update_spec note, "Created", "Edited by hand") */
+  note: string;
+  /** True on the revision the human approved by pressing Start */
+  approvedBaseline: boolean;
+  createdAt: number;
+}
+
+/** GET /tickets/:key/spec/revisions/:rev: a revision with its body. */
+export interface SpecRevision extends SpecRevisionInfo {
+  body: string;
+}
+
+/**
+ * GET /tickets/:key/spec/revisions/:rev?diff=<otherRev>: a unified diff (parseDiff in
+ * shared/src/diff.ts reads it) from revision `from` to `to`. `diff` is "" when they're the same.
+ */
+export interface SpecDiff {
+  from: number;
+  to: number;
+  diff: string;
 }
 
 export interface Watcher {
@@ -665,7 +760,7 @@ export const PROMPT_IDS = [
   "system.children",
   "system.branches",
   "system.files",
-  "system.summaries",
+  "system.spec",
   "system.file_links",
   "system.board",
   "system.board_changes",
@@ -794,7 +889,12 @@ export type HarnessEvent =
   | { kind: "subagent.upserted"; subagent: Subagent }
   /** Ephemeral streaming text; the full block is persisted later as transcript.appended */
   | { kind: "transcript.delta"; sessionId: string; runId: string; text: string }
-  | { kind: "summary.added"; summary: Summary }
+  | { kind: "activity.added"; entry: ActivityEntry }
+  /**
+   * A new spec revision; the ticket.upserted that follows carries the new body. Services from
+   * before runId / runKind / createdAt omit them.
+   */
+  | { kind: "spec.revised"; ticketId: string; rev: number; author: SpecRevisionAuthor; note: string; runId?: string | null; runKind?: RunKind | null; createdAt?: number }
   | { kind: "watcher.upserted"; watcher: Watcher }
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
@@ -914,8 +1014,11 @@ export interface CreateProjectBody {
 
 export interface CreateTicketBody {
   projectId: string;
-  /** First message / brief. Title is derived from it when title is omitted. */
-  prompt: string;
+  /**
+   * The ticket's spec: revision 1, and the first run's message. Title is derived from it when
+   * title is omitted.
+   */
+  spec: string;
   title?: string;
   kind?: TicketKind;
   driver?: string;
@@ -958,7 +1061,16 @@ export interface CreateTicketBody {
 
 export interface UpdateTicketBody {
   title?: string;
-  description?: string;
+  /** A new spec revision, written by the human. Needs baseRevision unless the ticket is a draft. */
+  spec?: string;
+  /**
+   * The spec revision the edit started from (Ticket.specRevision when the editor opened). A spec
+   * that moved on since answers 409 with the current revision in `data` (SpecConflict), so a
+   * human's edit never overwrites an agent's without them seeing it.
+   */
+  baseRevision?: number;
+  /** A few words on what the edit changed, kept with the revision (default "Edited by hand") */
+  specNote?: string;
   status?: TicketStatus; // manual moves from the board
   /** Changing the driver clears the model unless `model` is given too */
   driver?: string;
@@ -1097,6 +1209,18 @@ export interface MessageBody {
    * (planning → the plan run; blocked, review, done → a chat run with the work tools).
    */
   move?: boolean;
+  /**
+   * true: the message also goes into the ticket's Activity, as a `message` entry, and the agent's
+   * final answer follows as an `answer` entry. Clients send true from the Spec and Activity tabs
+   * and false from every other tab (the Transcript shows the message either way). Default false.
+   */
+  log?: boolean;
+}
+
+/** The `data` of PATCH /tickets/:key's 409 when baseRevision isn't the current spec revision. */
+export interface SpecConflict {
+  currentRevision: number;
+  spec: string;
 }
 
 /** Re-open a done ticket: back to in progress, with notes for the agent */
@@ -1132,7 +1256,8 @@ export interface TicketDetail {
   resolvedFrom?: string;
   ticket: Ticket;
   session: Session;
-  summaries: Summary[];
+  /** The ticket's Activity, oldest first */
+  activity: ActivityEntry[];
   runs: Run[];
   dependents: string[];
   children: Ticket[];

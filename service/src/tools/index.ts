@@ -9,7 +9,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
-import { block, postSummary, recordPullRequest, resumeWork, reviewDecision, submitForReview, unblock, updateBranch, updatePlan } from "./ticket";
+import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, reviewDecision, submitForReview, unblock, updateBranch, updateSpec } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -35,8 +35,10 @@ export const triageTools: ToolDefinition[] = [dispatchTicket, declineWork];
 
 /** Every tool definition, for lookup/documentation. */
 export const allTools: ToolDefinition[] = [
-  postSummary,
-  updatePlan,
+  postNote,
+  readSpec,
+  editSpec,
+  updateSpec,
   block,
   unblock,
   resumeWork,
@@ -70,16 +72,19 @@ export const allTools: ToolDefinition[] = [
  * A chat (a human's message to a blocked, review or done ticket) gets its ticket's work tools:
  * see toolsForRun.
  */
+/** The spec tools (DESIGN.md "Spec revisions and attachments"): plan, work, chat, conductor and complete runs. Review runs only read it. */
+export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
+
 const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
-  plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  plan: { harness: [postNote, ...specTools, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
-    harness: [postSummary, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",
   },
-  review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
-  complete: { harness: [postSummary, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
+  review: { harness: [postNote, readSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  complete: { harness: [postNote, ...specTools, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postSummary, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },

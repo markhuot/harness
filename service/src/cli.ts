@@ -341,7 +341,7 @@ export class Cli {
     }
     const path = resolve(dir);
     const project = (await client.listProjects()).find((p) => p.path === path) ?? (await client.createProject({ path }));
-    return client.createTicket({ projectId: project.id, prompt, driver: opts.driver, start: !opts.plan });
+    return client.createTicket({ projectId: project.id, spec: prompt, driver: opts.driver, start: !opts.plan });
   }
 
   async run(argv: string[]): Promise<number> {

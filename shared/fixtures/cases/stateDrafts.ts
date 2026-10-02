@@ -74,8 +74,8 @@ export const applyTicketPatchCases = cases(({ ticket, patch }: PatchInput) => ap
   "NEL isn't trimmed": { ticket: blank(), patch: { branch: "\u0085" } },
   "null clears every nullable field": { ticket: full, patch: { model: null, permissionMode: null, baseBranch: null, branch: null, useWorktree: null } },
   "absent leaves every field alone": { ticket: full, patch: {} },
-  "explicit values": { ticket: blank(), patch: { title: "T", description: "D", permissionMode: "read_only", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1", "WEB-2"], position: 3.5, useWorktree: true } },
-  "false and empty values still apply": { ticket: full, patch: { skipAgentReview: false, skipHumanReview: false, dependsOn: [], title: "", description: "" } },
+  "explicit values": { ticket: blank(), patch: { title: "T", spec: "D", permissionMode: "read_only", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1", "WEB-2"], position: 3.5, useWorktree: true } },
+  "false and empty values still apply": { ticket: full, patch: { skipAgentReview: false, skipHumanReview: false, dependsOn: [], title: "", spec: "" } },
   "status isn't applied locally": { ticket: blank(), patch: { status: "done" } },
 });
 
@@ -91,10 +91,10 @@ type EmptyInput = { ticket: Ticket; project: Project | null; settings: Settings 
 const emptyCase = (over: Partial<Ticket>, p: Project | null = project(), s: Settings | null = settings): EmptyInput => ({ ticket: { ...blank(), ...over }, project: p, settings: s });
 export const draftIsEmptyCases = cases(({ ticket, project, settings }: EmptyInput) => draftIsEmpty(ticket, project, settings), {
   blank: emptyCase({}),
-  "whitespace prompt": emptyCase({ description: "  " }),
-  "NBSP prompt is whitespace": emptyCase({ description: " \n" }),
-  "NEL prompt isn't whitespace": emptyCase({ description: "\u0085" }),
-  prompt: emptyCase({ description: "Fix it" }),
+  "whitespace spec": emptyCase({ spec: "  " }),
+  "NBSP spec is whitespace": emptyCase({ spec: " \n" }),
+  "NEL spec isn't whitespace": emptyCase({ spec: "\u0085" }),
+  spec: emptyCase({ spec: "Fix it" }),
   conductor: emptyCase({ kind: "conductor" as TicketKind }),
   "another driver": emptyCase({ driver: "codex" }),
   model: emptyCase({ model: "sonnet" }),
@@ -118,8 +118,8 @@ export const draftIsEmptyCases = cases(({ ticket, project, settings }: EmptyInpu
 
 type CreateInput = { ticket: Ticket; project: Project };
 export const draftCreateBodyCases = cases(({ ticket, project }: CreateInput) => draftCreateBody(ticket, project), {
-  "a worktree draft sends its branch and base": { ticket: { ...blank(), description: "Go", requestedBranch: "feat", baseBranch: "develop" }, project: project() },
-  "a worktree draft with no branch picks sends nulls": { ticket: { ...blank(), description: "Go" }, project: project() },
+  "a worktree draft sends its branch and base": { ticket: { ...blank(), spec: "Go", requestedBranch: "feat", baseBranch: "develop" }, project: project() },
+  "a worktree draft with no branch picks sends nulls": { ticket: { ...blank(), spec: "Go" }, project: project() },
   "no worktree drops branch and base": { ticket: { ...blank(), requestedBranch: "feat", baseBranch: "develop", useWorktree: false }, project: project() },
   "a non-git project sends no worktree choice": { ticket: { ...blank(), useWorktree: true }, project: project({ isGit: false }) },
   "a project without worktrees: no branch keys": { ticket: { ...blank(), requestedBranch: "feat" }, project: project({ useWorktrees: false }) },
@@ -133,11 +133,11 @@ export const draftCreateBodyCases = cases(({ ticket, project }: CreateInput) => 
 });
 
 type DiffInput = { prev: Ticket; next: Ticket };
-const prev = { ...blank(), description: "a" };
+const prev = { ...blank(), spec: "a" };
 const diff = (over: Partial<Ticket>, base: Ticket = prev): DiffInput => ({ prev: base, next: { ...base, ...over } });
 export const draftPatchCases = cases(({ prev, next }: DiffInput) => draftPatch(prev, next), {
   "nothing changed": diff({}),
-  "only the changed fields, with branch names mapped": diff({ description: "ab", requestedBranch: "feat" }),
+  "only the changed fields, with branch names mapped": diff({ spec: "ab", requestedBranch: "feat" }),
   "dependencies": diff({ dependsOn: ["WEB-1"] }),
   "same dependencies": { prev: { ...prev, dependsOn: ["WEB-1"] }, next: { ...prev, dependsOn: ["WEB-1"] } },
   "reordered dependencies": { prev: { ...prev, dependsOn: ["WEB-1", "WEB-2"] }, next: { ...prev, dependsOn: ["WEB-2", "WEB-1"] } },
@@ -157,7 +157,7 @@ export const draftPatchCases = cases(({ prev, next }: DiffInput) => draftPatch(p
   "skipHumanReview on": diff({ skipHumanReview: true }),
   "a new project and kind": diff({ projectId: "p2", kind: "conductor" }),
   "the title isn't sent": diff({ title: "New title" }),
-  "NFD description differs from NFC": { prev: { ...prev, description: nfc }, next: { ...prev, description: nfd } },
+  "NFD spec differs from NFC": { prev: { ...prev, spec: nfc }, next: { ...prev, spec: nfd } },
 });
 
 type RowsInput = { ticket: Ticket; project: Project | null };

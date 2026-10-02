@@ -15,7 +15,7 @@ function seed() {
   const s = new Store(openDb(":memory:"));
   const p = s.projects.create({ path: "/a/alpha", name: "alpha", key: "A" });
   const q = s.projects.create({ path: "/a/beta", name: "beta", key: "B" });
-  const add = (projectId: string, over: { title?: string; description?: string; status?: TicketStatus } = {}): Ticket => {
+  const add = (projectId: string, over: { title?: string; spec?: string; status?: TicketStatus } = {}): Ticket => {
     tick();
     const key = s.transaction(() => s.projects.takeNextKey(projectId, (k) => s.tickets.keyExists(k)));
     const session = s.sessions.create({ key, kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: key });
@@ -24,7 +24,7 @@ function seed() {
       projectId,
       kind: "task",
       title: over.title ?? key,
-      description: over.description ?? "",
+      spec: over.spec ?? "",
       status: over.status ?? "planning",
       sessionId: session.id,
       driver: "dummy",
@@ -81,7 +81,7 @@ describe("completedAt", () => {
     expect(t.completedAt).toBe(t.createdAt);
   });
 
-  test("migration backfills done tickets from updatedAt and indexes existing tickets + latest summaries", () => {
+  test("migration backfills done tickets from updatedAt and indexes existing tickets + latest summaries (notes after migration 26)", () => {
     const db = new Database(":memory:", { strict: true });
     db.exec("PRAGMA foreign_keys = ON;");
     for (let v = 0; v < 5; v++) db.exec(MIGRATIONS[v]!);
@@ -101,7 +101,7 @@ describe("completedAt", () => {
     expect(s.tickets.get("t1")!.completedAt).toBe(500);
     expect(s.tickets.get("t2")!.completedAt).toBeNull();
     expect(s.tickets.search({ q: "zebra" }).tickets.map((t) => t.id)).toEqual(["t1"]);
-    // Only the latest summary counts.
+    // Only the latest summary (now note) counts.
     expect(s.tickets.search({ q: "stale" }).total).toBe(0);
     expect(s.tickets.search({ q: "ancient-1" }).tickets.map((t) => t.id)).toEqual(["t1"]);
   });
@@ -216,22 +216,22 @@ describe("search", () => {
   function corpus() {
     const env = seed();
     const { s, p, q, add, complete } = env;
-    const login = add(p.id, { title: "Login page", description: "the form" }); // A-1
-    const other = add(p.id, { title: "Settings", description: "remember the login choice" }); // A-2
-    const summarized = add(p.id, { title: "Refactor", description: "internals" }); // A-3
-    s.summaries.add({ sessionId: summarized.sessionId, ticketId: summarized.id, author: "agent", body: "reworked the login throttle" });
-    const beta = add(q.id, { title: "Login for beta", description: "" }); // B-1
+    const login = add(p.id, { title: "Login page", spec: "the form" }); // A-1
+    const other = add(p.id, { title: "Settings", spec: "remember the login choice" }); // A-2
+    const noted = add(p.id, { title: "Refactor", spec: "internals" }); // A-3
+    s.activity.add({ sessionId: noted.sessionId, ticketId: noted.id, kind: "note", author: "agent", body: "reworked the login throttle" });
+    const beta = add(q.id, { title: "Login for beta", spec: "" }); // B-1
     complete(beta);
-    return { ...env, login, other, summarized, beta };
+    return { ...env, login, other, noted, beta };
   }
 
-  test("matches title, description and latest summary; title hits rank above the rest, newest first", () => {
-    const { s, login, other, summarized, beta } = corpus();
+  test("matches title, spec and latest note; title hits rank above the rest, newest first", () => {
+    const { s, login, other, noted, beta } = corpus();
     const res = s.tickets.search({ q: "login" });
-    // Title matches (newest first), then description/summary matches (newest first), across statuses.
-    expect(res.tickets.map((t) => t.id)).toEqual([beta.id, login.id, summarized.id, other.id]);
+    // Title matches (newest first), then spec/note matches (newest first), across statuses.
+    expect(res.tickets.map((t) => t.id)).toEqual([beta.id, login.id, noted.id, other.id]);
     expect(res.total).toBe(4);
-    expect(s.tickets.search({ q: "throttle" }).tickets.map((t) => t.id)).toEqual([summarized.id]);
+    expect(s.tickets.search({ q: "throttle" }).tickets.map((t) => t.id)).toEqual([noted.id]);
     expect(s.tickets.search({ q: "rememb" }).tickets.map((t) => t.id)).toEqual([other.id]); // prefix
     expect(s.tickets.search({ q: "LOGIN FORM" }).tickets.map((t) => t.id)).toEqual([login.id]); // every term, any column
   });
@@ -252,7 +252,7 @@ describe("search", () => {
 
   test("user input with FTS syntax is literal, never a syntax error", () => {
     const { s, p, add } = corpus();
-    const quoted = add(p.id, { title: `say "hello" (loudly)`, description: "a:b c-d e*f NOT near" });
+    const quoted = add(p.id, { title: `say "hello" (loudly)`, spec: "a:b c-d e*f NOT near" });
     for (const q of [`"`, `"hello`, `hello"`, `*`, `hel*`, `-`, `-hello`, `:`, `title:hello`, `(`, `)`, `(hello`, `hello)`, `NOT`, `AND OR`, `^`, `{title}`, `'`, `%`, `_`, `\\`]) {
       expect(() => s.tickets.search({ q })).not.toThrow();
     }
@@ -279,7 +279,7 @@ describe("search", () => {
   test("pages through results with no dupes or skips", () => {
     const { s, p, add } = seed();
     for (let i = 0; i < 7; i++) add(p.id, { title: `widget ${i}` });
-    for (let i = 0; i < 6; i++) add(p.id, { description: `widget body ${i}` });
+    for (let i = 0; i < 6; i++) add(p.id, { spec: `widget body ${i}` });
     const all = s.tickets.search({ q: "widget", limit: 200 }).tickets.map((t) => t.id);
     expect(all).toHaveLength(13);
     const paged: string[] = [];
@@ -293,20 +293,26 @@ describe("search", () => {
     expect(paged).toEqual(all);
   });
 
-  test("index stays in sync after update, rename, delete and new summaries", () => {
+  test("index stays in sync after update, spec revision, rename, delete and new notes", () => {
     const { s, p, add } = seed();
-    const t = add(p.id, { title: "alpha words", description: "bravo" });
+    const t = add(p.id, { title: "alpha words", spec: "bravo" });
     expect(s.tickets.search({ q: "alpha" }).total).toBe(1);
-    s.tickets.update(t.id, { title: "charlie words", description: "delta" });
+    s.tickets.update(t.id, { title: "charlie words" });
+    s.specs.revise(t.id, { body: "delta", author: "human", note: "Edited by hand" });
     expect(s.tickets.search({ q: "alpha" }).total).toBe(0);
     expect(s.tickets.search({ q: "bravo" }).total).toBe(0);
     expect(s.tickets.search({ q: "charlie delta" }).total).toBe(1);
 
-    s.summaries.add({ sessionId: t.sessionId, ticketId: t.id, author: "agent", body: "first echo" });
+    s.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "note", author: "agent", body: "first echo" });
     expect(s.tickets.search({ q: "echo" }).total).toBe(1);
     tick();
-    s.summaries.add({ sessionId: t.sessionId, ticketId: t.id, author: "agent", body: "second foxtrot" });
-    expect(s.tickets.search({ q: "echo" }).total).toBe(0); // only the latest summary is indexed
+    s.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "submitted", author: "agent", body: "second foxtrot" });
+    expect(s.tickets.search({ q: "echo" }).total).toBe(0); // only the latest note is indexed
+    expect(s.tickets.search({ q: "foxtrot" }).total).toBe(1);
+    tick();
+    // Other kinds of Activity aren't notes: they neither get indexed nor displace the latest note.
+    s.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "blocked", author: "agent", body: "golf question", meta: { question: "golf question" } });
+    expect(s.tickets.search({ q: "golf" }).total).toBe(0);
     expect(s.tickets.search({ q: "foxtrot" }).total).toBe(1);
 
     s.projects.rekey(p.id, "NEWKEY");
@@ -322,7 +328,7 @@ describe("search", () => {
   test("without the FTS index, search falls back to LIKE with the same ranking; the index rebuilds when reopened", () => {
     const { s, p, add } = seed();
     const titled = add(p.id, { title: "Gamma ray" });
-    const described = add(p.id, { description: "a gamma burst" });
+    const described = add(p.id, { spec: "a gamma burst" });
     s.db.exec("DROP TABLE ticket_fts; DROP TRIGGER IF EXISTS ticket_fts_insert; DROP TRIGGER IF EXISTS ticket_fts_delete; DROP TRIGGER IF EXISTS ticket_fts_update;");
     expect(hasSearchIndex(s.db)).toBe(false);
     const fallback = new Store(s.db);

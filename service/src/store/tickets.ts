@@ -11,7 +11,9 @@ interface TicketRow {
   project_id: string;
   kind: string;
   title: string;
-  description: string;
+  spec: string;
+  spec_revision: number;
+  spec_baseline_revision: number | null;
   status: string;
   session_id: string;
   driver: string;
@@ -92,7 +94,8 @@ export interface NewTicket {
   projectId: string;
   kind: TicketKind;
   title: string;
-  description: string;
+  /** Revision 1 of the spec */
+  spec: string;
   status: TicketStatus;
   sessionId: string;
   driver: string;
@@ -111,9 +114,9 @@ export interface NewTicket {
   draft?: boolean;
 }
 
+/** Every column but the spec, which only SpecRepo writes (a revision each time). */
 export type TicketPatch = Partial<{
   title: string;
-  description: string;
   status: TicketStatus;
   driver: string;
   autoStart: boolean;
@@ -144,7 +147,6 @@ export type TicketPatch = Partial<{
 
 const COLUMNS: Record<string, string> = {
   title: "title",
-  description: "description",
   status: "status",
   driver: "driver",
   autoStart: "auto_start",
@@ -199,7 +201,9 @@ export class TicketRepo {
       projectId: r.project_id,
       kind: r.kind as TicketKind,
       title: r.title,
-      description: r.description,
+      spec: r.spec,
+      specRevision: r.spec_revision ?? 1,
+      specBaselineRevision: r.spec_baseline_revision ?? null,
       status: r.status as TicketStatus,
       sessionId: r.session_id,
       driver: r.driver,
@@ -260,8 +264,8 @@ export class TicketRepo {
   /**
    * The search hit set for `q` as CTEs ending in `hits(id, rank)`: rank 0 exact key, 1 key
    * prefix (current key or an old one from before a rename), 2 exact remote ID, 3 remote ID
-   * prefix, 4 every term in the title, 5 every term somewhere in key/old keys/title/description/
-   * latest summary/remote ID. FTS5 prefix matching when the index exists, LIKE substring
+   * prefix, 4 every term in the title, 5 every term somewhere in key/old keys/title/spec/
+   * latest note/remote ID. FTS5 prefix matching when the index exists, LIKE substring
    * matching otherwise.
    */
   private hitsCte(q: string, params: SqlParams): string {
@@ -284,7 +288,7 @@ export class TicketRepo {
     } else {
       const terms = searchTerms(q);
       if (terms.length) {
-        const cols = ["key", "aliases", "title", "description", "summary", "external_key"];
+        const cols = ["key", "aliases", "title", "spec", "latest_note", "external_key"];
         terms.forEach((term, i) => (params[`like${i}`] = `%${likePattern(term, false)}%`));
         const anyCol = terms.map((_, i) => `(${cols.map((c) => `s.${c} LIKE $like${i} ESCAPE '\\'`).join(" OR ")})`).join(" AND ");
         const inTitle = terms.map((_, i) => `s.title LIKE $like${i} ESCAPE '\\'`).join(" AND ");
@@ -466,9 +470,9 @@ export class TicketRepo {
     this.db.query("DELETE FROM ticket_key_aliases WHERE key = $key").run({ key: input.key.toUpperCase() });
     this.db
       .query(
-        `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, parent_id, auto_start,
+        `INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, parent_id, auto_start,
            agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, created_at, updated_at)
-         VALUES ($id, $key, $projectId, $kind, $title, $description, $status, $sessionId, $driver, $parentId, $autoStart,
+         VALUES ($id, $key, $projectId, $kind, $title, $spec, $status, $sessionId, $driver, $parentId, $autoStart,
            'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $t, $t)`,
       )
       .run({
@@ -477,7 +481,7 @@ export class TicketRepo {
         projectId: input.projectId,
         kind: input.kind,
         title: input.title,
-        description: input.description,
+        spec: input.spec,
         status: input.status,
         sessionId: input.sessionId,
         driver: input.driver,
@@ -497,6 +501,11 @@ export class TicketRepo {
         t,
       });
     this.setDeps(id, input.dependsOn);
+    this.db
+      .query(
+        "INSERT INTO spec_revisions (id, ticket_id, rev, body, author, run_id, run_kind, note, approved_baseline, created_at) VALUES ($rid, $id, 1, $spec, 'system', NULL, NULL, 'Created', 0, $t)",
+      )
+      .run({ rid: newId(), id, spec: input.spec, t });
     return this.get(id)!;
   }
 

@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs
 import { connect } from "node:net";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, type HarnessEvent } from "@harness/shared";
+import { HarnessApiError, HarnessClient, specConflict, type HarnessEvent } from "@harness/shared";
 import { onTempCleanup } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
@@ -72,13 +72,13 @@ describe("http api", () => {
     await expect(client.getTicket("NOPE-1")).rejects.toMatchObject({ status: 404 });
     await expect(client.createProject({ path: join(dir, "missing") })).rejects.toMatchObject({ status: 400 });
     const p = await client.createProject({ path: dir });
-    await client.createTicket({ projectId: p.id, prompt: "x", key: "EXT-1", start: false });
-    const dup = await client.createTicket({ projectId: p.id, prompt: "x", key: "EXT-1" }).catch((e) => e);
+    await client.createTicket({ projectId: p.id, spec: "x", key: "EXT-1", start: false });
+    const dup = await client.createTicket({ projectId: p.id, spec: "x", key: "EXT-1" }).catch((e) => e);
     expect(dup).toBeInstanceOf(HarnessApiError);
     expect(dup.status).toBe(409);
     await expect(client.request("POST", "/tickets", "not json" as any)).rejects.toMatchObject({ status: 400 });
     await expect(client.humanReview("EXT-1", { decision: "maybe" as any })).rejects.toMatchObject({ status: 400 });
-    await expect(client.createTicket({ projectId: p.id, prompt: "x", useWorktree: "yes" as any })).rejects.toMatchObject({ status: 400 });
+    await expect(client.createTicket({ projectId: p.id, spec: "x", useWorktree: "yes" as any })).rejects.toMatchObject({ status: 400 });
     await expect(client.updateSettings({ maxConcurrentRuns: 0 })).rejects.toMatchObject({ status: 400 });
   });
 
@@ -92,7 +92,7 @@ describe("http api", () => {
       const p2 = await client.createProject({ path: dir, name: "again" });
       expect(p2.key).toBe("NYTIMES2");
 
-      const t = await client.createTicket({ projectId: p.id, prompt: "Make the header blue" });
+      const t = await client.createTicket({ projectId: p.id, spec: "Make the header blue" });
       expect(t.key).toBe("NYTIMES-1");
       expect(t.status).toBe("in_progress");
       await h.orchestrator.idle();
@@ -122,7 +122,7 @@ describe("http api", () => {
       await h.orchestrator.idle();
       detail = await client.getTicket(t.key);
       expect(detail.ticket.status).toBe("done");
-      expect((await client.listSummaries(t.key)).some((s) => s.body === "Completed.")).toBe(true);
+      expect((await client.listActivity(t.key)).some((e) => e.kind === "note" && e.body === "Completed.")).toBe(true);
 
       const sessions = await client.listSessions("ticket");
       expect(sessions.map((s) => s.key)).toContain("NYTIMES-1");
@@ -136,7 +136,7 @@ describe("http api", () => {
   test("a background task over REST: listed with the ticket, its output read by offset; 400 for a bad offset, 404 for an agent", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "/bgtask 3" });
+    const t = await client.createTicket({ projectId: p.id, spec: "/bgtask 3" });
     await h.orchestrator.idle();
     const detail = await client.getTicket(t.key);
     onTempCleanup(() => rmSync(join(dummyTaskOutputDir(), detail.runs[0]!.id), { recursive: true, force: true }));
@@ -154,7 +154,7 @@ describe("http api", () => {
   test("block, reply, cancel and patch over REST", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "please /block Which color?" });
+    const t = await client.createTicket({ projectId: p.id, spec: "please /block Which color?" });
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.blockedReason).toBe("Which color?");
     // A message moves nothing: a side question leaves the ticket blocked...
@@ -175,7 +175,7 @@ describe("http api", () => {
     expect(stays.status).toBe("review");
     await h.orchestrator.idle();
 
-    const f = await client.createTicket({ projectId: p.id, prompt: "long /hold", driver: "fake" });
+    const f = await client.createTicket({ projectId: p.id, spec: "long /hold", driver: "fake" });
     await Bun.sleep(10);
     const cancelled = await client.cancelTicket(f.key);
     expect(cancelled.busy).toBe(false);
@@ -193,7 +193,7 @@ describe("http api", () => {
   test("start a planned ticket over REST; 409 once it's past planning, 404 for an unknown key", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "Write the landing page", start: false });
+    const t = await client.createTicket({ projectId: p.id, spec: "Write the landing page", start: false });
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.status).toBe("planning");
     const started = await client.startTicket(t.key);
@@ -207,7 +207,7 @@ describe("http api", () => {
   test("re-open a done ticket over REST: 409 before done, 400 without notes", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x" });
     await h.orchestrator.idle();
     await expect(client.reopenTicket(t.key, { notes: "more" })).rejects.toMatchObject({ status: 409 });
     await client.completeTicket(t.key, { skipAgent: true });
@@ -348,7 +348,7 @@ describe("http api", () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir, defaultModels: { fake: "proj-model" } });
     expect(p.defaultModels).toEqual({ fake: "proj-model" });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", driver: "fake", model: "ticket-model" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", driver: "fake", model: "ticket-model" });
     expect(t.model).toBe("ticket-model");
     await h.orchestrator.idle();
     expect(fake.calls[0]!.model).toBe("ticket-model");
@@ -381,7 +381,7 @@ describe("http api", () => {
   test("MCP endpoint serves the run's tools only while the run is active", async () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x /hold", driver: "fake" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x /hold", driver: "fake" });
     await until(() => fake.calls.length === 1);
     const mcpUrl = fake.calls[0]!.mcpUrl;
     expect(mcpUrl.startsWith(`${h.url}/mcp/`)).toBe(true);
@@ -391,9 +391,9 @@ describe("http api", () => {
     expect(names).toContain("submit_for_review");
     expect(names).not.toContain("review_decision");
     // Calling a tool over MCP drives the orchestrator
-    const call = await (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "post_summary", arguments: { summary: "via mcp" } } })).json();
+    const call = await (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "post_note", arguments: { note: "via mcp" } } })).json();
     expect(call.result.isError).toBe(false);
-    expect((await client.listSummaries(t.key)).map((s) => s.body)).toContain("via mcp");
+    expect((await client.listActivity(t.key)).map((e) => [e.kind, e.body])).toContainEqual(["note", "via mcp"]);
     fake.release();
     await h.orchestrator.idle();
     expect((await rpc({ jsonrpc: "2.0", id: 3, method: "tools/list" })).status).toBe(404);
@@ -402,7 +402,7 @@ describe("http api", () => {
   test("browser frames go only to subscribed sockets; input is forwarded; unsubscribe on close", async () => {
     const { client, dir, browser } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false, driver: "fake" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false, driver: "fake" });
     const a = collect(client);
     const b = collect(client);
     await Promise.all([a.ready, b.ready]);
@@ -441,7 +441,7 @@ describe("http api", () => {
   test("browser.subscribe with a tab switches the socket's tab; a repeat without one changes nothing; the client resubscribes to it", async () => {
     const { client, dir, browser } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false, driver: "fake" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false, driver: "fake" });
     const a = collect(client);
     await a.ready;
     const subscribed: (number | undefined)[] = [];
@@ -472,7 +472,7 @@ describe("http api", () => {
   test("conductor with the real dummy driver + tools drives its children to done", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const c = await client.createTicket({ projectId: p.id, prompt: "Ship it\n- Build the API\n- Build the UI", kind: "conductor" });
+    const c = await client.createTicket({ projectId: p.id, spec: "Ship it\n- Build the API\n- Build the UI", kind: "conductor" });
     await h.orchestrator.idle(30_000);
     const d = await client.getTicket(c.key);
     expect(d.children.map((x) => [x.title, x.status])).toEqual([
@@ -486,7 +486,7 @@ describe("http api", () => {
   test("a plain task ticket that makes a child with the real dummy driver conducts it to done", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "Audit the PRs /child Rebase the PR" });
+    const t = await client.createTicket({ projectId: p.id, spec: "Audit the PRs /child Rebase the PR" });
     await h.orchestrator.idle(30_000);
     const d = await client.getTicket(t.key);
     expect(d.ticket.kind).toBe("task");
@@ -550,7 +550,7 @@ describe("http api", () => {
   test("POST /tickets/:key/approval answers a pending approval; 409 without one", async () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: 'x /tool Bash {"command":"npm test"}', driver: "fake" });
+    const t = await client.createTicket({ projectId: p.id, spec: 'x /tool Bash {"command":"npm test"}', driver: "fake" });
     await h.orchestrator.idle();
     const blocked = (await client.getTicket(t.key)).ticket;
     expect(blocked.pendingApproval?.toolName).toBe("Bash");
@@ -572,11 +572,11 @@ describe("drafts over http", () => {
     const q = await client.createProject({ path: other, key: "OTHER" });
     const { events, ready } = collect(client);
     await ready;
-    const d = await client.createTicket({ projectId: p.id, prompt: "", draft: true });
+    const d = await client.createTicket({ projectId: p.id, spec: "", draft: true });
     expect([d.draft, d.status, d.title, d.busy]).toEqual([true, "planning", "Untitled draft", false]);
     expect((await client.listTickets()).map((t) => [t.key, t.draft])).toEqual([[d.key, true]]);
     await expect(client.submitTicket(d.key, { start: true })).rejects.toMatchObject({ status: 400 });
-    await client.updateTicket(d.key, { description: "Make the header blue" });
+    await client.updateTicket(d.key, { spec: "Make the header blue" }); // a draft needs no baseRevision
     await expect(client.request("POST", `/tickets/${d.key}/submit`, { start: "yes" })).rejects.toMatchObject({ status: 400 });
     // Moving projects re-keys it; the old key keeps resolving (resolvedFrom), as after a project rename.
     const moved = await client.updateTicket(d.key, { projectId: q.id });
@@ -593,13 +593,59 @@ describe("drafts over http", () => {
   });
 });
 
+describe("spec + Activity over http", () => {
+  test("PATCH spec needs baseRevision; a stale one is 409 with the current spec; revisions and diffs read back", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const created = await client.createTicket({ projectId: p.id, spec: "Make the header blue", start: false });
+    await h.orchestrator.idle(); // the plan run writes its own revision
+    const t = (await client.getTicket(created.key)).ticket;
+    const base = t.specRevision!;
+    await expect(client.updateTicket(t.key, { spec: "Make it red" })).rejects.toMatchObject({ status: 400 });
+    const u = await client.updateTicket(t.key, { spec: "Make the header red", baseRevision: base, specNote: "Red, not blue" });
+    expect([u.spec, u.specRevision]).toEqual(["Make the header red", base + 1]);
+    // Someone else's edit from the old revision is refused, and the client can read what it lost to.
+    const stale = await client.updateTicket(t.key, { spec: "Make the header green", baseRevision: base }).catch((e: unknown) => e);
+    expect(specConflict(stale)).toEqual({ currentRevision: base + 1, spec: "Make the header red" });
+    expect((await client.getTicket(t.key)).ticket.spec).toBe("Make the header red");
+
+    const revisions = await client.specRevisions(t.key);
+    expect(revisions.map((r) => r.rev)).toEqual(Array.from({ length: base + 1 }, (_, i) => i + 1));
+    expect([revisions[0], revisions.at(-1)]).toMatchObject([
+      { author: "system", note: "Created" },
+      { author: "human", note: "Red, not blue" },
+    ]);
+    expect((await client.specRevision(t.key, 1)).body).toBe("Make the header blue");
+    const diff = await client.specDiff(t.key, 1, base + 1);
+    expect([diff.from, diff.to]).toEqual([1, base + 1]);
+    expect(diff.diff).toContain("-Make the header blue");
+    expect(diff.diff).toContain("+Make the header red");
+    await expect(client.specRevision(t.key, base + 2)).rejects.toMatchObject({ status: 404 });
+    await expect(client.request("GET", `/tickets/${t.key}/spec/revisions/0`)).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("GET", `/tickets/${t.key}/spec/revisions/1?diff=x`)).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("POST /messages takes log as a boolean; log: true puts the message in Activity", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false });
+    await h.orchestrator.idle();
+    await expect(client.request("POST", `/tickets/${t.key}/messages`, { text: "hi", log: "yes" })).rejects.toMatchObject({ status: 400 });
+    await client.sendMessage(t.key, "not logged");
+    await client.sendMessage(t.key, "logged", { log: true });
+    await h.orchestrator.idle();
+    const messages = (await client.listActivity(t.key)).filter((e) => e.kind === "message").map((e) => [e.author, e.body]);
+    expect(messages).toEqual([["human", "logged"]]);
+  });
+});
+
 describe("ticket paging + search over http", () => {
   async function seedBoard() {
     const env = await boot();
     const { client, dir } = env;
     const p = await client.createProject({ path: dir, key: "PG" });
     const make = async (title: string, status?: "done" | "review") => {
-      const t = await client.createTicket({ projectId: p.id, prompt: title, title, start: false });
+      const t = await client.createTicket({ projectId: p.id, spec: title, title, start: false });
       if (status) await client.updateTicket(t.key, { status });
       await Bun.sleep(2); // distinct completion timestamps
       return (await client.getTicket(t.key)).ticket;
@@ -670,7 +716,7 @@ describe("ticket paging + search over http", () => {
     const p = await client.createProject({ path: dir });
     expect(await client.projectFiles(p.id, "app")).toEqual([{ path: "src/app.ts", kind: "file" }]);
     expect(await client.projectFiles(p.id, "", 1)).toEqual([{ path: "src/", kind: "dir" }]);
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false });
     expect(await client.ticketFiles(t.key, "sr")).toEqual([
       { path: "src/", kind: "dir" },
       { path: "src/app.ts", kind: "file" },
@@ -695,9 +741,9 @@ describe("ticket paging + search over http", () => {
     expect((await client.projectCommands(p.id, "")).map((c) => c.name)).toEqual(["code-walk", "code-review", "vercel:deploy"]);
     expect(fake.listCommandsCalls).toEqual([dir]);
 
-    const onDummy = await client.createTicket({ projectId: p.id, prompt: "x", start: false, driver: "dummy" });
+    const onDummy = await client.createTicket({ projectId: p.id, spec: "x", start: false, driver: "dummy" });
     expect(await client.ticketCommands(onDummy.key, "code")).toEqual([]);
-    const onFake = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const onFake = await client.createTicket({ projectId: p.id, spec: "x", start: false });
     expect((await client.ticketCommands(onFake.key, "review"))[0]).toEqual({ name: "code-review", description: "Review the diff", argumentHint: "[pr]" });
 
     await expect(client.projectCommands(p.id, "a", { driver: "nope" })).rejects.toMatchObject({ status: 400 });
@@ -722,7 +768,7 @@ describe("ticket paging + search over http", () => {
     writeFileSync(join(dir, ".env"), "S=1\n");
     writeFileSync(join(dir, "node_modules", "foo", "index.js"), "module.exports = 1;\n");
     const p = await client.createProject({ path: dir });
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false });
 
     const view = await client.projectFile(p.id, "src/app.ts");
     expect(view).toMatchObject({ path: "src/app.ts", root: dir, size: 4, contents: "two\n", binary: false, tooLarge: false });
@@ -780,7 +826,7 @@ describe("ticket paging + search over http", () => {
     expect(await client.projectBranches(p.id, "", 1)).toHaveLength(1);
     await expect(client.projectBranches("nope")).rejects.toMatchObject({ status: 404 });
     // Ticket fields over REST: chosen branch and base override; the settings default is public.
-    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false, branch: "medl-1223-ai-app", baseBranch: "release" });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false, branch: "medl-1223-ai-app", baseBranch: "release" });
     expect([t.requestedBranch, t.baseBranch, t.branch]).toEqual(["medl-1223-ai-app", "release", null]);
     expect((await client.updateTicket(t.key, { baseBranch: "" })).baseBranch).toBeNull();
     expect((await client.getSettings()).baseBranch).toBe("main");
@@ -795,29 +841,35 @@ describe("GET /attachments/:id", () => {
     writeFileSync(join(b.dir, "after.png"), png(40, 30));
     writeFileSync(join(b.dir, "flow.mp4"), video);
     const p = await b.client.createProject({ path: b.dir });
-    const t = await b.client.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const created = await b.client.createTicket({ projectId: p.id, spec: "x", start: false });
+    await b.h.orchestrator.idle(); // the plan run writes its own revision first
+    const t = (await b.client.getTicket(created.key)).ticket;
     const { events, ready } = collect(b.client);
     await ready;
     const ctx = fakeContext({ ticket: t, cwd: b.dir, session: fakeSession({ id: t.sessionId, key: t.key, ticketId: t.id }), ops: b.h.orchestrator.ops });
-    await b.h.orchestrator.ops.postSummary(ctx, "shots", ["after.png", "flow.mp4"]);
-    await until(() => events.some((e) => e.kind === "summary.added"));
-    const [summary] = await b.client.listSummaries(t.key);
-    return { ...b, t, video, events, summary: summary! };
+    await b.h.orchestrator.ops.updateSpec(ctx, { spec: "Shots:\n\n![After](after.png)\n![Flow](flow.mp4)", note: "shots", baseRevision: t.specRevision! });
+    await until(() => events.some((e) => e.kind === "spec.revised" && e.ticketId === t.id));
+    const attachments = b.h.store.attachments.listByTicket(t.id);
+    return { ...b, t, video, events, attachments };
   }
 
-  test("summaries over REST and summary.added carry the attachments", async () => {
-    const { summary, events } = await withAttachments();
-    expect(summary.attachments.map((a) => [a.name, a.kind, a.mimeType, a.width, a.height])).toEqual([
+  test("a spec write stores its images as the ticket's attachments and links them from the spec over REST", async () => {
+    const { client, t, attachments, events } = await withAttachments();
+    expect(attachments.map((a) => [a.name, a.kind, a.mimeType, a.width, a.height])).toEqual([
       ["after.png", "image", "image/png", 40, 30],
       ["flow.mp4", "video", "video/mp4", undefined, undefined],
     ]);
-    const added = events.find((e) => e.kind === "summary.added");
-    expect(added).toMatchObject({ summary: { attachments: summary.attachments } });
+    const [image, video] = attachments;
+    const spec = `Shots:\n\n![After](attachment:${image!.id})\n![Flow](attachment:${video!.id})`;
+    const rev = t.specRevision! + 1;
+    expect((await client.getTicket(t.key)).ticket).toMatchObject({ spec, specRevision: rev });
+    expect(await client.specRevision(t.key, rev)).toMatchObject({ rev, author: "agent", note: "shots", body: spec });
+    expect(events.find((e) => e.kind === "spec.revised")).toMatchObject({ ticketId: t.id, rev, author: "agent", note: "shots" });
   });
 
   test("header token or query token; a bad token is 401 and an unknown id 404", async () => {
-    const { h, client, summary } = await withAttachments();
-    const [image] = summary.attachments;
+    const { h, client, attachments } = await withAttachments();
+    const [image] = attachments;
     const viaHeader = await fetch(`${h.url}/attachments/${image!.id}`, { headers: { authorization: `Bearer ${h.token}` } });
     expect(viaHeader.status).toBe(200);
     expect(viaHeader.headers.get("content-type")).toBe("image/png");
@@ -836,14 +888,14 @@ describe("GET /attachments/:id", () => {
 
   test("the query token works on no other route", async () => {
     const { h, t } = await withAttachments();
-    for (const path of ["/projects", `/tickets/${t.key}/summaries`, "/settings"]) {
+    for (const path of ["/projects", `/tickets/${t.key}/activity`, "/settings"]) {
       expect((await fetch(`${h.url}${path}?token=${encodeURIComponent(h.token)}`)).status).toBe(401);
     }
   });
 
   test("Range requests get 206 with exactly the asked-for bytes", async () => {
-    const { client, summary, video } = await withAttachments();
-    const url = client.attachmentUrl(summary.attachments[1]!.id);
+    const { client, attachments, video } = await withAttachments();
+    const url = client.attachmentUrl(attachments[1]!.id);
     const mid = await fetch(url, { headers: { range: "bytes=100-199" } });
     expect(mid.status).toBe(206);
     expect(mid.headers.get("content-range")).toBe(`bytes 100-199/${video.length}`);
@@ -864,9 +916,9 @@ describe("GET /attachments/:id", () => {
   });
 
   test("the file is gone once its ticket is deleted", async () => {
-    const { client, t, summary, h } = await withAttachments();
+    const { client, t, attachments, h } = await withAttachments();
     await client.deleteTicket(t.key);
-    for (const a of summary.attachments) expect((await fetch(client.attachmentUrl(a.id))).status).toBe(404);
+    for (const a of attachments) expect((await fetch(client.attachmentUrl(a.id))).status).toBe(404);
     expect(readdirSync(h.paths.attachmentsDir)).toEqual([]);
   });
 });

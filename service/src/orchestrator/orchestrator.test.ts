@@ -27,7 +27,7 @@ const runKinds = (h: ReturnType<typeof setup>, t: Ticket) => h.store.runs.listBy
 describe("ticket lifecycle", () => {
   test("start:true runs work with the brief, auto-reviews, then Complete with instructions → done", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     expect(t.key).toBe("ACME-1");
     expect(t.status).toBe("in_progress");
     expect(t.busy).toBe(true);
@@ -52,18 +52,18 @@ describe("ticket lifecycle", () => {
     expect(st).toContain("Run started (work)");
     expect(st).toContain("Moved to review");
     expect(st.at(-1)).toBe("Completed");
-    const summaries = h.orch.summaries(t.key).map((s) => `${s.author}:${s.body}`);
-    expect(summaries).toContain("agent:All done.");
+    const activity = h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`);
+    expect(activity).toContain("submitted:agent:All done.");
   });
 
-  test("start:false plans (update_plan), then /start runs the approved plan", async () => {
+  test("start:false plans (update_spec), then /start runs the approved plan", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Refactor auth", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Refactor auth", start: false });
     expect(t.status).toBe("planning");
     await h.orch.idle();
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("planning");
-    expect(cur.description).toBe("1. Do Refactor auth");
+    expect(cur.spec).toBe("1. Do Refactor auth");
     expect(h.driver.calls.map((c) => c.kind)).toEqual(["plan"]);
 
     await h.orch.sendMessage(t.key, "also do tests");
@@ -76,14 +76,14 @@ describe("ticket lifecycle", () => {
     cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("review");
     const work = h.driver.calls.find((c) => c.kind === "work")!;
-    expect(work.prompt).toContain("The plan is approved");
+    expect(work.prompt).toContain("The spec is approved");
     expect(work.prompt).toContain("1. Do also do tests");
     await expect(h.orch.startTicket(t.key)).rejects.toBeInstanceOf(HarnessError);
   });
 
   test("work runs resume driver state; review runs start fresh and never write state", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     await h.orch.startTicket(t.key);
     await h.orch.idle();
@@ -98,18 +98,18 @@ describe("ticket lifecycle", () => {
 
   test("block → blocked; the human's answer resumes the agent with its tools, which unblocks and submits", async () => {
     const h = setup({ realTools: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
     expect(cur.blockedReason).toBe("Which database?");
-    expect(h.orch.summaries(t.key).map((s) => s.body)).toContain("Blocked: Which database?");
+    expect(h.orch.activity(t.key).map((s) => [s.kind, s.author, s.body, s.meta.question])).toContainEqual(["blocked", "agent", "Which database?", "Which database?"]);
     // blocked runs do not auto-submit and do not get a review
     expect(runKinds(h, t)).toEqual(["work:succeeded"]);
     const workTools = h.driver.calls[0]!.toolNames;
 
     // The message moves nothing: the agent decides.
-    cur = await h.orch.sendMessage(t.key, "Postgres /unblock /submit");
+    cur = await h.orch.sendMessage(t.key, "Postgres /unblock /submit", { log: true });
     expect(cur.status).toBe("blocked");
     await h.orch.idle();
     const chat = h.driver.calls[1]!;
@@ -125,9 +125,14 @@ describe("ticket lifecycle", () => {
     expect(cur).toMatchObject({ status: "review", blockedReason: null, agentReview: "approved" });
     expect(statuses(h, t.sessionId)).toContain("Unblocked by the agent: answered");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded", "review:succeeded"]);
-    // One agent answer: the submit summary, not the chat's last text as well (then the reviewer's).
-    const after = h.orch.summaries(t.key).map((s) => `${s.author}:${s.body}`);
-    expect(after.slice(after.indexOf("human:Postgres /unblock /submit"))).toEqual(["human:Postgres /unblock /submit", "agent:Done from chat.", "agent:Review approved: LGTM"]);
+    // One agent answer: the submit note, not the chat's last text as well (then the reviewer's).
+    const after = h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`);
+    expect(after.slice(after.indexOf("message:human:Postgres /unblock /submit"))).toEqual([
+      "message:human:Postgres /unblock /submit",
+      "unblocked:agent:answered",
+      "submitted:agent:Done from chat.",
+      "review_approved:agent:LGTM",
+    ]);
     // The card went blocked → in progress (while the agent worked) → review.
     const st = statuses(h, t.sessionId);
     expect(st.indexOf("Unblocked by the agent: answered")).toBeLessThan(st.indexOf("Moved to review"));
@@ -135,32 +140,32 @@ describe("ticket lifecycle", () => {
 
   test("work run that ends without submitting is auto-submitted with the last assistant text", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "quiet /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "quiet /nosubmit" });
     await h.orch.idle();
     const d = h.orch.ticketDetail(t.key);
     expect(d.ticket.status).toBe("review");
-    const sys = d.summaries.find((s) => s.author === "system")!;
+    const sys = d.activity.find((s) => s.author === "system")!;
     expect(sys.body).toBe('Hello from fake! You said: "quiet /nosubmit"');
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
   });
 
   test("auto-submit is skipped while another human message is queued", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "first /hold /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "first /hold /nosubmit" });
     await Bun.sleep(5);
     await h.orch.sendMessage(t.key, "second /nosubmit");
     h.driver.release();
     await h.orch.idle();
     // Only the second run's end triggers the submit
-    const sys = h.orch.summaries(t.key).filter((s) => s.author === "system");
+    const sys = h.orch.activity(t.key).filter((s) => s.author === "system");
     expect(sys.map((s) => s.body)).toEqual(['Hello from fake! You said: "second /nosubmit"']);
     expect(runKinds(h, t)).toEqual(["work:succeeded", "work:succeeded", "review:succeeded"]);
   });
 
   test("work run failure (error event or thrown) → blocked with the error", async () => {
     const h = setup();
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "/fail disk full" });
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "/throw kaboom" });
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "/fail disk full" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "/throw kaboom" });
     await h.orch.idle();
     const ta = h.orch.ticketDetail(a.key).ticket;
     expect(ta.status).toBe("blocked");
@@ -168,9 +173,9 @@ describe("ticket lifecycle", () => {
     expect(h.orch.ticketDetail(a.key).runs[0]!.status).toBe("failed");
     const tb = h.orch.ticketDetail(b.key).ticket;
     expect(tb.blockedReason).toBe("kaboom");
-    // The detail view has no blocked callout; the Summary tab is where the reason shows.
-    expect(h.orch.summaries(a.key).map((s) => [s.author, s.body])).toEqual([["system", "Run failed: disk full"]]);
-    expect(h.orch.summaries(b.key).map((s) => s.body)).toEqual(["Run failed: kaboom"]);
+    // The detail view has no blocked callout; Activity is where the reason shows.
+    expect(h.orch.activity(a.key).map((s) => [s.kind, s.author, s.body])).toEqual([["failed", "system", "Run failed: disk full"]]);
+    expect(h.orch.activity(b.key).map((s) => s.body)).toEqual(["Run failed: kaboom"]);
     expect(h.store.transcript.list(a.sessionId).some((e) => e.content.type === "error" && e.content.text === "disk full")).toBe(true);
   });
 
@@ -178,7 +183,7 @@ describe("ticket lifecycle", () => {
     const driver = new FakeDriver();
     driver.rejectsLeft = 2;
     const h = setup({ driver });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "loop" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "loop" });
     await h.orch.idle();
     const d = h.orch.ticketDetail(t.key);
     expect(d.ticket.status).toBe("review");
@@ -198,7 +203,7 @@ describe("ticket lifecycle", () => {
 
   test("human request_changes resets both reviews and re-runs work with the notes", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const cur = h.orch.humanReview(t.key, { decision: "request_changes", notes: "rename it" });
     expect(cur.status).toBe("in_progress");
@@ -212,7 +217,7 @@ describe("ticket lifecycle", () => {
 
   test("tickets of a project that skips the human review complete right after the agent approves, with the project's default action", async () => {
     const h = setup({ skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.agentReview, cur.humanReview, cur.completionAction]).toEqual(["done", "approved", "approved", "custom"]);
@@ -222,7 +227,7 @@ describe("ticket lifecycle", () => {
 
   test("the human approval completes the ticket without pressing Complete", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     // Agent approved, human pending: nothing runs yet.
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
@@ -239,7 +244,7 @@ describe("ticket lifecycle", () => {
 
   test("approving while the agent review runs waits for it; its approval then completes with the chosen action", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     while (h.driver.holding === 0) await Bun.sleep(1);
     const approved = h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "tag it" });
     expect([approved.status, approved.agentReview, approved.humanReview]).toEqual(["review", "pending", "approved"]);
@@ -256,7 +261,7 @@ describe("ticket lifecycle", () => {
     const driver = new FakeDriver();
     driver.rejectsLeft = 1;
     const h = setup({ driver, skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     // Human review is pre-approved; the first agent review rejects, the second approves and completes.
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
@@ -265,7 +270,7 @@ describe("ticket lifecycle", () => {
 
   test("a second Complete while the approval's complete run is queued is refused", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await expect(h.orch.completeTicket(t.key)).rejects.toThrow(/already completing/);
@@ -275,7 +280,7 @@ describe("ticket lifecycle", () => {
 
   test("cancelling a running completion puts the approval back; approving again lands it", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     let started = false;
     h.driver.script = async function* (req) {
@@ -302,7 +307,7 @@ describe("ticket lifecycle", () => {
 
   test("cancelling a completion still queued behind another run puts the approval back too", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     while (h.driver.holding === 0) await Bun.sleep(1);
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.completeTicket(t.key); // queued behind the held review
@@ -317,7 +322,7 @@ describe("ticket lifecycle", () => {
 
   test("while the complete run is in flight, a message or request for changes is refused and the ticket ends done", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));
@@ -342,7 +347,7 @@ describe("ticket lifecycle", () => {
 
   test("a work run that fails after its ticket was marked done leaves it done", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     h.driver.script = async function* (req) {
       if (req.kind !== "work") return;
       await h.orch.completeTicket(t.key, { skipAgent: true });
@@ -359,7 +364,7 @@ describe("ticket lifecycle", () => {
     const h = setup();
     const p = h.orch.updateProject(h.project.id, { autoComplete: false } as never);
     expect(p).not.toHaveProperty("autoComplete");
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
@@ -369,14 +374,14 @@ describe("ticket lifecycle", () => {
 
   test("complete requires review; skipAgent marks done without a run; drag to done runs nothing", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     await expect(h.orch.completeTicket(t.key)).rejects.toThrow(/must be in review/);
     const done = await h.orch.completeTicket(t.key, { skipAgent: true });
     expect(done.status).toBe("done");
     expect(runKinds(h, t)).toEqual(["plan:succeeded"]);
 
-    const u = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", start: false });
+    const u = await h.orch.createTicket({ projectId: h.project.id, spec: "y", start: false });
     await h.orch.idle();
     const dragged = await h.orch.updateTicket(u.key, { status: "done" });
     expect(dragged.status).toBe("done");
@@ -385,7 +390,7 @@ describe("ticket lifecycle", () => {
 
   test("complete run failure → blocked", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.driver.script = async function* () {
       yield { type: "error", message: "merge conflict" };
@@ -399,7 +404,7 @@ describe("ticket lifecycle", () => {
 
   test("cancel aborts the active run and drops queued runs; status unchanged", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "long /hold" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "long /hold" });
     await Bun.sleep(5);
     await h.orch.sendMessage(t.key, "queued behind");
     expect(h.driver.holding).toBe(1);
@@ -414,7 +419,7 @@ describe("ticket lifecycle", () => {
 
   test("rerun agent review; a message with move in review reopens work", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.orch.rerunAgentReview(t.key);
     await h.orch.idle();
@@ -428,7 +433,7 @@ describe("ticket lifecycle", () => {
 
   test("re-open sends a done ticket back to work with the notes; only done tickets, notes required", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await expect(h.orch.reopenTicket(t.key, { notes: "again" })).rejects.toThrow(/not done/);
     h.orch.humanReview(t.key, { decision: "approve" });
@@ -449,12 +454,12 @@ describe("ticket lifecycle", () => {
     expect(after.humanReview).toBe("pending");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded", "work:succeeded", "review:succeeded"]);
     expect(statuses(h, t.sessionId)).toContain("Re-opened by human");
-    expect(h.orch.summaries(t.key).map((s) => `${s.author}:${s.body}`)).toContain("human:Re-opened: the button is the wrong color");
+    expect(h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`)).toContain("reopened:human:the button is the wrong color");
   });
 
   test("dragging a done ticket to in progress re-opens it with the plan", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "the plan" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "the plan" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
@@ -468,13 +473,13 @@ describe("ticket lifecycle", () => {
 
   test("external keys, duplicates and validation", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "mirror", key: "foo-123", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "mirror", key: "foo-123", start: false });
     expect(t.key).toBe("FOO-123");
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "again", key: "FOO-123" })).rejects.toMatchObject({ status: 409 });
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "bad", key: "nope" })).rejects.toMatchObject({ status: 400 });
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", driver: "missing" })).rejects.toMatchObject({ status: 400 });
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", dependsOn: ["ACME-77"] })).rejects.toMatchObject({ status: 400 });
-    const n = await h.orch.createTicket({ projectId: h.project.id, prompt: "native", start: false });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "again", key: "FOO-123" })).rejects.toMatchObject({ status: 409 });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "bad", key: "nope" })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", driver: "missing" })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", dependsOn: ["ACME-77"] })).rejects.toMatchObject({ status: 400 });
+    const n = await h.orch.createTicket({ projectId: h.project.id, spec: "native", start: false });
     expect(n.key).toBe("ACME-1");
     expect(n.title).toBe("native");
     await h.orch.idle();
@@ -482,7 +487,7 @@ describe("ticket lifecycle", () => {
 
   test("delete removes ticket + session and closes the browser tab", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /hold" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /hold" });
     await Bun.sleep(5);
     await h.orch.deleteTicket(t.key);
     await h.orch.idle();
@@ -494,7 +499,7 @@ describe("ticket lifecycle", () => {
 
   test("events: ticket.upserted busy flips and transcript.delta streams", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const busyFlags = h.events.filter((e) => e.kind === "ticket.upserted" && e.ticket.id === t.id).map((e) => (e as any).ticket.busy);
     expect(busyFlags).toContain(true);
@@ -509,7 +514,7 @@ describe("ticket lifecycle", () => {
 describe("skipping the agent review", () => {
   test("a ticket created with skipAgentReview goes to review without a review run and waits only on the human", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "What does this repo do?", skipAgentReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "What does this repo do?", skipAgentReview: true });
     expect(t.skipAgentReview).toBe(true);
     await h.orch.idle();
     let cur = h.orch.ticketDetail(t.key).ticket;
@@ -528,7 +533,7 @@ describe("skipping the agent review", () => {
 
   test("changes requested by the human come back skipped again on the next submit", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
     await h.orch.idle();
     const back = h.orch.humanReview(t.key, { decision: "request_changes", notes: "more" });
     expect([back.status, back.agentReview]).toEqual(["in_progress", "pending"]);
@@ -539,7 +544,7 @@ describe("skipping the agent review", () => {
 
   test("with the project skipping the human review, a skipped agent review completes the ticket at once", async () => {
     const h = setup({ skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "skipped", "approved"]);
@@ -549,7 +554,7 @@ describe("skipping the agent review", () => {
 
   test("the agent can skip its own review with submit_for_review skip_agent_review", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "hello /skipreview" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "hello /skipreview" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["review", "skipped", true]);
@@ -559,7 +564,7 @@ describe("skipping the agent review", () => {
 
   test("an agent can't skip the review when nobody else would review the ticket", async () => {
     const h = setup({ skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "hello /skipreview" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "hello /skipreview" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     // The refused submit left it in progress; the run's end auto-submitted it for a normal review,
@@ -572,7 +577,7 @@ describe("skipping the agent review", () => {
 
   test("turning skipAgentReview on while the agent review runs stops it; turning it off starts one", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     while (h.driver.holding === 0) await Bun.sleep(1);
     expect(h.orch.ticketDetail(t.key).ticket.agentReview).toBe("pending");
 
@@ -594,12 +599,12 @@ describe("skipping the agent review", () => {
 
   test("skipAgentReview must be a boolean", async () => {
     const h = setup();
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: "yes" as never })).rejects.toThrow(/skipAgentReview must be true or false/);
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: "yes" as never })).rejects.toThrow(/skipAgentReview must be true or false/);
   });
 
   test("a conductor's child created with skip_agent_review is reviewed and completed by the conductor alone", async () => {
     const h = setup();
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "- Answer a question [skip-review]", kind: "conductor" });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "- Answer a question [skip-review]", kind: "conductor" });
     await h.orch.idle();
     const [child] = h.store.tickets.list({ parentId: parent.id });
     expect(child!.skipAgentReview).toBe(true);
@@ -611,7 +616,7 @@ describe("skipping the agent review", () => {
 describe("skipping the human review", () => {
   test("a ticket created with skipHumanReview lands as soon as its agent review approves it", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button", skipHumanReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button", skipHumanReview: true });
     expect(t.skipHumanReview).toBe(true);
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
@@ -623,7 +628,7 @@ describe("skipping the human review", () => {
 
   test("the human can still send it back while the agent review runs", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]", skipHumanReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]", skipHumanReview: true });
     while (h.driver.holding === 0) await Bun.sleep(1);
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "pending", humanReview: "approved" });
     // The human can still step in and send it back before it lands.
@@ -639,7 +644,7 @@ describe("skipping the human review", () => {
 
   test("with both reviews skipped the ticket lands as soon as it's submitted", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true, skipHumanReview: true });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true, skipHumanReview: true });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "skipped", "approved"]);
@@ -649,7 +654,7 @@ describe("skipping the human review", () => {
 
   test("the agent can skip the human review with submit_for_review skip_human_review", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skiphuman" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "ship it /skiphuman" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.skipHumanReview]).toEqual(["done", true]);
@@ -659,8 +664,8 @@ describe("skipping the human review", () => {
 
   test("an agent can't skip both reviews, nor the human review of a ticket that skips its agent review", async () => {
     const h = setup();
-    const both = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skipreview /skiphuman" });
-    const noBot = await h.orch.createTicket({ projectId: h.project.id, prompt: "ship it /skiphuman", skipAgentReview: true });
+    const both = await h.orch.createTicket({ projectId: h.project.id, spec: "ship it /skipreview /skiphuman" });
+    const noBot = await h.orch.createTicket({ projectId: h.project.id, spec: "ship it /skiphuman", skipAgentReview: true });
     await h.orch.idle();
     const refusals = (t: Ticket) =>
       h.store.transcript
@@ -679,7 +684,7 @@ describe("skipping the human review", () => {
 
   test("turning skipHumanReview on while the ticket waits on the human lands it", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
     await h.orch.updateTicket(t.key, { skipHumanReview: true });
@@ -690,7 +695,7 @@ describe("skipping the human review", () => {
 
   test("turning it off while the agent review runs puts the human review back to pending", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     while (h.driver.holding === 0) await Bun.sleep(1);
     let cur = await h.orch.updateTicket(t.key, { skipHumanReview: true });
     expect([cur.agentReview, cur.humanReview]).toEqual(["pending", "approved"]);
@@ -705,8 +710,8 @@ describe("skipping the human review", () => {
 
   test("a create that leaves the review switches out takes the project's defaults, and one that sets them wins", async () => {
     const h = setup({ skipAgentReview: true, skipHumanReview: true });
-    const defaulted = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
-    const reviewed = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", skipAgentReview: false, skipHumanReview: false });
+    const defaulted = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    const reviewed = await h.orch.createTicket({ projectId: h.project.id, spec: "y", skipAgentReview: false, skipHumanReview: false });
     expect([defaulted.skipAgentReview, defaulted.skipHumanReview, reviewed.skipAgentReview, reviewed.skipHumanReview]).toEqual([true, true, false, false]);
     await h.orch.idle();
     // Skipping both, it lands as soon as it's submitted; the other gets both reviews, like any ticket.
@@ -717,7 +722,7 @@ describe("skipping the human review", () => {
     // The defaults are only for new tickets: changing them leaves existing ones alone.
     h.orch.updateProject(h.project.id, { skipAgentReview: false, skipHumanReview: false });
     expect(h.orch.ticketDetail(defaulted.key).ticket).toMatchObject({ skipAgentReview: true, skipHumanReview: true });
-    const after = await h.orch.createTicket({ projectId: h.project.id, prompt: "z", start: false });
+    const after = await h.orch.createTicket({ projectId: h.project.id, spec: "z", start: false });
     expect([after.skipAgentReview, after.skipHumanReview]).toEqual([false, false]);
   });
 
@@ -732,14 +737,14 @@ describe("skipping the human review", () => {
 
   test("skipHumanReview must be a boolean", async () => {
     const h = setup();
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipHumanReview: 1 as never })).rejects.toThrow(/skipHumanReview must be true or false/);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", skipHumanReview: 1 as never })).rejects.toThrow(/skipHumanReview must be true or false/);
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await expect(h.orch.updateTicket(t.key, { skipHumanReview: "on" as never })).rejects.toThrow(/skipHumanReview must be true or false/);
   });
 
   test("a conductor's child that skips the human review lands without the conductor's approval", async () => {
     const h = setup();
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "- Ship the fix [skip-human]", kind: "conductor" });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "- Ship the fix [skip-human]", kind: "conductor" });
     await h.orch.idle();
     const [child] = h.store.tickets.list({ parentId: parent.id });
     expect(child!.skipHumanReview).toBe(true);
@@ -752,12 +757,12 @@ describe("skipping the human review", () => {
 describe("messages that leave the ticket where it is (chat runs)", () => {
   test("in review: the agent answers with its work tools, and the ticket keeps its status and reviews", async () => {
     const h = setup({ realTools: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     await h.orch.idle();
     const before = h.orch.ticketDetail(t.key).ticket;
     expect(before).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
 
-    const cur = await h.orch.sendMessage(t.key, "why a button?");
+    const cur = await h.orch.sendMessage(t.key, "why a button?", { log: true });
     expect(cur.status).toBe("review");
     expect(cur.busy).toBe(true);
     await h.orch.idle();
@@ -774,14 +779,14 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(chat.state).toEqual({ turns: 1 });
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
     expect(chat.toolNames).toEqual(h.driver.calls[0]!.toolNames);
-    expect(h.orch.summaries(t.key).some((s) => s.body.startsWith("Question:"))).toBe(false);
-    // The exchange reads in the summaries: the question, then the agent's answer.
-    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:why a button?", "agent:Chatting about: why a button?."]);
+    expect(h.orch.activity(t.key).some((s) => s.kind === "blocked")).toBe(false);
+    // The exchange reads in Activity: the question, then the agent's answer.
+    expect(h.orch.activity(t.key).slice(-2).map((s) => `${s.kind}:${s.author}:${s.body}`)).toEqual(["message:human:why a button?", "answer:agent:Chatting about: why a button?."]);
   });
 
   test("in review: a chat that changed the work submits again, and the reviews start over with one reviewer", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "make it red /hold /submit");
     await Bun.sleep(5);
@@ -791,12 +796,12 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     await h.orch.idle();
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded", "review:cancelled", "review:succeeded"]);
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
-    expect(h.orch.summaries(t.key).filter((s) => s.body === "Done from chat.")).toHaveLength(1);
+    expect(h.orch.activity(t.key).filter((s) => s.body === "Done from chat.")).toHaveLength(1);
   });
 
   test("in review: resume_work moves the ticket to in progress while the chat changes it, then it ends like a work run", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved" });
     await h.orch.sendMessage(t.key, "make it red /resume /hold");
@@ -812,47 +817,47 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("resume_work is refused on a ticket that isn't in review", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "Postgres /resume");
+    await h.orch.sendMessage(t.key, "Postgres /resume", { log: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
-    expect(h.orch.summaries(t.key).at(-1)!.body).toContain(`Refused: ${t.key} is blocked, not in review`);
+    expect(h.orch.activity(t.key).at(-1)!.body).toContain(`Refused: ${t.key} is blocked, not in review`);
   });
 
   test("in review: block asks the human and starts the reviews over", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "change the copy /block Which copy?");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which copy?", agentReview: "pending", humanReview: "pending" });
-    // The block summary is the answer: the chat's last text isn't posted as well.
-    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Blocked: Which copy?" });
+    // The blocked entry is the answer: the chat's last text isn't posted as well.
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "blocked", author: "agent", body: "Which copy?" });
   });
 
   test("in blocked: a side question leaves the ticket blocked with its question open", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "what are the options? /ask");
+    await h.orch.sendMessage(t.key, "what are the options? /ask", { log: true });
     await h.orch.idle();
     // No unblock: no auto-block on the trailing question and no auto-submit either.
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
     expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded"]);
-    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Which color should it be?" });
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "answer", author: "agent", body: "Which color should it be?" });
   });
 
   test("in blocked: once the agent unblocks, the chat ends like a work run (auto-submit, or block on a question)", async () => {
     const h = setup();
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(a.key, "Postgres /unblock");
     await h.orch.idle();
     expect(h.orch.ticketDetail(a.key).ticket).toMatchObject({ status: "review", blockedReason: null });
-    expect(h.orch.summaries(a.key).find((s) => s.author === "system")!.body).toBe("Chatting about: Postgres /unblock.");
+    expect(h.orch.activity(a.key).find((s) => s.author === "system")!.body).toBe("Chatting about: Postgres /unblock.");
 
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(b.key, "Postgres /unblock /ask");
     await h.orch.idle();
@@ -861,18 +866,18 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("in blocked: block replaces the question; unblock is refused on a ticket that isn't blocked", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "Postgres /block Which port?");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which port?" });
 
-    const r = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const r = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
-    await h.orch.sendMessage(r.key, "looks good /unblock");
+    await h.orch.sendMessage(r.key, "looks good /unblock", { log: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(r.key).ticket.status).toBe("review");
-    expect(h.orch.summaries(r.key).at(-1)!.body).toContain(`Refused: ${r.key} is review, not blocked`);
+    expect(h.orch.activity(r.key).at(-1)!.body).toContain(`Refused: ${r.key} is review, not blocked`);
   });
 
   test("a blocked ticket without a worktree gets one before the chat; its status doesn't change", async () => {
@@ -883,7 +888,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     git("init", "-q", "-b", "main");
     git("commit", "-q", "--allow-empty", "-m", "init");
     const p = h.orch.createProject({ path: repo, key: "repo" });
-    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: p.id, spec: "x", start: false });
     await h.orch.idle();
     // Dragged from planning to blocked: it never got a worktree.
     await h.orch.updateTicket(t.key, { status: "blocked" });
@@ -897,11 +902,11 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("in planning: the plan run takes the message, never a chat", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Refactor auth", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Refactor auth", start: false });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "is this risky?", { move: true });
     await h.orch.idle();
-    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", description: "1. Do is this risky?" });
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", spec: "1. Do is this risky?" });
     expect(runKinds(h, t)).toEqual(["plan:succeeded", "plan:succeeded"]);
   });
 
@@ -909,7 +914,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const h = setup();
     const refusals: string[] = [];
     h.driver.script = async function* (req) {
-      for (const f of [() => req.toolContext.ops.submitForReview(req.toolContext, "x"), () => req.toolContext.ops.block(req.toolContext, "q?")]) {
+      for (const f of [() => req.toolContext.ops.submitForReview(req.toolContext, "x", true), () => req.toolContext.ops.block(req.toolContext, "q?")]) {
         try {
           await f();
         } catch (err) {
@@ -917,50 +922,52 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
         }
       }
     };
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("planning");
     expect(refusals).toEqual([`${t.key} is still in planning: the work starts when the human presses Start, so submit_for_review doesn't apply yet.`, `${t.key} is still in planning: the work starts when the human presses Start, so block doesn't apply yet.`]);
 
     h.driver.script = null;
-    const d = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    const d = await h.orch.createTicket({ projectId: h.project.id, spec: "y" });
     await h.orch.idle();
     await h.orch.completeTicket(d.key, { skipAgent: true });
-    await h.orch.sendMessage(d.key, "one more thing /submit");
+    await h.orch.sendMessage(d.key, "one more thing /submit", { log: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(d.key).ticket.status).toBe("done");
-    expect(h.orch.summaries(d.key).at(-1)!.body).toContain(`Refused: ${d.key} is done: the human re-opens it`);
+    expect(h.orch.activity(d.key).at(-1)!.body).toContain(`Refused: ${d.key} is done: the human re-opens it`);
   });
 
   test("in done: the ticket stays done; with move it re-opens", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await h.orch.completeTicket(t.key, { skipAgent: true });
     expect((await h.orch.sendMessage(t.key, "what did you change?")).status).toBe("done");
     await h.orch.idle();
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
+    // A message sent without log stays out of Activity, and so does the chat's answer to it.
+    expect(h.orch.activity(t.key).filter((s) => s.kind === "message" || s.kind === "answer")).toEqual([]);
     const cur = await h.orch.sendMessage(t.key, "change it back", { move: true });
     expect(cur).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
   });
 
   test("a failed chat leaves the ticket where it is, unless it had unblocked the ticket", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.driver.script = async function* (req) {
       if (req.kind !== "chat") return;
       if (req.prompt.includes("/unblock")) await req.toolContext.ops.unblock(req.toolContext);
       yield { type: "error", message: "boom" };
     };
-    await h.orch.sendMessage(t.key, "hello");
+    await h.orch.sendMessage(t.key, "hello", { log: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
-    expect(h.orch.summaries(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:hello", "system:Run failed: boom"]);
+    expect(h.orch.activity(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:hello", "system:Run failed: boom"]);
 
     h.driver.script = null;
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     h.driver.script = async function* (req) {
       if (req.kind !== "chat") return;
@@ -975,7 +982,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("a chat's approval card leaves the ticket in its column, and answering it resumes the chat", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "ask" });
     await h.orch.sendMessage(t.key, 'clean it /tool Bash {"command":"rm -rf dist"}');
@@ -998,7 +1005,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("a blocked ticket's chat approval keeps its question, and unblock waits for the human's answer", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "ask" });
     let refused = "";
@@ -1026,7 +1033,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("runs with the ticket's permission mode and all of its grants", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "ask", allowedTools: ["WebFetch"] });
     h.store.tickets.addGrant(t.id, "Bash", { command: "npm publish" });
@@ -1036,18 +1043,18 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
       const edit = await req.toolContext.ops.checkPermission(req.toolContext, "Edit", { file_path: join(req.cwd, "a.ts"), old_string: "a", new_string: "b" });
       yield { type: "text", text: `edit:${edit.behavior}` };
     };
-    await h.orch.sendMessage(t.key, "can you clean dist?");
+    await h.orch.sendMessage(t.key, "can you clean dist?", { log: true });
     await h.orch.idle();
     const chat = h.driver.calls.at(-1)!;
     expect(chat.kind).toBe("chat");
     expect(chat.permissionMode).toBe("ask");
     expect(chat.grants).toEqual({ tools: ["WebFetch"], once: [{ toolName: "Bash", input: { command: "npm publish" } }] });
-    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "edit:allow" });
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "answer", author: "agent", body: "edit:allow" });
   });
 
   test("a read_only ticket's chat stays read-only", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.store.tickets.update(t.id, { permissionMode: "read_only", allowedTools: ["WebFetch"] });
     await h.orch.sendMessage(t.key, "hi");
@@ -1057,7 +1064,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("a done ticket whose worktree is gone chats from the project checkout", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await h.orch.completeTicket(t.key, { skipAgent: true });
     h.store.tickets.update(t.id, { workdir: join(h.home, "gone") });
@@ -1070,7 +1077,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
   test("refused while the ticket is completing; text is required", async () => {
     const h = setup();
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "y" });
     await h.orch.idle();
     h.driver.script = async function* () {
       await Bun.sleep(20);
@@ -1085,8 +1092,8 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 describe("scheduling", () => {
   test("dependsOn + autoStart: dependent starts when its dependency is done", async () => {
     const h = setup();
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "A" });
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "B", start: false, autoStart: true, dependsOn: [a.key] });
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "A" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "B", start: false, autoStart: true, dependsOn: [a.key] });
     expect(b.status).toBe("planning");
     await h.orch.idle();
     expect(h.orch.ticketDetail(b.key).ticket.status).toBe("planning");
@@ -1102,9 +1109,9 @@ describe("scheduling", () => {
 
   test("dependents without autoStart are not started; start:true with open deps waits", async () => {
     const h = setup();
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "A", start: false });
-    const manual = await h.orch.createTicket({ projectId: h.project.id, prompt: "B", start: false, dependsOn: [a.key] });
-    const eager = await h.orch.createTicket({ projectId: h.project.id, prompt: "C", start: true, dependsOn: [a.key] });
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "A", start: false });
+    const manual = await h.orch.createTicket({ projectId: h.project.id, spec: "B", start: false, dependsOn: [a.key] });
+    const eager = await h.orch.createTicket({ projectId: h.project.id, spec: "C", start: true, dependsOn: [a.key] });
     expect(eager.status).toBe("planning");
     expect(eager.autoStart).toBe(true);
     await h.orch.idle();
@@ -1118,7 +1125,7 @@ describe("scheduling", () => {
 describe("concurrency", () => {
   test("runs are serialized per session", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "a /hold /nosubmit" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "a /hold /nosubmit" });
     await h.orch.sendMessage(t.key, "b /hold /nosubmit");
     await Bun.sleep(10);
     expect(h.driver.running).toBe(1);
@@ -1133,7 +1140,7 @@ describe("concurrency", () => {
   test("global maxConcurrentRuns limit, raised live via settings", async () => {
     const h = setup();
     h.orch.updateSettings({ maxConcurrentRuns: 2 });
-    for (let i = 0; i < 5; i++) await h.orch.createTicket({ projectId: h.project.id, prompt: `t${i} /hold` });
+    for (let i = 0; i < 5; i++) await h.orch.createTicket({ projectId: h.project.id, spec: `t${i} /hold` });
     await Bun.sleep(10);
     expect(h.driver.running).toBe(2);
     h.orch.updateSettings({ maxConcurrentRuns: 3 });
@@ -1151,7 +1158,7 @@ describe("concurrency", () => {
 describe("conductor", () => {
   test("creates children, is notified of their changes, approves + completes them, then submits", async () => {
     const h = setup();
-    const c = await h.orch.createTicket({ projectId: h.project.id, prompt: "Big job\n- Build API\n- Build UI", kind: "conductor" });
+    const c = await h.orch.createTicket({ projectId: h.project.id, spec: "Big job\n- Build API\n- Build UI", kind: "conductor" });
     await h.orch.idle(20_000);
     const d = h.orch.ticketDetail(c.key);
     expect(d.children.map((x) => x.title)).toEqual(["Build API", "Build UI"]);
@@ -1177,12 +1184,12 @@ describe("conductor", () => {
       if (req.kind !== "conductor") return;
       if (!keys.length) {
         for (const title of ["a", "b"]) {
-          keys.push((await req.toolContext.ops.createTicket(req.toolContext, { title, description: title, autoStart: false })).key);
+          keys.push((await req.toolContext.ops.createTicket(req.toolContext, { title, spec: title, autoStart: false })).key);
         }
         await gate;
       }
     };
-    const c = await h.orch.createTicket({ projectId: h.project.id, prompt: "go", kind: "conductor" });
+    const c = await h.orch.createTicket({ projectId: h.project.id, spec: "go", kind: "conductor" });
     while (keys.length < 2) await Bun.sleep(2);
     await h.orch.updateTicket(keys[0]!, { status: "blocked" });
     await h.orch.updateTicket(keys[1]!, { status: "done" });
@@ -1201,11 +1208,11 @@ describe("conductor", () => {
     const keys: string[] = [];
     h.driver.script = async function* (req) {
       const ops = req.toolContext.ops;
-      if (req.kind === "work") return void (await ops.submitForReview(req.toolContext, "done"));
+      if (req.kind === "work") return void (await ops.submitForReview(req.toolContext, "done", true));
       if (req.kind === "review") return void (await ops.reviewDecision(req.toolContext, "approve", ""));
       if (req.kind !== "conductor") return;
       if (!keys.length) {
-        keys.push((await ops.createTicket(req.toolContext, { title: "only", description: "only", autoStart: true })).key);
+        keys.push((await ops.createTicket(req.toolContext, { title: "only", spec: "only", autoStart: true })).key);
         return;
       }
       const child = (await ops.getTicket(req.toolContext, keys[0]!)).ticket;
@@ -1213,7 +1220,7 @@ describe("conductor", () => {
         await ops.reviewTicket(req.toolContext, child.key, "approve", "");
       }
     };
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "go", kind: "conductor" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "go", kind: "conductor" });
     await h.orch.idle();
     const child = h.orch.ticketDetail(keys[0]!).ticket;
     expect([child.status, child.agentReview, child.humanReview]).toEqual(["review", "approved", "approved"]);
@@ -1239,22 +1246,22 @@ describe("conductor", () => {
     const keys: string[] = [];
     h.driver.script = async function* (req) {
       if (req.kind === "conductor" && !keys.length) {
-        keys.push((await req.toolContext.ops.createTicket(req.toolContext, { title: "only", description: "only", autoStart: false })).key);
+        keys.push((await req.toolContext.ops.createTicket(req.toolContext, { title: "only", spec: "only", autoStart: false })).key);
       }
     };
-    const c = await h.orch.createTicket({ projectId: h.project.id, prompt: "go", kind: "conductor" });
+    const c = await h.orch.createTicket({ projectId: h.project.id, spec: "go", kind: "conductor" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(c.key).ticket.status).toBe("in_progress");
     await h.orch.updateTicket(keys[0]!, { status: "done" });
     await h.orch.idle();
     const d = h.orch.ticketDetail(c.key);
     expect(d.ticket.status).toBe("review");
-    expect(d.summaries.some((s) => s.author === "system")).toBe(true);
+    expect(d.activity.some((s) => s.author === "system")).toBe(true);
   });
 
   test("default conductor children chain via dependsOn", async () => {
     const h = setup();
-    const c = await h.orch.createTicket({ projectId: h.project.id, prompt: "Do it all", kind: "conductor" });
+    const c = await h.orch.createTicket({ projectId: h.project.id, spec: "Do it all", kind: "conductor" });
     await h.orch.idle(20_000);
     const kids = h.orch.ticketDetail(c.key).children;
     expect(kids.length).toBe(2);
@@ -1278,23 +1285,30 @@ describe("conductor", () => {
       const ops = ctx.ops;
       if (req.kind === "review") return void (await ops.reviewDecision(ctx, "approve", ""));
       if (req.kind === "complete" || req.kind === "plan") return;
-      if (ctx.ticket?.key !== parentKey) return void (await ops.submitForReview(ctx, "child done"));
+      if (ctx.ticket?.key !== parentKey) return void (await ops.submitForReview(ctx, "child done", true));
       parentPrompts.push(req.prompt);
       if (!keys.length) {
-        keys.push((await ops.createTicket(ctx, { title: "Rebase PR", description: "Bring the PR up to date", child: true })).key);
-        await ops.submitForReview(ctx, "too early").catch((e) => submitErrors.push(String(e)));
+        keys.push((await ops.createTicket(ctx, { title: "Rebase PR", spec: "Bring the PR up to date", child: true })).key);
+        await ops.submitForReview(ctx, "too early", true).catch((e) => submitErrors.push(String(e)));
         return;
       }
-      const child = (await ops.getTicket(ctx, keys[0]!)).ticket;
+      let child = (await ops.getTicket(ctx, keys[0]!)).ticket;
       if (child.status === "review" && child.agentReview === "approved" && child.humanReview === "pending") {
         await ops.reviewTicket(ctx, child.key, "approve", "looks right");
         await ops.completeTicket(ctx, child.key);
-      } else if (child.status === "done" && !submitted) {
+        // The child's complete run can land before this run ends, and then the run would be
+        // auto-submitted with its last text. Wait for it, so the submit below is the agent's own.
+        while (child.status !== "done") {
+          await Bun.sleep(2);
+          child = (await ops.getTicket(ctx, keys[0]!)).ticket;
+        }
+      }
+      if (child.status === "done" && !submitted) {
         submitted = true;
-        await ops.submitForReview(ctx, "the child is merged");
+        await ops.submitForReview(ctx, "the child is merged", true);
       }
     };
-    const draft = await h.orch.createTicket({ projectId: h.project.id, prompt: "Audit the PRs", start: false });
+    const draft = await h.orch.createTicket({ projectId: h.project.id, spec: "Audit the PRs", start: false });
     parentKey = draft.key;
     await h.orch.idle();
     await h.orch.startTicket(parentKey);
@@ -1313,7 +1327,7 @@ describe("conductor", () => {
     ]);
     expect(parentPrompts.slice(1).some((p) => p.includes("Child ticket updates:") && p.includes("in_progress → review"))).toBe(true);
     expect(d.ticket.status).toBe("review");
-    expect(d.summaries.some((s) => s.body === "the child is merged")).toBe(true);
+    expect(d.activity.some((s) => s.body === "the child is merged")).toBe(true);
     // Clients learn the parent now has children from its own upsert.
     const upserts = h.events.filter((e) => e.kind === "ticket.upserted" && e.ticket.key === parentKey) as { ticket: Ticket }[];
     expect(upserts.some((e) => e.ticket.childCount === 1)).toBe(true);
@@ -1327,12 +1341,12 @@ describe("conductor", () => {
       const ctx = req.toolContext;
       if (req.kind !== "work" || ctx.ticket?.title !== "parent") return;
       made = [
-        await ctx.ops.createTicket(ctx, { title: "top", description: "x" }),
-        await ctx.ops.createTicket(ctx, { title: "kid", description: "x", child: true, autoStart: false }),
+        await ctx.ops.createTicket(ctx, { title: "top", spec: "x" }),
+        await ctx.ops.createTicket(ctx, { title: "kid", spec: "x", child: true, autoStart: false }),
       ];
       scopes.push((await ctx.ops.listTickets(ctx, {})).tickets.map((t) => t.title));
     };
-    const p = await h.orch.createTicket({ projectId: h.project.id, prompt: "parent", title: "parent" });
+    const p = await h.orch.createTicket({ projectId: h.project.id, spec: "parent", title: "parent" });
     await h.orch.idle();
     expect(made.map((t) => [t.title, t.parentId, t.status])).toEqual([
       ["top", null, "planning"],
@@ -1346,7 +1360,7 @@ describe("conductor", () => {
 
   test("review_ticket and complete_ticket reject tickets that aren't the caller's children", async () => {
     const h = setup();
-    const other = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const other = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     const errs: Record<string, string[]> = {};
     h.driver.script = async function* (req) {
       const ctx = req.toolContext;
@@ -1356,8 +1370,8 @@ describe("conductor", () => {
       }
     };
     await h.orch.idle();
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "work" });
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "conduct", kind: "conductor" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "work" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "conduct", kind: "conductor" });
     await h.orch.idle();
     // A task ticket may conduct its own children, but never someone else's.
     for (const kind of ["work", "conductor"]) {
@@ -1458,7 +1472,7 @@ describe("triage", () => {
   test("dispatch without a key uses the project's next key and makes no mirror", async () => {
     const h = setup();
     h.driver.script = async function* (req) {
-      await req.toolContext.ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Handle the event", description: "Do it" });
+      await req.toolContext.ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Handle the event", spec: "Do it" });
     };
     const s = await h.orch.injectOutput("events", '{"event":"assigned","to":"mark"}');
     await h.orch.idle();
@@ -1474,8 +1488,8 @@ describe("triage", () => {
     const errors: string[] = [];
     h.driver.script = async function* (req) {
       const ops = req.toolContext.ops;
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Bad", description: "x", branch: "bad..name" }).catch((e: Error) => errors.push(e.message));
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Fix PR 12", description: "Resolve the conflicts", branch: "feature/pr-12", baseBranch: "feature/pr-12" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Bad", spec: "x", branch: "bad..name" }).catch((e: Error) => errors.push(e.message));
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", title: "Fix PR 12", spec: "Resolve the conflicts", branch: "feature/pr-12", baseBranch: "feature/pr-12" });
     };
     const s = await h.orch.injectOutput("github", '{"pr":12}');
     await h.orch.idle();
@@ -1489,8 +1503,8 @@ describe("triage", () => {
     let declineErr: unknown = null;
     h.driver.script = async function* (req) {
       const ops = req.toolContext.ops;
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-7", title: "First", description: "one" });
-      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-8", title: "Second", description: "two" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-7", title: "First", spec: "one" });
+      await ops.dispatchTicket(req.toolContext, { projectKey: "ACME", key: "JIRA-8", title: "Second", spec: "two" });
       try {
         await ops.declineWork(req.toolContext, "changed my mind");
       } catch (e) {
@@ -1538,7 +1552,7 @@ describe("triage", () => {
 describe("mcp tokens", () => {
   test("a run-scoped token resolves only while its run is active", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /hold" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /hold" });
     await Bun.sleep(5);
     const url = h.driver.calls[0]!.mcpUrl;
     expect(url).toMatch(/^http:\/\/127\.0\.0\.1:9\/mcp\/[0-9a-f]{48}$/);
@@ -1564,9 +1578,11 @@ describe("recovery", () => {
     const dir = join(home, "p");
     mkdirSync(dir);
     const p = first.orch.createProject({ path: dir });
-    const t = await first.orch.createTicket({ projectId: p.id, prompt: "x /hold" });
-    await first.orch.createTicket({ projectId: p.id, prompt: "y" });
-    await Bun.sleep(5);
+    const t = await first.orch.createTicket({ projectId: p.id, spec: "x /hold" });
+    const y = await first.orch.createTicket({ projectId: p.id, spec: "y" });
+    // Let the other ticket's work and review finish, so nothing of the first process touches the DB
+    // after it closes.
+    while (first.orch.ticketDetail(y.key).ticket.agentReview !== "approved" || first.orch.ticketDetail(y.key).ticket.busy) await Bun.sleep(1);
     // simulate a crash: no stop(), just a new process on the same DB
     first.store.db.close();
 
@@ -1592,7 +1608,7 @@ describe("worktrees", () => {
     git("init", "-q", "-b", "main");
     git("commit", "-q", "--allow-empty", "-m", "init");
     const p = h.orch.createProject({ path: repo, key: "repo" });
-    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: p.id, spec: "x" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.workdir).toBe(join(h.paths.worktreesDir, "REPO-1"));
@@ -1602,7 +1618,7 @@ describe("worktrees", () => {
     const branches = new TextDecoder().decode(git("branch", "--list", "harness/*").stdout);
     expect(branches).toContain("harness/repo-1");
 
-    const plain = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    const plain = await h.orch.createTicket({ projectId: h.project.id, spec: "y" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(plain.key).ticket.workdir).toBe(h.project.path);
     expect(h.orch.ticketDetail(plain.key).ticket.branch).toBeNull();
@@ -1617,7 +1633,7 @@ describe("worktrees", () => {
     git("init", "-q", "-b", "main");
     git("commit", "-q", "--allow-empty", "-m", "init");
     const p = h.orch.createProject({ path: repo, key: "repo" });
-    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: p.id, spec: "x" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
@@ -1653,7 +1669,7 @@ describe("worktrees", () => {
   test("useWorktree false: a git project with worktrees on runs the ticket in the project checkout", async () => {
     const h = setup();
     const { repo, git, project } = gitProject(h, true);
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "x", useWorktree: false });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.workdir, cur.branch, cur.useWorktree]).toEqual([repo, null, false]);
@@ -1665,8 +1681,8 @@ describe("worktrees", () => {
   test("useWorktree true: a project with worktrees off still gets one for that ticket", async () => {
     const h = setup();
     const { project } = gitProject(h, false);
-    const off = await h.orch.createTicket({ projectId: project.id, prompt: "follows the project" });
-    const on = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: true });
+    const off = await h.orch.createTicket({ projectId: project.id, spec: "follows the project" });
+    const on = await h.orch.createTicket({ projectId: project.id, spec: "x", useWorktree: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(off.key).ticket.branch).toBeNull();
     const cur = h.orch.ticketDetail(on.key).ticket;
@@ -1677,7 +1693,7 @@ describe("worktrees", () => {
   test("the choice is kept through planning: started later, it still runs in the project checkout", async () => {
     const h = setup();
     const { repo, project } = gitProject(h, true);
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", start: false, useWorktree: false });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "x", start: false, useWorktree: false });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.workdir).toBeNull();
     await h.orch.startTicket(t.key);
@@ -1690,7 +1706,7 @@ describe("worktrees", () => {
   test("re-opening a done project-checkout ticket keeps it in the project checkout", async () => {
     const h = setup();
     const { repo, project } = gitProject(h, true);
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "x", useWorktree: false });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "x", useWorktree: false });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
@@ -1712,7 +1728,7 @@ describe("worktrees", () => {
     git("init", "-q", "-b", "main");
     git("commit", "-q", "--allow-empty", "-m", "init");
     const p = h.orch.createProject({ path: repo, key: "repo" });
-    const t = await h.orch.createTicket({ projectId: p.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: p.id, spec: "x" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
@@ -1734,7 +1750,7 @@ describe("@-mentioned files", () => {
     writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
     mkdirSync(join(h.project.path, "src"));
     writeFileSync(join(h.project.path, "src", "app.ts"), "export {}\n");
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md first", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Read @notes.md first", start: false });
     await h.orch.idle();
     const plan = h.driver.calls[0]!;
     expect(plan.prompt).toStartWith("Read @notes.md first\n\n<mentioned-files>");
@@ -1752,7 +1768,7 @@ describe("@-mentioned files", () => {
   test("a chat question gets its files; review and complete runs don't re-attach the brief's", async () => {
     const h = setup();
     writeFileSync(join(h.project.path, "notes.md"), "remember the milk\n");
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Read @notes.md" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Read @notes.md" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "what does @notes.md say?");
     await h.orch.idle();
@@ -1769,7 +1785,7 @@ describe("@-mentioned files", () => {
 
   test("a prompt without mentions reaches the agent as typed, with no status line", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "email a@b.com", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "email a@b.com", start: false });
     await h.orch.idle();
     expect(h.driver.calls[0]!.prompt).toBe("email a@b.com");
     expect(statuses(h, t.sessionId).some((s) => s.startsWith("Attached"))).toBe(false);
@@ -1779,7 +1795,7 @@ describe("@-mentioned files", () => {
     const h = setup();
     writeFileSync(join(h.project.path, "readme.md"), "x");
     expect(await h.orch.projectFiles(h.project.id, "read")).toEqual([{ path: "readme.md", kind: "file" }]);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     expect(await h.orch.ticketFiles(t.key, "read")).toEqual([{ path: "readme.md", kind: "file" }]);
     const wt = join(h.home, "elsewhere");
     mkdirSync(wt);

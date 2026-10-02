@@ -30,13 +30,13 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "description", "driver", "model", "project_key", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "start", "title", "use_worktree"]);
-    expect(props("update_ticket")).toEqual(["base_branch", "branch", "depends_on", "description", "driver", "key", "model", "permission_mode", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "title"]);
+    expect(props("create_ticket")).toEqual(["auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "driver", "model", "project_key", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "start", "title", "use_worktree"]);
+    expect(props("update_ticket")).toEqual(["base_branch", "base_revision", "branch", "depends_on", "driver", "key", "model", "permission_mode", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "title"]);
     expect(props("update_branch")).toEqual(["base_branch", "branch"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
-    expect(props("dispatch_ticket")).toEqual(["base_branch", "branch", "conductor", "description", "key", "project_key", "start", "ticket_key", "title", "url"]);
+    expect(props("dispatch_ticket")).toEqual(["base_branch", "branch", "conductor", "key", "project_key", "spec", "start", "ticket_key", "title", "url"]);
     expect(props("decline_work")).toEqual(["reason", "title"]);
     expect(props("browser_open")).toEqual(["new_tab", "tab", "url"]);
     expect(props("browser_tabs")).toEqual([]);
@@ -49,7 +49,11 @@ describe("tool catalogue", () => {
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
-    expect(props("submit_for_review")).toEqual(["attachments", "skip_agent_review", "skip_human_review", "summary"]);
+    expect(props("submit_for_review")).toEqual(["note", "skip_agent_review", "skip_human_review", "spec_is_up_to_date"]);
+    expect(props("post_note")).toEqual(["note"]);
+    expect(props("read_spec")).toEqual(["revision"]);
+    expect(props("edit_spec")).toEqual(["base_revision", "edits", "note"]);
+    expect(props("update_spec")).toEqual(["base_revision", "note", "spec", "title"]);
     expect(props("complete_ticket")).toEqual(["action", "instructions", "key"]);
     expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
     expect(props("record_pull_request")).toEqual(["url"]);
@@ -60,47 +64,82 @@ describe("tool catalogue", () => {
 });
 
 describe("ticket tools → HarnessOps", () => {
-  test("post_summary", async () => {
+  test("post_note passes the note and returns a confirmation", async () => {
     const ops = fakeOps();
-    const r = await tool("post_summary").execute({ summary: "did X" }, fakeContext({ ops }));
+    const r = await tool("post_note").execute({ note: "did X" }, fakeContext({ ops }));
     expect(r.isError).toBeUndefined();
-    expect(ops.calls).toEqual([{ method: "postSummary", args: ["did X"] }]);
+    expect(text(r)).toBe("Note added to Activity.");
+    expect(ops.calls).toEqual([{ method: "postNote", args: ["did X"] }]);
   });
 
-  test("post_summary and submit_for_review pass attachments through and reject a non-list", async () => {
-    const ops = fakeOps();
-    const posted = await tool("post_summary").execute({ summary: "shots", attachments: ["a.png", "b.mp4"] }, fakeContext({ ops }));
-    expect(text(posted)).toBe("Summary posted with 2 attachments.");
-    await tool("submit_for_review").execute({ summary: "done", attachments: ["c.png"] }, fakeContext({ ops }));
+  test("read_spec passes the optional revision and returns what ops returns", async () => {
+    const ops = fakeOps({ readSpec: async (_ctx, rev?: number) => `Revision ${rev ?? 4}\n   1\tGoal` });
+    const current = await tool("read_spec").execute({}, fakeContext({ ops }));
+    const earlier = await tool("read_spec").execute({ revision: 2 }, fakeContext({ ops }));
+    expect(text(current)).toBe("Revision 4\n   1\tGoal");
+    expect(text(earlier)).toBe("Revision 2\n   1\tGoal");
     expect(ops.calls).toEqual([
-      { method: "postSummary", args: ["shots", ["a.png", "b.mp4"]] },
-      { method: "submitForReview", args: ["done", ["c.png"], { skipAgentReview: undefined, skipHumanReview: undefined }] },
+      { method: "readSpec", args: [undefined] },
+      { method: "readSpec", args: [2] },
     ]);
-    const bad = await tool("post_summary").execute({ summary: "x", attachments: "a.png" } as any, fakeContext({ ops }));
+    const bad = await tool("read_spec").execute({ revision: 0 }, fakeContext({ ops }));
     expect(bad.isError).toBe(true);
     expect(ops.calls).toHaveLength(2);
   });
 
-  test("submit_for_review passes both review skips through", async () => {
+  test("edit_spec maps base_revision and passes the edits through untouched", async () => {
     const ops = fakeOps();
-    await tool("submit_for_review").execute({ summary: "done", skip_agent_review: false, skip_human_review: true }, fakeContext({ ops }));
-    expect(ops.calls).toEqual([{ method: "submitForReview", args: ["done", undefined, { skipAgentReview: false, skipHumanReview: true }] }]);
+    const edits = [{ old_string: "a", new_string: "b" }, { start_line: 3, end_line: 2, new_text: "* note" }];
+    const r = await tool("edit_spec").execute({ base_revision: 3, note: "Status", edits }, fakeContext({ ops }));
+    expect(text(r)).toBe("Spec updated to revision 2.");
+    expect(ops.calls).toEqual([{ method: "editSpec", args: [{ baseRevision: 3, note: "Status", edits }] }]);
+    // A missing base_revision or a non-list of edits never reaches ops (an empty list is spec.ts's to refuse).
+    const noBase = await tool("edit_spec").execute({ note: "x", edits } as any, fakeContext({ ops }));
+    const notList = await tool("edit_spec").execute({ base_revision: 3, note: "x", edits: "a" } as any, fakeContext({ ops }));
+    for (const bad of [noBase, notList]) expect(bad.isError).toBe(true);
+    expect(text(noBase)).toContain('"base_revision" is required');
+    expect(ops.calls).toHaveLength(1);
   });
 
-  test("update_plan passes the optional title through", async () => {
+  test("update_spec maps base_revision and passes the optional title through", async () => {
     const ops = fakeOps();
-    await tool("update_plan").execute({ plan: "1. a" }, fakeContext({ ops }));
-    await tool("update_plan").execute({ plan: "1. b", title: "New" }, fakeContext({ ops }));
+    await tool("update_spec").execute({ spec: "1. a", note: "Plan drafted", base_revision: 1 }, fakeContext({ ops }));
+    await tool("update_spec").execute({ spec: "1. b", note: "Retitled", base_revision: 2, title: "New" }, fakeContext({ ops }));
     expect(ops.calls).toEqual([
-      { method: "updatePlan", args: ["1. a", undefined] },
-      { method: "updatePlan", args: ["1. b", "New"] },
+      { method: "updateSpec", args: [{ spec: "1. a", note: "Plan drafted", baseRevision: 1, title: undefined }] },
+      { method: "updateSpec", args: [{ spec: "1. b", note: "Retitled", baseRevision: 2, title: "New" }] },
     ]);
+    const noNote = await tool("update_spec").execute({ spec: "x", base_revision: 1 } as any, fakeContext({ ops }));
+    expect(noNote.isError).toBe(true);
+    expect(ops.calls).toHaveLength(2);
+  });
+
+  test("submit_for_review advertises spec_is_up_to_date as required but leaves the check to ops", async () => {
+    expect(tool("submit_for_review").inputSchema.required).toEqual(["note", "spec_is_up_to_date"]);
+    // A missing or false value still reaches ops, which refuses it with guidance (not a generic "is required").
+    const ops = fakeOps();
+    const missing = await tool("submit_for_review").execute({ note: "done" } as any, fakeContext({ ops }));
+    expect(missing.isError).toBeUndefined();
+    await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: false }, fakeContext({ ops }));
+    expect(ops.calls.map((c) => c.args[1])).toEqual([undefined, false]);
+    const refusing = fakeOps({
+      submitForReview: async (_ctx, _note, upToDate) => {
+        if (upToDate !== true) throw new Error("Bring the spec up to date with edit_spec or update_spec first");
+      },
+    });
+    await expect(tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: false }, fakeContext({ ops: refusing }))).rejects.toThrow("Bring the spec up to date");
+  });
+
+  test("submit_for_review passes both review skips through", async () => {
+    const ops = fakeOps();
+    await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: true, skip_agent_review: false, skip_human_review: true }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([{ method: "submitForReview", args: ["done", true, { skipAgentReview: false, skipHumanReview: true }] }]);
   });
 
   test("block and submit_for_review tell the model to stop", async () => {
     const ops = fakeOps();
     const b = await tool("block").execute({ question: "Which DB?" }, fakeContext({ ops }));
-    const s = await tool("submit_for_review").execute({ summary: "done" }, fakeContext({ ops }));
+    const s = await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: true }, fakeContext({ ops }));
     expect(text(b)).toContain("Stop here");
     expect(text(s)).toBe("Ticket moved to review. Stop here.");
     expect(ops.calls.map((c) => [c.method, c.args[0]])).toEqual([
@@ -142,14 +181,14 @@ describe("ticket tools → HarnessOps", () => {
   test("missing, empty and mistyped required inputs are isError results", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
-    const missing = await tool("post_summary").execute({} as any, ctx);
+    const missing = await tool("post_note").execute({} as any, ctx);
     const empty = await tool("block").execute({ question: "   " }, ctx);
-    const typed = await tool("submit_for_review").execute({ summary: 5 } as any, ctx);
-    const nullInput = await tool("post_summary").execute(null as any, ctx);
+    const typed = await tool("submit_for_review").execute({ note: 5, spec_is_up_to_date: true } as any, ctx);
+    const nullInput = await tool("post_note").execute(null as any, ctx);
     for (const r of [missing, empty, typed, nullInput]) expect(r.isError).toBe(true);
-    expect(text(missing)).toBe('Invalid input for post_summary: "summary" is required.');
+    expect(text(missing)).toBe('Invalid input for post_note: "note" is required.');
     expect(text(empty)).toContain("must not be empty");
-    expect(text(typed)).toContain('"summary" must be a string');
+    expect(text(typed)).toContain('"note" must be a string');
     expect(ops.calls).toEqual([]);
   });
 
@@ -163,12 +202,12 @@ describe("board write tools → HarnessOps", () => {
   test("create_ticket passes start, conductor, project, driver; an empty model means the driver default", async () => {
     const ops = fakeOps();
     await tool("create_ticket").execute(
-      { title: "Docs", description: "Write docs", project_key: "WEB", start: true, conductor: true, driver: "claude-code", model: " " },
+      { title: "Docs", spec: "Write docs", project_key: "WEB", start: true, conductor: true, driver: "claude-code", model: " " },
       fakeContext({ ops }),
     );
     expect(ops.calls[0]!.args[0]).toEqual({
       title: "Docs",
-      description: "Write docs",
+      spec: "Write docs",
       projectKey: "WEB",
       start: true,
       conductor: true,
@@ -180,7 +219,7 @@ describe("board write tools → HarnessOps", () => {
   test("update_ticket maps permission_mode \"inherit\" to null", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
-    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    await tool("create_ticket").execute({ title: "one", spec: "d" }, ctx);
     const r = await tool("update_ticket").execute({ key: "TEST-2", title: "Renamed", permission_mode: "inherit", depends_on: [] }, ctx);
     await tool("update_ticket").execute({ key: "TEST-2", permission_mode: "read_only", model: "claude-opus-5-5" }, ctx);
     const patches = ops.calls.filter((c) => c.method === "updateTicket").map((c) => c.args);
@@ -204,7 +243,7 @@ describe("board write tools → HarnessOps", () => {
   test("move/cancel/reopen map key and arguments", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
-    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    await tool("create_ticket").execute({ title: "one", spec: "d" }, ctx);
     const m = await tool("move_ticket").execute({ key: "TEST-2", status: "in_progress", position: 0 }, ctx);
     await tool("move_ticket").execute({ key: "TEST-2", status: "blocked" }, ctx);
     await tool("cancel_ticket").execute({ key: "TEST-2" }, ctx);
@@ -224,12 +263,12 @@ describe("conductor tools → HarnessOps", () => {
   test("create_ticket maps snake_case to the ops input and returns the key", async () => {
     const ops = fakeOps();
     const r = await tool("create_ticket").execute(
-      { title: "API", description: "Build the API", depends_on: ["TEST-7"], auto_start: false },
+      { title: "API", spec: "Build the API", depends_on: ["TEST-7"], auto_start: false },
       fakeContext({ ops }),
     );
     expect(ops.calls[0]).toEqual({
       method: "createTicket",
-      args: [{ title: "API", description: "Build the API", dependsOn: ["TEST-7"], autoStart: false }],
+      args: [{ title: "API", spec: "Build the API", dependsOn: ["TEST-7"], autoStart: false }],
     });
     expect(text(r)).toStartWith("Created TEST-2.");
     expect(JSON.parse(text(r).split("\n").slice(1).join("\n"))).toMatchObject({ key: "TEST-2", dependsOn: ["TEST-7"], autoStart: false });
@@ -237,7 +276,7 @@ describe("conductor tools → HarnessOps", () => {
 
   test("create_ticket rejects non-string depends_on entries", async () => {
     const ops = fakeOps();
-    const r = await tool("create_ticket").execute({ title: "a", description: "b", depends_on: [1] } as any, fakeContext({ ops }));
+    const r = await tool("create_ticket").execute({ title: "a", spec: "b", depends_on: [1] } as any, fakeContext({ ops }));
     expect(r.isError).toBe(true);
     expect(text(r)).toContain('"depends_on[0]" must be a string');
     expect(ops.calls).toEqual([]);
@@ -246,7 +285,7 @@ describe("conductor tools → HarnessOps", () => {
   test("start/message/review/complete map key and arguments", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
-    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    await tool("create_ticket").execute({ title: "one", spec: "d" }, ctx);
     await tool("start_ticket").execute({ key: "TEST-2" }, ctx);
     await tool("message_ticket").execute({ key: "TEST-2", text: "use postgres" }, ctx);
     const rv = await tool("review_ticket").execute({ key: "TEST-2", decision: "approve", notes: "ok" }, ctx);
@@ -268,11 +307,11 @@ describe("conductor tools → HarnessOps", () => {
 });
 
 describe("board tools → HarnessOps", () => {
-  test("list_tickets maps snake_case filters, applies the default limit, and returns parseable JSON without descriptions", async () => {
+  test("list_tickets maps snake_case filters, applies the default limit, and returns parseable JSON without specs", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
     expect(text(await tool("list_tickets").execute({}, ctx))).toContain("no child tickets");
-    await tool("create_ticket").execute({ title: "one", description: "d" }, ctx);
+    await tool("create_ticket").execute({ title: "one", spec: "d" }, ctx);
     const r = await tool("list_tickets").execute({ scope: "all", project_key: "WEB", status: ["planning", "review"], limit: 5 }, ctx);
     expect(ops.calls.filter((c) => c.method === "listTickets").map((c) => c.args)).toEqual([
       [{ scope: undefined, projectKey: undefined, statuses: undefined, limit: 50 }],
@@ -281,7 +320,7 @@ describe("board tools → HarnessOps", () => {
     const parsed = JSON.parse(text(r));
     expect(parsed).toHaveLength(1);
     expect(parsed[0]).toMatchObject({ key: "TEST-2", title: "one", status: "planning", agentReview: "pending", project: "TEST" });
-    expect(parsed[0].description).toBeUndefined();
+    expect(parsed[0].spec).toBeUndefined();
   });
 
   test("list_tickets rejects unknown statuses and scopes before calling ops", async () => {
@@ -305,13 +344,16 @@ describe("board tools → HarnessOps", () => {
     expect(text(await tool("list_tickets").execute({ status: ["blocked"] }, fakeContext({ ops: empty })))).toBe('No tickets match (scope "all", status blocked).');
   });
 
-  test("get_ticket includes description, parent, driver and summaries; transcript only when asked", async () => {
+  test("get_ticket includes spec and its revisions, parent, driver, Activity and attachments; transcript only when asked", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
-    await tool("create_ticket").execute({ title: "one", description: "the brief" }, ctx);
+    await tool("create_ticket").execute({ title: "one", spec: "the brief" }, ctx);
     const r = JSON.parse(text(await tool("get_ticket").execute({ key: "TEST-2" }, ctx)));
-    expect(r).toMatchObject({ key: "TEST-2", project: "TEST", description: "the brief", parent: "TEST-1", driver: "dummy", model: null });
-    expect(r.summaries[0].body).toBe("did it");
+    expect(r).toMatchObject({ key: "TEST-2", project: "TEST", spec: "the brief", specRevision: 1, specBaselineRevision: 1, parent: "TEST-1", driver: "dummy", model: null });
+    expect(r.activity).toEqual([{ kind: "note", author: "agent", body: "did it", meta: {}, createdAt: 1 }]);
+    expect(r.attachments).toEqual([]);
+    expect(r.description).toBeUndefined();
+    expect(r.summaries).toBeUndefined();
     expect(r.transcript).toBeUndefined();
     await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 5 }, ctx);
     expect(ops.calls.filter((c) => c.method === "getTicket").map((c) => c.args)).toEqual([
@@ -331,7 +373,10 @@ describe("board tools → HarnessOps", () => {
         parent: null,
         children: [],
         base: { branch: "develop", source: "project" },
-        summaries: [],
+        specRevision: 1,
+        specBaselineRevision: null,
+        activity: [],
+        attachments: [],
       }),
     });
     const r = JSON.parse(text(await tool("get_ticket").execute({ key: "OLD-1" }, fakeContext({ ops }))));
@@ -349,7 +394,10 @@ describe("board tools → HarnessOps", () => {
         parent: null,
         children: [],
         base: { branch: "main", source: "settings" },
-        summaries: [],
+        specRevision: 1,
+        specBaselineRevision: null,
+        activity: [],
+        attachments: [],
       }),
     });
     const r = JSON.parse(text(await tool("get_ticket").execute({ key: "MH-124" }, fakeContext({ ops }))));
@@ -385,7 +433,7 @@ describe("board tools → HarnessOps", () => {
   });
 
   test("search_tickets maps inputs and returns compact hits with nextCursor", async () => {
-    const hit = { ticket: { ...fakeTicket({ key: "WEB-3", title: "Nav", status: "done", description: "long brief" }), projectKey: "WEB" }, snippet: "…the nav…" };
+    const hit = { ticket: { ...fakeTicket({ key: "WEB-3", title: "Nav", status: "done", spec: "long brief" }), projectKey: "WEB" }, snippet: "…the nav…" };
     const ops = fakeOps({ searchTickets: async () => ({ hits: [hit], nextCursor: "abc", total: 7 }) });
     const ctx = fakeContext({ ops, runKind: "triage", ticket: null });
     const r = JSON.parse(text(await tool("search_tickets").execute({ query: "nav", project_key: "WEB", limit: 1, cursor: "prev" }, ctx)));
@@ -409,11 +457,11 @@ describe("triage tools → HarnessOps", () => {
   test("dispatch_ticket maps project_key and flags", async () => {
     const ops = fakeOps();
     const r = await tool("dispatch_ticket").execute(
-      { project_key: "WEB", key: "FOO-9", title: "Fix nav", description: "brief", start: true },
+      { project_key: "WEB", key: "FOO-9", title: "Fix nav", spec: "brief", start: true },
       fakeContext({ ops, runKind: "triage", ticket: null }),
     );
     expect(ops.calls).toEqual([
-      { method: "dispatchTicket", args: [{ projectKey: "WEB", key: "FOO-9", title: "Fix nav", description: "brief", start: true, conductor: undefined }] },
+      { method: "dispatchTicket", args: [{ projectKey: "WEB", key: "FOO-9", title: "Fix nav", spec: "brief", start: true, conductor: undefined }] },
     ]);
     expect(text(r)).toContain("Dispatched as FOO-9");
     expect(text(r)).toContain("Stop here");
@@ -424,7 +472,7 @@ describe("triage tools → HarnessOps", () => {
       dispatchTicket: async () => fakeTicket({ key: "WEB-3", externalRef: { source: "jira", key: "FOO-9", url: null, raw: null } }),
     });
     const r = await tool("dispatch_ticket").execute(
-      { project_key: "WEB", key: "FOO-9", ticket_key: "WEB-3", title: "Fix nav", description: "update" },
+      { project_key: "WEB", key: "FOO-9", ticket_key: "WEB-3", title: "Fix nav", spec: "update" },
       fakeContext({ ops, runKind: "triage", ticket: null }),
     );
     expect(ops.calls[0]).toMatchObject({ method: "dispatchTicket", args: [{ projectKey: "WEB", key: "FOO-9", ticketKey: "WEB-3" }] });
@@ -434,7 +482,7 @@ describe("triage tools → HarnessOps", () => {
 
   test("dispatch_ticket requires project_key", async () => {
     const ops = fakeOps();
-    const r = await tool("dispatch_ticket").execute({ title: "x", description: "y" } as any, fakeContext({ ops }));
+    const r = await tool("dispatch_ticket").execute({ title: "x", spec: "y" } as any, fakeContext({ ops }));
     expect(r.isError).toBe(true);
     expect(text(r)).toContain('"project_key" is required');
   });

@@ -76,7 +76,7 @@ describe("settings validation", () => {
 describe("model reaches the driver", () => {
   test("RunRequest.model follows ticket → project → settings → null", async () => {
     const h = setup();
-    const t1 = await h.orch.createTicket({ projectId: h.project.id, prompt: "a" });
+    const t1 = await h.orch.createTicket({ projectId: h.project.id, spec: "a" });
     await h.orch.idle();
     expect(h.driver.calls.map((c) => c.model)).toEqual([null, null]); // work + review
 
@@ -86,11 +86,11 @@ describe("model reaches the driver", () => {
     expect(h.driver.calls.at(-1)!.model).toBe("from-settings");
 
     h.orch.updateProject(h.project.id, { defaultModels: { fake: "from-project" } });
-    const t2 = await h.orch.createTicket({ projectId: h.project.id, prompt: "b" });
+    const t2 = await h.orch.createTicket({ projectId: h.project.id, spec: "b" });
     await h.orch.idle();
     expect(h.driver.calls.at(-1)!.model).toBe("from-project");
 
-    const t3 = await h.orch.createTicket({ projectId: h.project.id, prompt: "c", model: "from-ticket" });
+    const t3 = await h.orch.createTicket({ projectId: h.project.id, spec: "c", model: "from-ticket" });
     await h.orch.idle();
     const calls = h.driver.calls.filter((c) => c.prompt === "c");
     expect(calls.map((c) => c.model)).toEqual(["from-ticket"]);
@@ -102,7 +102,7 @@ describe("model reaches the driver", () => {
 
   test("changing a ticket's model applies to the next run and keeps the conversation state", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "first", model: "m1" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "first", model: "m1" });
     await h.orch.idle();
     const updated = await h.orch.updateTicket(t.key, { model: "m2" });
     expect(updated.model).toBe("m2");
@@ -118,7 +118,7 @@ describe("model reaches the driver", () => {
 
   test("switching driver clears the model unless one is given", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", model: "m1", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", model: "m1", start: false });
     await h.orch.idle();
     expect((await h.orch.updateTicket(t.key, { driver: "other" })).model).toBeNull();
     expect((await h.orch.updateTicket(t.key, { driver: "fake", model: "m3" })).model).toBe("m3");
@@ -128,7 +128,7 @@ describe("model reaches the driver", () => {
   test("review runs use settings.reviewModels when set", async () => {
     const h = setup();
     h.orch.updateSettings({ reviewModels: { fake: "reviewer" } });
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "x", model: "worker" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "x", model: "worker" });
     await h.orch.idle();
     expect(h.driver.calls.map((c) => `${c.kind}:${c.model}`)).toEqual(["work:worker", "review:reviewer"]);
   });

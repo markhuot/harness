@@ -234,7 +234,8 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true });
+    if (b?.log !== undefined && typeof b.log !== "boolean") throw new HarnessError(400, "log must be true or false");
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, log: b?.log === true });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
@@ -246,7 +247,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/cancel", ({ params }) => o.cancelTicket(params.key!));
   add("POST", "/tickets/:key/agent-review", ({ params }) => o.rerunAgentReview(params.key!));
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
-  add("GET", "/tickets/:key/summaries", ({ params }) => o.summaries(params.key!));
+  add("GET", "/tickets/:key/activity", ({ params }) => o.activity(params.key!));
+  add("GET", "/tickets/:key/spec/revisions", ({ params }) => o.specRevisions(params.key!));
+  add("GET", "/tickets/:key/spec/revisions/:rev", ({ params, url }) => o.specRevision(params.key!, params.rev!, url.searchParams.get("diff")));
   add("GET", "/tickets/:key/files", ({ params, url }) => o.ticketFiles(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
   add("GET", "/tickets/:key/commands", ({ params, url }) => o.ticketCommands(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
   add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
@@ -420,7 +423,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return json({ error: "WebSocket upgrade required" }, 400);
       }
 
-      // Summary attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
+      // Ticket attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
       // No other route takes the token from the query.
       const attachment = /^\/attachments\/([^/]+)$/.exec(path);
       if (attachment && (req.method === "GET" || req.method === "HEAD")) {

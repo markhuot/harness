@@ -3,6 +3,8 @@
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
 import type {
+  ActivityKind,
+  ActivityMeta,
   CompletionAction,
   CreateProjectBody,
   DriverInfo,
@@ -81,8 +83,13 @@ export interface BoardTicketDetail {
   children: string[];
   /** The effective base branch and where it came from (ticket, project, settings, or the checkout's) */
   base: { branch: string; source: string };
-  /** attachments[].path: the stored copy, readable with a file tool */
-  summaries: { author: string; body: string; createdAt: number; attachments: { name: string; kind: "image" | "video"; path: string }[] }[];
+  /** The spec's current revision (ticket.spec is its body) and the approved baseline (null before Start) */
+  specRevision: number;
+  specBaselineRevision: number | null;
+  /** The ticket's Activity, oldest first */
+  activity: { kind: ActivityKind; author: string; body: string; meta: ActivityMeta; createdAt: number }[];
+  /** The ticket's images and videos (attachment:<id> in the spec): path is the stored copy, readable with a file tool */
+  attachments: { id: string; name: string; kind: "image" | "video"; path: string }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
 }
@@ -115,7 +122,7 @@ export interface InboxItem {
 
 export interface CreateTicketInput {
   title: string;
-  description: string;
+  spec: string;
   dependsOn?: string[];
   /** Start once every dependency is done. Default: true for a conductor's child, false otherwise. */
   autoStart?: boolean;
@@ -146,7 +153,10 @@ export interface CreateTicketInput {
 
 export interface UpdateTicketInput {
   title?: string;
-  description?: string;
+  /** A new spec revision for the ticket (written as the caller's agent revision) */
+  spec?: string;
+  /** The specRevision the new spec replaces (from get_ticket); required with spec, a stale one is refused */
+  baseRevision?: number;
   driver?: string;
   model?: string | null;
   permissionMode?: PermissionMode | null;
@@ -195,15 +205,20 @@ export interface ToolContext {
  */
 export interface HarnessOps {
   // --- any ticket run ---
-  /**
-   * Post a short progress/result summary on the ticket (or triage session). `attachments` are
-   * image/video paths (relative ones resolve against ctx.cwd); all are validated before any is stored.
-   */
-  postSummary(ctx: ToolContext, body: string, attachments?: string[]): Promise<void>;
+  /** A short Activity note on the ticket (post_note). */
+  postNote(ctx: ToolContext, note: string): Promise<void>;
+  /** The ticket's spec (a revision, else the current one), with numbered lines (read_spec). */
+  readSpec(ctx: ToolContext, revision?: number): Promise<string>;
 
-  // --- plan runs ---
-  /** Replace the ticket brief/plan (planning agent). */
-  updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void>;
+  // --- plan, work, chat, conductor and complete runs ---
+  /**
+   * edit_spec: apply `edits` (all or nothing) to revision `baseRevision`, which must be the
+   * current one. Local images in the new text are stored and rewritten to attachment:<id>.
+   * Returns what happened, for the model.
+   */
+  editSpec(ctx: ToolContext, input: { baseRevision: number; note: string; edits: unknown }): Promise<string>;
+  /** update_spec: replace the whole spec (and maybe the title) as a new revision of `baseRevision`. */
+  updateSpec(ctx: ToolContext, input: { spec: string; note: string; baseRevision: number; title?: string }): Promise<string>;
 
   // --- work, conductor and chat runs ---
   /** Move ticket to blocked with a question for the human. The run should end after this. */
@@ -212,9 +227,13 @@ export interface HarnessOps {
   unblock(ctx: ToolContext, note?: string): Promise<void>;
   /** The agent is changing reviewed work again: review → in progress, and both reviews start over. */
   resumeWork(ctx: ToolContext, note?: string): Promise<void>;
-  /** Work is finished: move to review with a summary. The run should end after this. */
-  /** The skips are stored on the ticket first (turning one on is refused when the other review is skipped too). */
-  submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skips?: ReviewSkips): Promise<void>;
+  /**
+   * Work is finished: move to review with a note on this round. `specIsUpToDate` must be true (the
+   * spec was brought up to date in an earlier call), else it throws and the ticket stays put. The
+   * skips are stored on the ticket first (turning one on is refused when the other review is
+   * skipped too). The run should end after this.
+   */
+  submitForReview(ctx: ToolContext, note: string, specIsUpToDate: unknown, skips?: ReviewSkips): Promise<void>;
   /**
    * Work and conductor runs: re-point the run's own ticket to `branch` (into the worktree that has
    * it checked out, or by switching the ticket's worktree to it) and/or set its base branch
@@ -235,7 +254,7 @@ export interface HarnessOps {
    * "project"; no ticket (triage) → "all". Throws for an unknown project key.
    */
   listTickets(ctx: ToolContext, filter: BoardListFilter): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }>;
-  /** One ticket in any project, with summaries and optionally the last N text transcript entries. */
+  /** One ticket in any project, with its spec, Activity and optionally the last N text transcript entries. */
   /**
    * Local keys only (current key or alias). A key only remote IDs match throws RemoteIdError
    * (tools/util.ts) carrying BoardRemoteMatches; one nothing matches throws a plain Error.
@@ -294,7 +313,7 @@ export interface HarnessOps {
   /**
    * `key` is the remote ID: without `ticketKey` a new ticket (native key) is created, linked to
    * it. `ticketKey` names an existing local ticket (current key or alias) that gets the
-   * description as a message instead, and is linked to `key` when it has no remote ID yet.
+   * spec as a message instead, and is linked to `key` when it has no remote ID yet.
    */
   dispatchTicket(
     ctx: ToolContext,
@@ -304,7 +323,7 @@ export interface HarnessOps {
       ticketKey?: string;
       url?: string;
       title: string;
-      description: string;
+      spec: string;
       start?: boolean;
       conductor?: boolean;
       /** The new ticket's branch (CreateTicketBody.branch); ignored with ticketKey */

@@ -155,7 +155,7 @@ describe("plugin host over HTTP", () => {
     expect((await client.health()).ok).toBe(true);
     // Tabs from a failed plugin are never offered.
     const project = await client.createProject({ path: h.paths.home, key: "P" });
-    const t = await client.createTicket({ projectId: project.id, prompt: "hi", start: false });
+    const t = await client.createTicket({ projectId: project.id, spec: "hi", start: false });
     expect(await client.ticketTabs(t.key)).toEqual([]);
   });
 
@@ -191,7 +191,7 @@ describe("plugin host over HTTP", () => {
     const dir = join(h.paths.home, "proj");
     mkdirSync(dir);
     const project = await client.createProject({ path: dir, key: "CTX" });
-    const t = await client.createTicket({ projectId: project.id, prompt: "hi", start: false });
+    const t = await client.createTicket({ projectId: project.id, spec: "hi", start: false });
     expect(await client.request<any>("GET", `/plugins/alpha/api/ticket?key=${t.key}`)).toEqual({ key: t.key, project: "CTX", workdir: null });
     h.store.tickets.update(t.id, { workdir: dir });
     expect(await client.request<any>("GET", `/plugins/alpha/api/ticket?key=${t.key}`)).toEqual({ key: t.key, project: "CTX", workdir: dir });
@@ -210,7 +210,7 @@ describe("plugin host over HTTP", () => {
       writePlugin(builtin, "angry-async", { id: "angry-async", server: "server.js" }, { "server.js": `export default { async onTicketEvent() { throw new Error("async nope"); } };` });
     });
     const project = await client.createProject({ path: h.paths.home, key: "ANG" });
-    const t = await client.createTicket({ projectId: project.id, prompt: "hi", start: false });
+    const t = await client.createTicket({ projectId: project.id, spec: "hi", start: false });
     expect(t.key).toBe("ANG-1");
     await Bun.sleep(10);
     expect(logs.some((l) => l.includes("[plugin:angry] onTicketEvent failed"))).toBe(true);
@@ -330,7 +330,7 @@ describe("plugin host over HTTP", () => {
     await git(repo, "commit", "-qm", "init");
 
     const project = await client.createProject({ path: repo, key: "TAB" });
-    const t = await client.createTicket({ projectId: project.id, prompt: "hi", start: false });
+    const t = await client.createTicket({ projectId: project.id, spec: "hi", start: false });
     const tabs = await client.ticketTabs(t.key);
     expect(tabs[0]).toEqual({ pluginId: "another", id: "x", title: "X", icon: null, when: "always" });
     expect(ids(tabs)).toEqual(["another:x", "tabs:every"]); // no workdir yet
@@ -374,7 +374,7 @@ describe("plugin host over HTTP", () => {
     mkdirSync(repo);
     await git(repo, "init", "-q", "-b", "main");
     const project = await client.createProject({ path: repo, key: "KEEP" });
-    const t = await client.createTicket({ projectId: project.id, prompt: "please keep this", start: false });
+    const t = await client.createTicket({ projectId: project.id, spec: "please keep this", start: false });
     const ids = (tabs: PluginTab[]) => tabs.map((x) => x.id);
 
     // No workdir: `when` fails for every tab, showTab decides.
@@ -389,7 +389,7 @@ describe("plugin host over HTTP", () => {
     expect(asked()).toEqual([`dropped:${t.key}:KEEP:keep`, `boom:${t.key}:KEEP:keep`]);
 
     // A false answer hides it.
-    const other = await client.createTicket({ projectId: project.id, prompt: "nothing special", start: false });
+    const other = await client.createTicket({ projectId: project.id, spec: "nothing special", start: false });
     expect(ids(await client.ticketTabs(other.key))).toEqual([]);
   });
 

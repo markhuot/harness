@@ -21,13 +21,32 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   tap one to open it full size, then step through every image in that text. Images from other
   websites aren't loaded. They show as a link instead.
 
+- Every change to a ticket's spec is kept as a revision, with who made it and a short note on
+  what changed. The revision that's current when you press Start is marked as the one you
+  approved.
+- Agents can show screenshots and recordings right in the spec. The images are kept with the
+  ticket until you delete it.
+
 ### Changed
 
-- An agent review now opens with a short message naming the ticket, and the reviewer reads the
-  brief and summaries itself with `get_ticket`. Its transcript no longer starts with a copy of
-  every summary, which grew with each round of review. The Agent review prompt in Settings has a
-  new `{{key}}` variable and no longer offers `{{brief}}` or `{{summaries}}`. A customized version
-  that uses them is flagged as invalid, and reviews use the built-in prompt until you update it.
+- A ticket's description is now its **spec**: one living document with the goal, the plan, the
+  current status (what's done, how it was checked, screenshots) and open questions. Agents keep it
+  up to date as they work, changing only the parts that changed, instead of posting a new summary
+  each round. They have to bring it up to date before they submit for review.
+- **Summaries are now Activity**: a short timeline of typed entries, such as notes, submits,
+  questions, review decisions, approvals, re-opens and failures. Agent notes are kept to a few
+  lines about what changed since the last one, so a second review round no longer repeats the
+  first.
+- Agent reviews know which round they are. A re-review sees the earlier rounds' notes and the
+  commit they looked at, checks what changed since then, and keeps its notes to that round. The
+  reviewer also sees how the spec changed since you approved it, and asks for changes if the goal
+  moved without you asking.
+- A message to a ticket's agent goes into Activity, with the agent's answer, only when you send
+  it from the Spec or Activity tab. From any other tab it goes to the agent and the transcript
+  only.
+- Saved changes to the Summaries prompt in Settings → Prompts are dropped, since the new Spec and
+  Activity prompt replaces it. If another saved prompt still mentions `update_plan` or
+  `post_summary`, the service log says so at startup.
 - Project settings now have **Skip agent review** and **Skip human review** switches (on Mac and
   iPhone/iPad), in place of **Require human review**. They set where a new ticket's two review
   switches start, so one project can skip your review by default while another skips the agent's,
@@ -50,6 +69,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Cards linked to a remote ID no longer carry a badge naming where the link came from ("manual",
   "jira" or a watcher's name). The remote ID still shows in place of the ticket's key. The ticket's
   details and settings no longer mention the source either.
+- Agents no longer attach screenshots to individual summaries. They put them in the spec instead,
+  and screenshots from older summaries show in those entries in Activity.
 
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 

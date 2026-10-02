@@ -9,7 +9,7 @@
 // (unknown event kinds, enum values, content types) that the app must decode without failing.
 
 import type * as P from "../../src/protocol";
-import { CLASSIFIER_BACKENDS, COMPLETION_ACTIONS, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, TICKET_STATUSES } from "../../src/protocol";
+import { ACTIVITY_KINDS, CLASSIFIER_BACKENDS, COMPLETION_ACTIONS, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, TICKET_STATUSES } from "../../src/protocol";
 import type * as M from "../../src/mentions";
 import type * as C from "../../src/commands";
 
@@ -107,7 +107,9 @@ const ticket: P.Ticket = {
   projectId: "prj_8f2c1a",
   kind: "conductor",
   title: "Port the wire protocol to Swift",
-  description: "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum",
+  spec: "Port shared/src/protocol.ts to Codable Swift types.\n\n- Patch<T>\n- OpenEnum\n\n![after](attachment:att_1)",
+  specRevision: 4,
+  specBaselineRevision: 2,
   status: "blocked",
   sessionId: "ses_31",
   driver: "claude-code",
@@ -148,7 +150,7 @@ const plainTicket: P.Ticket = {
   projectId: "prj_00a1",
   kind: "task",
   title: "Fix the flaky test",
-  description: "",
+  spec: "",
   status: "planning",
   sessionId: "ses_2",
   driver: "anthropic-api",
@@ -356,16 +358,45 @@ export const TaskOutput: P.TaskOutput[] = [
   { text: "", start: 40, end: 40, size: 0, done: true, available: false },
 ];
 
-export const SummaryAttachment: P.SummaryAttachment[] = [
+export const Attachment: P.Attachment[] = [
   { id: "att_1", kind: "image", mimeType: "image/png", name: "after.png", size: 48213, width: 1280, height: 800 },
   { id: "att_2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 2_400_118 },
 ];
 
-export const Summary: P.Summary[] = [
-  { id: "sum_1", sessionId: "ses_31", ticketId: "tkt_31", author: "agent", body: "Ported the enums; **tests pass**; next: entities.", createdAt: T0, attachments: SummaryAttachment },
-  { id: "sum_2", sessionId: "ses_t4", ticketId: null, author: "system", body: "Dispatched.", createdAt: T0, attachments: [] },
-  { id: "sum_3", sessionId: "ses_31", ticketId: "tkt_31", author: "human", body: "Looks good", createdAt: T0, attachments: [] },
+export const ActivityMeta: P.ActivityMeta[] = [
+  { question: "Should HarnessEvent decode unknown kinds or drop them?" },
+  { round: 2, commit: "9f1c2ab", by: "agent" },
+  { round: 1, commit: null, by: "conductor" },
+  { note: "The human answered", specRevision: 4, by: "human" },
+  {},
 ];
+
+export const ActivityEntry: P.ActivityEntry[] = [
+  { id: "act_1", sessionId: "ses_31", ticketId: "tkt_31", kind: "note", author: "agent", body: "Ported the enums; **tests pass**; next: entities.", meta: {}, createdAt: T0 },
+  { id: "act_2", sessionId: "ses_t4", ticketId: null, kind: "system", author: "system", body: "Dispatched.", meta: {}, createdAt: T0 },
+  { id: "act_3", sessionId: "ses_31", ticketId: "tkt_31", kind: "message", author: "human", body: "Looks good", meta: {}, createdAt: T0 },
+  { id: "act_4", sessionId: "ses_31", ticketId: "tkt_31", kind: "blocked", author: "agent", body: "Should HarnessEvent decode unknown kinds or drop them?", meta: ActivityMeta[0]!, createdAt: T0 + 1 },
+  { id: "act_5", sessionId: "ses_31", ticketId: "tkt_31", kind: "changes_requested", author: "agent", body: "The enum test is tautological", meta: ActivityMeta[1]!, createdAt: T0 + 2 },
+  { id: "act_6", sessionId: "ses_31", ticketId: "tkt_31", kind: "submitted", author: "agent", body: "Ready", meta: { specRevision: 4 }, createdAt: T0 + 3 },
+];
+
+export const SpecRevisionInfo: P.SpecRevisionInfo[] = [
+  { rev: 1, author: "human", runId: null, runKind: null, note: "Created", approvedBaseline: false, createdAt: T0 },
+  { rev: 2, author: "agent", runId: "run_7", runKind: "plan", note: "Plan", approvedBaseline: true, createdAt: T0 + 60_000 },
+  { rev: 3, author: "system", runId: null, runKind: null, note: "Restored", approvedBaseline: false, createdAt: T0 + 120_000 },
+];
+
+export const SpecRevision: P.SpecRevision[] = [
+  { ...SpecRevisionInfo[1]!, body: "## Goal\n\nPort the protocol." },
+  { ...SpecRevisionInfo[0]!, body: "" },
+];
+
+export const SpecDiff: P.SpecDiff[] = [
+  { from: 1, to: 2, diff: "--- a/spec.md\n+++ b/spec.md\n@@ -0,0 +1 @@\n+## Goal\n" },
+  { from: 2, to: 2, diff: "" },
+];
+
+export const SpecConflict: P.SpecConflict[] = [{ currentRevision: 5, spec: "## Goal\n\nChanged by the agent." }];
 
 export const WatcherLive: P.WatcherLive[] = [
   { state: "running", since: T0, nextRunAt: null, failures: 0 },
@@ -595,16 +626,16 @@ export const TicketDetail: P.TicketDetail[] = [
     resolvedFrom: "OLDKEY-31",
     ticket,
     session,
-    summaries: Summary,
+    activity: ActivityEntry,
     runs: Run,
     dependents: ["NYTIMES-32"],
     children: [plainTicket],
-    parent: { ...plainTicket, id: "tkt_30", key: "NYTIMES-30", kind: "conductor", childCount: 1 },
+    parent: { ...plainTicket, id: "tkt_30", key: "NYTIMES-30", kind: "conductor", childCount: 1, specRevision: 1, specBaselineRevision: null },
     subagents: Subagent,
     relatedTickets: RelatedTicket,
   },
-  { ticket: plainTicket, session, summaries: [], runs: [], dependents: [], children: [], parent: null, subagents: [], relatedTickets: [] },
-  { ticket: plainTicket, session, summaries: [], runs: [], dependents: [], children: [] },
+  { ticket: plainTicket, session, activity: [], runs: [], dependents: [], children: [], parent: null, subagents: [], relatedTickets: [] },
+  { ticket: plainTicket, session, activity: [], runs: [], dependents: [], children: [] },
 ];
 
 export const RemoteKeyMatches: P.RemoteKeyMatches[] = [{ requested: "PLAYR-123", relatedTickets: RelatedTicket }];
@@ -654,7 +685,7 @@ export const PluginFrameMessage: P.PluginFrameMessage[] = [
 // Events and WebSocket messages
 // ---------------------------------------------------------------------------
 
-/** One sample per HarnessEvent kind (17). */
+/** One sample per HarnessEvent kind (18). */
 export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "project.upserted", project },
   { kind: "project.deleted", id: "prj_00a1" },
@@ -666,7 +697,11 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "transcript.appended", entry: TranscriptEntry[1]! },
   { kind: "subagent.upserted", subagent: Subagent[0]! },
   { kind: "transcript.delta", sessionId: "ses_31", runId: "run_7", text: "Compiling Proto" },
-  { kind: "summary.added", summary: Summary[0]! },
+  { kind: "activity.added", entry: ActivityEntry[0]! },
+  { kind: "spec.revised", ticketId: "tkt_31", rev: 4, author: "agent", note: "Status", runId: "run_7", runKind: "work", createdAt: T0 + 180_000 },
+  { kind: "spec.revised", ticketId: "tkt_31", rev: 5, author: "human", note: "Edited by hand", runId: null, runKind: null },
+  // From a service before runId / runKind / createdAt.
+  { kind: "spec.revised", ticketId: "tkt_31", rev: 6, author: "agent", note: "Plan" },
   { kind: "watcher.upserted", watcher: Watcher[0]! },
   { kind: "watcher.deleted", id: "wat_2" },
   { kind: "settings.updated", settings: publicSettings },
@@ -747,10 +782,10 @@ export const UpdateProjectBody: Partial<P.CreateProjectBody>[] = [
 ];
 
 export const CreateTicketBody: P.CreateTicketBody[] = [
-  { projectId: "prj_8f2c1a", prompt: "Fix the flaky login test" },
+  { projectId: "prj_8f2c1a", spec: "Fix the flaky login test" },
   {
     projectId: "prj_8f2c1a",
-    prompt: "Port the protocol",
+    spec: "Port the protocol",
     title: "Swift protocol",
     kind: "conductor",
     driver: "claude-code",
@@ -769,15 +804,16 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     externalRef,
     draft: false,
   },
-  { projectId: "prj_8f2c1a", prompt: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
-  { projectId: "prj_8f2c1a", prompt: "In the checkout", useWorktree: false },
+  { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
+  { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
 ];
 
 export const UpdateTicketBody: P.UpdateTicketBody[] = [
-  { title: "Renamed", description: "New brief", status: "in_progress", driver: "anthropic-api", dependsOn: [], position: 3, skipAgentReview: false, skipHumanReview: true, kind: "task", projectId: "prj_00a1" },
+  { title: "Renamed", spec: "New brief", baseRevision: 3, specNote: "Tightened the goal", status: "in_progress", driver: "anthropic-api", dependsOn: [], position: 3, skipAgentReview: false, skipHumanReview: true, kind: "task", projectId: "prj_00a1" },
   { model: null, permissionMode: null, baseBranch: null, branch: null, externalRef: null, useWorktree: null },
   { model: "sonnet", permissionMode: "auto", baseBranch: "main", branch: "feature/x", externalRef: { key: "FOO-1", url: null }, useWorktree: true },
   { status: "done" },
+  { spec: "Draft brief" },
   {},
 ];
 
@@ -789,7 +825,12 @@ export const HumanReviewBody: P.HumanReviewBody[] = [
   { decision: "approve" },
 ];
 
-export const MessageBody: P.MessageBody[] = [{ text: "Use Double for timestamps" }, { text: "Re-open please", move: true }];
+export const MessageBody: P.MessageBody[] = [
+  { text: "Use Double for timestamps" },
+  { text: "Re-open please", move: true },
+  { text: "Why the enum?", log: true },
+  { text: "Back to work", move: true, log: false },
+];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];
 
@@ -847,7 +888,9 @@ export const enums: Record<string, readonly string[]> = {
   TranscriptRole: all<P.TranscriptRole>({ user: true, assistant: true, tool: true, system: true }),
   SubagentStatus: all<P.SubagentStatus>({ running: true, succeeded: true, failed: true, stopped: true }),
   SubagentKind: all<P.SubagentKind>({ agent: true, bash: true, monitor: true }),
-  SummaryAuthor: all<P.SummaryAuthor>({ agent: true, human: true, system: true }),
+  ActivityAuthor: all<P.ActivityAuthor>({ agent: true, human: true, system: true }),
+  ActivityKind: ACTIVITY_KINDS satisfies readonly P.ActivityKind[],
+  SpecRevisionAuthor: all<P.SpecRevisionAuthor>({ agent: true, human: true, system: true }),
   AttachmentKind: all<P.AttachmentKind>({ image: true, video: true }),
   WatcherMode: all<P.Watcher["mode"]>({ loop: true, interval: true }),
   WatcherLiveState: all<P.WatcherLive["state"]>({ running: true, waiting: true, stopped: true }),
@@ -878,7 +921,8 @@ export const discriminators: Record<string, string[]> = {
     "transcript.appended": true,
     "subagent.upserted": true,
     "transcript.delta": true,
-    "summary.added": true,
+    "activity.added": true,
+    "spec.revised": true,
     "watcher.upserted": true,
     "watcher.deleted": true,
     "settings.updated": true,
@@ -920,6 +964,7 @@ export const forwardCompat: { type: string; samples: unknown[] }[] = [
     samples: [{ ...plainTicket, status: "archived", kind: "epic", agentReview: "escalated", humanReview: "waived", permissionMode: "yolo", completionAction: "deploy" }],
   },
   { type: "Run", samples: [{ ...run, kind: "deploy", status: "paused" }] },
+  { type: "ActivityEntry", samples: [{ id: "act_9", sessionId: "ses_31", ticketId: "tkt_31", kind: "deployed", author: "bot", body: "Shipped", meta: {}, createdAt: T0 }] },
   { type: "TranscriptEntry", samples: [{ id: "ent_9", sessionId: "ses_31", runId: null, seq: 9, role: "developer", content: { type: "text", text: "hi" }, createdAt: T0 }] },
   { type: "PublicSettings", samples: [{ ...publicSettings, permissionMode: "paranoid", classifier: "local-llm", listen: { mode: "lan" } }] },
 ];

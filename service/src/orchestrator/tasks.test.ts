@@ -31,7 +31,7 @@ function setup(script: (req: RunRequest) => AsyncGenerator<DriverEvent>) {
   const project = h.orch.createProject({ path: dir });
   driver.script = (req) => (req.kind === "work" ? script(req) : (async function* () {})());
   const run = async () => {
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "do it" });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "do it" });
     await h.orch.idle();
     return t;
   };
@@ -88,7 +88,7 @@ describe("background tasks", () => {
       await hold;
     });
     const project = h.orch.listProjects()[0]!;
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "do it" });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "do it" });
     for (let i = 0; i < 50 && !h.orch.subagents(t.sessionId).length; i++) await Bun.sleep(5);
     const first = h.orch.taskOutput(t.sessionId, "c1");
     expect(first).toEqual({ text: "a\n", start: 0, end: 2, size: 2, done: false, available: true });
