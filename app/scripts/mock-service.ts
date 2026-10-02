@@ -85,6 +85,7 @@ let settings: PublicSettings = {
   anthropicApiKeySet: false,
   listen: { mode: "localhost" },
   baseBranch: "main",
+  browserIdleTabMinutes: 5,
   // One working override and one that names a variable the prompt doesn't have (as after an app
   // update renamed it): GET /prompts reports its overrideError.
   prompts: {

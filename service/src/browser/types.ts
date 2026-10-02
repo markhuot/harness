@@ -58,7 +58,12 @@ export interface BrowserService {
     opts?: TabOption,
   ): Promise<void>;
   unsubscribe(sessionId: string, subscriberId: string): Promise<void>;
-  /** Close all of the session's tabs. */
+  /**
+   * Close all of the session's tabs but keep the session (its viewers and tab numbering): its next
+   * call opens a fresh tab. When someone is watching, a blank tab replaces the closed ones.
+   */
+  closeTabs(sessionId: string): Promise<void>;
+  /** Close all of the session's tabs and forget it (unless someone is still watching). */
   close(sessionId: string): Promise<void>;
   /** Shut down Chrome. */
   shutdown(): Promise<void>;

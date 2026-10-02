@@ -20,7 +20,17 @@ export interface BrowserManagerOptions {
   commandTimeoutMs?: number;
   /** JPEG quality for the screencast. */
   screencastQuality?: number;
+  /**
+   * How long a tab nobody watches may go unused before it is closed (read on every sweep, so a
+   * settings change applies at once). 0 or omitted: never.
+   */
+  idleTabMs?: () => number;
+  /** Clock for idle tracking (tests). */
+  now?: () => number;
 }
+
+/** How often idle tabs are swept. */
+const IDLE_SWEEP_MS = 30_000;
 
 interface Subscriber {
   onFrame: (f: BrowserFrame) => void;
@@ -65,6 +75,8 @@ interface Tab {
   lastFrame?: BrowserFrame;
   /** Mouse buttons currently held (CDP `buttons` bitmask). */
   buttons: number;
+  /** When an agent call or viewer input last used it, or a viewer last left it (see reapIdleTabs). */
+  lastUsed: number;
   closed: boolean;
   gone: Promise<void>;
   markGone: () => void;
@@ -154,11 +166,14 @@ export class BrowserManager implements BrowserService {
   private readonly viewport: { width: number; height: number };
   private readonly navigationTimeoutMs: number;
   private readonly settleTimeoutMs: number;
+  private readonly now: () => number;
+  private sweeper?: ReturnType<typeof setInterval>;
 
   constructor(private readonly opts: BrowserManagerOptions) {
     this.viewport = opts.viewport ?? { width: 1280, height: 800 };
     this.navigationTimeoutMs = opts.navigationTimeoutMs ?? 30_000;
     this.settleTimeoutMs = opts.settleTimeoutMs ?? 10_000;
+    this.now = opts.now ?? Date.now;
   }
 
   /** The running Chrome's code-sign clone directory (macOS), if attributed. */
@@ -333,6 +348,7 @@ export class BrowserManager implements BrowserService {
     }
     const watched = opts.tab === undefined && sub ? watchedTab(entry, sub) : undefined;
     const tab = watched ?? (await this.tab(sessionId, opts.tab));
+    tab.lastUsed = this.now();
     if (input.type === "closeTab") return this.closeTab(sessionId, tab.id);
     const s = tab.session;
     switch (input.type) {
@@ -417,6 +433,10 @@ export class BrowserManager implements BrowserService {
     const entry = this.entry(sessionId);
     // A fresh record (no lastStateKey or watching), so the subscriber gets state and a frame at once.
     const sub: Subscriber = { onFrame, onState, want: opts.tab ?? null };
+    // Resubscribing switches tabs: the one it leaves starts its idle time now.
+    const prev = entry.subscribers.get(subscriberId);
+    const left = prev && watchedTab(entry, prev);
+    if (left) left.lastUsed = this.now();
     entry.subscribers.set(subscriberId, sub);
     const tab = watchedTab(entry, sub) ?? (await this.tab(sessionId));
     if (entry.subscribers.get(subscriberId) !== sub) return; // unsubscribed (or resubscribed) while the tab was starting
@@ -426,7 +446,12 @@ export class BrowserManager implements BrowserService {
 
   async unsubscribe(sessionId: string, subscriberId: string): Promise<void> {
     const entry = this.entries.get(sessionId);
-    if (!entry || !entry.subscribers.delete(subscriberId)) return;
+    const sub = entry?.subscribers.get(subscriberId);
+    if (!entry || !sub) return;
+    // Its idle time starts now, not when an agent last touched it.
+    const left = watchedTab(entry, sub);
+    if (left) left.lastUsed = this.now();
+    entry.subscribers.delete(subscriberId);
     await this.refresh(entry);
   }
 
@@ -450,7 +475,52 @@ export class BrowserManager implements BrowserService {
     if (entry.subscribers.size === 0) this.entries.delete(sessionId);
   }
 
+  async closeTabs(sessionId: string): Promise<void> {
+    const entry = this.entries.get(sessionId);
+    if (!entry) return;
+    // Taken now: a tab the next run opens after this call isn't ours to close.
+    const tabs = openTabs(entry);
+    const creating = entry.creating;
+    this.dropTabs(tabs);
+    const late = await creating?.catch(() => undefined);
+    if (late && !late.closed) {
+      tabs.push(late);
+      this.dropTab(late);
+    }
+    await Promise.all(
+      tabs.map((tab) => this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {})),
+    );
+    // Someone is watching: don't leave them on nothing.
+    if (entry.subscribers.size > 0 && this.entries.get(sessionId) === entry && !defaultTab(entry)) await this.tab(sessionId);
+  }
+
+  /**
+   * Close every tab nobody watches that no agent call or viewer input has used for idleTabMs.
+   * A watched tab is in use: it counts as used now, so its idle time starts when the viewer leaves.
+   * Returns how many tabs it closed.
+   */
+  async reapIdleTabs(): Promise<number> {
+    const idleMs = this.opts.idleTabMs?.() ?? 0;
+    if (!(idleMs > 0)) return 0;
+    const now = this.now();
+    const idle: Tab[] = [];
+    for (const entry of this.entries.values()) {
+      for (const tab of openTabs(entry)) {
+        if (watchersOf(tab).length > 0) tab.lastUsed = now;
+        else if (now - tab.lastUsed >= idleMs) idle.push(tab);
+      }
+    }
+    if (!idle.length) return 0;
+    this.dropTabs(idle);
+    await Promise.all(
+      idle.map((tab) => this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {})),
+    );
+    return idle.length;
+  }
+
   async shutdown(): Promise<void> {
+    if (this.sweeper) clearInterval(this.sweeper);
+    this.sweeper = undefined;
     const browser = this.browser ?? (await this.launching?.catch(() => undefined));
     this.browser = undefined;
     for (const entry of this.entries.values()) this.dropTabs(openTabs(entry));
@@ -544,6 +614,10 @@ export class BrowserManager implements BrowserService {
 
     await cdp.send("Target.setDiscoverTargets", { discover: true });
     this.browser = browser;
+    if (!this.sweeper && this.opts.idleTabMs) {
+      this.sweeper = setInterval(() => void this.reapIdleTabs().catch(() => {}), IDLE_SWEEP_MS);
+      this.sweeper.unref?.();
+    }
     return browser;
   }
 
@@ -569,10 +643,14 @@ export class BrowserManager implements BrowserService {
     if (id !== undefined) {
       const tab = entry.tabs.get(id);
       if (!tab || tab.closed) throw new Error(noTabMessage(entry, id));
+      tab.lastUsed = this.now();
       return tab;
     }
     const open = defaultTab(entry);
-    if (open) return open;
+    if (open) {
+      open.lastUsed = this.now();
+      return open;
+    }
     if (!entry.creating) {
       entry.creating = this.createTab(entry).finally(() => {
         entry.creating = undefined;
@@ -619,6 +697,7 @@ export class BrowserManager implements BrowserService {
       castStarts: 0,
       castChain: Promise.resolve(),
       buttons: 0,
+      lastUsed: this.now(),
       closed: false,
       gone,
       markGone,
@@ -872,6 +951,8 @@ export class BrowserManager implements BrowserService {
         safeCall(() => sub.onState(state));
       }
       if (sub.watching !== tab.id) {
+        const left = sub.watching === undefined ? undefined : entry.tabs.get(sub.watching);
+        if (left) left.lastUsed = this.now();
         sub.watching = tab.id;
         const frame = tab.lastFrame;
         if (frame) safeCall(() => sub.onFrame(frame));

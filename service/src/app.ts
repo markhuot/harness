@@ -1,6 +1,6 @@
 // Composition root: boots store, orchestrator and the HTTP/WS server.
 
-import type { Settings } from "@harness/shared";
+import { DEFAULT_BROWSER_IDLE_TAB_MINUTES, type Settings } from "@harness/shared";
 import { ensureHome, ensureToken, rotateToken, type HarnessPaths } from "./config";
 import { openDb } from "./db";
 import { Store } from "./store";
@@ -80,7 +80,11 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
 
   const drivers = opts.drivers ?? (await import("./drivers/index")).createDrivers({ settings });
   const ownsBrowser = !opts.browser;
-  const browser = opts.browser ?? (await import("./browser/index")).createBrowserService({ profileDir: paths.chromeProfileDir, headless: true });
+  const browser = opts.browser ?? (await import("./browser/index")).createBrowserService({
+    profileDir: paths.chromeProfileDir,
+    headless: true,
+    idleTabMs: () => (settings().browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES) * 60_000,
+  });
   const mcp: McpHandler = (await import("./api/mcp")).handleMcpRequest;
 
   let baseUrl = "";

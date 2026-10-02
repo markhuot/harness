@@ -1,5 +1,5 @@
 import type { ListenSetting, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   anthropicApiKey: null,
   listen: { mode: "localhost" },
   baseBranch: DEFAULT_BASE_BRANCH,
+  browserIdleTabMinutes: DEFAULT_BROWSER_IDLE_TAB_MINUTES,
   prompts: unsetPrompts(),
 };
 
@@ -138,6 +139,11 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 64)
           throw badRequest("maxConcurrentRuns must be an integer between 1 and 64");
         out.maxConcurrentRuns = value;
+        break;
+      case "browserIdleTabMinutes":
+        if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_BROWSER_IDLE_TAB_MINUTES)
+          throw badRequest(`browserIdleTabMinutes must be an integer between 0 (never) and ${MAX_BROWSER_IDLE_TAB_MINUTES}`);
+        out.browserIdleTabMinutes = value;
         break;
       case "permissionMode":
         if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")}`);

@@ -187,7 +187,7 @@ function settingsView(settings: PublicSettings): unknown {
 export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), how many minutes an unused browser tab stays open (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key is never shown; anthropicApiKeySet says whether one is stored.",
   inputSchema: schema({
     include_prompts: {
       type: "boolean",
@@ -429,6 +429,7 @@ function fieldSuffix(i: Record<string, unknown>, skip: string[]): string {
 type SettingsInput = {
   default_driver?: string;
   max_concurrent_runs?: number;
+  browser_idle_tab_minutes?: number;
   permission_mode?: string;
   classifier?: string;
   default_models?: Record<string, string | null>;
@@ -444,6 +445,7 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
   const map: Record<string, keyof SettingsInput> = {
     defaultDriver: "default_driver",
     maxConcurrentRuns: "max_concurrent_runs",
+    browserIdleTabMinutes: "browser_idle_tab_minutes",
     permissionMode: "permission_mode",
     classifier: "classifier",
     defaultModels: "default_models",
@@ -466,6 +468,12 @@ export const updateSettings = defineGatedTool<SettingsInput>({
   inputSchema: schema({
     default_driver: { type: "string", minLength: 1, description: "Driver for tickets whose project has none (see list_drivers)." },
     max_concurrent_runs: { type: "integer", minimum: 1, maximum: 64, description: "How many agent runs may run at once." },
+    browser_idle_tab_minutes: {
+      type: "integer",
+      minimum: 0,
+      maximum: 1440,
+      description: "Minutes a session browser tab may go unused while nobody has it open in the app before it is closed. 0 never closes one. Default 5.",
+    },
     permission_mode: { type: "string", enum: [...PERMISSION_MODES], description: "Default permission mode for tickets whose project and ticket don't set one." },
     classifier: { type: "string", enum: ["claude-cli", "anthropic-api", "off"], description: "Who judges actions in auto mode for drivers without built-in permissions (\"off\" asks a human)." },
     default_models: modelMapProp,

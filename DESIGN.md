@@ -1316,6 +1316,17 @@ target in its own headless window (so every tab paints and can screencast). Numb
   `newTab { url? }` opens a tab and moves that socket to it; `closeTab` closes the input's tab, and
   closing the last one while anyone watches leaves a blank tab in its place. `resize` sets the
   session's viewport for every tab, including ones opened later, so a switch needs no resize.
+- **Lifecycle.** Tabs exist only while someone uses them, since Chrome runs with background
+  throttling off and every leftover page keeps its timers and rendering going. A ticket that moves
+  to done gets `closeTabs(sessionId)` (from `Orchestrator.transition`): every tab closes, but the
+  session keeps its viewers and its numbering, and a viewer still watching lands on a fresh blank
+  tab. No other column move closes tabs, so a page left up for the human during blocked or review
+  stays open. `deleteTicket` uses `close`, which also forgets the session. Separately, the idle
+  reaper (`reapIdleTabs`, swept every 30 s) closes any tab that nobody watches and that no agent
+  call or viewer input has used for `browserIdleTabMinutes` (Settings, default 5, 0 = never).
+  `lastUsed` is set when a tab opens, whenever a call resolves to it, on viewer input, and when a
+  viewer leaves it (unsubscribe or a switch), so the countdown starts at the moment nobody is
+  looking. The agents' Browser prompt asks them to close tabs they're done with.
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 

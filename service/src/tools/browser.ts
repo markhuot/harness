@@ -23,7 +23,7 @@ const tabLine = (tabs: { id: number; url: string; title: string; loading: boolea
 export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean }>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Returns the tab, final URL and page title; use browser_content to read the page.",
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Returns the tab, final URL and page title; use browser_content to read the page.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },

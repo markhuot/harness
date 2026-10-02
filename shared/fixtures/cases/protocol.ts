@@ -442,13 +442,14 @@ const settings: P.Settings = {
   anthropicApiKey: "sk-ant-api03-redacted",
   baseBranch: "main",
   listen: { mode: "tailscale" },
+  browserIdleTabMinutes: 5,
   prompts: { "system.intro": "You are {{agentName}}.", "run.review": null },
 };
 
 export const Settings: P.Settings[] = [
   settings,
   { defaultDriver: "claude-code", maxConcurrentRuns: 2, permissionMode: "read_only", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKey: null },
-  { ...settings, watcherDriver: null, classifier: "anthropic-api" },
+  { ...settings, watcherDriver: null, classifier: "anthropic-api", browserIdleTabMinutes: 0 },
 ];
 
 const { anthropicApiKey: _key, ...settingsWithoutKey } = settings;
@@ -466,7 +467,7 @@ export const SettingsPatch: Partial<P.Settings>[] = [
   { anthropicApiKey: "sk-ant-new" },
   { prompts: { "system.intro": null, "run.work_start": "Begin {{ticketKey}}." } },
   { defaultModels: { "claude-code": null }, reviewModels: { "anthropic-api": "claude-opus-4-1" }, watcherModels: { "claude-code": null } },
-  { watcherDriver: null, maxConcurrentRuns: 8, permissionMode: "ask", classifier: "anthropic-api" },
+  { watcherDriver: null, maxConcurrentRuns: 8, permissionMode: "ask", classifier: "anthropic-api", browserIdleTabMinutes: 30 },
   { watcherDriver: "claude-code", defaultDriver: "anthropic-api", baseBranch: "trunk", listen: { mode: "custom", host: "100.64.0.1" } },
   {},
 ];

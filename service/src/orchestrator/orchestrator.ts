@@ -3303,6 +3303,8 @@ export class Orchestrator {
       if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
       if (to === "review") this.track(this.refreshHasChanges(t));
       if (to === "done") {
+        // A done ticket's pages would otherwise keep running (and rendering) in Chrome for good.
+        this.track(this.browser.closeTabs(t.sessionId));
         this.kickScheduler();
         this.releaseReadyChildren(t);
       }

@@ -67,6 +67,27 @@ struct SettingsRulesTests {
         #expect(SettingsRules.maxConcurrentRuns(text) == nil)
     }
 
+    @Test(arguments: [
+        ("5", 5), (" 12 ", 12), ("2.5", 3), ("0", 0), ("-3", 0), ("1440", 1440), ("1441", 1440), ("0x10", 16),
+    ])
+    func browserIdleTabMinutesRoundsAndClamps(_ text: String, _ expected: Int) {
+        #expect(SettingsRules.browserIdleTabMinutes(text) == expected)
+    }
+
+    @Test(arguments: ["", "  ", "abc", "Infinity", "5 min"])
+    func browserIdleTabMinutesIgnoresBlankAndNonNumbers(_ text: String) {
+        #expect(SettingsRules.browserIdleTabMinutes(text) == nil)
+    }
+
+    @Test func idleTabMinutesFallsBackToTheDefaultForAnOlderService() throws {
+        let old = #"{"defaultDriver":"dummy","maxConcurrentRuns":2,"permissionMode":"auto","classifier":"off","defaultModels":{},"reviewModels":{},"anthropicApiKeySet":false}"#
+        let decoded = try JSONDecoder().decode(PublicSettings.self, from: Data(old.utf8))
+        #expect(decoded.browserIdleTabMinutes == nil)
+        #expect(decoded.idleTabMinutes == 5)
+        let off = try JSONDecoder().decode(PublicSettings.self, from: Data((old.dropLast() + #","browserIdleTabMinutes":0}"#).utf8))
+        #expect(off.idleTabMinutes == 0)
+    }
+
     @Test func settingsBaseBranchFallsBackToMainAndSkipsUnchanged() {
         #expect(SettingsRules.settingsBaseBranchCommit("  ", current: "develop") == .save("main"))
         #expect(SettingsRules.settingsBaseBranchCommit("", current: "main") == .none)

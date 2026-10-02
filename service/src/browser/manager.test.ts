@@ -635,6 +635,145 @@ withChrome("BrowserManager (real Chrome)", () => {
   }, 30_000);
 });
 
+withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
+  let server: Server<unknown>;
+  let base: string;
+  let browser: BrowserManager;
+  let clock = 1_000_000;
+  let idleMs = 60_000;
+
+  beforeAll(() => {
+    server = Bun.serve({ port: 0, fetch: fixtures });
+    base = `http://127.0.0.1:${server.port}`;
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock });
+  });
+
+  afterAll(async () => {
+    await browser?.shutdown();
+    void server?.stop(true);
+  });
+
+  /** URLs of the page targets Chrome itself reports (its DevTools /json/list), not our bookkeeping. */
+  async function chromePages(): Promise<string[]> {
+    const wsUrl: string = (browser as any).browser.chrome.wsUrl;
+    const res = await fetch(`http://${new URL(wsUrl).host}/json/list`);
+    const targets = (await res.json()) as { type: string; url: string }[];
+    return targets.filter((t) => t.type === "page").map((t) => t.url);
+  }
+
+  test("closeTabs closes every tab in Chrome, leaves other sessions alone, and the next call gets a fresh tab", async () => {
+    await browser.open("lc-close", `${base}/popup?lc-close`);
+    await browser.open("lc-close", `${base}/page2?lc-close`, { newTab: true });
+    await browser.click("lc-close", "#open"); // window.open: a popup becomes tab 3
+    await until(async () => (await browser.tabs("lc-close")).length === 3, "the popup's tab");
+    await browser.open("lc-other", `${base}/?lc-other`);
+    await browser.evaluate("lc-close", "window.mine = 'old'");
+    await until(async () => (await chromePages()).some((u) => u.endsWith("/form")), "the popup in Chrome");
+
+    await browser.closeTabs("lc-close");
+
+    expect(await browser.state("lc-close")).toBeNull();
+    expect(await browser.tabs("lc-close")).toEqual([]);
+    await until(async () => !(await chromePages()).some((u) => u.includes("lc-close") || u.endsWith("/form")), "the session's targets to go");
+    expect(await chromePages()).toContain(`${base}/?lc-other`);
+    expect((await browser.state("lc-other"))?.title).toBe("Home Page");
+
+    // Numbering carries on, and the page is new: nothing from the old one survives.
+    expect(await browser.evaluate("lc-close", "window.mine")).toBe("undefined");
+    const tabs = await browser.tabs("lc-close");
+    expect(tabs.map((t) => [t.id, t.url])).toEqual([[4, "about:blank"]]);
+    await expect(browser.content("lc-close", { tab: 1 })).rejects.toThrow("No browser tab 1. Open tabs: 4.");
+  }, 30_000);
+
+  test("closeTabs also closes a tab that was still being created", async () => {
+    const opening = browser.open("lc-race", `${base}/?lc-race`).catch((e) => e);
+    await browser.closeTabs("lc-race");
+    await opening;
+    expect(await browser.tabs("lc-race")).toEqual([]);
+    await until(async () => !(await chromePages()).some((u) => u.includes("lc-race")), "the half-made tab to leave Chrome");
+  }, 30_000);
+
+  test("closeTabs with a viewer leaves it on one fresh blank tab; without one, nothing is left", async () => {
+    await browser.open("lc-view", `${base}/page2?lc-view`);
+    await browser.open("lc-view", `${base}/form?lc-view`, { newTab: true });
+    const states: BrowserState[] = [];
+    await browser.subscribe("lc-view", "v", () => {}, (s) => states.push(s));
+    await browser.closeTabs("lc-view");
+    await until(() => states.at(-1)?.tabId === 3 && states.at(-1)?.tabs?.length === 1, "the viewer on a new tab 3");
+    expect(states.at(-1)?.url).toBe("about:blank");
+    await until(async () => !(await chromePages()).some((u) => u.includes("lc-view")), "the closed tabs to leave Chrome");
+    await browser.unsubscribe("lc-view", "v");
+    await browser.closeTabs("lc-view");
+    expect(await browser.state("lc-view")).toBeNull();
+  }, 30_000);
+
+  test("idle tabs nobody watches are reaped; use and watching keep them; 0 turns it off", async () => {
+    idleMs = 60_000;
+    await browser.open("lc-idle", `${base}/?lc-idle-1`);
+    await browser.open("lc-idle", `${base}/page2?lc-idle-2`, { newTab: true });
+    await browser.open("lc-busy", `${base}/?lc-busy`);
+    await browser.open("lc-input", `${base}/?lc-input`);
+    await browser.open("lc-watch", `${base}/?lc-watch`);
+    await browser.subscribe("lc-watch", "w", () => {}, () => {});
+    clock += 59_000;
+    await browser.content("lc-busy"); // used just before the deadline
+    await browser.input("lc-input", { type: "mouse", action: "move", x: 1, y: 1 });
+    expect(await browser.reapIdleTabs()).toBe(0); // nothing is a full minute idle yet
+
+    clock += 1_000;
+    // Every other test's tabs here are idle too; only these sessions' outcome matters.
+    await browser.reapIdleTabs();
+    expect(await browser.tabs("lc-idle")).toEqual([]);
+    await until(async () => !(await chromePages()).some((u) => u.includes("lc-idle")), "the reaped tabs to leave Chrome");
+    expect((await browser.tabs("lc-busy")).length).toBe(1);
+    expect((await browser.tabs("lc-input")).length).toBe(1);
+    expect((await browser.tabs("lc-watch")).length).toBe(1);
+
+    // A watched tab is never idle; once the viewer leaves, it gets a full idle period from then.
+    clock += 600_000;
+    await browser.reapIdleTabs();
+    expect((await browser.tabs("lc-watch")).length).toBe(1);
+    expect(await browser.tabs("lc-busy")).toEqual([]);
+    await browser.unsubscribe("lc-watch", "w");
+    clock += 59_000;
+    await browser.reapIdleTabs();
+    expect((await browser.tabs("lc-watch")).length).toBe(1);
+    clock += 1_000;
+    await browser.reapIdleTabs();
+    expect(await browser.tabs("lc-watch")).toEqual([]);
+
+    // 0 means never; the setting is read on every sweep.
+    await browser.open("lc-off", `${base}/?lc-off`);
+    idleMs = 0;
+    clock += 3_600_000;
+    expect(await browser.reapIdleTabs()).toBe(0);
+    expect((await browser.tabs("lc-off")).length).toBe(1);
+    idleMs = 60_000;
+    expect(await browser.reapIdleTabs()).toBeGreaterThan(0);
+    expect(await browser.tabs("lc-off")).toEqual([]);
+  }, 30_000);
+
+  test("only the watched tab of a session survives the reaper", async () => {
+    idleMs = 60_000;
+    await browser.open("lc-two", `${base}/?lc-two-1`);
+    await browser.open("lc-two", `${base}/page2?lc-two-2`, { newTab: true });
+    await browser.subscribe("lc-two", "w", () => {}, () => {}, { tab: 2 });
+    clock += 120_000;
+    await browser.reapIdleTabs();
+    expect((await browser.tabs("lc-two")).map((t) => t.id)).toEqual([2]);
+    // Switching the viewer to a new tab starts tab 2's idle time at the switch (not the last sweep).
+    clock += 30_000;
+    await browser.input("lc-two", { type: "newTab" }, { subscriberId: "w" });
+    clock += 59_000;
+    await browser.reapIdleTabs();
+    expect((await browser.tabs("lc-two")).map((t) => t.id)).toEqual([2, 3]);
+    clock += 1_000;
+    await browser.reapIdleTabs();
+    expect((await browser.tabs("lc-two")).map((t) => t.id)).toEqual([3]);
+    await browser.unsubscribe("lc-two", "w");
+  }, 30_000);
+});
+
 withChrome("createBrowserService shutdown", () => {
   test("shutdown closes Chrome gracefully: process gone, no code-sign clone left, later call relaunches", async () => {
     const cloneRoot = codeSignCloneRoot();
