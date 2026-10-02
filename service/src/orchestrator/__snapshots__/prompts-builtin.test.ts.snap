@@ -8084,66 +8084,10 @@ exports[`built-in run prompts workStartPrompt · conductor · "   " 1`] = `
 (no description; the title is the whole brief)"
 `;
 
-exports[`built-in run prompts reviewPrompt · summaries with attachments 1`] = `
+exports[`built-in run prompts reviewPrompt 1`] = `
 "Review NYT-3 "Add dark mode".
 
-## Brief
-Add a dark theme toggle to the header.
-
-* keep \`prefers-color-scheme\`
-
-## Summaries (oldest first)
-1. [agent, 1970-01-01T00:00:01.000Z]
-Added the toggle.
-Attachments:
-* after.png (image): /att/a1/after.png
-* flow.mp4 (video): /att/a2/flow.mp4
-
-2. [human, 1970-01-01T00:00:02.000Z]
-Looks close.
-Fix the icon.
-
-3. [system, 1970-01-01T00:00:03.000Z]
-Moved
-
-The summaries are the author's claims. Verify the work yourself, then call \`review_decision\` exactly once."
-`;
-
-exports[`built-in run prompts reviewPrompt · default attachment path 1`] = `
-"Review NYT-3 "Add dark mode".
-
-## Brief
-Add a dark theme toggle to the header.
-
-* keep \`prefers-color-scheme\`
-
-## Summaries (oldest first)
-1. [agent, 1970-01-01T00:00:01.000Z]
-Added the toggle.
-Attachments:
-* after.png (image): a1
-* flow.mp4 (video): a2
-
-2. [human, 1970-01-01T00:00:02.000Z]
-Looks close.
-Fix the icon.
-
-3. [system, 1970-01-01T00:00:03.000Z]
-Moved
-
-The summaries are the author's claims. Verify the work yourself, then call \`review_decision\` exactly once."
-`;
-
-exports[`built-in run prompts reviewPrompt · no summaries, empty brief 1`] = `
-"Review NYT-3 "Add dark mode".
-
-## Brief
-(no description; the title is the whole brief)
-
-## Summaries (oldest first)
-(no summaries were posted)
-
-The summaries are the author's claims. Verify the work yourself, then call \`review_decision\` exactly once."
+Start with \`get_ticket\` { key: "NYT-3" }. Its description is the brief to judge the work against. Its summaries, oldest first, are the author's claims, earlier review notes and the human's messages, with the stored path of each attachment. Read all of them, verify the work yourself, then call \`review_decision\` exactly once."
 `;
 
 exports[`built-in run prompts completePrompt · checkout (no worktree) · instructions undefined 1`] = `

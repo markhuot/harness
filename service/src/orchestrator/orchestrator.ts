@@ -3363,7 +3363,7 @@ export class Orchestrator {
   /** Start the agent review, unless the ticket skips it (submit already marked it "skipped"). */
   private enqueueReview(t: Ticket) {
     if (t.agentReview === "skipped") return;
-    this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t, this.store.summaries.listBySession(t.sessionId), (a) => this.attachmentFilePath(a)));
+    this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t));
   }
 
   private allChildrenDone(t: Ticket): boolean {

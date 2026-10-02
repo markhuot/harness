@@ -1301,8 +1301,10 @@ has a visible result, and `browser_screenshot { save_to }` writes one to a file 
   `Accept-Ranges: bytes`. A single `Range: bytes=a-b` / `a-` / `-n` gets a 206 with
   `Content-Range` (416 past the end), so players can seek. Unknown ids, and ids whose file is
   missing, get a 404.
-- **Agents.** `get_ticket` and the review prompt list each summary's attachments with name, kind
-  and the stored absolute path, so reviewer and conductor agents can open them with a file tool.
+- **Agents.** `get_ticket` lists each summary's attachments with name, kind and the stored
+  absolute path, so reviewer and conductor agents can open them with a file tool. The review
+  prompt doesn't inline the brief or summaries: it names the ticket's local key and has the
+  reviewer call `get_ticket`, so it stays short however many review rounds a ticket goes through.
 - **Deletion.** Deleting a ticket (so also a project) collects its attachment files, deletes the
   rows with the session, then removes the files.
 - **Mac app** (`app/src/renderer/components/Attachments.tsx`). The Summaries tab shows a strip

@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- An agent review now opens with a short message naming the ticket, and the reviewer reads the
+  brief and summaries itself with `get_ticket`. Its transcript no longer starts with a copy of
+  every summary, which grew with each round of review. The Agent review prompt in Settings has a
+  new `{{key}}` variable and no longer offers `{{brief}}` or `{{summaries}}`. A customized version
+  that uses them is flagged as invalid, and reviews use the built-in prompt until you update it.
+
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 
 ### Changed

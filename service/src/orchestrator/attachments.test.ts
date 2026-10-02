@@ -107,7 +107,7 @@ describe("submit_for_review attachments", () => {
     expect(h.stored()).toEqual([]);
   });
 
-  test("attachments land on the submit summary, and the review prompt and get_ticket name the stored copies", async () => {
+  test("attachments land on the submit summary, and the review prompt points at get_ticket, which names the stored copies", async () => {
     const h = await setup();
     h.driver.script = async function* (req: RunRequest) {
       if (req.kind === "work") await req.toolContext.ops.submitForReview(req.toolContext, "Header toggle done", ["shots/after.png"]);
@@ -121,7 +121,8 @@ describe("submit_for_review attachments", () => {
     expect(existsSync(path)).toBe(true);
 
     const review = h.driver.calls.find((c) => c.kind === "review")!;
-    expect(review.prompt).toContain(`Header toggle done\nAttachments:\n* after.png (image): ${path}`);
+    expect(review.prompt).toContain(`\`get_ticket\` { key: "${t.key}" }`);
+    expect(review.prompt).not.toContain("Header toggle done");
 
     const detail = await h.orch.ops.getTicket(h.ctx(h.store.tickets.get(t.id)!), t.key);
     expect(detail.summaries[0]!.attachments).toEqual([{ name: "after.png", kind: "image", path }]);

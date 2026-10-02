@@ -485,20 +485,15 @@ This session has its own Chrome tab, driven with \`browser_open\` { url }, \`bro
     group: "run",
     label: "Agent review",
     description: "Starts an agent review run once the work is submitted.",
+    // The reviewer fetches the brief and summaries with get_ticket rather than getting them inline,
+    // so the prompt stays short however many rounds of summaries pile up.
     variables: {
       ticket: TICKET,
-      brief: "The ticket's description, or a note that it has none",
-      summaries: "The ticket's summaries, numbered oldest first with author, time and attachments, or empty when none were posted",
+      key: "The ticket's local key, what get_ticket takes",
     },
     template: `Review {{ticket}}.
 
-## Brief
-{{brief}}
-
-## Summaries (oldest first)
-{{#if summaries}}{{summaries}}{{else}}(no summaries were posted){{/if}}
-
-The summaries are the author's claims. Verify the work yourself, then call \`review_decision\` exactly once.`,
+Start with \`get_ticket\` { key: "{{key}}" }. Its description is the brief to judge the work against. Its summaries, oldest first, are the author's claims, earlier review notes and the human's messages, with the stored path of each attachment. Read all of them, verify the work yourself, then call \`review_decision\` exactly once.`,
   },
 
   "run.complete_merge": {
