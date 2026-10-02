@@ -47,7 +47,7 @@ export function Sidebar({
     const path = await window.harness?.pickDirectory();
     if (!path) return;
     const p = await act(() => client.createProject({ path }));
-    if (p) navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" });
+    if (p) navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" });
   };
 
   const onBoard = route.view === "board";
@@ -68,7 +68,7 @@ export function Sidebar({
     // when another client removes it).
     if (ok) forgetProjectPanes(p.id, p.key);
     if (ok && ((route.view === "board" && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id))) {
-      navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
+      navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" });
     }
   };
 
@@ -143,7 +143,7 @@ export function Sidebar({
               icon="layers"
               label="All projects"
               active={onBoard && route.projectId === null}
-              onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" })}
+              onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" })}
               counts={counts.total}
             />
           </nav>
@@ -167,7 +167,7 @@ export function Sidebar({
                   title={p.path}
                   prefix={<ProjectKey project={p} />}
                   active={(onBoard && route.projectId === p.id) || (route.view === "project" && route.projectId === p.id)}
-                  onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" })}
+                  onClick={() => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" })}
                   counts={counts.byProject[p.id]}
                 />
                 <button className="nav-gear" title={`${p.name} settings`} aria-label={`${p.name} settings`} onClick={() => openSettings(p)}>

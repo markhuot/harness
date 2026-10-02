@@ -29,7 +29,7 @@ export function ProjectSettingsView() {
         <div className="empty" style={{ flex: 1 }}>
           <Icon name="folder" />
           <strong>This project no longer exists</strong>
-          <button className="btn btn-sm" onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" })}>
+          <button className="btn btn-sm" onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" })}>
             Back to all projects
           </button>
         </div>
@@ -58,7 +58,7 @@ function ProjectSettings({ project }: { project: Project }) {
   const tickets = Object.values(state.tickets).filter((t) => t.projectId === project.id);
   // A custom color being dragged in the color panel, shown on the header badge before it's saved.
   const [previewColor, setPreviewColor] = useState<string | undefined>();
-  const openBoard = () => navigate({ view: "board", projectId: project.id, ticketKey: null, tab: "summaries" });
+  const openBoard = () => navigate({ view: "board", projectId: project.id, ticketKey: null, tab: "spec" });
 
   const changePath = async () => {
     const path = await window.harness?.pickDirectory({ title: `Move ${project.name}`, buttonLabel: "Use this folder", defaultPath: project.path });
@@ -70,7 +70,7 @@ function ProjectSettings({ project }: { project: Project }) {
     const what = n ? `its ${n} ticket${n === 1 ? "" : "s"} and their transcripts` : "the project";
     if (!confirm(`Remove ${project.name} (${project.key}) from Harness?\n\nThis deletes ${what}. Files on disk, branches and worktrees are left alone.`)) return;
     const ok = await act(() => client.deleteProject(project.id), "Project removed");
-    if (ok) navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
+    if (ok) navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" });
   };
 
   return (
