@@ -542,6 +542,18 @@ export const Health: P.Health[] = [
 export const BrowserState: P.BrowserState[] = [
   { sessionId: "ses_31", url: "http://localhost:3000/login", title: "Log in", loading: false },
   { sessionId: "ses_31", url: "about:blank", title: "", loading: true },
+  {
+    sessionId: "ses_31",
+    tabId: 3,
+    url: "http://localhost:3000/docs",
+    title: "Docs",
+    loading: false,
+    tabs: [
+      { id: 1, url: "http://localhost:3000/login", title: "Log in", loading: false },
+      { id: 3, url: "http://localhost:3000/docs", title: "Docs", loading: false },
+      { id: 4, url: "about:blank", title: "", loading: true },
+    ],
+  },
 ];
 
 export const BranchInfo: P.BranchInfo[] = [
@@ -657,7 +669,9 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "watcher.deleted", id: "wat_2" },
   { kind: "settings.updated", settings: publicSettings },
   { kind: "browser.frame", sessionId: "ses_31", data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1280, height: 800 },
+  { kind: "browser.frame", sessionId: "ses_31", tabId: 3, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768 },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]! },
+  { kind: "browser.state", sessionId: "ses_31", state: BrowserState[2]! },
   { kind: "service.status", status: ServiceStatus[0]! },
 ];
 
@@ -674,13 +688,18 @@ export const BrowserInput: P.BrowserInput[] = [
   { type: "forward" },
   { type: "reload" },
   { type: "resize", width: 1024, height: 768 },
+  { type: "newTab", url: "http://localhost:3000/docs" },
+  { type: "newTab" },
+  { type: "closeTab" },
 ];
 
 export const ClientMessage: P.ClientMessage[] = [
   { type: "hello", client: "ios/1.0" },
   { type: "browser.subscribe", sessionId: "ses_31" },
+  { type: "browser.subscribe", sessionId: "ses_31", tabId: 3 },
   { type: "browser.unsubscribe", sessionId: "ses_31" },
   { type: "browser.input", sessionId: "ses_31", input: BrowserInput[0]! },
+  { type: "browser.input", sessionId: "ses_31", tabId: 3, input: { type: "closeTab" } },
   { type: "ping" },
 ];
 
@@ -786,7 +805,7 @@ export const InjectOutputBody: { source: string; text: unknown; prompt?: string 
   { source: "github", text: { pr: 812, state: "open" } },
 ];
 
-export const NavigateBody: { url: string }[] = [{ url: "https://example.com" }];
+export const NavigateBody: { url: string; tabId?: number }[] = [{ url: "https://example.com" }, { url: "https://example.com/docs", tabId: 3 }];
 
 export const OkResponse: { ok: true }[] = [{ ok: true }];
 
@@ -865,7 +884,7 @@ export const discriminators: Record<string, string[]> = {
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),
   ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, ping: true }),
   ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true }),
-  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true }),
+  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
 };

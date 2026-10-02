@@ -103,6 +103,16 @@
       "type": "resize",
       "width": 1024,
       "height": 768
+    },
+    {
+      "type": "newTab",
+      "url": "http://localhost:3000/docs"
+    },
+    {
+      "type": "newTab"
+    },
+    {
+      "type": "closeTab"
     }
   ],
   "BrowserState": [
@@ -117,6 +127,33 @@
       "url": "about:blank",
       "title": "",
       "loading": true
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 3,
+      "url": "http://localhost:3000/docs",
+      "title": "Docs",
+      "loading": false,
+      "tabs": [
+        {
+          "id": 1,
+          "url": "http://localhost:3000/login",
+          "title": "Log in",
+          "loading": false
+        },
+        {
+          "id": 3,
+          "url": "http://localhost:3000/docs",
+          "title": "Docs",
+          "loading": false
+        },
+        {
+          "id": 4,
+          "url": "about:blank",
+          "title": "",
+          "loading": true
+        }
+      ]
     }
   ],
   "ClientMessage": [
@@ -127,6 +164,11 @@
     {
       "type": "browser.subscribe",
       "sessionId": "ses_31"
+    },
+    {
+      "type": "browser.subscribe",
+      "sessionId": "ses_31",
+      "tabId": 3
     },
     {
       "type": "browser.unsubscribe",
@@ -142,6 +184,14 @@
         "y": 48,
         "button": "left",
         "clickCount": 2
+      }
+    },
+    {
+      "type": "browser.input",
+      "sessionId": "ses_31",
+      "tabId": 3,
+      "input": {
+        "type": "closeTab"
       }
     },
     {
@@ -746,6 +796,14 @@
       "height": 800
     },
     {
+      "kind": "browser.frame",
+      "sessionId": "ses_31",
+      "tabId": 3,
+      "data": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD",
+      "width": 1024,
+      "height": 768
+    },
+    {
       "kind": "browser.state",
       "sessionId": "ses_31",
       "state": {
@@ -753,6 +811,37 @@
         "url": "http://localhost:3000/login",
         "title": "Log in",
         "loading": false
+      }
+    },
+    {
+      "kind": "browser.state",
+      "sessionId": "ses_31",
+      "state": {
+        "sessionId": "ses_31",
+        "tabId": 3,
+        "url": "http://localhost:3000/docs",
+        "title": "Docs",
+        "loading": false,
+        "tabs": [
+          {
+            "id": 1,
+            "url": "http://localhost:3000/login",
+            "title": "Log in",
+            "loading": false
+          },
+          {
+            "id": 3,
+            "url": "http://localhost:3000/docs",
+            "title": "Docs",
+            "loading": false
+          },
+          {
+            "id": 4,
+            "url": "about:blank",
+            "title": "",
+            "loading": true
+          }
+        ]
       }
     },
     {
@@ -857,6 +946,10 @@
   "NavigateBody": [
     {
       "url": "https://example.com"
+    },
+    {
+      "url": "https://example.com/docs",
+      "tabId": 3
     }
   ],
   "NetworkStatus": [
@@ -3052,7 +3145,9 @@
       "back",
       "forward",
       "reload",
-      "resize"
+      "resize",
+      "newTab",
+      "closeTab"
     ],
     "PluginHostMessage": [
       "harness:init",
