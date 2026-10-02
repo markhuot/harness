@@ -161,21 +161,59 @@ struct TranscriptLogicTests {
 
     // MARK: Agents
 
-    @Test("sections drop empty groups; finished ones are newest first")
-    func sections() {
-        let list = [Self.agent("a", .succeeded, endedAt: 5), Self.agent("b", .failed, endedAt: 9)]
-        #expect(AgentsLogic.sections(list).map(\.id) == ["finished"])
-        #expect(AgentsLogic.sections(list)[0].items.map(\.id) == ["b", "a"])
-        #expect(AgentsLogic.sections(list + [Self.agent("c", .running)]).map(\.label) == ["Running", "Finished"])
-        #expect(AgentsLogic.sections([]).isEmpty)
+    @Test("one list, running or not, latest update first")
+    func list() {
+        var a = Self.agent("a", .succeeded, endedAt: 5)
+        a.updatedAt = 5
+        var b = Self.agent("b", .running)
+        b.updatedAt = 9
+        var c = Self.agent("c", .failed, endedAt: 7)
+        c.updatedAt = 7
+        #expect(AgentsLogic.list([a, b, c]).map(\.id) == ["b", "c", "a"])
+        #expect(AgentsLogic.list([]).isEmpty)
     }
 
-    @Test("the preview is the result once finished, else the prompt")
+    @Test("the preview is the result once finished, else the prompt (a task's command, unless it's the title)")
     func preview() {
         #expect(AgentsLogic.preview(Self.agent("a", .running, result: "early")) == "Look around")
         #expect(AgentsLogic.preview(Self.agent("a", .succeeded, result: "Found it")) == "Found it")
         #expect(AgentsLogic.preview(Self.agent("a", .failed, result: "")) == "Look around")
         #expect(AgentsLogic.preview(Self.agent("a", .stopped)) == "Look around")
+        var task = Self.agent("t", .running, prompt: "", description: "Run the tests")
+        task.kind = .bash
+        task.command = .value(" bun test ")
+        #expect(AgentsLogic.preview(task) == "bun test")
+        task.description = ""
+        #expect(AgentsLogic.preview(task) == "", "the command is already the title")
+        task.status = .succeeded
+        task.result = "exit 0"
+        #expect(AgentsLogic.preview(task) == "exit 0")
+    }
+
+    static func output(_ text: String, end: Int = 0, done: Bool = false, available: Bool = true) -> TaskOutputState {
+        TaskOutputState(text: text, end: end, size: end, done: done, available: available, truncated: false)
+    }
+
+    @Test("the output pane's note: waiting while it runs, none once it's done, unavailable over both")
+    func outputNote() {
+        #expect(AgentsLogic.outputNote(nil, running: true) == nil)
+        #expect(AgentsLogic.outputNote(Self.output(""), running: true) == "Waiting for output…")
+        #expect(AgentsLogic.outputNote(Self.output("", done: true), running: true) == "No output")
+        #expect(AgentsLogic.outputNote(Self.output(""), running: false) == "No output")
+        #expect(AgentsLogic.outputNote(Self.output("line 1\n"), running: true) == nil)
+        #expect(AgentsLogic.outputNote(Self.output("", available: false), running: true) == "Output isn't available")
+    }
+
+    @Test("polling reads the tail first, then on from the end while the task runs")
+    func polling() {
+        #expect(AgentsLogic.pollOffset(nil) == nil)
+        #expect(AgentsLogic.pollOffset(Self.output("abc", end: 40)) == 40)
+        #expect(AgentsLogic.pollOffset(Self.output("", end: 40, available: false)) == nil)
+        #expect(AgentsLogic.keepsPolling(.running, nil))
+        #expect(AgentsLogic.keepsPolling(.running, Self.output("a")))
+        #expect(!AgentsLogic.keepsPolling(.running, Self.output("a", done: true)))
+        #expect(!AgentsLogic.keepsPolling(.succeeded, Self.output("a")))
+        #expect(!AgentsLogic.keepsPolling(nil, nil))
     }
 
     @Test("row label, marks and ticks")

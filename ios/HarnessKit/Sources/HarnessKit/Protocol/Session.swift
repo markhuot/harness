@@ -217,6 +217,10 @@ public struct TranscriptEntry: Codable, Sendable, Equatable, Identifiable {
 /// A sub-agent an agent started inside its own session (Claude Code's Agent / Task tool), not a
 /// ticket. Drivers report them with the "subagent" driver event; its conversation is the session's
 /// transcript entries carrying its id as `subagentId` (DESIGN.md "Sub-agents").
+///
+/// A background task (a Bash command or Monitor the agent left running, `kind` bash or monitor) is
+/// reported the same way. It has no conversation: its output is read with
+/// GET /sessions/:id/subagents/:subagentId/output (TaskOutput).
 public struct Subagent: Codable, Sendable, Equatable, Identifiable {
     /// The id of the tool call that started it (unique within the session)
     public var id: String
@@ -237,11 +241,18 @@ public struct Subagent: Codable, Sendable, Equatable, Identifiable {
     public var startedAt: Timestamp
     @Nullable public var endedAt: Timestamp?
     public var updatedAt: Timestamp
+    /// "agent" (absent from older services), or the kind of background task
+    public var kind: SubagentKind?
+    /// A background task's command (null for agents)
+    public var command: Patch<String>
+    /// A background task has output to read (GET …/output)
+    public var hasOutput: Bool?
 
     public init(
         id: String, sessionId: String, runId: String? = nil, parentId: String? = nil, description: String,
         agentType: String? = nil, prompt: String, status: SubagentStatus, result: String? = nil,
-        startedAt: Timestamp, endedAt: Timestamp? = nil, updatedAt: Timestamp
+        startedAt: Timestamp, endedAt: Timestamp? = nil, updatedAt: Timestamp,
+        kind: SubagentKind? = nil, command: Patch<String> = .absent, hasOutput: Bool? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -255,5 +266,35 @@ public struct Subagent: Codable, Sendable, Equatable, Identifiable {
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.updatedAt = updatedAt
+        self.kind = kind
+        self.command = command
+        self.hasOutput = hasOutput
+    }
+}
+
+/// A slice of a background task's output (GET /sessions/:id/subagents/:subagentId/output). Offsets
+/// count bytes of the output. Without `offset` the route sends the tail (up to 256 KB); with one, the
+/// output after it, skipping ahead to the tail when more than that came in since (`start` > the
+/// offset asked for: a gap). Text is UTF-8 with terminal escapes removed.
+public struct TaskOutput: Codable, Sendable, Equatable {
+    public var text: String
+    /// Where `text` starts in the output
+    public var start: Int
+    /// Where it ends: pass it back as `offset` to read on
+    public var end: Int
+    /// The output's size so far
+    public var size: Int
+    /// The task finished: the output won't grow
+    public var done: Bool
+    /// false when there's no output to read (the file is gone, or the driver never said where it is)
+    public var available: Bool
+
+    public init(text: String, start: Int, end: Int, size: Int, done: Bool, available: Bool) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.size = size
+        self.done = done
+        self.available = available
     }
 }

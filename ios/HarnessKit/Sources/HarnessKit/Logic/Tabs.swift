@@ -2,11 +2,12 @@ import Foundation
 
 // Port of shared/src/state/tabs.ts. Ticket detail tabs, shared by every client: the built-in tabs,
 // plugin tabs addressed as "plugin:<pluginId>:<tabId>" (DESIGN.md "Plugins") and one sub-agent's
-// transcript as "agent:<subagentId>" (under the Agents tab, DESIGN.md "Sub-agents"). The desktop
+// transcript or task output as "agent:<subagentId>" (under the Agents & tasks tab, DESIGN.md
+// "Sub-agents", "Background tasks"). The desktop
 // puts these in its hash route; the phone keeps them in navigation params.
 
-/// "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" lists the
-/// session's sub-agents; it exists only once the session has any.
+/// "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" (Agents &
+/// tasks) lists the session's sub-agents and background tasks; it exists only once there are any.
 public enum BuiltinTicketTab: String, Codable, Sendable, CaseIterable {
     case summaries, children, transcript, agents, browser, details
 }
@@ -73,7 +74,7 @@ public enum Tabs {
         .summaries: "Summaries",
         .children: "Tickets",
         .transcript: "Transcript",
-        .agents: "Agents",
+        .agents: "Agents & tasks",
         .browser: "Browser",
         .details: "Details",
     ]
@@ -113,7 +114,7 @@ public enum Tabs {
 
     public static func parseSubagentTab(_ tab: TicketTab) -> String? { parseSubagentTab(tab.rawValue) }
 
-    /// The tab strip entry a tab belongs to: a sub-agent's transcript sits under Agents.
+    /// The tab strip entry a tab belongs to: a sub-agent's transcript sits under Agents & tasks.
     public static func tabStripTab(_ tab: TicketTab) -> TicketTab {
         parseSubagentTab(tab) != nil ? .agents : tab
     }
@@ -123,7 +124,10 @@ public enum Tabs {
         return TicketTab(t).builtin != nil || parsePluginTab(t) != nil || parseSubagentTab(t) != nil
     }
 
-    /// Whether the tab strip shows Agents: only once the session has sub-agents to list.
+    /// The live dot's label on the Agents & tasks tab.
+    public static let agentsLiveLabel = "A sub-agent or task is running"
+
+    /// Whether the tab strip shows Agents & tasks: only once the session has sub-agents or tasks to list.
     public static func showsAgentsTab(subagentIds: [String]?) -> Bool {
         (subagentIds?.count ?? 0) > 0
     }
@@ -134,7 +138,7 @@ public enum Tabs {
 
     /// The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
     /// tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to Summaries.
-    /// The Agents tab and a sub-agent's view need sub-agents: without any (or before they're known)
+    /// The Agents & tasks tab and a sub-agent's view need sub-agents: without any (or before they're known)
     /// they fall back to Summaries, and a sub-agent that isn't among them falls back to the list.
     /// The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
     public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTabID]?, subagentIds: [String]? = nil) -> TicketTab {
@@ -162,8 +166,8 @@ public enum Tabs {
         return summaryCount > 0 ? .summaries : .transcript
     }
 
-    /// The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents
-    /// only once there are sub-agents), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
+    /// The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents &
+    /// tasks only once there are sub-agents or tasks), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
     public static func visibleTabs(conductor: Bool, subagentIds: [String]? = nil, pluginTabs: [PluginTabID]? = nil) -> [TicketTab] {
         let builtin = ticketTabs.filter { ($0 != .children || conductor) && ($0 != .agents || showsAgentsTab(subagentIds: subagentIds)) }
         return builtin.map(TicketTab.init) + (pluginTabs ?? []).map { pluginTabRoute($0.pluginId, $0.id) }
@@ -174,7 +178,7 @@ public enum Tabs {
     }
 
     /// The tab `delta` steps from `current` in `tabs`, wrapping at both ends (like Chrome's ⌘⇧]). A
-    /// sub-agent's view counts as the Agents tab; from a tab that isn't in the strip, forward goes to
+    /// sub-agent's view counts as the Agents & tasks tab; from a tab that isn't in the strip, forward goes to
     /// the first tab and back to the last. Nil when there are no tabs.
     public static func nextTab(_ tabs: [TicketTab], current: TicketTab, delta: Int) -> TicketTab? {
         guard !tabs.isEmpty else { return nil }

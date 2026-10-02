@@ -282,6 +282,12 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/sessions/\(sessionId)/subagents")
     }
 
+    /// A background task's output: the tail, or with `offset` what came after it (TaskOutput).
+    public func taskOutput(_ sessionId: String, subagentId: String, offset: Int? = nil) async throws -> TaskOutput {
+        let q = offset.map { "?offset=\($0)" } ?? ""
+        return try await request("GET", "/sessions/\(sessionId)/subagents/\(URIComponent.encode(subagentId))/output\(q)")
+    }
+
     // MARK: Watchers
 
     public func listWatchers() async throws -> [Watcher] {

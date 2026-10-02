@@ -62,6 +62,45 @@ extension BoardState {
         subagents[sessionId] = Self.mergeById(prev, fresh, order: { $0.startedAt })
     }
 
+    /// The most output text a client keeps for one task; older lines are dropped past it.
+    public static let taskOutputKeepChars = 512 * 1024
+
+    /// Fold a slice into the task's output: a slice that starts where the loaded text ends is
+    /// appended; one that's already covered (a repeated poll) only updates `done`; anything else (the
+    /// first read, or a gap after a burst) replaces it. Lengths count UTF-16 code units, as in JS.
+    public static func mergeTaskOutput(_ prev: TaskOutputState?, _ out: TaskOutput) -> TaskOutputState {
+        guard out.available else {
+            guard var prev else { return TaskOutputState(text: "", end: out.end, size: 0, done: out.done, available: false, truncated: false) }
+            prev.done = out.done
+            prev.available = !prev.text.isEmpty
+            return prev
+        }
+        var next: TaskOutputState
+        if let prev, prev.available, out.start == prev.end {
+            next = prev
+            next.text += out.text
+            next.end = out.end
+            next.size = out.size
+            next.done = out.done
+        } else if var prev, prev.available, out.start < prev.end, out.end <= prev.end {
+            prev.done = out.done
+            return prev
+        } else {
+            next = TaskOutputState(text: out.text, end: out.end, size: out.size, done: out.done, available: true, truncated: out.start > 0)
+        }
+        let units = next.text.utf16
+        if units.count > taskOutputKeepChars {
+            let cut = units.count - taskOutputKeepChars
+            let from = units.index(units.startIndex, offsetBy: cut)
+            // The first line break at or after the cut, if it's near; else cut mid-line.
+            let nl = units[from...].firstIndex(of: 0x0A)
+            let start = nl.flatMap { units.distance(from: from, to: $0) < 4096 ? units.index(after: $0) : nil } ?? from
+            next.text = String(decoding: Array(units[start...]), as: UTF16.self)
+            next.truncated = true
+        }
+        return next
+    }
+
     mutating func mergeSummaries(_ sessionId: String, _ incoming: [Summary]) {
         summaries[sessionId] = Self.mergeById(summaries[sessionId] ?? [], incoming, order: { $0.createdAt })
     }
@@ -183,6 +222,10 @@ extension BoardState {
             mergeTranscript(Self.transcriptKey(sessionId, subagentId.optional), entries, loaded: true)
         case let .subagents(sessionId, list):
             mergeSubagents(sessionId, list)
+        case let .taskOutput(sessionId, subagentId, output):
+            let key = Self.transcriptKey(sessionId, subagentId)
+            let next = Self.mergeTaskOutput(taskOutputs[key], output)
+            if next != taskOutputs[key] { taskOutputs[key] = next }
         case let .summaries(sessionId, list):
             mergeSummaries(sessionId, list)
         case let .drivers(list):
