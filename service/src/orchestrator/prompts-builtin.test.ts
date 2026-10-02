@@ -5,7 +5,7 @@
 // the snapshot diff.
 
 import { describe, expect, test } from "bun:test";
-import type { Project, RunKind, Session, Summary, Ticket, TicketStatus } from "@harness/shared";
+import type { Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
 import {
   type BranchContext,
   changesRequestedPrompt,
@@ -215,23 +215,6 @@ describe("built-in system prompts", () => {
   }
 });
 
-const summaries: Summary[] = [
-  { id: "s2", sessionId: "s1", ticketId: "t1", author: "human", body: "  Looks close.\nFix the icon.  ", createdAt: 2_000, attachments: [] } as unknown as Summary,
-  {
-    id: "s1",
-    sessionId: "s1",
-    ticketId: "t1",
-    author: "agent",
-    body: "Added the toggle.",
-    createdAt: 1_000,
-    attachments: [
-      { id: "a1", name: "after.png", kind: "image", mime: "image/png", size: 1 },
-      { id: "a2", name: "flow.mp4", kind: "video", mime: "video/mp4", size: 2 },
-    ],
-  } as unknown as Summary,
-  { id: "s3", sessionId: "s1", ticketId: "t1", author: "system", body: "Moved", createdAt: 3_000 } as unknown as Summary,
-];
-
 describe("built-in run prompts", () => {
   for (const kind of ["task", "conductor"] as const) {
     for (const description of ["Do the thing.\n\n* one\n* two", "   "]) {
@@ -241,14 +224,8 @@ describe("built-in run prompts", () => {
     }
   }
 
-  test("reviewPrompt · summaries with attachments", () => {
-    expect(reviewPrompt(ticket(), summaries, (a) => `/att/${a.id}/${a.name}`)).toMatchSnapshot();
-  });
-  test("reviewPrompt · default attachment path", () => {
-    expect(reviewPrompt(ticket(), summaries)).toMatchSnapshot();
-  });
-  test("reviewPrompt · no summaries, empty brief", () => {
-    expect(reviewPrompt(ticket({ description: "" }), [])).toMatchSnapshot();
+  test("reviewPrompt", () => {
+    expect(reviewPrompt(ticket())).toMatchSnapshot();
   });
 
   for (const [name, c] of Object.entries(TICKETS)) {

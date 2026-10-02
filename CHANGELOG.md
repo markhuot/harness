@@ -18,6 +18,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   open, a row of tabs above the page. Tap or click a tab to watch it, or close it with its ×.
   Each app keeps its own place, so you can watch one tab while the agent works in another.
 
+### Changed
+
+- An agent review now opens with a short message naming the ticket, and the reviewer reads the
+  brief and summaries itself with `get_ticket`. Its transcript no longer starts with a copy of
+  every summary, which grew with each round of review. The Agent review prompt in Settings has a
+  new `{{key}}` variable and no longer offers `{{brief}}` or `{{summaries}}`. A customized version
+  that uses them is flagged as invalid, and reviews use the built-in prompt until you update it.
+
 ### Fixed
 
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for

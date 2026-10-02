@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Project, RunKind, Session, Summary, Ticket } from "@harness/shared";
+import type { Project, RunKind, Session, Ticket } from "@harness/shared";
 import { parseFileLink } from "@harness/shared";
 import {
   changesRequestedPrompt,
@@ -574,53 +574,28 @@ describe("run prompts", () => {
 
   test("a ticket linked to a remote ID is named by it, with its local key alongside", () => {
     const linked = ticket({ key: "NYT-124", title: "Fix it", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
-    expect(reviewPrompt(linked, [])).toContain('NYT-62 (local NYT-124) "Fix it"');
+    expect(reviewPrompt(linked)).toContain('NYT-62 (local NYT-124) "Fix it"');
     // A legacy mirror's key is its remote ID, and an unlinked ticket has only its key.
     const legacy = ticket({ key: "FOO-9", title: "Old", externalRef: { source: "jira", key: "FOO-9", url: null, raw: null } });
-    expect(reviewPrompt(legacy, [])).toContain('FOO-9 "Old"');
-    expect(reviewPrompt(legacy, [])).not.toContain("(local");
-    expect(reviewPrompt(ticket({ title: "Plain" }), [])).toContain('NYT-3 "Plain"');
+    expect(reviewPrompt(legacy)).toContain('FOO-9 "Old"');
+    expect(reviewPrompt(legacy)).not.toContain("(local");
+    expect(reviewPrompt(ticket({ title: "Plain" }))).toContain('NYT-3 "Plain"');
   });
 
   test("workStartPrompt handles an empty description", () => {
     expect(workStartPrompt(ticket({ description: "  " }))).toContain("the title is the whole brief");
   });
 
-  test("reviewPrompt includes the brief and summaries oldest first with authors", () => {
-    const summaries: Summary[] = [
-      { id: "b", sessionId: "s1", ticketId: "t1", author: "agent", body: "Second: tests pass", createdAt: 2000, attachments: [] },
-      { id: "a", sessionId: "s1", ticketId: "t1", author: "human", body: "First: use CSS vars", createdAt: 1000, attachments: [] },
-    ];
-    const text = reviewPrompt(ticket(), summaries);
-    expect(text).toContain("Add a dark theme toggle to the header.");
-    expect(text.indexOf("First: use CSS vars")).toBeLessThan(text.indexOf("Second: tests pass"));
-    expect(text).toContain("[human, 1970-01-01T00:00:01.000Z]");
+  test("reviewPrompt has the reviewer fetch the ticket instead of inlining it", () => {
+    const text = reviewPrompt(ticket());
+    expect(text).toContain('`get_ticket` { key: "NYT-3" }');
     expect(text).toContain("`review_decision` exactly once");
-    expect(text).not.toContain("Attachments:");
-    expect(reviewPrompt(ticket(), [])).toContain("no summaries were posted");
-  });
-
-  test("reviewPrompt lists each summary's attachments under it with the stored path", () => {
-    const summaries: Summary[] = [
-      { id: "a", sessionId: "s1", ticketId: "t1", author: "agent", body: "Built the toggle", createdAt: 1000, attachments: [] },
-      {
-        id: "b",
-        sessionId: "s1",
-        ticketId: "t1",
-        author: "agent",
-        body: "Done",
-        createdAt: 2000,
-        attachments: [
-          { id: "att1", kind: "image", mimeType: "image/png", name: "after.png", size: 10 },
-          { id: "att2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 20 },
-        ],
-      },
-    ];
-    const text = reviewPrompt(ticket(), summaries, (a) => `/home/attachments/${a.id}.bin`);
-    const [first, second] = text.split("2. [agent");
-    expect(first).not.toContain("Attachments:");
-    expect(second).toContain("Done\nAttachments:\n* after.png (image): /home/attachments/att1.bin\n* flow.mp4 (video): /home/attachments/att2.bin");
+    expect(toolsMentioned(text).filter((n) => !TOOLS.review.includes(n))).toEqual([]);
+    expect(text).not.toContain("Add a dark theme toggle to the header.");
     expect(text).not.toMatch(/^- /m);
+    // A ticket linked to a remote ID is fetched by its local key: get_ticket doesn't take remote IDs.
+    const linked = ticket({ key: "NYT-124", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
+    expect(reviewPrompt(linked)).toContain('`get_ticket` { key: "NYT-124" }');
   });
 
   test("completePrompt is branch-dependent and includes instructions", () => {
@@ -661,7 +636,7 @@ describe("run prompts", () => {
   test("run prompts contain no slash directives of their own", () => {
     const texts = [
       workStartPrompt(ticket()),
-      reviewPrompt(ticket(), []),
+      reviewPrompt(ticket()),
       completePrompt(ticket(worktree)),
       changesRequestedPrompt("fix", "agent"),
       conductorUpdatePrompt([{ key: "A-1", title: "t", from: "review", to: "done" }]),

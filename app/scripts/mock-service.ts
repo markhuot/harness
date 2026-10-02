@@ -89,7 +89,7 @@ let settings: PublicSettings = {
   // update renamed it): GET /prompts reports its overrideError.
   prompts: {
     ...Object.fromEntries(PROMPT_IDS.map((id) => [id, null])),
-    "run.review": `Review {{ticket}} carefully.\n\n## Brief\n{{brief}}\n\n{{#if summaries}}## Summaries\n{{summaries}}{{/if}}\n\nCheck the tests first, then the diff.`,
+    "run.review": `Review {{ticket}} carefully.\n\nRead it with get_ticket { key: "{{key}}" }.\n\nCheck the tests first, then the diff.`,
     "system.files": "## Files\nRead with {{readTool}}. Never use {{shellTool}} to edit files.",
   },
 };

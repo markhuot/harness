@@ -646,7 +646,7 @@ const GREET_JA = functionLines(greetingsLines(true), "export function greet_ja")
  */
 async function seedPrompts() {
   await api("PATCH", "/settings", {
-    prompts: { "run.review": "Review {{ticket}} carefully.\n\n## Brief\n{{brief}}\n\n{{#if summaries}}## Summaries\n{{summaries}}{{/if}}\n\nCheck the tests first, then the diff." },
+    prompts: { "run.review": "Review {{ticket}} carefully.\n\nRead it with get_ticket { key: \"{{key}}\" }.\n\nCheck the tests first, then the diff." },
   });
   const db = new Database(join(home, "harness.db"));
   try {
@@ -1864,7 +1864,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         // Its last line, past the end of the text: the cursor goes to the end.
         await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width - 20)), "-y", String(Math.round(el.frame.y + el.frame.height - 16)), "--udid", udid);
         await Bun.sleep(400);
-        await tapWhere(udid, (l) => l.startsWith("{{brief}}"));
+        await tapWhere(udid, (l) => l.startsWith("{{key}}"));
         await Bun.sleep(500);
         await axe("type", "Z", "--udid", udid);
         await Bun.sleep(300);
@@ -1872,7 +1872,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000);
         await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
         moved(udid);
-        if (!saved?.endsWith("then the diff.{{brief}}Z")) throw new Error(`expected the text to end "then the diff.{{brief}}Z", got ${JSON.stringify(saved)}`);
+        if (!saved?.endsWith("then the diff.{{key}}Z")) throw new Error(`expected the text to end "then the diff.{{key}}Z", got ${JSON.stringify(saved)}`);
         return `ends ${JSON.stringify(saved.slice(-24))}`;
       });
     }),

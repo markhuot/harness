@@ -12,7 +12,7 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { CompletionAction, Project, RunKind, Session, Summary, SummaryAttachment, Ticket, TicketStatus } from "@harness/shared";
+import type { CompletionAction, Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
 import { displayKey, harnessBranch, plannedBranch, resolveBaseBranch, secondaryKey } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
@@ -374,25 +374,9 @@ export function workStartPrompt(ticket: Ticket, overrides?: PromptOverrides | nu
   return renderPrompt(id, { ticket: ticketLabel(ticket), brief: briefOf(ticket) }, overrides);
 }
 
-const AUTHOR_LABEL: Record<Summary["author"], string> = { agent: "agent", human: "human", system: "system" };
-
-/** A summary's attachments as lines naming the stored copy, for agents to open with a file tool. */
-function attachmentLines(s: Summary, pathOf: (a: SummaryAttachment) => string): string {
-  if (!s.attachments?.length) return "";
-  return `\nAttachments:\n${s.attachments.map((a) => `* ${a.name} (${a.kind}): ${pathOf(a)}`).join("\n")}`;
-}
-
-export function reviewPrompt(
-  ticket: Ticket,
-  summaries: Summary[],
-  attachmentPath: (a: SummaryAttachment) => string = (a) => a.id,
-  overrides?: PromptOverrides | null,
-): string {
-  const ordered = [...summaries].sort((a, b) => a.createdAt - b.createdAt);
-  const log = ordered
-    .map((s, i) => `${i + 1}. [${AUTHOR_LABEL[s.author]}, ${new Date(s.createdAt).toISOString()}]\n${s.body.trim()}${attachmentLines(s, attachmentPath)}`)
-    .join("\n\n");
-  return renderPrompt("run.review", { ticket: ticketLabel(ticket), brief: briefOf(ticket), summaries: log.trim() }, overrides);
+/** Names the ticket; the reviewer reads the brief and summaries itself with get_ticket. */
+export function reviewPrompt(ticket: Ticket, overrides?: PromptOverrides | null): string {
+  return renderPrompt("run.review", { ticket: ticketLabel(ticket), key: ticket.key }, overrides);
 }
 
 export function completePrompt(
@@ -506,8 +490,7 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
   return {
     systemPrompt: (info: Omit<PromptInfo, "overrides">) => systemPrompt({ ...info, overrides }),
     workStartPrompt: (ticket: Ticket) => workStartPrompt(ticket, overrides),
-    reviewPrompt: (ticket: Ticket, summaries: Summary[], attachmentPath?: (a: SummaryAttachment) => string) =>
-      reviewPrompt(ticket, summaries, attachmentPath, overrides),
+    reviewPrompt: (ticket: Ticket) => reviewPrompt(ticket, overrides),
     completePrompt: (ticket: Ticket, instructions?: string, branches?: BranchContext, project: Project | null = null) =>
       completePrompt(ticket, instructions, branches, project, overrides),
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),

@@ -200,7 +200,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "prompts", route: "#/settings/prompts" },
   { name: "prompt-builtin", route: "#/settings/prompts", setup: openPrompt("system.work") },
   { name: "prompt-customized", route: "#/settings/prompts", setup: openPrompt("run.review") },
-  { name: "prompt-invalid", route: "#/settings/prompts", setup: openPrompt("run.review", `type(area(), area().value.replace("{{brief}}", "{{breif}}"));`) },
+  { name: "prompt-invalid", route: "#/settings/prompts", setup: openPrompt("run.review", `type(area(), area().value.replace("{{key}}", "{{kye}}"));`) },
   {
     name: "prompt-compare",
     route: "#/settings/prompts",
