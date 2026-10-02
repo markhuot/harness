@@ -1335,7 +1335,7 @@ export class Orchestrator {
    *  - planning: the plan run takes it (plan mode; it revises the plan),
    *  - in progress: the running work takes it, or a new work run,
    *  - blocked, review, done: a chat run with the ticket's work tools, whose agent moves the
-   *    ticket itself (unblock once the block is resolved, submit_for_review, block).
+   *    ticket itself (unblock once the block is resolved, resume_work before changing reviewed work, submit_for_review, block).
    * A message to a ticket waiting on a tool approval answers it as a deny.
    */
   async sendMessage(key: string, text: string, opts: { move?: boolean } = {}): Promise<Ticket> {
@@ -2030,6 +2030,20 @@ export class Orchestrator {
     if (t.status !== "blocked") throw new Error(`${t.key} is ${t.status}, not blocked: there's nothing to unblock.`);
     const why = typeof note === "string" ? note.trim() : "";
     this.transition(t, "in_progress", { blockedReason: null }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
+  }
+
+  /**
+   * A chat on a ticket in review is changing the work again: back to in progress, as when the human
+   * moves it there, with both reviews pending and a running agent review stopped (it would judge
+   * work that's about to change).
+   */
+  async resumeWork(ctx: ToolContext, note?: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can move it.`);
+    if (t.status !== "review") throw new Error(`${t.key} is ${t.status}, not in review: resume_work only takes a ticket out of review.`);
+    await this.cancelReviewRuns(t.sessionId);
+    const why = typeof note === "string" ? note.trim() : "";
+    this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`);
   }
 
   /**
@@ -3760,7 +3774,7 @@ export class Orchestrator {
         this.finishWork(ticket, run, active);
         break;
       case "chat":
-        // A chat that moved the ticket (submit_for_review, block, unblock) ends like a work run;
+        // A chat that moved the ticket (submit_for_review, block, unblock, resume_work) ends like a work run;
         // one that left it where it was posts its answer next to the human's message.
         if (active.submitted || active.blocked || ticket.status === "in_progress") this.finishWork(ticket, run, active);
         else if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
@@ -3829,6 +3843,7 @@ export class Orchestrator {
       updatePlan: (c, p, t) => this.updatePlan(c, p, t),
       block: (c, q) => this.block(c, q),
       unblock: (c, n) => this.unblock(c, n),
+      resumeWork: (c, n) => this.resumeWork(c, n),
       submitForReview: (c, s, a, skips) => this.submitForReview(c, s, a, skips),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),

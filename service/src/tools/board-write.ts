@@ -208,7 +208,7 @@ export const startTicket = defineTool<{ key: string }>({
 export const messageTicket = defineTool<{ key: string; text: string }>({
   name: "message_ticket",
   description:
-    "Send a message to the agent working on another ticket, as if a human had written it: answer a blocked ticket's question, give extra direction, or correct course. The ticket stays in its column: its agent moves it on itself (a blocked one unblocks once your message resolves its question; one in review is submitted again if the agent changes the work). Tickets waiting on a tool approval can't be messaged (only a human answers approvals), nor can tickets whose permission mode is looser than yours.",
+    "Send a message to the agent working on another ticket, as if a human had written it: answer a blocked ticket's question, give extra direction, or correct course. The ticket stays in its column: its agent moves it on itself (a blocked one unblocks once your message resolves its question; one in review goes back to in progress while its agent changes the work, then is submitted again). Tickets waiting on a tool approval can't be messaged (only a human answers approvals), nor can tickets whose permission mode is looser than yours.",
   inputSchema: schema(
     {
       key: keyProp,

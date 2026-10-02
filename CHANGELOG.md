@@ -20,6 +20,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- When you message a ticket in Review and the agent starts changing the work (rather than just
+  answering), it now moves the ticket back to In progress first. The board shows it being worked
+  on, an agent review that was waiting is stopped, and both reviews start over once the agent
+  submits again. A message the agent only answers still leaves the ticket in Review.
 - When a ticket has nothing to land, its Approve button no longer offers **Approve and merge** or
   **Approve and open PR** (Mac, iPhone and iPad). It reads **Approve and clean up** instead. That
   covers a ticket that worked in the project folder without a worktree of its own (a release, say)

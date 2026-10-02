@@ -117,6 +117,12 @@ describe("ticket tools → HarnessOps", () => {
     await expect(tool("unblock").execute({}, fakeContext({ ops: refusing }))).rejects.toThrow("not blocked");
   });
 
+  test("resume_work tells the model to make the changes and resubmit, not stop", async () => {
+    const r = await tool("resume_work").execute({ note: "fixing the bug" }, fakeContext({ ops: fakeOps() }));
+    expect(text(r)).toContain("submit_for_review");
+    expect(text(r)).not.toContain("Stop here");
+  });
+
   test("review_decision rejects an unknown decision without calling ops", async () => {
     const ops = fakeOps();
     const bad = await tool("review_decision").execute({ decision: "maybe", notes: "" } as any, fakeContext({ ops }));

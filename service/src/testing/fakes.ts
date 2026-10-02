@@ -78,7 +78,7 @@ export interface RecordedCall {
  *
  * work directives: `/block <q>`, `/fail <msg>`, `/hold` (wait for release()/abort),
  * `/nosubmit` (end without submitting → auto-submit), `/throw <msg>`.
- * chat directives: `/unblock`, then `/submit`, `/block <q>` or `/ask`; `/tool` and `/hold` as in work.
+ * chat directives: `/resume` (before a `/hold`), `/unblock`, then `/submit`, `/block <q>` or `/ask`; `/tool` and `/hold` as in work.
  * Steering (only with supportsSteering): after a /hold (work, plan and chat runs) the run takes the
  * messages sent meanwhile and answers each with `Steered: <text>`; `/deaf` never takes them in.
  * review: request_changes while `rejectsLeft > 0` or the prompt contains [dummy:reject].
@@ -281,6 +281,8 @@ export class FakeDriver implements Driver {
         return;
       }
       case "chat": {
+        // /resume takes the ticket out of review before anything else, so a /hold shows it in progress.
+        const resumeRefused = p.includes("/resume") ? await ops.resumeWork(ctx, "changing it").then(() => null, (e: Error) => e.message) : null;
         if (p.includes("/hold")) {
           await this.hold(req);
           if (req.signal.aborted) return;
@@ -288,6 +290,7 @@ export class FakeDriver implements Driver {
         }
         const said = p.split("\n\n[Harness note:")[0]!;
         yield { type: "text", text: `Chatting about: ${said}.` };
+        if (resumeRefused) yield { type: "text", text: `Refused: ${resumeRefused}` };
         yield { type: "state", state: { turns } };
         const tool = /\/tool (\S+) (\{.*\})/.exec(p);
         if (tool) this.lastTool = { name: tool[1]!, input: JSON.parse(tool[2]!) };

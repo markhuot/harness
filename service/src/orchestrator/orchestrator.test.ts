@@ -775,6 +775,32 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.orch.summaries(t.key).filter((s) => s.body === "Done from chat.")).toHaveLength(1);
   });
 
+  test("in review: resume_work moves the ticket to in progress while the chat changes it, then it ends like a work run", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Add a button" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved" });
+    await h.orch.sendMessage(t.key, "make it red /resume /hold");
+    await Bun.sleep(5);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
+    expect(h.store.transcript.list(t.sessionId).some((e) => e.content.type === "status" && e.content.text === "Moved back to in progress by the agent: changing it")).toBe(true);
+    h.driver.release();
+    await h.orch.idle();
+    // Left in progress, the chat auto-submits like a work run, and a fresh agent review judges the new work.
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded", "review:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+  });
+
+  test("resume_work is refused on a ticket that isn't in review", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /block Which database?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "Postgres /resume");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
+    expect(h.orch.summaries(t.key).at(-1)!.body).toContain(`Refused: ${t.key} is blocked, not in review`);
+  });
+
   test("in review: block asks the human and starts the reviews over", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });

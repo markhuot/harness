@@ -210,6 +210,8 @@ export interface HarnessOps {
   block(ctx: ToolContext, question: string): Promise<void>;
   /** A human's message resolved the block: blocked → in progress, and the run carries on with the work. */
   unblock(ctx: ToolContext, note?: string): Promise<void>;
+  /** The agent is changing reviewed work again: review → in progress, and both reviews start over. */
+  resumeWork(ctx: ToolContext, note?: string): Promise<void>;
   /** Work is finished: move to review with a summary. The run should end after this. */
   /** The skips are stored on the ticket first (turning one on is refused when the other review is skipped too). */
   submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skips?: ReviewSkips): Promise<void>;

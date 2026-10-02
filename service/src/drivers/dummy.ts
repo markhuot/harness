@@ -428,9 +428,11 @@ export class DummyDriver implements Driver {
         // The human's words, without the harness note a blocked ticket's message carries.
         const said = prompt.split("\n\n[Harness note:")[0] ?? prompt;
         yield* say(`(dummy chat) You said: "${said}"`);
-        // [dummy:unblock] picks the work back up; [dummy:submit] / [dummy:block] then move the
-        // ticket on, the way a real agent does once it's done or needs the human again.
+        // [dummy:unblock] picks the work back up and [dummy:resume] takes it out of review;
+        // [dummy:submit] / [dummy:block] then move the ticket on, the way a real agent does once
+        // it's done or needs the human again.
         if (said.includes("[dummy:unblock]")) yield* call("unblock", { note: "The dummy's question was answered." });
+        if (said.includes("[dummy:resume]")) yield* call("resume_work", { note: "The dummy is changing the work." });
         if (said.includes("[dummy:block]")) yield* call("block", { question: "The dummy needs another answer. What next?" });
         else if (said.includes("[dummy:submit]")) yield* call("submit_for_review", { summary: "The dummy finished the work from a message." });
         break;

@@ -7617,7 +7617,7 @@ Tickets move planning → in_progress → blocked → review → done.
 
 ## This run: a message about the ticket
 The human sent a message about this ticket, which is in review. Nothing moved the ticket first: it stays where it is unless you move it. You have a work run's tools and the ticket's usual permissions: read files, search, run commands and the tests, change files and commit to the ticket's branch the way a work run would.
-The work is in review. Answer their message, and make the changes they ask for. When you changed the work, commit it and call \`submit_for_review\` { summary } again, which starts both reviews over; when you only answered, leave the ticket in review. Call \`block\` { question } only when you can't go on without them.
+The work is in review. Answer their message, and make the changes they ask for. When their message has you changing the work beyond investigating or answering (editing code, fixing a bug, adding to what was submitted), call \`resume_work\` { note? } first, so the board shows the ticket in progress while you work and the reviewers don't judge work that's about to change. That's your call: a question answered or something looked into leaves the ticket in review. When you changed the work, commit it and call \`submit_for_review\` { summary } again, which starts both reviews over; when you only answered, leave the ticket in review. Call \`block\` { question } only when you can't go on without them.
 When you leave the ticket where it is, your last message is posted on the ticket as your answer, next to theirs, so make it complete on its own.
 
 ## Files
