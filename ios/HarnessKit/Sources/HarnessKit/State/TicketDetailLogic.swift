@@ -92,6 +92,20 @@ public enum TicketDetailLogic {
         }
     }
 
+    // MARK: Composer
+
+    /// Whether a message sent while `tab` is on screen also goes into Activity (MessageBody.log):
+    /// from the Spec and Activity tabs only (Tabs.logsMessages).
+    public static func composerLogs(_ tab: TicketTab) -> Bool { Tabs.logsMessages(tab) }
+
+    /// The composer's placeholder: what a message does in the ticket's state, and where it shows
+    /// ("Answer the agent (shows in Activity)", "Send a follow-up (transcript only)").
+    public static func composerPlaceholder(_ t: Ticket, tab: TicketTab) -> String {
+        var base = Format.composerPlaceholder[t.status] ?? "Message the agent…"
+        if base.hasSuffix("…") { base.removeLast() }
+        return "\(base) (\(composerLogs(tab) ? "shows in Activity" : "transcript only"))"
+    }
+
     /// "1 ticket waiting on you" / "3 tickets waiting on you".
     public static func waitingOnYou(_ n: Int) -> String {
         "\(n) ticket\(n == 1 ? "" : "s") waiting on you"
