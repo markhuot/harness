@@ -849,6 +849,35 @@ try {
   check("browser key input forwarded", inputs.some((l) => l.includes('"key":"a"')));
   check("browser resize sent", inputs.some((l) => l.includes('"type":"resize"')));
 
+  // 6a. Browser tabs: + opens a tab (the strip appears with it current), a chip switches back,
+  // × closes one (the strip goes away with a single tab left).
+  {
+    type Chip = { id: number; on: boolean; label: string };
+    const chips = () => js<Chip[]>(`[...document.querySelectorAll(".browser-tab-select")].map((b) => ({ id: Number(b.dataset.tabId), on: b.getAttribute("aria-selected") === "true", label: b.textContent }))`);
+    check("one tab shows no tab strip", !(await exists(".browser-tabs")) && (await exists("[data-testid=browser-new-tab]")));
+    await js(`document.querySelector("[data-testid=browser-new-tab]").click()`);
+    const opened = await until("tab strip", async () => {
+      const c = await chips();
+      return c.length === 2 && c[1]!.on && c;
+    }).catch(() => null);
+    check("New tab opens a second tab and switches to it", !!opened && opened[1]!.label === "New tab", JSON.stringify(opened));
+    check("New tab sent newTab", inputs.some((l) => l.includes('"type":"newTab"')));
+    const repainted = await until("new tab frame", () => js<boolean>(canvasPainted), 8000).catch(() => false);
+    check("the new tab's frames are drawn", repainted);
+    await screenshot("/tmp/harness-192-mac-browser-tabs.png");
+    await js(`document.querySelector(".browser-tab-select[data-tab-id="${opened?.[0]?.id ?? 1}"]").click()`);
+    const back = await until("switched back", async () => {
+      const c = await chips();
+      const url = await js<string>(`document.querySelector(".browser-url-input").value`);
+      return c[0]?.on && url.startsWith("http://localhost:3000") && c;
+    }).catch(() => null);
+    check("clicking a chip switches to its tab (and its URL)", !!back, JSON.stringify(back));
+    await js(`document.querySelectorAll(".browser-tab-close")[1].click()`);
+    const closed = await until("strip gone", async () => !(await exists(".browser-tabs"))).catch(() => false);
+    check("closing a tab down to one hides the strip", closed);
+    check("closeTab sent with the tab's id", inputs.some((l) => l.includes('"type":"closeTab"')));
+  }
+
   // 6b. Project settings: right-click → settings, rename the identifier, live preview + validation.
   type P = { id: string; key: string; name: string };
   const hh = (await api<P[]>("GET", "/projects")).find((p) => p.key === "HELLOHARNESS")!;
