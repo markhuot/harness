@@ -129,6 +129,28 @@ describe("edit_spec", () => {
   });
 });
 
+describe("update_ticket's spec", () => {
+  test("a human's PATCH between get_ticket and update_ticket refuses the stale write and keeps their text", async () => {
+    const h = await setup();
+    const actor = await h.make();
+    const target = await h.make("planning");
+    const seen = await h.orch.ops.getTicket(h.ctx(actor), target.key);
+    expect(seen.specRevision).toBe(1);
+    await h.orch.updateTicket(target.key, { spec: "Human: the footer too", baseRevision: 1 });
+    await expect(
+      tool("update_ticket").execute({ key: target.key, spec: "Agent rewrite", base_revision: seen.specRevision }, h.ctx(actor)),
+    ).rejects.toThrow(`The spec of ${target.key} is at revision 2, not 1: it changed since you read it (a human may have edited it). Call get_ticket { key: "${target.key}" }`);
+    expect(h.fresh(target)).toMatchObject({ spec: "Human: the footer too", specRevision: 2 });
+    // base_revision is required with a spec, and only with one.
+    await expect(tool("update_ticket").execute({ key: target.key, spec: "Agent rewrite" }, h.ctx(actor))).rejects.toThrow("base_revision is required with spec");
+    await expect(tool("update_ticket").execute({ key: target.key, title: "x", base_revision: 2 }, h.ctx(actor))).rejects.toThrow("base_revision only goes with spec");
+    // Against the current revision it's a new agent revision.
+    await tool("update_ticket").execute({ key: target.key, spec: "Agent rewrite", base_revision: 2 }, h.ctx(actor));
+    expect(h.fresh(target)).toMatchObject({ spec: "Agent rewrite", specRevision: 3 });
+    expect(h.orch.specRevisions(target.key).at(-1)).toMatchObject({ author: "agent", runKind: "work", note: "Rewritten with update_ticket" });
+  });
+});
+
 describe("which runs get the spec tools", () => {
   const names = (kind: RunKind) => toolsForRun(kind, { hasBuiltinTools: true, usesPermissionPromptTool: false }).map((t) => t.name);
   test("review runs get read_spec only; triage none; the others all three", () => {

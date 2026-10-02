@@ -357,7 +357,7 @@ describe("permission modes across tickets", () => {
     await expect(h.orch.ops.updateTicket(c, loose.key, { title: "renamed" })).rejects.toThrow("runs in ask, looser than your read_only");
     expect((await h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only" })).permissionMode).toBe("read_only");
     // Now as strict as the caller: every field is editable again.
-    const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", spec: "new brief", dependsOn: [dep.key] });
+    const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", spec: "new brief", baseRevision: h.get(loose).specRevision, dependsOn: [dep.key] });
     expect([u.title, u.spec, u.dependsOn]).toEqual(["renamed", "new brief", [dep.key]]);
   });
 
@@ -389,7 +389,7 @@ describe("update, move, start, cancel, reopen", () => {
     const me = await h.make("me", { status: "in_progress" });
     const dep = await h.make("dep");
     const t = await h.make("t");
-    const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { title: " Renamed ", spec: "New brief", dependsOn: [dep.key.toLowerCase()] });
+    const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { title: " Renamed ", spec: "New brief", baseRevision: h.get(t).specRevision, dependsOn: [dep.key.toLowerCase()] });
     expect([u.title, u.spec, u.dependsOn]).toEqual(["Renamed", "New brief", [dep.key]]);
     expect(h.store.sessions.get(t.sessionId)!.title).toBe("Renamed");
     await expect(h.orch.ops.updateTicket(h.ctx("work", me), t.key, { dependsOn: [t.key] })).rejects.toThrow("cannot depend on itself");

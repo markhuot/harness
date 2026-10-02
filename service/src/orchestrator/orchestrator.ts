@@ -2180,9 +2180,10 @@ ${numberLines(r.body)}`;
     return out;
   }
 
-  private staleSpecMessage(t: Ticket, base: number): string {
+  /** A spec write based on a revision that isn't current anymore; `reread` is the tool that shows it. */
+  private staleSpecMessage(t: Ticket, base: number, reread = "read_spec"): string {
     const current = t.specRevision ?? 1;
-    return `The spec is at revision ${current}, not ${base}: it changed since you read it${current > base ? " (a human may have edited it)" : ""}. Call read_spec, then redo your change against revision ${current}. Nothing was changed.`;
+    return `The spec${reread === "read_spec" ? "" : ` of ${t.key}`} is at revision ${current}, not ${base}: it changed since you read it${current > base ? " (a human may have edited it)" : ""}. Call ${reread}, then redo your change against revision ${current}. Nothing was changed.`;
   }
 
   /**
@@ -2651,8 +2652,15 @@ ${numberLines(r.body)}`;
     }
     if (input.spec !== undefined) {
       if (!String(input.spec).trim()) throw new Error("spec can't be empty");
+      // Like edit_spec: the write names the revision it replaces, so a human's edit in between isn't overwritten.
+      if (input.baseRevision === undefined) {
+        throw new Error(`base_revision is required with spec: the specRevision get_ticket showed for ${target.key} (it's at ${target.specRevision ?? 1} now).`);
+      }
+      if (input.baseRevision !== (target.specRevision ?? 1)) throw new Error(this.staleSpecMessage(target, input.baseRevision, `get_ticket { key: "${target.key}" }`));
       body.spec = String(input.spec);
-      body.baseRevision = target.specRevision ?? 1;
+      body.baseRevision = input.baseRevision;
+    } else if (input.baseRevision !== undefined) {
+      throw new Error("base_revision only goes with spec");
     }
     if (input.driver !== undefined) body.driver = input.driver;
     if (input.model !== undefined) body.model = input.model;
@@ -2682,7 +2690,15 @@ ${numberLines(r.body)}`;
       body.permissionMode = mode;
     }
     if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
-    return this.asTool(() => this.updateTicket(target.key, body, { author: "agent", runId: ctx.runId, runKind: ctx.runKind }));
+    try {
+      return await this.updateTicket(target.key, body, { author: "agent", runId: ctx.runId, runKind: ctx.runKind });
+    } catch (err) {
+      // The spec moved on between the check above and the write.
+      if (err instanceof HarnessError && err.status === 409 && body.baseRevision !== undefined && (err.data as SpecConflict | undefined)?.currentRevision !== undefined) {
+        throw new Error(this.staleSpecMessage(this.store.tickets.get(target.id) ?? target, body.baseRevision, `get_ticket { key: "${target.key}" }`));
+      }
+      throw new Error(errMsg(err));
+    }
   }
 
   /**

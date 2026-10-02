@@ -8,9 +8,9 @@ describe("openingTab", () => {
 });
 
 describe("ticketTabFrom", () => {
-  test("an old Summaries link opens Activity, even though summaries is no longer a tab", () => {
+  test("an old Summaries link opens the Spec, the default view that replaced it, even though summaries is no longer a tab", () => {
     expect(isTicketTab("summaries")).toBe(false);
-    expect(ticketTabFrom("summaries")).toBe("activity");
+    expect(ticketTabFrom("summaries")).toBe("spec");
   });
   test("current tab ids pass through unchanged", () => {
     for (const t of [...TICKET_TABS, "plugin:git:changes", "agent:toolu_1"] as TicketTab[]) expect(ticketTabFrom(t)).toBe(t);

@@ -59,7 +59,7 @@ export function isTicketTab(t: string | undefined | null): t is TicketTab {
 }
 
 /** Tab ids older links and saved routes may still carry, and the tab each one became. */
-export const RENAMED_TABS: Readonly<Record<string, BuiltinTicketTab>> = { summaries: "activity" };
+export const RENAMED_TABS: Readonly<Record<string, BuiltinTicketTab>> = { summaries: "spec" };
 
 /** A tab id from a link or saved route, with renamed ids mapped to their new tab; null when it isn't one. */
 export function ticketTabFrom(t: string | undefined | null): TicketTab | null {

@@ -155,6 +155,8 @@ export interface UpdateTicketInput {
   title?: string;
   /** A new spec revision for the ticket (written as the caller's agent revision) */
   spec?: string;
+  /** The specRevision the new spec replaces (from get_ticket); required with spec, a stale one is refused */
+  baseRevision?: number;
   driver?: string;
   model?: string | null;
   permissionMode?: PermissionMode | null;

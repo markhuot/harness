@@ -126,6 +126,7 @@ export const updateTicket = defineTool<{
   key: string;
   title?: string;
   spec?: string;
+  base_revision?: number;
   driver?: string;
   model?: string;
   permission_mode?: PermissionMode | "inherit";
@@ -139,12 +140,13 @@ export const updateTicket = defineTool<{
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, spec (written as a new revision of it), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
       title: { type: "string", minLength: 1, description: "New title." },
-      spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one)." },
+      spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one). Needs base_revision." },
+      base_revision: { type: "integer", minimum: 1, description: "Required with spec: the specRevision get_ticket showed. If the spec changed since, the call fails with the current revision." },
       driver: driverProp,
       model: modelProp,
       permission_mode: { type: "string", enum: [...PERMISSION_MODES, "inherit"], description: "\"inherit\" uses the project's mode." },
@@ -162,6 +164,7 @@ export const updateTicket = defineTool<{
     const ticket = await ctx.ops.updateTicket(ctx, input.key, {
       title: input.title,
       spec: input.spec,
+      baseRevision: input.base_revision,
       driver: input.driver,
       model: modelInput(input.model),
       permissionMode: input.permission_mode === undefined ? undefined : input.permission_mode === "inherit" ? null : input.permission_mode,

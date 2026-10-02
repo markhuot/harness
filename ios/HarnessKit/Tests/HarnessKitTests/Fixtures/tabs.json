@@ -1084,7 +1084,7 @@
     }
   ],
   "renamedTabs": {
-    "summaries": "activity"
+    "summaries": "spec"
   },
   "showsAgentsTabCases": [
     {
@@ -1314,7 +1314,7 @@
     {
       "name": "renamed summaries",
       "input": "summaries",
-      "output": "activity"
+      "output": "spec"
     },
     {
       "name": "children",
