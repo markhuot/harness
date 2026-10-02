@@ -3003,8 +3003,8 @@
   "shortToolNameCases": [
     {
       "name": "harness tool",
-      "input": "mcp__harness__post_summary",
-      "output": "post_summary"
+      "input": "mcp__harness__post_note",
+      "output": "post_note"
     },
     {
       "name": "plain tool",

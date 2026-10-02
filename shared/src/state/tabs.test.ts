@@ -20,7 +20,7 @@ describe("ticketTabFrom", () => {
   });
   // RENAMED_TABS is a plain object, so RENAMED_TABS["constructor"] is Object and ticketTabFrom
   // returns a function for a route like #/T-1/constructor. Needs Object.hasOwn in tabs.ts.
-  test.todo("Object.prototype keys aren't renamed tabs", () => {
+  test("Object.prototype keys aren't renamed tabs", () => {
     for (const t of ["constructor", "toString", "__proto__", "hasOwnProperty"]) expect(ticketTabFrom(t)).toBeNull();
   });
 });

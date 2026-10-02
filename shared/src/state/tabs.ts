@@ -64,7 +64,7 @@ export const RENAMED_TABS: Readonly<Record<string, BuiltinTicketTab>> = { summar
 /** A tab id from a link or saved route, with renamed ids mapped to their new tab; null when it isn't one. */
 export function ticketTabFrom(t: string | undefined | null): TicketTab | null {
   if (!t) return null;
-  const renamed = RENAMED_TABS[t];
+  const renamed = Object.hasOwn(RENAMED_TABS, t) ? RENAMED_TABS[t] : undefined;
   if (renamed) return renamed;
   return isTicketTab(t) ? t : null;
 }

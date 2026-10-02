@@ -200,7 +200,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -356,7 +358,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1/a": {
                 "entries": [
@@ -462,7 +466,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1/a": {
                 "entries": [
@@ -594,7 +600,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s1",
                   "driver": "dummy",
@@ -630,7 +636,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": [],
@@ -718,7 +724,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s1",
                 "driver": "dummy",
@@ -758,9 +764,11 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s1": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {
               "s1": [
@@ -838,7 +846,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s1",
                   "driver": "dummy",
@@ -874,7 +882,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": []
@@ -902,7 +910,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s1",
                   "driver": "dummy",
@@ -938,7 +946,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": [],
@@ -966,7 +974,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s1",
                 "driver": "dummy",
@@ -1006,9 +1014,11 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s1": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {
               "s1": []
@@ -1094,7 +1104,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {
               "s1": [
@@ -1249,7 +1261,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {
@@ -1333,7 +1347,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {
@@ -1472,7 +1488,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {
@@ -1662,7 +1680,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {
               "s1": [
