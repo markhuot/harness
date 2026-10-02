@@ -47,7 +47,7 @@ struct ToastOverlay: ViewModifier {
                         Icon(t.kind == .error ? "alert" : "checkCircle", size: 16, weight: .semibold)
                             .foregroundStyle(t.kind == .error ? c.red : c.green)
                         Text(t.message)
-                            .font(.system(size: 14.5))
+                            .font(.scaled(size: 14.5))
                             .foregroundStyle(c.text)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)

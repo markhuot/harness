@@ -33,7 +33,7 @@ struct SelectTrigger: View {
         let tint = disabled ? c.text3 : c.accent
         HStack(spacing: 4) {
             Text(text)
-                .font(mono ? .mono(15) : .system(size: 15))
+                .font(mono ? .mono(15) : .scaled(size: 15))
                 .foregroundStyle(tint)
                 .lineLimit(1)
                 .truncationMode(.middle)

@@ -11,6 +11,7 @@
 //                          {"__until_input": n} → waits (up to 5s) until n more user messages arrived
 //                          {"__replay": true} → echoes the oldest un-echoed later user message the
 //                            way --replay-user-messages does (isReplay, with its uuid)
+//                          {"__replay_prompt": true} → echoes the prompt message the same way
 //                        Runs read one stream-json user message (recorded as stdin), replay the
 //                        script, then exit once stdin closes like the real CLI (code 7 if it
 //                        stays open for 5s: the driver never ended the run). Later user
@@ -83,6 +84,7 @@ if (streamInput && !argv.includes("--mcp-config")) {
 // harness closes it, and any later user message (steering) is collected.
 let stdinClosed = false;
 let stdin = "";
+let promptUuid: string | undefined;
 const input: { uuid: string; content: unknown }[] = [];
 let replayed = 0;
 if (argv[0] === "-p") {
@@ -101,7 +103,9 @@ if (argv[0] === "-p") {
   const first = (nl === -1 ? buf : buf.slice(0, nl)).trim();
   buf = nl === -1 ? "" : buf.slice(nl + 1);
   if (streamInput && first) {
-    const content = JSON.parse(first).message?.content;
+    const prompt = JSON.parse(first);
+    const content = prompt.message?.content;
+    promptUuid = prompt.uuid;
     stdin = typeof content === "string" ? content : JSON.stringify(content);
   } else stdin = first;
   const collect = () => {
@@ -178,6 +182,8 @@ for (const raw of script.split("\n")) {
   else if (typeof line.__until_input === "number") {
     const start = Date.now();
     while (input.length < line.__until_input && Date.now() - start < 5_000) await Bun.sleep(10);
+  } else if (line.__replay_prompt) {
+    out(JSON.stringify({ type: "user", isReplay: true, uuid: promptUuid, session_id: resume ?? "new-session", message: { role: "user", content: stdin } }));
   } else if (line.__replay) {
     const next = input[replayed++];
     if (next) out(JSON.stringify({ type: "user", isReplay: true, uuid: next.uuid, session_id: resume ?? "new-session", message: { role: "user", content: next.content } }));

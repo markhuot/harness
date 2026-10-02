@@ -98,7 +98,7 @@ private struct BranchSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .overlay {
                 if rows.isEmpty && !loading {
-                    Text("No branches match").font(.system(size: 15)).foregroundStyle(c.text3)
+                    Text("No branches match").font(.scaled(size: 15)).foregroundStyle(c.text3)
                 }
             }
         }
@@ -114,7 +114,7 @@ private struct BranchSheet: View {
         case let .invalid(label):
             HStack(spacing: 10) {
                 Icon("alert", size: 15).foregroundStyle(c.red)
-                Text(label).font(.system(size: 14)).foregroundStyle(c.red)
+                Text(label).font(.scaled(size: 14)).foregroundStyle(c.red)
             }
             .listRowBackground(c.bgElev)
             .accessibilityElement(children: .combine)
@@ -129,7 +129,7 @@ private struct BranchSheet: View {
                 leading: { Icon("branch", size: 15).foregroundStyle(c.text3) },
                 subtitle: {
                     Text(where_.map { "Checked out in \($0)" } ?? "Last commit \(Format.relativeTime(info.lastCommitAt))")
-                        .font(.system(size: 12.5))
+                        .font(.scaled(size: 12.5))
                         .foregroundStyle(where_ != nil ? c.amber : c.text3)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -163,7 +163,7 @@ private struct BranchSheet: View {
             return
         } catch {
             if Task.isCancelled { return }
-            self.error = pickerErrorMessage(error)
+            self.error = localizedErrorMessage(error)
             loading = false
         }
     }

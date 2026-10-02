@@ -13,6 +13,7 @@ export function LandButton({
   icon,
   primaryClass = "btn-primary",
   disabled = false,
+  locked = false,
   title,
   onChoose,
 }: {
@@ -22,13 +23,15 @@ export function LandButton({
   primaryClass?: string;
   /** The primary half and the menu's action choices; the take-no-action choice stays available. */
   disabled?: boolean;
+  /** Everything disabled, the menu too: a conductor approves and lands the ticket (`title` says so). */
+  locked?: boolean;
   title?: string;
   onChoose: (choice: LandChoice) => void;
 }) {
   const noun = mode === "approve" ? "approve" : "complete";
   return (
-    <div className="split-btn" role="group" aria-label={mode === "approve" ? "Approve" : "Complete"} data-testid={`${mode}-split`}>
-      <button className={`btn ${primaryClass} split-btn-main`} disabled={disabled} title={title} onClick={() => onChoose(menu.primary)} data-testid={`${mode}-primary`}>
+    <div className="split-btn" role="group" aria-label={mode === "approve" ? "Approve" : "Complete"} title={locked ? title : undefined} data-testid={`${mode}-split`}>
+      <button className={`btn ${primaryClass} split-btn-main`} disabled={disabled || locked} title={title} onClick={() => onChoose(menu.primary)} data-testid={`${mode}-primary`}>
         <Icon name={icon} strokeWidth={mode === "approve" ? 2.25 : undefined} /> {menu.primary.label}
       </button>
       <MenuButton
@@ -41,7 +44,8 @@ export function LandButton({
             aria-haspopup="menu"
             aria-expanded={open}
             aria-label={`Other ways to ${noun}`}
-            title={`Other ways to ${noun}`}
+            title={locked ? title : `Other ways to ${noun}`}
+            disabled={locked}
             data-testid={`${mode}-menu`}
             onClick={toggle}
           >
@@ -53,7 +57,7 @@ export function LandButton({
           <>
             {menu.items.map((c) => (
               <button key={c.label} role="menuitem" disabled={disabled} data-action={c.kind === "none" ? "none" : c.action} onClick={() => (close(), onChoose(c))}>
-                <Icon name={c.kind !== "none" && c.action === "pr" ? "branch" : c.kind === "sheet" ? "edit" : "check"} /> {c.label}
+                <Icon name={c.kind !== "none" && c.action === "pr" ? "branch" : c.kind !== "none" && c.action === "cleanup" ? "trash" : c.kind === "sheet" ? "edit" : "check"} /> {c.label}
               </button>
             ))}
             {menu.items.length > 0 && <hr />}
@@ -77,19 +81,18 @@ export interface LandSheetState {
 const SHEET_COPY: Record<CompletionAction, string> = {
   merge: "The agent merges the worktree branch, cleans up, and marks the ticket done.",
   pr: "The agent pushes the branch and opens a pull request (or updates the one it opened), then marks the ticket done.",
+  cleanup: "The agent checks the work is already pushed or merged, removes the worktree and the harness branch, and marks the ticket done. Anything that would be lost leaves the ticket blocked instead.",
   custom: "The agent lands the work the way you describe, then marks the ticket done.",
 };
 
 export function LandSheet({
   ticket,
   sheet,
-  parentBranch,
   onSubmit,
   onClose,
 }: {
   ticket: Ticket;
   sheet: LandSheetState;
-  parentBranch: string | null;
   /** Resolves truthy when the request went through (the sheet closes). */
   onSubmit: (instructions: string | undefined) => Promise<unknown>;
   onClose: () => void;
@@ -106,7 +109,6 @@ export function LandSheet({
     if (ok) onClose();
   };
   const verb = sheet.mode === "approve" ? "Approve" : "Complete";
-  const copy = parentBranch ? `The agent merges the worktree branch into ${parentBranch}, cleans up, and marks the ticket done.` : SHEET_COPY[sheet.action];
   return (
     <Modal onClose={onClose}>
       <div className="modal-head">
@@ -116,7 +118,7 @@ export function LandSheet({
       </div>
       <div className="modal-body" data-testid="land-sheet" data-action={sheet.action}>
         <p className="dim" style={{ marginTop: 0 }}>
-          {copy}
+          {SHEET_COPY[sheet.action]}
         </p>
         <textarea
           autoFocus

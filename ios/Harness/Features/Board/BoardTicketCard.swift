@@ -9,7 +9,6 @@ import SwiftUI
 struct BoardTicketCard: View {
     let ticket: Ticket
     let showProject: Bool
-    var models: ModelListCache?
     let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
     let onDiscard: (Ticket) -> Void
 
@@ -32,9 +31,6 @@ struct BoardTicketCard: View {
                 ForEach(BoardScreenRules.accessibilityMoves(t), id: \.self) { s in
                     Button("Move to \(statusLabel(s))") { onMove(t, s, .bottom) }
                 }
-            }
-            .task(id: t.model == nil ? "" : t.driver) {
-                if t.model != nil { await models?.load(t.driver) }
             }
     }
 
@@ -88,7 +84,7 @@ struct BoardTicketCard: View {
             .frame(minHeight: 21)
 
             Text(BoardScreenRules.cardTitle(t))
-                .font(.system(size: dim ? 14.5 : 15.5, weight: .medium))
+                .font(.scaled(size: dim ? 14.5 : 15.5, weight: .medium))
                 .foregroundStyle(dim ? c.text2 : c.text)
                 .lineLimit(dim ? 2 : 3)
                 .lineSpacing(2)
@@ -106,7 +102,7 @@ struct BoardTicketCard: View {
 
             if let summary, t.status != .blocked, t.pendingApproval == nil {
                 Text(Markdown.plainText(summary.body))
-                    .font(.system(size: 13.5))
+                    .font(.scaled(size: 13.5))
                     .foregroundStyle(dim ? c.text3 : c.text2)
                     .lineLimit(dim ? 1 : 2)
                     .lineSpacing(2)
@@ -117,7 +113,7 @@ struct BoardTicketCard: View {
             if let progress { ConductorRollup(progress: progress) }
 
             if !deps.isEmpty {
-                BoardFlow(spacing: 5) {
+                FlowLayout(spacing: 5) {
                     ForEach(deps, id: \.key) { d in
                         DepChip(label: d.ticket.map { Keys.keyLabel($0) } ?? d.key, done: d.done, unknown: d.state == .unknown)
                     }
@@ -125,9 +121,9 @@ struct BoardTicketCard: View {
             }
 
             if customDriver || (t.model?.isEmpty == false) {
-                BoardFlow(spacing: 5) {
+                FlowLayout(spacing: 5) {
                     if customDriver { DriverBadge(driver: t.driver, drivers: state.drivers) }
-                    ModelBadge(model: t.model, models: models?.get(t.driver).data?.models)
+                    ModelBadge(model: t.model, driver: t.driver)
                 }
             }
         }
@@ -146,7 +142,7 @@ struct BoardTicketCard: View {
         let t = c.tone(tone)
         return HStack(alignment: .firstTextBaseline, spacing: 7) {
             Icon(icon, size: 12, weight: .semibold)
-            content().font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading).multilineTextAlignment(.leading)
+            content().font(.scaled(size: 13)).frame(maxWidth: .infinity, alignment: .leading).multilineTextAlignment(.leading)
         }
         .foregroundStyle(t.fg)
         .padding(.vertical, 7)
@@ -158,6 +154,11 @@ struct BoardTicketCard: View {
 
     @ViewBuilder private func menu(parent: Ticket?) -> some View {
         let t = ticket
+        // The RN action sheet's title, as the menu's header.
+        Section(BoardScreenRules.menuTitle(t)) { menuItems(t, parent: parent) }
+    }
+
+    @ViewBuilder private func menuItems(_ t: Ticket, parent: Ticket?) -> some View {
         ForEach(Array(BoardScreenRules.cardMenu(t, parent: parent).enumerated()), id: \.offset) { _, item in
             switch item {
             case .discardDraft:
@@ -189,55 +190,5 @@ private struct BoardCardPressStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
-/// Chips that wrap onto more lines (RN `flexWrap: "wrap"`).
-struct BoardFlow: Layout {
-    var spacing: CGFloat = 5
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = rows(width: proposal.width ?? .infinity, subviews: subviews)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
-        return CGSize(width: proposal.width ?? width, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in rows(width: bounds.width, subviews: subviews) {
-            var x = bounds.minX
-            for i in row.items {
-                let size = subviews[i].sizeThatFits(.unspecified)
-                subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
-                x += size.width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row {
-        var items: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func rows(width: CGFloat, subviews: Subviews) -> [Row] {
-        var rows: [Row] = []
-        var row = Row()
-        for i in subviews.indices {
-            let size = subviews[i].sizeThatFits(.unspecified)
-            if size.width == 0 && size.height == 0 { continue }
-            let next = row.items.isEmpty ? size.width : row.width + spacing + size.width
-            if next > width && !row.items.isEmpty {
-                rows.append(row)
-                row = Row()
-            }
-            row.width = row.items.isEmpty ? size.width : row.width + spacing + size.width
-            row.height = max(row.height, size.height)
-            row.items.append(i)
-        }
-        if !row.items.isEmpty { rows.append(row) }
-        return rows
     }
 }

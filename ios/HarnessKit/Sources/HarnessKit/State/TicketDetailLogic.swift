@@ -43,8 +43,10 @@ public enum TicketDetailLogic {
 
     // MARK: Review actions
 
-    /// The Complete button's accessibility label, which says why it's disabled.
-    public static func completeButtonLabel(ready: Bool, busy: Bool) -> String {
+    /// The Complete button's accessibility label, which says why it's disabled: a managing conductor
+    /// (`managedReason`) first, then readiness, then a run in progress.
+    public static func completeButtonLabel(ready: Bool, busy: Bool, managedReason: String? = nil) -> String {
+        if let managedReason { return "Complete (\(managedReason))" }
         if !ready { return "Complete (needs both agent and human approval)" }
         if busy { return "Complete (an agent run is in progress)" }
         return "Complete"
@@ -55,10 +57,10 @@ public enum TicketDetailLogic {
         state == .skipped ? "Run agent review" : "Re-run agent review"
     }
 
-    /// The approve/complete menus' message for a child on its parent's branch.
-    public static func parentBranchMessage(_ opts: Completion.Options) -> String? {
-        guard let branch = opts.parentBranch, !branch.isEmpty else { return nil }
-        return "It merges into \(branch), its parent's branch."
+    /// The Approve button's accessibility label: its title, plus why it's disabled on a
+    /// conductor-managed ticket.
+    public static func approveButtonLabel(_ title: String, managedReason: String?) -> String {
+        managedReason.map { "\(title) (\($0))" } ?? title
     }
 
     /// The toast after a Complete menu row: none marks the ticket done, an action queues a run.
@@ -67,9 +69,10 @@ public enum TicketDetailLogic {
     }
 
     /// The Complete sheet's "When approved" choice: both reviews passed and nothing completes it on
-    /// its own (no auto-complete, not a child on its parent's branch), with more than one action.
+    /// its own (no auto-complete), with more than one action. A child on its parent's branch only
+    /// merges, so it never chooses.
     public static func completeSheetChooses(ready: Bool, autoComplete: Bool, opts: Completion.Options) -> Bool {
-        ready && !autoComplete && (opts.parentBranch ?? "").isEmpty && opts.actions.count > 1
+        ready && !autoComplete && opts.actions.count > 1
     }
 
     /// The Complete sheet's first pick: the menu's action when the ticket offers it, else the default.
@@ -81,14 +84,11 @@ public enum TicketDetailLogic {
     /// "The agent finalizes the work: …, cleans up, and marks the ticket done."
     public static func completeSheetText(_ action: CompletionAction, opts: Completion.Options) -> String {
         let what: String
-        if let branch = opts.parentBranch, !branch.isEmpty {
-            what = "merges the branch into \(branch)"
-        } else {
-            switch action {
-            case .merge: what = "merges the worktree branch"
-            case .pr: what = "pushes the branch and opens a pull request"
-            default: what = "follows your instructions"
-            }
+        switch action {
+        case .merge: what = "merges the worktree branch"
+        case .pr: what = "pushes the branch and opens a pull request"
+        case .cleanup: what = "removes the worktree and the harness branch, once nothing on them would be lost"
+        default: what = "follows your instructions"
         }
         return "The agent finalizes the work: \(what), cleans up, and marks the ticket done."
     }

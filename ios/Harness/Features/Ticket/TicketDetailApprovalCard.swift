@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// A tool-permission request (screens/Approval.tsx): allow once, always allow the tool on this
-/// ticket, or deny with an optional note for the agent.
+/// ticket, or deny with an optional note for the agent. RN marks it `accessibilityRole="alert"`;
+/// here VoiceOver announces each new request and reads the card as one container.
 struct TicketDetailApprovalCard: View {
     let ticket: Ticket
     let approval: PendingApproval
@@ -27,11 +28,11 @@ struct TicketDetailApprovalCard: View {
                     .background(c.bgElev, in: .circle)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("The agent wants to use \(Text(tool).font(.mono(15.5, weight: .semibold)))")
-                        .font(.system(size: 15.5, weight: .semibold))
+                        .font(.scaled(size: 15.5, weight: .semibold))
                         .foregroundStyle(c.text)
                     NowReader(interval: .approval) { now in
                         Text("\(TicketDetailLogic.approvalSubtitle(approval, description: input.description)) · requested \(Format.relativeTime(approval.requestedAt, now: now))")
-                            .font(.system(size: 13))
+                            .font(.scaled(size: 13))
                             .foregroundStyle(c.text2)
                     }
                 }
@@ -41,7 +42,7 @@ struct TicketDetailApprovalCard: View {
                 HStack(alignment: .top, spacing: 7) {
                     Icon("shield", size: 13).foregroundStyle(c.text2).padding(.top, 2)
                     Text("\(Text("\(TicketDetailLogic.approvalReasonSource(approval.source)):").fontWeight(.semibold)) \(reason)")
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(c.text2)
                         .lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,10 +50,10 @@ struct TicketDetailApprovalCard: View {
             }
             if let primary = input.primary {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(primary.label.uppercased()).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
+                    Text(primary.label.uppercased()).font(.scaled(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
                     ScrollView(primary.code ? [.horizontal, .vertical] : .vertical) {
                         Text(primary.value)
-                            .font(primary.code ? .mono(13) : .system(size: 13))
+                            .font(primary.code ? .mono(13) : .scaled(size: 13))
                             .foregroundStyle(c.text)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: primary.code, vertical: true)
@@ -68,7 +69,7 @@ struct TicketDetailApprovalCard: View {
             if let rest = input.rest {
                 VStack(alignment: .leading, spacing: 6) {
                     Button(TicketDetailLogic.approvalRestToggle(showing: showRest, hasPrimary: input.primary != nil)) { showRest.toggle() }
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(c.accentText)
                         .buttonStyle(.plain)
                     if showRest {
@@ -81,7 +82,7 @@ struct TicketDetailApprovalCard: View {
             }
             if denying {
                 TextField("", text: $message, prompt: Text("Optional: tell the agent why, or what to do instead").foregroundStyle(c.text3), axis: .vertical)
-                    .font(.system(size: 15))
+                    .font(.scaled(size: 15))
                     .foregroundStyle(c.text)
                     .lineLimit(3...8)
                     .focused($messageFocused)
@@ -111,17 +112,21 @@ struct TicketDetailApprovalCard: View {
         .padding(12)
         .background(c.amberSoft, in: .rect(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.amber, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .task(id: approval.id) {
+            let text: String = "Approval needed: the agent wants to use \(tool)"
+            AccessibilityNotification.Announcement(text).post()
+        }
     }
 
     private func answer(_ decision: ApprovalDecision, tool: String) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = TicketDetailLogic.trim(message)
         let body = ApprovalBody(decision: decision, message: text.isEmpty ? nil : text)
         busy = decision
         Task {
             let ok = await actions.run(Format.approvalToast(decision, tool: tool, ticketKey: Keys.keyLabel(ticket))) {
-                try await api.answerApproval(key, body)
+                try await store.connectedAPI().answerApproval(key, body)
             }
             if ok != nil { haptic(decision == .deny ? .warning : .success) }
             busy = nil

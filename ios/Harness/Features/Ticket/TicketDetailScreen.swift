@@ -63,8 +63,6 @@ struct TicketDetailScreen: View {
             }
         }
         .background(c.bg)
-        // RN's ticket screen covers the tabs: the composer sits at the bottom edge.
-        .toolbar(.hidden, for: .tabBar)
         .fileLinkScope(ticketKey: ticket?.key ?? ticketKey)
         .pluginTabs(for: ticket, into: $pluginTabs)
         // Done tickets page in: an older one may drop out of the store on a refetch; keep it resolved.
@@ -231,7 +229,7 @@ private struct TicketDetailHeader: ViewModifier {
 
     private func menu(_ label: String) -> some View {
         let key = ticket.key
-        let api = store.client as? HarnessClient
+        let api = store.api
         return Menu {
             Button("Copy key", systemImage: "number") { UIPasteboard.general.string = key }
             if let ref = ticket.externalRef, let url = ref.url.flatMap(URL.init(string:)) {

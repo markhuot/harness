@@ -27,7 +27,7 @@ struct Badge: View {
         HStack(spacing: 4) {
             if let icon { Icon(icon, size: 11, weight: .semibold).foregroundStyle(iconColor ?? t.fg) }
             if let text {
-                Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(t.fg).lineLimit(1)
+                Text(text).font(.scaled(size: 12, weight: .medium)).foregroundStyle(t.fg).lineLimit(1)
             }
         }
         .padding(.horizontal, 7)
@@ -57,7 +57,7 @@ struct StatusPill: View {
     var body: some View {
         HStack(spacing: 6) {
             StatusDot(status: status)
-            Text(statusLabel(status)).font(.system(size: 12.5, weight: .medium)).foregroundStyle(c.text2)
+            Text(statusLabel(status)).font(.scaled(size: 12.5, weight: .medium)).foregroundStyle(c.text2)
         }
         .padding(.horizontal, 9)
         .frame(height: 24)
@@ -90,7 +90,7 @@ struct ProjectKeyBadge: View {
         case .lg: (24, 11, 34)
         }
         Text(String(key_.prefix(3)))
-            .font(.system(size: fs, weight: .bold))
+            .font(.scaled(size: fs, weight: .bold))
             .tracking(0.3)
             .foregroundStyle(Color(css: colors.fg) ?? c.accentText)
             .padding(.horizontal, 3)
@@ -151,14 +151,24 @@ struct KindBadge: View {
     }
 }
 
-/// The ticket's model, by its display name when the driver's model list has it.
+/// The ticket's model, by its display name when the driver's model list has it (ui/selects.tsx
+/// ModelBadge). The list comes from the store's shared per-driver cache, loaded only when there's
+/// a model to name; without a store in the environment (previews) it shows the raw id.
 struct ModelBadge: View {
     let model: String?
-    var models: [ModelInfo]?
+    let driver: String
+
+    @Environment(BoardStore.self) private var store: BoardStore?
 
     var body: some View {
         if let model, !model.isEmpty {
-            Badge(Models.modelName(models, model), outline: true, icon: "layers")
+            let cache = store?.sharedModelCache
+            Badge(Models.modelName(cache?.get(driver).data?.models, model), outline: true, icon: "layers")
+                .task(id: "\(driver)#\(store?.epoch ?? 0)#\(store.map { ObjectIdentifier($0).hashValue } ?? 0)") {
+                    guard let store, let cache else { return }
+                    cache.syncEpoch(store.epoch)
+                    await cache.load(driver)
+                }
         }
     }
 }
@@ -178,7 +188,7 @@ struct DepChip: View {
         let chip = HStack(spacing: 4) {
             if !unknown {
                 Icon(done ? "check" : "clock", size: 9, weight: done ? .heavy : .semibold).foregroundStyle(done ? c.green : c.text2)
-                if let prefix { Text(prefix).font(.system(size: 11.5)).foregroundStyle(c.text3) }
+                if let prefix { Text(prefix).font(.scaled(size: 11.5)).foregroundStyle(c.text3) }
             }
             Text(label).font(.mono(11.5)).foregroundStyle(done ? c.green : c.text2)
         }

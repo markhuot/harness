@@ -427,7 +427,7 @@ public final class ModelListCache {
             do {
                 next = ModelListState(data: try await fetch(driverId, refresh), loading: false, error: nil)
             } catch {
-                next = ModelListState(data: cur.data, loading: false, error: Self.message(error))
+                next = ModelListState(data: cur.data, loading: false, error: errorMessage(error))
             }
             guard let self else { return }
             // Mirrors TS exactly: a request that was in flight when syncEpoch cleared the cache still
@@ -454,12 +454,5 @@ public final class ModelListCache {
     private func set(_ driverId: String, _ s: ModelListState) {
         entries[driverId] = s
         version += 1
-    }
-
-    /// `err instanceof Error ? err.message : String(err)`.
-    nonisolated static func message(_ error: any Error) -> String {
-        if let e = error as? HarnessAPIError { return e.message }
-        if let e = error as? LocalizedError, let d = e.errorDescription { return d }
-        return String(describing: error)
     }
 }

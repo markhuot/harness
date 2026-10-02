@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The app shell (mobile/app/_layout.tsx, (tabs)/_layout.tsx, index.tsx): holds the launch UI
 /// until the Keychain has loaded, shows Connect without an active server and the tabs with one,
-/// presents the Router's sheet and cover, routes harness:// links, applies the theme, and forwards
-/// scene phases to the store.
+/// presents the Router's sheet and cover, routes harness:// links, applies the theme (bar titles
+/// and tab badges included, through BarAppearance), and forwards scene phases to the store.
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -17,6 +17,14 @@ struct RootView: View {
     /// once paired: ContentPreviewView).
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
+
+    /// What the bar colors depend on: both appearances' text and redSolid (BarAppearance).
+    private var barColorKey: String {
+        [false, true].map { dark in
+            let p = Palette(app.resolvedTheme(systemDark: dark))
+            return "\(p.tokens[.text]) \(p.tokens[.redSolid])"
+        }.joined(separator: " | ")
+    }
 
     var body: some View {
         let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
@@ -33,6 +41,10 @@ struct RootView: View {
             // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
             .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)
             .onOpenURL { url in router.open(url: url, applyThemes: app.applyThemes) }
+            // Navigation titles in the theme's text color, tab badges in its redSolid (BarAppearance).
+            .onChange(of: barColorKey, initial: true) {
+                BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
+            }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active: app.sceneBecameActive()
@@ -109,7 +121,7 @@ struct MainTabs: View {
             Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
                 TabStack(tab: .settings) { SettingsScreen() }
             }
-            Tab(value: AppTab.search, role: .search) {
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 TabStack(tab: .search) { BoardScreen(mode: .search) }
             }
         }

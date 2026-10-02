@@ -37,10 +37,10 @@ struct BoardStatusStrip: View {
             HStack(spacing: 7) {
                 StatusDot(status: s)
                 Text(statusLabel(s))
-                    .font(.system(size: 14, weight: on ? .semibold : .medium))
+                    .font(.scaled(size: 14, weight: on ? .semibold : .medium))
                     .foregroundStyle(on ? c.text : c.text2)
                 Text("\(n)")
-                    .font(.system(size: 13))
+                    .font(.scaled(size: 13))
                     .monospacedDigit()
                     .foregroundStyle(c.text3)
             }
@@ -67,7 +67,6 @@ struct BoardStatusStrip: View {
 struct BoardColumnView: View {
     let status: TicketStatus
     let ctx: BoardContext
-    let models: ModelListCache?
     let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
     /// A card (by key) dropped above `before` (nil: at the end).
     let onDrop: (String, String?) -> Bool
@@ -84,7 +83,7 @@ struct BoardColumnView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
-                    BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, models: models, onMove: onMove, onDiscard: onDiscard)
+                    BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, onMove: onMove, onDiscard: onDiscard)
                         .draggable(t.key) { BoardDragPreview(ticket: t) }
                         .dropDestination(for: String.self) { keys, _ in
                             guard let key = keys.first else { return false }
@@ -141,7 +140,7 @@ struct BoardColumnView: View {
     }
 
     private func emptyText(_ s: String) -> some View {
-        Text(s).font(.system(size: 14)).foregroundStyle(c.text3).multilineTextAlignment(.center)
+        Text(s).font(.scaled(size: 14)).foregroundStyle(c.text3).multilineTextAlignment(.center)
     }
 
     /// Under the cards: the next page loading, or a failed Done page with Retry.
@@ -155,7 +154,7 @@ struct BoardColumnView: View {
             if p.error != nil {
                 Button { store.loader.retryDone(ctx.projectId) } label: {
                     Text("Couldn't load older tickets. \(Text("Retry").fontWeight(.semibold).foregroundStyle(c.accentText))")
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(c.text3)
                         .multilineTextAlignment(.center)
                         .padding(.vertical, 16)
@@ -179,7 +178,7 @@ private struct BoardDragPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             TicketKeyLabel(ticket: ticket)
-            Text(BoardScreenRules.cardTitle(ticket)).font(.system(size: 15, weight: .medium)).foregroundStyle(c.text).lineLimit(2)
+            Text(BoardScreenRules.cardTitle(ticket)).font(.scaled(size: 15, weight: .medium)).foregroundStyle(c.text).lineLimit(2)
         }
         .padding(12)
         .frame(width: 260, alignment: .leading)

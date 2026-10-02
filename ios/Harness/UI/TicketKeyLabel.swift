@@ -37,7 +37,7 @@ struct RelatedTicketRows: View {
                         StatusDot(status: r.status)
                         VStack(alignment: .leading, spacing: 1) {
                             TicketKeyLabel(ticket: r)
-                            Text(r.title.isEmpty ? "Untitled" : r.title).font(.system(size: 14.5)).foregroundStyle(c.text).lineLimit(2)
+                            Text(r.title.isEmpty ? "Untitled" : r.title).font(.scaled(size: 14.5)).foregroundStyle(c.text).lineLimit(2)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Icon("chevronRight", size: 12).foregroundStyle(c.text3)

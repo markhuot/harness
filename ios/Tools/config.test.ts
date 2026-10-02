@@ -40,6 +40,10 @@ test("every orientation on iPhone and iPad, and no full-screen lock (Stage Manag
   expect(String(spec.settings.base.TARGETED_DEVICE_FAMILY)).toBe("1,2");
 });
 
+test("one window, as in the React Native app (a single Router and AppModel)", () => {
+  expect(plist.UIApplicationSceneManifest.UIApplicationSupportsMultipleScenes).toBe(false);
+});
+
 test("Release replaces the React Native app on TestFlight; Debug installs beside it", () => {
   expect(configs.Release!.PRODUCT_BUNDLE_IDENTIFIER).toBe(rn.ios.bundleIdentifier);
   expect(configs.Release!.HARNESS_DISPLAY_NAME).toBe(rn.name);

@@ -11,6 +11,49 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Settings groups each driver's settings under that driver. On the Mac, click a driver in
+  Settings → Drivers to open its sign-in and review model. On iPhone and iPad, tap a driver to
+  open its own screen. The Anthropic API key moved from General into the Anthropic API driver.
+- The default model now sits right below the driver list, and the separate Models section is gone.
+- A conductor's child tickets no longer show "Approve and merge into <branch>". Their Approve and
+  Complete buttons read as usual ("Approve and merge") but are turned off, menu included. On the
+  Mac, the tooltip says the ticket is conductor managed. On iPhone and iPad, a note under the
+  buttons says so. The conductor approves and lands its children itself. Once the conductor is
+  done, the buttons work again.
+
+### Fixed
+
+- An agent that picks up a ticket where an earlier run left a background job running (approving
+  a ticket whose agent submitted with a dev server or test run still going, for example) now
+  waits for the background jobs it starts. Before, the run ended as soon as the agent's first
+  reply came back, stopped those jobs, and could mark the ticket done before its work was merged.
+
+## [app-20261001.1617](https://github.com/markhuot/harness/releases/tag/app-20261001.1617) - 2026-10-01
+
+### Added
+
+- The Mac app now includes the service that runs your agents, so you can download it and open it
+  on any Apple silicon Mac. You no longer need Bun or a copy of the Harness source.
+- Settings → Service on the Mac has a **Start at login** button. Click **Install** and macOS starts
+  the service when you log in, and agents keep running after you quit Harness. **Remove** puts the
+  service back inside the app.
+- A new **Approve and clean up** choice on the Mac and iPhone/iPad, in the Approve menu and as a
+  project's "When approved" default. It removes the ticket's worktree and branch without merging
+  or pushing anything. Use it when the work already landed: a ticket that pushed fixes to an open
+  pull request's branch, a branch you merged yourself, or a ticket that only changed something
+  outside git. If something on the branch would be lost (uncommitted changes, or commits that
+  aren't pushed or merged), the ticket moves to Blocked and says what's left, so you can sort out
+  those commits first.
+
+### Changed
+
+- Tickets that triage makes for work on an open pull request (fixes, resolving conflicts) now work
+  on the pull request's own branch instead of a separate harness branch. Their Approve button reads
+  **Approve and clean up**, and the merge and open-PR choices are gone from the menu, since there's
+  nothing to merge. The same goes for any ticket whose branch is also its base branch.
+- On the Mac, the service now runs inside the app by default, so quitting Harness stops it. If
+  agents are running, Harness asks before quitting. If you'd already set up the service to run in
+  the background, nothing changes: Settings → Service shows Start at login as on.
 - On the Mac, the Changes tab's diffs and the Browser tab's page now run edge to edge, without the
   small margin around them.
 - The agent reviewer now looks past the diff at the rest of the codebase, and requests changes

@@ -11,10 +11,16 @@ extension Highlighter {
     static let app = Highlighter.bundled()
 }
 
+extension Palette {
+    /// The app theme's Shiki theme for its appearance, Pierre's when it names none (RN
+    /// useSyntaxTheme): the theme in every code view's HighlightCache key.
+    var syntaxTheme: String { SyntaxTheme.name(appearance, theme.syntaxTheme) }
+}
+
 enum HighlightedText {
     /// CodeBlock's FONT (12.5 pt) in SF Mono.
     static let fontSize: CGFloat = 12.5
-    static let font = Font.system(size: fontSize, design: .monospaced)
+    static let font = Font.scaled(size: fontSize, design: .monospaced)
 
     /// How lines draw beyond their spans' own colors.
     struct Style {

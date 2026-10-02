@@ -18,6 +18,8 @@ struct ProjectSettingsScreen: View {
             EmptyState(icon: "folder", title: "This project no longer exists")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(c.bg)
+                .navigationTitle("Project settings")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
@@ -29,7 +31,7 @@ private struct ProjectSettingsForm: View {
     @Environment(AppModel.self) private var app
     @Environment(Actions.self) private var actions
     @Environment(ToastCenter.self) private var toasts
-    @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
     /// Done tickets page in, so Remove project's count asks the service for its done total.
@@ -62,17 +64,17 @@ private struct ProjectSettingsForm: View {
                 ProjectSettingsKeyRow(project: project)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Text("Color").font(.system(size: 15)).foregroundStyle(c.text)
+                        Text("Color").font(.scaled(size: 15)).foregroundStyle(c.text)
                         ProjectKeyBadge(project.key, color: project.color)
                     }
-                    Text("Tints the project's key badge on cards, tickets and lists.").font(.system(size: 12.5)).foregroundStyle(c.text3)
+                    Text("Tints the project's key badge on cards, tickets and lists.").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     ProjectColorPicker(value: project.color) { save(UpdateProjectBody(color: Patch($0))) }
                 }
                 .settingsRowBackground(c)
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Folder").font(.system(size: 15)).foregroundStyle(c.text)
-                        Text("Absolute path on the Mac").font(.system(size: 12.5)).foregroundStyle(c.text3)
+                        Text("Folder").font(.scaled(size: 15)).foregroundStyle(c.text)
+                        Text("Absolute path on the Mac").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     }
                     TextField("", text: $path)
                         .font(.mono(14))
@@ -150,8 +152,8 @@ private struct ProjectSettingsForm: View {
             Section("Danger zone") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Remove project").font(.system(size: 15)).foregroundStyle(c.text)
-                        Text(SettingsRules.removeProjectHint(count)).font(.system(size: 12.5)).foregroundStyle(c.text3)
+                        Text("Remove project").font(.scaled(size: 15)).foregroundStyle(c.text)
+                        Text(SettingsRules.removeProjectHint(count)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     }
                     HButton("Remove project…", icon: "trash", variant: .dangerSolid, haptic: .warning) { remove(count) }
                 }
@@ -173,7 +175,7 @@ private struct ProjectSettingsForm: View {
         .onChange(of: project.path) { _, p in path = p }
         .onChange(of: pathFocused) { _, now in if !now { commitPath() } }
         .task(id: project.id) {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             if let page = try? await api.ticketPage(status: .done, projectId: project.id, limit: 1), !Task.isCancelled { doneTotal = page.total }
         }
     }
@@ -185,7 +187,7 @@ private struct ProjectSettingsForm: View {
     }
 
     private func save(_ body: UpdateProjectBody, ok: String? = nil) {
-        guard let api = store.settingsAPI else { return }
+        guard let api = store.api else { return }
         let id = project.id
         actions.perform(ok) { _ = try await api.updateProject(id, body) }
     }
@@ -201,15 +203,27 @@ private struct ProjectSettingsForm: View {
         }
     }
 
+    /// Leaves this screen through the Router rather than `dismiss`: the socket's projectDeleted
+    /// can land before the request returns, which swaps this form for the empty state, so the
+    /// form's own dismiss action may no longer be the screen's. Pops only when the selected tab's
+    /// stack still ends at this project.
+    private func pop(_ router: Router, projectId id: String) {
+        let tab = router.selectedTab
+        var path = router.path(tab)
+        guard case let .project(top)? = path.last, top == id else { return }
+        path.removeLast()
+        router.setPath(tab, path)
+    }
+
     private func remove(_ count: Int) {
         let copy = SettingsRules.removeProjectConfirm(name: project.name, key: project.key, count: count)
         let id = project.id
         confirm = Confirmation(title: copy.title, message: copy.message, action: "Remove") {
-            guard let api = store.settingsAPI else { return }
+            guard let api = store.api else { return }
             Task {
                 if await actions.run("Project removed", { try await api.deleteProject(id) }) != nil {
                     if app.prefs.boardProject == id { app.setPref(\.boardProject, nil) }
-                    dismiss()
+                    pop(router, projectId: id)
                 }
             }
         }
@@ -235,7 +249,7 @@ private struct ProjectSettingsKeyRow: View {
         let _ = latest.set(preview)
         let tint = preview.error != nil ? c.red : preview.changed ? c.amber : c.text3
         VStack(alignment: .leading, spacing: 8) {
-            Text("Identifier").font(.system(size: 15)).foregroundStyle(c.text)
+            Text("Identifier").font(.scaled(size: 15)).foregroundStyle(c.text)
             TextField("", text: Binding(get: { draft }, set: { draft = SettingsRules.identifierDraft($0) }))
                 .font(.mono(16))
                 .foregroundStyle(c.text)
@@ -250,7 +264,7 @@ private struct ProjectSettingsKeyRow: View {
                 .accessibilityLabel("Identifier")
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if preview.error != nil { Icon("alert", size: 12).foregroundStyle(c.red) }
-                Text(preview.message).font(.system(size: 13)).foregroundStyle(tint).frame(maxWidth: .infinity, alignment: .leading)
+                Text(preview.message).font(.scaled(size: 13)).foregroundStyle(tint).frame(maxWidth: .infinity, alignment: .leading)
             }
             if preview.changed {
                 HStack(spacing: 8) {
@@ -268,7 +282,7 @@ private struct ProjectSettingsKeyRow: View {
     }
 
     private func commit() {
-        guard let preview = latest.value, preview.changed, preview.error == nil, !busy, let api = store.settingsAPI else { return }
+        guard let preview = latest.value, preview.changed, preview.error == nil, !busy, let api = store.api else { return }
         busy = true
         let id = project.id
         Task {

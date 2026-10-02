@@ -33,8 +33,9 @@
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
-//      New session sheet scrolls to its last button above it. Needs the simulator's software
-//      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
+//      New session sheet scrolls to its last button above it; keyboard-*.png. A headless simulator
+//      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
+//      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
 //   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
 //      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
@@ -221,6 +222,28 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   const y = String(Math.round(el.frame.y + el.frame.height / 2));
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
+}
+/**
+ * Taps a header item by its label when AXe can see it (the native app's toolbar items), else at the
+ * point where it sits in RN's header (RN's glass header buttons aren't in AXe's tree).
+ */
+async function tapHeader(udid: string, label: string | ((l: string) => boolean), at: { x: number; y: number }) {
+  const match = typeof label === "string" ? (l: string) => l === label : label;
+  const el = await until(`header ${label}`, () => findElement(udid, match), 1500).catch(() => null);
+  const x = el ? el.frame.x + el.frame.width / 2 : at.x;
+  const y = el ? el.frame.y + el.frame.height / 2 : at.y;
+  await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--udid", udid);
+}
+/**
+ * Closes an open menu without choosing anything: RN's action sheet by its Cancel, a native Menu by
+ * its "Dismiss context menu" backdrop. The backdrop covers the whole screen, so its center can sit
+ * under one of the menu's rows; tap near its bottom edge, below any menu that opens from the top.
+ */
+async function dismissMenu(udid: string) {
+  const el = await until("menu backdrop or Cancel", () => findElement(udid, (l) => l === "Cancel" || l === "Dismiss context menu"), 8000);
+  const x = Math.round(el.frame.x + el.frame.width / 2);
+  const y = Math.round(el.AXLabel === "Cancel" ? el.frame.y + el.frame.height / 2 : el.frame.y + el.frame.height - 60);
+  await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
 }
 /**
  * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
@@ -767,7 +790,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     throw new Error("couldn't open the Done column");
   };
   const boardMenu = async () => {
-    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await tapHeader(udid, "Board options", { x: 308, y: 84 });
     await tapWhere(udid, "Show child tickets");
   };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
@@ -978,12 +1001,57 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   });
 }
 
-/** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
+/**
+ * A preference in the simulated device's own data (so no other simulator changes): reads it, and
+ * writes a bool or deletes it when `value` is given. Returns the value it found ("1", "0" or null
+ * when unset) so the run can put it back.
+ */
+async function devicePref(udid: string, domain: string, key: string, value?: "0" | "1" | null): Promise<string | null> {
+  const was = (await sh(["xcrun", "simctl", "spawn", udid, "defaults", "read", domain, key], { allowFail: true })) || null;
+  if (value === null) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "delete", domain, key], { allowFail: true });
+  else if (value !== undefined) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "write", domain, key, "-bool", value === "1" ? "YES" : "NO"]);
+  return was === "1" || was === "0" ? was : null;
+}
+const KEYBOARD_PREFS = "com.apple.keyboard.preferences";
+
+/**
+ * --keyboard: the composer and a sheet's last control stay above the on-screen keyboard.
+ *
+ * A headless simulator always has a hardware keyboard, and iOS then minimizes the software one to a
+ * bar: the run turns the device's AutomaticMinimizationEnabled off, and puts it back afterwards.
+ * Text goes in by tapping the on-screen keys, since AXe's typing is hardware key events.
+ */
 async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
-  // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
+  const minimize = await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", "0");
+  try {
+    await keyboardChecksWithSoftwareKeyboard(udid, p);
+  } finally {
+    await devicePref(udid, KEYBOARD_PREFS, "AutomaticMinimizationEnabled", minimize as "0" | "1" | null);
+  }
+}
+
+async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  // Types by tapping the on-screen keys (letters, space, return). AXe's `type` and `key` send
+  // hardware key events, which put iOS in hardware-keyboard mode for the rest of the run.
+  const typeOnKeys = async (text: string) => {
+    const keys = (await nodes(udid)).filter((n) => n.AXLabel && (/^[a-zA-Z]$/.test(n.AXLabel) || /^(space|return|new line)$/i.test(n.AXLabel)));
+    const at = (label: string) => keys.find((k) => k.AXLabel!.toLowerCase() === label);
+    for (const ch of text) {
+      const k = ch === " " ? at("space") : ch === "\n" ? (at("return") ?? at("new line")) : at(ch.toLowerCase());
+      if (!k) throw new Error(`no key for ${JSON.stringify(ch)} on the keyboard`);
+      await axe("tap", "-x", String(Math.round(k.frame.x + k.frame.width / 2)), "-y", String(Math.round(k.frame.y + k.frame.height / 2)), "--udid", udid);
+    }
+  };
+  // The keyboard's top edge: the top letter row ("q"), or the predictive bar sitting right on it
+  // (suggested words, Passwords) when there is one. A suggested "I" is a single-letter label too, so
+  // the letter row is found by its "q" key, not as the highest single letter.
   const keyboardTop = async () => {
-    const keys = (await nodes(udid)).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
-    return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
+    const all = await nodes(udid);
+    if (all.filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "")).length < 10) return null;
+    const q = all.find((n) => n.AXLabel === "q" || n.AXLabel === "Q");
+    if (!q) return null;
+    const bar = all.filter((n) => n.frame.y < q.frame.y - 4 && n.frame.y > q.frame.y - 70 && Math.abs(n.frame.y + n.frame.height - q.frame.y) <= 12);
+    return Math.min(q.frame.y, ...bar.map((n) => n.frame.y)) - 8;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
 
@@ -992,7 +1060,8 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
   // the keyboard, which blurs the field.
   const switchShown = async () => (await labels(udid)).includes("Move to in progress");
   const dismiss = async (top: number) => {
-    await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
+    // Start in the list just above the composer (the native hero and tab strip reach y≈325).
+    await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 150)), "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
     await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
   };
   await check("the composer's switch shows while writing", async () => {
@@ -1005,7 +1074,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     await until("keyboard up", keyboardTop, 8000);
-    await axe("type", "Draft", "--udid", udid);
+    await typeOnKeys("draft");
     await dismiss(top);
     await Bun.sleep(400);
     if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
@@ -1054,8 +1123,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     // Near its last line puts the cursor at the end of the text.
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
-    for (let i = 0; i < 16; i++) await axe("key", "40", "--udid", udid); // return
-    await axe("type", "End of the prompt.", "--udid", udid);
+    await typeOnKeys("\n".repeat(16) + "end of the prompt");
     await Bun.sleep(900);
     await shot(udid, "keyboard-prompt");
     const field = await findElement(udid, isField);
@@ -1379,15 +1447,18 @@ function screens(s: Seeded): Screen[] {
     },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
-    // Settings → Models: the Default model picker above a review model per driver.
+    // Settings → Drivers: a row per driver that opens its settings, with the Default model picker under them.
     { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Default model, ")).then(() => Bun.sleep(500)) },
+    // A driver's own settings: status, sign-in and review model; Anthropic API adds its API key.
+    { name: "driver-claude-code", url: "harness://driver/claude-code", ready: hasLabel("Review model") },
+    { name: "driver-anthropic-api", url: "harness://driver/anthropic-api", ready: hasLabel("Anthropic API key") },
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
     // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
     // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
     { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
-    // A git ticket in review: the Approve button's menu (merge, Approve and…, take no action), then
+    // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action), then
     // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
     {
       name: "approve-menu",
@@ -1396,7 +1467,7 @@ function screens(s: Seeded): Screen[] {
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
       // RN's action sheet has Cancel; the native app's menu closes with a tap outside it.
-      after: (udid) => tapWhere(udid, (l) => l === "Cancel" || l === "Dismiss context menu").then(() => Bun.sleep(400)),
+      after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
     },
     {
       name: "approve-custom",
@@ -1577,7 +1648,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         });
         await shot(udid, "card-tap-detail-light");
         // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
-        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+        await tapHeader(udid, (l) => l === "Back" || l === "Board", { x: 32, y: 89 });
         await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
         lastUrl.set(udid, BOARD);
         await shot(udid, "card-tap-back-light");
@@ -1693,8 +1764,15 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       };
       await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
         await openModels();
+        // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
+        // Code's models) can leave its rows unrealized and out of AXe's tree.
+        await tapWhere(udid, "Search models");
+        await axe("type", "slow", "--udid", udid);
         await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
-        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000).catch(async (e) => {
+          await shot(udid, "model-pick-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
         await openModels();
         await tapWhere(udid, (l) => l.startsWith("Default"));
         const cleared = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === null, 8000);
@@ -1715,6 +1793,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
         await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
+        // Wait for the sheet to settle: a row tapped while it slides in can miss.
+        await approveMenuUp(udid);
         await tapWhere(udid, "Approve and take no action");
         const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
         if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);

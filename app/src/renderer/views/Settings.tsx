@@ -1,4 +1,4 @@
-// Settings: appearance, drivers, general run settings, prompts, watchers, and the project list
+// Settings: appearance, drivers (each with its own settings) and the default model, general run settings, prompts, watchers, and the project list
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -13,18 +13,19 @@ import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime, Switch } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
-import { ModelsSection } from "./settings/ModelSettings";
+import { DriversSection } from "./settings/DriverSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
 import { NetworkSection } from "./settings/NetworkSettings";
 import { AppearanceSection } from "./settings/AppearanceSettings";
 import { PromptsSection } from "./settings/PromptSettings";
+import { ServiceSection } from "./settings/ServiceSettings";
 
 /** The settings page's sections, in order ([id, label]); the ⌘K palette lists them too. */
 export const SETTINGS_SECTIONS = [
   ["appearance", "Appearance"],
   ["drivers", "Drivers"],
   ["general", "General"],
-  ["models", "Models"],
+  ["service", "Service"],
   ["permissions", "Permissions"],
   ["network", "Network"],
   ["prompts", "Prompts"],
@@ -72,7 +73,7 @@ export function SettingsView() {
               </div>
             </Section>
           )}
-          {state.settings && <ModelsSection settings={state.settings} />}
+          <ServiceSection />
           {state.settings && <PermissionsSection settings={state.settings} />}
           {state.settings && <NetworkSection settings={state.settings} />}
           <PromptsSection />
@@ -110,83 +111,6 @@ export function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNod
 }
 
 // ---------------------------------------------------------------------------
-// Drivers
-// ---------------------------------------------------------------------------
-
-function driverBadge(d: DriverInfo) {
-  if (!d.available) return <span className="badge badge-red">Unavailable</span>;
-  if (!d.authenticated) return <span className="badge badge-amber">Not signed in</span>;
-  return (
-    <span className="badge badge-green">
-      <Icon name="check" /> Ready
-    </span>
-  );
-}
-
-function DriversSection() {
-  const { state, client, dispatch, epoch, toast } = useStore();
-  const act = useAction();
-  const [loading, setLoading] = useState(false);
-
-  const reload = async () => {
-    setLoading(true);
-    const drivers = await act(() => client.listDrivers());
-    if (drivers) dispatch({ type: "drivers", drivers });
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (epoch > 0) void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [epoch]);
-
-  const login = async (d: DriverInfo) => {
-    const res = await act(() => client.loginDriver(d.id));
-    if (!res) return;
-    if (res.url) await window.harness?.openExternal(res.url);
-    if (res.message) toast(res.message, "info");
-  };
-
-  return (
-    <Section
-      id="drivers"
-      title="Drivers"
-      actions={
-        <button className="btn btn-ghost btn-sm" onClick={reload} disabled={loading} title="Refresh drivers">
-          {loading ? <span className="spinner" /> : <Icon name="refresh" size={13} />}
-          Refresh
-        </button>
-      }
-    >
-      <div className="card-surface settings-card">
-        {state.drivers.length === 0 && <div className="empty">No drivers reported by the service.</div>}
-        {state.drivers.map((d) => (
-          <div className="settings-row" key={d.id}>
-            <div className="settings-row-main">
-              <div className="settings-row-title">
-                {d.name}
-                {driverBadge(d)}
-                {state.settings?.defaultDriver === d.id && <span className="badge badge-accent">Default</span>}
-              </div>
-              <div className="settings-row-sub">{d.description}</div>
-              {d.detail && <div className="settings-row-sub">{d.detail}</div>}
-            </div>
-            <div className="settings-row-actions">
-              {d.supportsLogin && (
-                <button className="btn btn-sm" onClick={() => login(d)}>
-                  <Icon name="key" size={12} />
-                  {d.authenticated ? "Log in again" : "Log in"}
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // General
 // ---------------------------------------------------------------------------
 
@@ -218,19 +142,8 @@ export function DraftInput({ value, onCommit, placeholder, type = "text", classN
 function GeneralSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
-  const [apiKey, setApiKey] = useState("");
-  const [replacing, setReplacing] = useState(false);
 
   const save = (body: Partial<Settings>) => act(() => client.updateSettings(body));
-
-  const saveKey = async () => {
-    if (!apiKey.trim()) return;
-    const ok = await act(() => client.updateSettings({ anthropicApiKey: apiKey.trim() }), "API key saved");
-    if (ok) {
-      setApiKey("");
-      setReplacing(false);
-    }
-  };
 
   return (
     <Section id="general" title="General">
@@ -248,56 +161,6 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
         <Row title="Base branch" sub="New ticket branches start from it, and finished tickets merge into it.">
           <DraftInput className="input mono" value={settings.baseBranch ?? DEFAULT_BASE_BRANCH} placeholder={DEFAULT_BASE_BRANCH} onCommit={(v) => void save({ baseBranch: v.trim() || DEFAULT_BASE_BRANCH })} />
         </Row>
-      </div>
-
-      <div className="settings-section-head" style={{ marginTop: 20 }}>
-        <div className="section-title">Anthropic API</div>
-      </div>
-      <div className="card-surface settings-card">
-        <div className="settings-row">
-          <div className="settings-row-main">
-            <div className="settings-row-title">API key</div>
-            <div className="settings-row-sub">Stored by the service; falls back to ANTHROPIC_API_KEY.</div>
-          </div>
-          <div className="settings-control" style={{ width: 320 }}>
-            {settings.anthropicApiKeySet && !replacing ? (
-              <>
-                <span className="settings-key-saved grow">
-                  <Icon name="checkCircle" size={13} /> Key saved
-                </span>
-                <button className="btn btn-sm" onClick={() => setReplacing(true)}>
-                  Replace
-                </button>
-                <button className="btn btn-sm btn-danger" onClick={() => void act(() => client.updateSettings({ anthropicApiKey: null }), "API key cleared")}>
-                  Clear
-                </button>
-              </>
-            ) : (
-              <>
-                <input
-                  className="input mono"
-                  type="password"
-                  placeholder="sk-ant-…"
-                  value={apiKey}
-                  autoFocus={replacing}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void saveKey();
-                    if (e.key === "Escape") setReplacing(false);
-                  }}
-                />
-                <button className="btn btn-sm btn-primary" disabled={!apiKey.trim()} onClick={saveKey}>
-                  Save
-                </button>
-                {replacing && (
-                  <button className="btn btn-sm btn-ghost" onClick={() => setReplacing(false)}>
-                    Cancel
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
       </div>
     </Section>
   );

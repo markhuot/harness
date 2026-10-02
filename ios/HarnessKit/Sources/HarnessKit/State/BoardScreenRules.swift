@@ -38,6 +38,13 @@ public enum BoardScreenRules {
         return out
     }
 
+    /// The card menu's title (the RN action sheet's): "KEY · title" cut to 90 characters, or
+    /// "KEY · Draft" for a draft. RN cuts the whole line, key included.
+    public static func menuTitle(_ t: Ticket) -> String {
+        if t.draft == true { return "\(Keys.keyLabel(t)) · Draft" }
+        return String("\(Keys.keyLabel(t)) · \(t.title)".prefix(90))
+    }
+
     /// The statuses VoiceOver's custom actions move a card to (none for a draft).
     public static func accessibilityMoves(_ t: Ticket) -> [TicketStatus] {
         t.draft == true ? [] : TicketStatus.allKnown.filter { $0 != t.status }

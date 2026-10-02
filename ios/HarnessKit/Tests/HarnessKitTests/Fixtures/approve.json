@@ -6,6 +6,7 @@
         "actions": [
           "merge",
           "pr",
+          "cleanup",
           "custom"
         ],
         "defaultAction": "merge",
@@ -19,6 +20,10 @@
         {
           "value": "pr",
           "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
         },
         {
           "value": "custom",
@@ -35,6 +40,7 @@
       "input": {
         "actions": [
           "merge",
+          "cleanup",
           "custom"
         ],
         "defaultAction": "merge",
@@ -44,6 +50,10 @@
         {
           "value": "merge",
           "label": "Approve and merge"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
         },
         {
           "value": "custom",
@@ -86,6 +96,10 @@
       },
       "output": [
         {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
           "value": "none",
           "label": "Approve and take no action"
         }
@@ -97,6 +111,7 @@
         "actions": [
           "merge",
           "pr",
+          "cleanup",
           "custom"
         ],
         "defaultAction": "pr",
@@ -110,6 +125,10 @@
         {
           "value": "pr",
           "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
         },
         {
           "value": "custom",
@@ -158,6 +177,66 @@
         "parentBranch": null
       },
       "output": [
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "on its base branch",
+      "input": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
+        {
+          "value": "none",
+          "label": "Approve and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup",
+      "input": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Approve and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Approve and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Approve and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Approve and…"
+        },
         {
           "value": "none",
           "label": "Approve and take no action"
@@ -265,6 +344,20 @@
       }
     },
     {
+      "name": "cleanup never carries instructions",
+      "input": {
+        "choice": "cleanup",
+        "instructions": "stray"
+      },
+      "output": {
+        "via": "review",
+        "body": {
+          "decision": "approve",
+          "action": "cleanup"
+        }
+      }
+    },
+    {
       "name": "an unknown action passes through",
       "input": {
         "choice": "deploy",
@@ -358,6 +451,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "merge",
@@ -373,6 +467,10 @@
         {
           "value": "pr",
           "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
         },
         {
           "value": "custom",
@@ -391,6 +489,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "merge",
@@ -411,6 +510,7 @@
         "opts": {
           "actions": [
             "merge",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "merge",
@@ -422,6 +522,10 @@
         {
           "value": "merge",
           "label": "Complete and merge"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
         },
         {
           "value": "custom",
@@ -439,6 +543,7 @@
         "opts": {
           "actions": [
             "merge",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "merge",
@@ -509,6 +614,10 @@
       },
       "output": [
         {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
           "value": "none",
           "label": "Complete and take no action"
         }
@@ -540,6 +649,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "pr",
@@ -555,6 +665,10 @@
         {
           "value": "pr",
           "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
         },
         {
           "value": "custom",
@@ -573,6 +687,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "pr",
@@ -641,6 +756,114 @@
           "label": "Complete and take no action"
         }
       ]
+    },
+    {
+      "name": "on its base branch, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "on its base branch, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup, ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": true
+      },
+      "output": [
+        {
+          "value": "merge",
+          "label": "Complete and merge"
+        },
+        {
+          "value": "pr",
+          "label": "Complete and open PR"
+        },
+        {
+          "value": "cleanup",
+          "label": "Complete and clean up"
+        },
+        {
+          "value": "custom",
+          "label": "Complete and…"
+        },
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
+    },
+    {
+      "name": "earlier cleanup, not ready",
+      "input": {
+        "opts": {
+          "actions": [
+            "merge",
+            "pr",
+            "cleanup",
+            "custom"
+          ],
+          "defaultAction": "cleanup",
+          "parentBranch": null
+        },
+        "canRun": false
+      },
+      "output": [
+        {
+          "value": "none",
+          "label": "Complete and take no action"
+        }
+      ]
     }
   ],
   "completeMenuRequestCases": [
@@ -666,6 +889,13 @@
       }
     },
     {
+      "name": "cleanup",
+      "input": "cleanup",
+      "output": {
+        "action": "cleanup"
+      }
+    },
+    {
       "name": "custom",
       "input": "custom",
       "output": {
@@ -682,26 +912,26 @@
   ],
   "completionActionOptionsCases": [
     {
-      "name": "names the parent's branch on merge",
+      "name": "merge alone",
       "input": {
         "actions": [
           "merge"
-        ],
-        "parentBranch": "harness/web-1"
+        ]
       },
       "output": [
         {
           "value": "merge",
-          "label": "Merge into harness/web-1"
+          "label": "Merge"
         }
       ]
     },
     {
-      "name": "every action, no parent",
+      "name": "every action",
       "input": {
         "actions": [
           "merge",
           "pr",
+          "cleanup",
           "custom"
         ]
       },
@@ -715,24 +945,8 @@
           "label": "Open PR"
         },
         {
-          "value": "custom",
-          "label": "Custom"
-        }
-      ]
-    },
-    {
-      "name": "explicit null parent",
-      "input": {
-        "actions": [
-          "merge",
-          "custom"
-        ],
-        "parentBranch": null
-      },
-      "output": [
-        {
-          "value": "merge",
-          "label": "Merge"
+          "value": "cleanup",
+          "label": "Clean up"
         },
         {
           "value": "custom",
@@ -741,29 +955,13 @@
       ]
     },
     {
-      "name": "empty parent branch is falsy",
-      "input": {
-        "actions": [
-          "merge"
-        ],
-        "parentBranch": ""
-      },
-      "output": [
-        {
-          "value": "merge",
-          "label": "Merge"
-        }
-      ]
-    },
-    {
-      "name": "only merge names the branch",
+      "name": "order is kept",
       "input": {
         "actions": [
           "pr",
           "custom",
           "merge"
-        ],
-        "parentBranch": "harness/web-1"
+        ]
       },
       "output": [
         {
@@ -776,7 +974,7 @@
         },
         {
           "value": "merge",
-          "label": "Merge into harness/web-1"
+          "label": "Merge"
         }
       ]
     },
@@ -809,6 +1007,7 @@
   "names": {
     "merge": "Merge",
     "pr": "Open PR",
+    "cleanup": "Clean up",
     "custom": "Custom"
   },
   "primaryApproveRequestCases": [
@@ -819,6 +1018,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "pr",
@@ -863,6 +1063,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "custom",
@@ -889,6 +1090,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "custom",
@@ -959,6 +1161,7 @@
           "actions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "defaultAction": "merge",

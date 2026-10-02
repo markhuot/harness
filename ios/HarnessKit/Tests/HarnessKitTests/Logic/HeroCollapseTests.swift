@@ -47,6 +47,23 @@ struct HeroCollapseTests {
         #expect(HeroCollapse.events(from: .idle, to: .animating, metrics: m) == [])
     }
 
+    @Test("a status-bar tap (an animated scroll that settles at the top) brings the hero back")
+    func scrollToTop() {
+        #expect(HeroCollapse.events(from: .animating, to: .idle, metrics: Self.at(0)) == [.show])
+        #expect(HeroCollapse.events(from: .animating, to: .idle, metrics: Self.at(-20)) == [.show])
+        // A programmatic scroll that settles anywhere else (stick-to-bottom following) doesn't.
+        #expect(HeroCollapse.events(from: .animating, to: .idle, metrics: Self.at(300)) == [])
+        // A finger catching the animation is a drag, not a scroll to top.
+        #expect(HeroCollapse.events(from: .animating, to: .interacting, metrics: Self.at(0)) == [.beginDrag(Self.at(0))])
+        // A fling that coasts to the top is momentum, not a status-bar tap.
+        #expect(HeroCollapse.events(from: .decelerating, to: .idle, metrics: Self.at(0)) == [.momentumEnd])
+
+        let hidden = Collapse(hidden: true, live: false, anchor: 400)
+        var s = hidden
+        for e in HeroCollapse.events(from: .animating, to: .idle, metrics: Self.at(0)) { s = HeroCollapse.step(s, e, heroHeight: 200) }
+        #expect(s == HeroCollapse.shown)
+    }
+
     @Test("phase-driven flick hides the hero, and the clamp that follows doesn't bring it back")
     func drivenByPhases() {
         var s = HeroCollapse.shown

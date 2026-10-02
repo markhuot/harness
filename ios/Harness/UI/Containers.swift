@@ -31,9 +31,9 @@ struct Callout<Content: View, Trailing: View>: View {
         HStack(alignment: .top, spacing: 10) {
             Icon(icon, size: 16, weight: .semibold).foregroundStyle(t.fg).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                if let title { Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(t.fg) }
+                if let title { Text(title).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(t.fg) }
                 if let message {
-                    Text(message).font(.system(size: 14)).foregroundStyle(c.text).lineSpacing(3).textSelection(.enabled)
+                    Text(message).font(.scaled(size: 14)).foregroundStyle(c.text).lineSpacing(3).textSelection(.enabled)
                 }
                 content
             }
@@ -117,28 +117,6 @@ struct SectionTitle: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        Text(text.uppercased()).font(.system(size: 12.5, weight: .semibold)).tracking(0.4).foregroundStyle(c.text3)
-    }
-}
-
-/// "Coming soon" body for a feature slot that a later ticket fills in (ARCHITECTURE.md § Feature
-/// slots). Shows the slot's name and parameters so deep-link routing can be checked on screen.
-struct SlotPlaceholder: View {
-    let name: String
-    var params: [(String, String)] = []
-    @Environment(\.palette) private var c
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(name, systemImage: "hammer")
-        } description: {
-            VStack(spacing: 4) {
-                Text("Coming soon")
-                ForEach(params, id: \.0) { k, v in
-                    Text("\(k): \(v)").font(.mono(12.5)).textSelection(.enabled)
-                }
-            }
-        }
-        .foregroundStyle(c.text2)
+        Text(text.uppercased()).font(.scaled(size: 12.5, weight: .semibold)).tracking(0.4).foregroundStyle(c.text3)
     }
 }

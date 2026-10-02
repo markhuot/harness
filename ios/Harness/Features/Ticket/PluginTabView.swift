@@ -28,7 +28,7 @@ struct PluginTabView: View {
         let tabId: String
     }
 
-    private var client: HarnessClient? { store.client as? HarnessClient }
+    private var client: HarnessClient? { store.api }
     private var hostKey: HostKey? {
         client.map { HostKey(baseUrl: $0.baseUrl, token: $0.token, ticketKey: ticket.key, pluginId: tab.pluginId, tabId: tab.id) }
     }

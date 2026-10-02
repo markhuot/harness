@@ -28,7 +28,7 @@ struct TicketDetailSummariesTab: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
                 }
                 if !deps.isEmpty {
-                    TicketDetailFlow(spacing: 6) {
+                    FlowLayout(spacing: 6) {
                         SectionTitle("Depends on")
                         ForEach(deps, id: \.key) { d in
                             let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
@@ -77,8 +77,8 @@ private struct TicketDetailSummaryRow: View {
                 .background(fill, in: .circle)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(TicketDetailLogic.authorLabel(summary.author)).font(.system(size: 14, weight: .semibold)).foregroundStyle(c.text)
-                    Text(Format.relativeTime(summary.createdAt, now: now)).font(.system(size: 12.5)).foregroundStyle(c.text3)
+                    Text(TicketDetailLogic.authorLabel(summary.author)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(c.text)
+                    Text(Format.relativeTime(summary.createdAt, now: now)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                 }
                 MarkdownView(text: summary.body)
                 if !summary.attachments.isEmpty { AttachmentRow(attachments: summary.attachments) }

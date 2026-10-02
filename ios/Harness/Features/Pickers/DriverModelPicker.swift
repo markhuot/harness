@@ -123,14 +123,9 @@ private struct DriverModelSheet: View {
             }
             .overlay {
                 if sections.isEmpty {
-                    Text("No models match").font(.system(size: 15)).foregroundStyle(c.text3)
+                    Text("No models match").font(.scaled(size: 15)).foregroundStyle(c.text3)
                 }
             }
         }
     }
-}
-
-extension String {
-    /// nil for "".
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

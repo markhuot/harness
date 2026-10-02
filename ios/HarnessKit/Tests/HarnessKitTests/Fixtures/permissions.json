@@ -280,6 +280,7 @@
           "completionActions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "pullRequestHost": "github.com",
@@ -372,6 +373,7 @@
           "completionActions": [
             "merge",
             "pr",
+            "cleanup",
             "custom"
           ],
           "pullRequestHost": "github.com",

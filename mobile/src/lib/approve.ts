@@ -3,7 +3,6 @@
 
 import {
   APPROVE_NO_ACTION_LABEL,
-  approveMenuActions,
   COMPLETION_ACTION_LABELS,
   type CompleteBody,
   type CompletionAction,
@@ -18,7 +17,7 @@ export type ApproveChoice = CompletionAction | "none";
 
 /** The menu's rows, in order: the offered actions, then "Approve and take no action". */
 export function approveMenuChoices(opts: CompletionOptions): { value: ApproveChoice; label: string }[] {
-  return [...approveMenuActions(opts).map((a) => ({ value: a as ApproveChoice, label: COMPLETION_ACTION_LABELS[a] })), { value: "none", label: APPROVE_NO_ACTION_LABEL }];
+  return [...opts.actions.map((a) => ({ value: a as ApproveChoice, label: COMPLETION_ACTION_LABELS[a] })), { value: "none", label: APPROVE_NO_ACTION_LABEL }];
 }
 
 export type ApproveRequest = { via: "review"; body: HumanReviewBody } | { via: "complete"; body: CompleteBody };
@@ -54,7 +53,7 @@ function asComplete(label: string): string {
  * or on a project that doesn't complete on its own, gets done without an agent run.
  */
 export function completeMenuChoices(opts: CompletionOptions, canRun: boolean): { value: ApproveChoice; label: string }[] {
-  const actions = canRun ? approveMenuActions(opts).map((a) => ({ value: a as ApproveChoice, label: asComplete(COMPLETION_ACTION_LABELS[a]) })) : [];
+  const actions = canRun ? opts.actions.map((a) => ({ value: a as ApproveChoice, label: asComplete(COMPLETION_ACTION_LABELS[a]) })) : [];
   return [...actions, { value: "none", label: asComplete(APPROVE_NO_ACTION_LABEL) }];
 }
 
@@ -72,12 +71,13 @@ export function approveToast(choice: ApproveChoice, key: string): string {
 export const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = {
   merge: "Merge",
   pr: "Open PR",
+  cleanup: "Clean up",
   custom: "Custom",
 };
 
-/** Options for a select of completion actions. A child on its parent's branch names the branch. */
-export function completionActionOptions(actions: CompletionAction[], parentBranch: string | null = null): SelectOption<CompletionAction>[] {
-  return actions.map((a) => ({ value: a, label: a === "merge" && parentBranch ? `Merge into ${parentBranch}` : COMPLETION_ACTION_NAMES[a] }));
+/** Options for a select of completion actions. */
+export function completionActionOptions(actions: CompletionAction[]): SelectOption<CompletionAction>[] {
+  return actions.map((a) => ({ value: a, label: COMPLETION_ACTION_NAMES[a] }));
 }
 
 /**

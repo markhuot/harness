@@ -27,7 +27,7 @@ struct TicketDetailDetailsTab: View {
             .listRowBackground(c.bgElev)
             Section(ticket.status == .planning ? "Plan / brief" : "Brief") {
                 TextField("", text: $description, prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)
-                    .font(.system(size: 14.5))
+                    .font(.scaled(size: 14.5))
                     .foregroundStyle(c.text)
                     // A long plan scrolls inside the field instead of pushing the settings off screen.
                     .lineLimit(5...10)
@@ -37,7 +37,7 @@ struct TicketDetailDetailsTab: View {
                     .accessibilityLabel(ticket.status == .planning ? "Plan / brief" : "Brief")
                 if description != ticket.description {
                     HStack(spacing: 8) {
-                        Text("Unsaved changes").font(.system(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Unsaved changes").font(.scaled(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
                         HButton("Revert", variant: .ghost, small: true, fullWidth: false) { description = ticket.description }
                         HButton("Save", variant: .primary, small: true, fullWidth: false) { saveDescription() }
                     }
@@ -95,7 +95,7 @@ struct TicketDetailDetailsTab: View {
         if let url = ticket.pullRequestUrl.optional {
             LabeledContent("Pull request") {
                 Button(TicketDetailLogic.pullRequestShort(url)) { if let u = URL(string: url) { openURL(u) } }
-                    .font(.system(size: 14))
+                    .font(.scaled(size: 14))
                     .foregroundStyle(c.accentText)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -106,7 +106,7 @@ struct TicketDetailDetailsTab: View {
         if let ref = ticket.externalRef {
             LabeledContent("External") {
                 let text = Text("\(Text(ref.key).font(.mono(14)))\(ref.url != nil ? " ↗" : "")\(Text(" · \(TicketDetailLogic.externalSource(ref))").foregroundStyle(c.text3))")
-                    .font(.system(size: 14))
+                    .font(.scaled(size: 14))
                     .foregroundStyle(ref.url != nil ? c.accentText : c.text)
                     .multilineTextAlignment(.trailing)
                 if let link = ref.url.flatMap(URL.init(string:)) {
@@ -119,7 +119,7 @@ struct TicketDetailDetailsTab: View {
         if !related.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text(TicketDetailLogic.relatedHeading(ticket))
-                    .font(.system(size: 14))
+                    .font(.scaled(size: 14))
                     .foregroundStyle(c.text2)
                     .padding(.bottom, 4)
                 RelatedTicketRows(related: related) { router.push(.ticket(key: $0, tab: nil)) }
@@ -128,20 +128,20 @@ struct TicketDetailDetailsTab: View {
         }
         LabeledContent("Allowed tools") {
             if ticket.allowedTools.isEmpty {
-                Text("None granted").font(.system(size: 14)).foregroundStyle(c.text3)
+                Text("None granted").font(.scaled(size: 14)).foregroundStyle(c.text3)
             } else {
-                TicketDetailFlow(spacing: 4, alignment: .trailing) {
+                FlowLayout(spacing: 4, alignment: .trailing) {
                     ForEach(ticket.allowedTools, id: \.self) { DepChip(label: $0, done: true) }
                 }
             }
         }
         LabeledContent("Auto-start") {
             Text(ticket.autoStart ? "When dependencies are done" : "Off")
-                .font(.system(size: 14))
+                .font(.scaled(size: 14))
                 .foregroundStyle(ticket.autoStart ? c.text : c.text3)
         }
-        LabeledContent("Created") { RelativeTimeText(ms: ticket.createdAt).font(.system(size: 14)).foregroundStyle(c.text) }
-        LabeledContent("Updated") { RelativeTimeText(ms: ticket.updatedAt).font(.system(size: 14)).foregroundStyle(c.text) }
+        LabeledContent("Created") { RelativeTimeText(ms: ticket.createdAt).font(.scaled(size: 14)).foregroundStyle(c.text) }
+        LabeledContent("Updated") { RelativeTimeText(ms: ticket.updatedAt).font(.scaled(size: 14)).foregroundStyle(c.text) }
     }
 
     private func runRow(_ r: Run, now: Double) -> some View {
@@ -150,14 +150,14 @@ struct TicketDetailDetailsTab: View {
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 if running { Spinner() }
-                Text(r.status.rawValue).font(.system(size: 13, weight: .semibold)).foregroundStyle(tint)
-                Text(r.kind.rawValue).font(.system(size: 13)).foregroundStyle(c.text)
-                Text(Format.driverLabel(r.driver, drivers: store.state.drivers)).font(.system(size: 13)).foregroundStyle(c.text3)
+                Text(r.status.rawValue).font(.scaled(size: 13, weight: .semibold)).foregroundStyle(tint)
+                Text(r.kind.rawValue).font(.scaled(size: 13)).foregroundStyle(c.text)
+                Text(Format.driverLabel(r.driver, drivers: store.state.drivers)).font(.scaled(size: 13)).foregroundStyle(c.text3)
                 Spacer(minLength: 0)
-                Text(TicketDetailLogic.runTime(r, now: now)).font(.system(size: 12.5)).foregroundStyle(c.text3)
+                Text(TicketDetailLogic.runTime(r, now: now)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
             }
             Text(TicketDetailLogic.runDetail(r))
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(r.error != nil ? c.red : c.text3)
                 .lineLimit(2)
         }
@@ -165,28 +165,25 @@ struct TicketDetailDetailsTab: View {
     }
 
     private func saveTitle(_ draft: String) {
-        guard let api = store.client as? HarnessClient else { return }
         // The ticket as it is now: a commit can fire with an older render's closure.
         let current = store.state.ticketByKey(ticket.key) ?? ticket
         let title = TicketDetailLogic.trim(draft)
         guard !title.isEmpty, title != current.title else { return }
         let key = current.key
-        actions.perform { _ = try await api.updateTicket(key, UpdateTicketBody(title: title)) }
+        actions.perform { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(title: title)) }
     }
 
     private func saveDescription() {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = description
-        actions.perform("Saved") { _ = try await api.updateTicket(key, UpdateTicketBody(description: text)) }
+        actions.perform("Saved") { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(description: text)) }
     }
 
     private func patch(_ body: UpdateTicketBody) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let relinks: Bool = if case .absent = body.externalRef { false } else { true }
         Task {
-            let ok = await actions.run(TicketDetailLogic.patchToast(body)) { try await api.updateTicket(key, body) }
+            let ok = await actions.run(TicketDetailLogic.patchToast(body)) { try await store.connectedAPI().updateTicket(key, body) }
             // A new remote ID has other tickets on it (some may not be loaded): fetch the list again.
             if ok != nil, relinks { _ = try? await store.loadDetail(key) }
         }

@@ -53,7 +53,7 @@ private struct NewSessionEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Start", systemImage: "paperplane.fill") { submit(start: true) }
-                        .buttonStyle(.borderedProminent)
+                        .primaryToolbarItem(c)
                         .disabled(!canSubmit(view))
                 }
             }
@@ -141,7 +141,11 @@ private struct NewSessionEditorView: View {
                     Spacer(minLength: 0)
                 }
                 .listRowBackground(c.bgElev)
-                Picker("Kind", selection: Binding(get: { kind }, set: { editor.edit(UpdateTicketBody(kind: $0)) })) {
+                // RN's Segmented plays the select haptic on a change.
+                Picker("Kind", selection: Binding(get: { kind }, set: { next in
+                    if next != kind { haptic(.select) }
+                    editor.edit(UpdateTicketBody(kind: next))
+                })) {
                     Text("Task").tag(TicketKind.task)
                     Text("Conductor").tag(TicketKind.conductor)
                 }
@@ -162,7 +166,7 @@ private struct NewSessionEditorView: View {
                 .listRowBackground(c.bgElev)
             } footer: {
                 if kind == .conductor {
-                    Text("Orchestrates child tickets.").font(.system(size: 13)).foregroundStyle(c.text3)
+                    Text("Orchestrates child tickets.").font(.scaled(size: 13)).foregroundStyle(c.text3)
                 }
             }
             Section {
@@ -172,11 +176,11 @@ private struct NewSessionEditorView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: optionsOpen ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.scaled(size: 14, weight: .semibold))
                             .foregroundStyle(needsLook ? c.amber : c.text2)
                             .frame(width: 18)
                         Text(summary.isEmpty ? "Options" : summary.joined(separator: " · "))
-                            .font(.system(size: 15))
+                            .font(.scaled(size: 15))
                             .foregroundStyle(summary.isEmpty ? c.text2 : c.text)
                             .lineLimit(1)
                         Spacer(minLength: 0)
@@ -227,7 +231,7 @@ private struct NewSessionEditorView: View {
 
     private func begin() {
         if editor == nil {
-            guard let client = store.client as? HarnessClient else { return }
+            guard let client = store.api else { return }
             let store = store
             let toasts = toasts
             editor = NewSessionEditor(
@@ -237,7 +241,7 @@ private struct NewSessionEditorView: View {
                 onSaved: { store.dispatch(.tickets([$0])) },
                 onError: { e in
                     haptic(.error)
-                    toasts.show("Couldn't save the draft: \(Self.message(e))", kind: .error)
+                    toasts.show("Couldn't save the draft: \(localizedErrorMessage(e))", kind: .error)
                 }
             )
         }
@@ -316,12 +320,6 @@ private struct NewSessionEditorView: View {
     /// Close this sheet, unless a link has already replaced it with another.
     private func dismiss() {
         if router.sheet == .newSession(projectId: projectId, key: reopen) { router.sheet = nil }
-    }
-
-    /// `e instanceof Error ? e.message : String(e)`.
-    private static func message(_ e: any Error) -> String {
-        if let e = e as? HarnessAPIError { return e.message }
-        return e.localizedDescription
     }
 }
 

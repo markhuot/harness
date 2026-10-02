@@ -64,7 +64,7 @@ struct PickerGalleryView: View {
                     Section("Ticket settings · \(ticket.key)") {
                         TicketSettingsForm(ticket: ticket) { patch in
                             actions.perform {
-                                guard let client = store.client as? HarnessClient else { return }
+                                guard let client = store.api else { return }
                                 _ = try await client.updateTicket(ticket.key, patch)
                             }
                         }

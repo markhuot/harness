@@ -4,13 +4,24 @@
 // package.json and this platform's prebuilt pty.node + spawn-helper are copied into
 // node_modules/node-pty and unpacked beside app.asar, where native code has to live (sign-mac.ts
 // signs them with the rest of the bundle).
+//
+// The service ships inside the app (service/scripts/compile.ts): the compiled executable in
+// Contents/MacOS/harness-service and the prebuilt builtin plugins in Contents/Resources/plugins,
+// with resources/harness.json pointing the app at the executable. So the app runs on any Mac,
+// with no bun or checkout.
+//
+//   --checkout   keep build.ts's harness.json instead: the app runs the service from this
+//                checkout with bun, so a merge into it restarts the service onto the new code
+//                (`bun run install-app` does this; see README "Quick start")
 import { packager } from "@electron/packager";
-import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { compileService } from "../../service/scripts/compile";
 
 const appDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(appDir, "..");
+const fromCheckout = process.argv.includes("--checkout");
 for (const f of ["dist/main/main.cjs", "dist/main/preload.cjs", "dist/renderer/index.html", "resources/harness.json"]) {
   if (!existsSync(join(appDir, f))) throw new Error(`Missing ${f}; run \`bun run build\` first.`);
 }
@@ -33,6 +44,10 @@ function copyNodePty(buildPath: string) {
   chmodSync(join(dest, ptyPrebuild, "spawn-helper"), 0o755);
 }
 
+// Compiled before packaging, so a failed compile leaves the last app alone.
+const serviceOut = join(appDir, "out", "service");
+const compiled = fromCheckout ? null : await compileService(serviceOut);
+
 const keep = /^\/(package\.json|dist|resources)(\/|$)/;
 const paths = await packager({
   dir: appDir,
@@ -50,6 +65,10 @@ const paths = await packager({
     (buildPath, _electronVersion, _platform, _arch, done) => {
       try {
         copyNodePty(buildPath);
+        if (compiled) {
+          const json = { executable: "harness-service", builtAt: new Date().toISOString() };
+          writeFileSync(join(buildPath, "resources", "harness.json"), JSON.stringify(json, null, 2) + "\n");
+        }
         done();
       } catch (e) {
         done(e as Error);
@@ -61,4 +80,13 @@ const paths = await packager({
   ignore: (path: string) => path !== "" && !keep.test(path),
   darwinDarkModeSupport: true,
 });
-for (const p of paths) console.log(`packaged → ${join(p, "Harness.app")}`);
+for (const p of paths) {
+  const bundle = join(p, "Harness.app", "Contents");
+  if (compiled) {
+    cpSync(compiled.executable, join(bundle, "MacOS", "harness-service"));
+    const plugins = join(bundle, "Resources", "plugins");
+    rmSync(plugins, { recursive: true, force: true });
+    cpSync(join(serviceOut, "Resources", "plugins"), plugins, { recursive: true });
+  }
+  console.log(`packaged → ${join(p, "Harness.app")} (service: ${compiled ? `bundled, plugins ${compiled.plugins.join(", ")}` : `checkout ${repoRoot}`})`);
+}

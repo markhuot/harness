@@ -17,7 +17,7 @@ final class AttachmentMedia {
     /// An attachment's URL on the paired service (token in the query, so image and video views
     /// can load it). Nil without a store or a real client.
     static func url(_ store: BoardStore?, _ id: String) -> String? {
-        (store?.client as? HarnessClient)?.attachmentUrl(id)
+        store?.api?.attachmentUrl(id)
     }
 
     func cached(_ url: String, poster: Bool = false) -> UIImage? {

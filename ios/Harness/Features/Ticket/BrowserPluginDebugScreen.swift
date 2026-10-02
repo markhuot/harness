@@ -140,9 +140,9 @@ private struct PluginProbePanel: View {
                 if let nextTicket { Button("Next ticket", action: nextTicket) }
             }
             .buttonStyle(.bordered)
-            .font(.system(size: 12))
+            .font(.scaled(size: 12))
             Text(readout)
-                .font(.system(size: 10.5, design: .monospaced))
+                .font(.scaled(size: 10.5, design: .monospaced))
                 .foregroundStyle(c.text2)
                 .textSelection(.enabled)
                 .lineLimit(8)

@@ -54,6 +54,17 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.accessibilityMoves(Self.t("a", .done)) == [.planning, .inProgress, .blocked, .review])
     }
 
+    @Test func menuTitleNamesTheCardAndCutsAt90() {
+        #expect(BoardScreenRules.menuTitle(Self.t("1", .review)) == "K-1 · Title")
+        // A draft says so instead of its title, however long that is.
+        #expect(BoardScreenRules.menuTitle(Self.t("1", draft: true, title: String(repeating: "x", count: 200))) == "K-1 · Draft")
+        // 90 characters, key included: "K-1 · " is 6, so 84 of the title survive.
+        let long = BoardScreenRules.menuTitle(Self.t("1", title: String(repeating: "a", count: 84) + "bcd"))
+        #expect(long.count == 90)
+        #expect(long == "K-1 · " + String(repeating: "a", count: 84))
+        #expect(BoardScreenRules.menuTitle(Self.t("1", title: String(repeating: "a", count: 84))).count == 90)
+    }
+
     @Test func accessibilityLabelSaysWhyACardMatters() {
         #expect(BoardScreenRules.cardAccessibilityLabel(Self.t("1", draft: true, title: "")) == "K-1 , draft")
         #expect(BoardScreenRules.cardAccessibilityLabel(Self.t("1", .blocked)) == "K-1 Title, blocked")

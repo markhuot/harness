@@ -26,7 +26,9 @@ struct TicketDetailChildrenTab: View {
                 list(children, complete: complete)
             }
         }
-        .task(id: children.map(\.id)) { fetchSummaries(children) }
+        // Keyed on the epoch too, so a fetch that failed while the connection was down runs again
+        // once it's back (the reconnect clears `fetched` first).
+        .task(id: ChildSummariesFetch(ids: children.map(\.id), epoch: store.epoch)) { fetchSummaries(children) }
         .onChange(of: store.epoch) { fetched = [] }
     }
 
@@ -36,7 +38,7 @@ struct TicketDetailChildrenTab: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 8) {
-                        Text(Conductor.progressLabel(progress)).font(.system(size: 14.5, weight: .medium)).foregroundStyle(c.text)
+                        Text(Conductor.progressLabel(progress)).font(.scaled(size: 14.5, weight: .medium)).foregroundStyle(c.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if !complete { Spinner() }
                     }
@@ -44,7 +46,7 @@ struct TicketDetailChildrenTab: View {
                     if progress.attention > 0 {
                         HStack(spacing: 5) {
                             Icon("alert", size: 12, weight: .semibold)
-                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.system(size: 13.5))
+                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.scaled(size: 13.5))
                         }
                         .foregroundStyle(c.red)
                     }
@@ -56,8 +58,8 @@ struct TicketDetailChildrenTab: View {
                     VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 7) {
                             StatusDot(status: group.status)
-                            Text(statusLabel(group.status)).font(.system(size: 14, weight: .semibold)).foregroundStyle(c.text)
-                            Text("\(group.tickets.count)").font(.system(size: 13)).foregroundStyle(c.text3)
+                            Text(statusLabel(group.status)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(c.text)
+                            Text("\(group.tickets.count)").font(.scaled(size: 13)).foregroundStyle(c.text3)
                         }
                         .padding(.horizontal, 2)
                         .accessibilityElement(children: .combine)
@@ -76,7 +78,7 @@ struct TicketDetailChildrenTab: View {
     }
 
     private func fetchSummaries(_ children: [Ticket]) {
-        guard let api = store.client as? HarnessClient else { return }
+        guard let api = store.api else { return }
         for child in children where store.state.summaries[child.sessionId] == nil && !fetched.contains(child.id) {
             fetched.insert(child.id)
             let key = child.key
@@ -89,8 +91,16 @@ struct TicketDetailChildrenTab: View {
     }
 }
 
+/// What the child-summaries fetch is keyed on.
+private struct ChildSummariesFetch: Equatable {
+    let ids: [String]
+    let epoch: Int
+}
+
 /// One child: key, title, its state, then why it needs you (or its latest summary), what it waits
-/// on and its driver and model. Tapping it opens it.
+/// on and its driver and model. Tapping it opens it. The row isn't a Button: a Button's label
+/// swallows the taps of the dependency chips' own buttons, so the row takes a tap gesture (the
+/// chips, being buttons, win their own taps) and tells VoiceOver it's a button.
 private struct TicketDetailChildRow: View {
     let child: Ticket
     let first: Bool
@@ -104,67 +114,69 @@ private struct TicketDetailChildRow: View {
         let deps = state.dependencyStates(child)
         let attention = Conductor.attentionOf(child)
         let showDriver = state.hasCustomDriver(child)
-        Button { router.push(.ticket(key: child.key, tab: nil)) } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 7) {
-                    TicketKeyLabel(ticket: child).fixedSize()
-                    Text(child.title.isEmpty ? "Untitled" : child.title)
-                        .font(.system(size: 14.5, weight: .medium))
-                        .foregroundStyle(c.text)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if child.busy { Spinner() }
-                    if child.status == .review {
-                        HStack(spacing: 3) {
-                            ReviewMark(who: .agent, state: child.agentReview)
-                            ReviewMark(who: .human, state: child.humanReview)
-                        }
-                    }
-                }
-                if let approval = child.pendingApproval {
-                    Text("\(Image(icon: "lock")) Needs approval: \(Text(Format.shortToolName(approval.toolName)).font(.mono(13)))")
-                        .font(.system(size: 13))
-                        .foregroundStyle(c.amber)
-                } else if child.status == .blocked {
-                    Text(child.blockedReason.flatMap { $0.isEmpty ? nil : $0 } ?? "Blocked")
-                        .font(.system(size: 13)).foregroundStyle(c.red).lineLimit(3)
-                } else if let summary = state.latestSummary(child.sessionId) {
-                    Text(Markdown.plainText(summary.body)).font(.system(size: 13)).foregroundStyle(c.text2).lineLimit(2)
-                }
-                if !deps.isEmpty || showDriver || child.model != nil {
-                    HStack(alignment: .center, spacing: 5) {
-                        TicketDetailFlow(spacing: 5) {
-                            ForEach(deps, id: \.key) { d in
-                                let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
-                                DepChip(label: d.ticket.map { Keys.keyLabel($0) } ?? d.key, done: d.done, prefix: d.done ? "after" : "waiting on",
-                                        unknown: d.state == .unknown,
-                                        onTap: opens ? { router.push(.ticket(key: d.ticket?.key ?? d.key, tab: nil)) } : nil)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                        if showDriver { DriverBadge(driver: child.driver, drivers: state.drivers) }
-                        if let model = child.model { Badge(model, outline: true) }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                TicketKeyLabel(ticket: child).fixedSize()
+                Text(child.title.isEmpty ? "Untitled" : child.title)
+                    .font(.scaled(size: 14.5, weight: .medium))
+                    .foregroundStyle(c.text)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if child.busy { Spinner() }
+                if child.status == .review {
+                    HStack(spacing: 3) {
+                        ReviewMark(who: .agent, state: child.agentReview)
+                        ReviewMark(who: .human, state: child.humanReview)
                     }
                 }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(.rect)
+            if let approval = child.pendingApproval {
+                Text("\(Image(icon: "lock")) Needs approval: \(Text(Format.shortToolName(approval.toolName)).font(.mono(13)))")
+                    .font(.scaled(size: 13))
+                    .foregroundStyle(c.amber)
+            } else if child.status == .blocked {
+                Text(child.blockedReason.flatMap { $0.isEmpty ? nil : $0 } ?? "Blocked")
+                    .font(.scaled(size: 13)).foregroundStyle(c.red).lineLimit(3)
+            } else if let summary = state.latestSummary(child.sessionId) {
+                Text(Markdown.plainText(summary.body)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
+            }
+            if !deps.isEmpty || showDriver || child.model != nil {
+                HStack(alignment: .center, spacing: 5) {
+                    FlowLayout(spacing: 5) {
+                        ForEach(deps, id: \.key) { d in
+                            let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
+                            DepChip(label: d.ticket.map { Keys.keyLabel($0) } ?? d.key, done: d.done, prefix: d.done ? "after" : "waiting on",
+                                    unknown: d.state == .unknown,
+                                    onTap: opens ? { router.push(.ticket(key: d.ticket?.key ?? d.key, tab: nil)) } : nil)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if showDriver { DriverBadge(driver: child.driver, drivers: state.drivers) }
+                    if let model = child.model { Badge(model, outline: true) }
+                }
+            }
         }
-        .buttonStyle(TicketDetailRowStyle())
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .onTapGesture(perform: open)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, open)
+        .accessibilityActions {
+            ForEach(deps, id: \.key) { d in
+                if Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey) {
+                    let target = d.ticket?.key ?? d.key
+                    Button("Open \(d.ticket.map { Keys.keyLabel($0) } ?? d.key)") { router.push(.ticket(key: target, tab: nil)) }
+                }
+            }
+        }
         .overlay(alignment: .leading) {
             if let attention { Rectangle().fill(attention == .approval ? c.amber : c.red).frame(width: 3) }
         }
         .overlay(alignment: .top) { if !first { Rectangle().fill(c.border).frame(height: 1 / 3) } }
         .opacity(child.status == .done ? 0.7 : 1)
     }
-}
 
-/// A list row that highlights while pressed.
-struct TicketDetailRowStyle: ButtonStyle {
-    @Environment(\.palette) private var c
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.background(configuration.isPressed ? c.bgHover : .clear)
-    }
+    private func open() { router.push(.ticket(key: child.key, tab: nil)) }
 }

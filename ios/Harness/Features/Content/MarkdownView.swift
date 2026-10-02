@@ -54,7 +54,7 @@ struct MarkdownStyle {
     let palette: Palette
     let linkable: (String) -> Bool
 
-    var font: Font { .system(size: size) }
+    var font: Font { .scaled(size: size) }
     /// RN lineHeight round(size × 1.45), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * 1.45).rounded() - size * 1.2 }
 
@@ -62,7 +62,7 @@ struct MarkdownStyle {
     /// and linkable ticket keys (both in the tint, accentText).
     func inline(_ text: String, size: CGFloat? = nil, bold: Bool = false) -> AttributedString {
         let size = size ?? self.size
-        let base = Font.system(size: size, weight: bold ? .bold : .regular)
+        let base = Font.scaled(size: size, weight: bold ? .bold : .regular)
         var out = AttributedString()
         for token in MarkdownCache.shared.inline(text) {
             var run: AttributedString
@@ -77,7 +77,7 @@ struct MarkdownStyle {
                 run.foregroundColor = palette.text
             case let .strong(s):
                 run = AttributedString(s)
-                run.font = .system(size: size, weight: .bold)
+                run.font = .scaled(size: size, weight: .bold)
             case let .em(s):
                 run = AttributedString(s)
                 run.font = base.italic()

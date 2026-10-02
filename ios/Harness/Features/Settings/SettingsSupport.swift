@@ -5,12 +5,6 @@ import SwiftUI
 // Shared by Settings, Project settings, the watcher form and Prompts (ui/settings.tsx's Group and
 // SRow, as Form idioms).
 
-extension BoardStore {
-    /// The store's client as the full HarnessClient, for the calls that aren't on BoardClient
-    /// (settings, network, prompts, watchers, projects).
-    var settingsAPI: HarnessClient? { client as? HarnessClient }
-}
-
 extension View {
     /// A Form row drawn in the theme's elevated color.
     func settingsRowBackground(_ c: Palette) -> some View { listRowBackground(c.bgElev) }
@@ -34,11 +28,11 @@ struct SettingsRow<Control: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 12) {
-                Text(label).font(.system(size: 15)).foregroundStyle(c.text).layoutPriority(1)
+                Text(label).font(.scaled(size: 15)).foregroundStyle(c.text).layoutPriority(1)
                 Spacer(minLength: 8)
                 control
             }
-            if let hint, !hint.isEmpty { Text(hint).font(.system(size: 12.5)).foregroundStyle(c.text3) }
+            if let hint, !hint.isEmpty { Text(hint).font(.scaled(size: 12.5)).foregroundStyle(c.text3) }
         }
         .settingsRowBackground(c)
     }

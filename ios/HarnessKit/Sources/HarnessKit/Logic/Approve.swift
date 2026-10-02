@@ -90,7 +90,7 @@ public enum Approve {
 
     /// The menu's rows, in order: the offered actions, then "Approve and take no action".
     public static func approveMenuChoices(_ opts: Completion.Options) -> [MenuChoice] {
-        Completion.approveMenuActions(opts).map { MenuChoice(value: .action($0), label: Completion.label(for: $0)) }
+        opts.actions.map { MenuChoice(value: .action($0), label: Completion.label(for: $0)) }
             + [MenuChoice(value: .none, label: Completion.approveNoActionLabel)]
     }
 
@@ -127,7 +127,7 @@ public enum Approve {
     /// take no action", which is always there: it's how an approved ticket waiting on its agent review,
     /// or on a project that doesn't complete on its own, gets done without an agent run.
     public static func completeMenuChoices(_ opts: Completion.Options, canRun: Bool) -> [MenuChoice] {
-        let actions = canRun ? Completion.approveMenuActions(opts).map { MenuChoice(value: .action($0), label: asComplete(Completion.label(for: $0))) } : []
+        let actions = canRun ? opts.actions.map { MenuChoice(value: .action($0), label: asComplete(Completion.label(for: $0))) } : []
         return actions + [MenuChoice(value: .none, label: asComplete(Completion.approveNoActionLabel))]
     }
 
@@ -148,15 +148,13 @@ public enum Approve {
     public static let completionActionNames: [CompletionAction: String] = [
         .merge: "Merge",
         .pr: "Open PR",
+        .cleanup: "Clean up",
         .custom: "Custom",
     ]
 
-    /// Options for a select of completion actions. A child on its parent's branch names the branch.
-    public static func completionActionOptions(_ actions: [CompletionAction], parentBranch: String? = nil) -> [Option] {
-        actions.map { a in
-            if a == .merge, let branch = parentBranch, !branch.isEmpty { return Option(value: a, label: "Merge into \(branch)") }
-            return Option(value: a, label: completionActionNames[a])
-        }
+    /// Options for a select of completion actions.
+    public static func completionActionOptions(_ actions: [CompletionAction]) -> [Option] {
+        actions.map { Option(value: $0, label: completionActionNames[$0]) }
     }
 
     /// The Complete sheet's request. `choose` is whether the sheet offered the action choice (both reviews

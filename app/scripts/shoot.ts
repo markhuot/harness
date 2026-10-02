@@ -123,6 +123,17 @@ const openCombo = (scope: string) => `(async () => {
 
 // Settings → Prompts: opens a prompt's editor and scrolls it into view; `then` runs after (with
 // `area`, the editor's textarea, and `wait`), e.g. to type into it.
+const openDriver = (id: string) => `(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let row = null;
+  for (let i = 0; i < 40 && !row; i++) {
+    await wait(100);
+    row = document.querySelector('[data-driver-row="${id}"]');
+  }
+  row?.click();
+  await wait(200);
+  row?.scrollIntoView({ block: "start" });
+})()`;
 const openPrompt = (id: string, then = "") => `(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   let row = null;
@@ -178,9 +189,11 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "compose", route: "#/compose", setup: inDraft(`await pickProject("NYTIMES");`) },
   { name: "compose-nogit", route: "#/compose", setup: inDraft(`await pickProject("SITE"); await options();`) },
   { name: "permissions", route: "#/settings/permissions" },
-  // Settings → Models: one Default model combobox, then a review model per driver.
-  { name: "settings-models", route: "#/settings/models" },
-  { name: "settings-models-open", route: "#/settings/models", setup: openCombo("#settings-models") },
+  // Settings → Drivers: the driver list with the Default model under it, a driver opened into its
+  // own settings (Anthropic API carries the API key), and the Default model combobox open.
+  { name: "settings-drivers", route: "#/settings/drivers" },
+  { name: "settings-driver-open", route: "#/settings/drivers", setup: openDriver("anthropic-api") },
+  { name: "settings-models-open", route: "#/settings/drivers", setup: openCombo("[data-testid=default-model]") },
   { name: "project-model-open", route: `#/project/${hello}/settings`, setup: openCombo("[data-testid=project-models]") },
   // Prompts: the list, a built-in prompt, a customized one, a draft that doesn't validate, the
   // compare view, and a stored override that no longer validates (mock-service seeds both).

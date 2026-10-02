@@ -19,7 +19,7 @@ struct BrowserTabView: View {
     @State private var typing = false
 
     private var sessionId: String { ticket.sessionId }
-    private var client: HarnessClient? { store.client as? HarnessClient }
+    private var client: HarnessClient? { store.api }
 
     private struct Subscription: Hashable {
         let sessionId: String
@@ -60,9 +60,9 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "chevronLeft", label: "Back", disabled: model.empty) { model.command(.back) }
             BrowserBarButton(icon: "chevronRight", label: "Forward", disabled: model.empty) { model.command(.forward) }
             HStack(spacing: 6) {
-                Image(icon: "globe").font(.system(size: 13)).foregroundStyle(c.text3)
+                Image(icon: "globe").font(.scaled(size: 13)).foregroundStyle(c.text3)
                 TextField("", text: $urlDraft, selection: $urlSelection, prompt: Text("Enter a URL…").foregroundStyle(c.text3))
-                    .font(.system(size: 14, design: .monospaced))
+                    .font(.scaled(size: 14, design: .monospaced))
                     .foregroundStyle(c.text)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
@@ -92,9 +92,9 @@ struct BrowserTabView: View {
     private var status: some View {
         HStack(spacing: 6) {
             Circle().fill(model.live ? c.green : c.text3).frame(width: 7, height: 7)
-            Text(model.live ? "Live" : "Idle").font(.system(size: 12)).foregroundStyle(c.text3)
+            Text(model.live ? "Live" : "Idle").font(.scaled(size: 12)).foregroundStyle(c.text3)
             if let title = model.state?.title, !title.isEmpty {
-                Text("· \(title)").font(.system(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
+                Text("· \(title)").font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -170,7 +170,7 @@ struct BrowserBarButton: View {
             action()
         } label: {
             Image(icon: icon)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.scaled(size: 17, weight: .semibold))
                 .foregroundStyle(active ? c.accentText : c.text2)
                 .frame(width: 34, height: 34)
                 .background(active ? c.accentSoft : .clear, in: RoundedRectangle(cornerRadius: 8))

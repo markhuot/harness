@@ -21,6 +21,8 @@ public enum Route: Hashable, Sendable {
     case file(FileRouteParams)
     /// harness://project/<id>
     case project(id: String)
+    /// harness://driver/<id>: one driver's settings
+    case driver(id: String)
     /// harness://prompts
     case prompts
     /// harness://prompt/<id>
@@ -108,6 +110,9 @@ public enum DeepLink: Equatable, Sendable {
         case "project":
             guard let id = tail.first, !id.isEmpty else { return nil }
             return .push(.project(id: id))
+        case "driver":
+            guard let id = tail.first, !id.isEmpty else { return nil }
+            return .push(.driver(id: id))
         case "prompts": return .push(.prompts)
         case "prompt":
             guard let id = tail.first, !id.isEmpty else { return nil }

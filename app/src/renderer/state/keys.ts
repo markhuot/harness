@@ -114,6 +114,7 @@ export const COMMANDS: CommandSpec[] = [
       ["ticket.approve", "Approve", ["Approve ticket"]],
       ["ticket.land.merge", "Approve and merge"],
       ["ticket.land.pr", "Approve and open PR", ["Pull request"]],
+      ["ticket.land.cleanup", "Approve and clean up", ["Remove worktree", "Delete branch"]],
       ["ticket.land.custom", "Approve and…"],
       ["ticket.approveNoAction", "Approve and take no action"],
       ["ticket.requestChanges", "Request changes…", ["Reject", "Send back"]],

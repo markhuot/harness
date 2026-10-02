@@ -2,9 +2,10 @@ import HarnessHighlight
 import HarnessKit
 import SwiftUI
 
+#if DEBUG
 /// Debug screen: Swift, TypeScript and a diff highlighted in the default light and dark themes,
-/// with how long the highlighter took to load and to color its first block. Open it from the root
-/// screen in debug builds, or launch with `-debugScreen highlight`.
+/// with how long the highlighter took to load and to color its first block. Debug builds only:
+/// launch with `-debugScreen highlight` (RootView opens it in place of the app).
 struct HighlightPreviewView: View {
     @State private var timing: String?
     /// `-debugAppearance dark` (or light) shows one theme only, for screenshots.
@@ -144,3 +145,4 @@ private enum Samples {
 #Preview {
     NavigationStack { HighlightPreviewView() }
 }
+#endif

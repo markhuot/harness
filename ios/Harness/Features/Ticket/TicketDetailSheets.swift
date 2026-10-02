@@ -21,7 +21,7 @@ struct TicketDetailSheetFrame<Primary: View, Content: View>: View {
             HStack(spacing: 10) {
                 HButton("Cancel", variant: .ghost, fullWidth: false, haptic: nil) { dismiss() }
                 VStack(spacing: 1) {
-                    Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(c.text).lineLimit(1)
+                    Text(title).font(.scaled(size: 16, weight: .semibold)).foregroundStyle(c.text).lineLimit(1)
                     if let subtitle { Text(subtitle).font(.mono(12)).foregroundStyle(c.text3).lineLimit(1) }
                 }
                 .frame(maxWidth: .infinity)
@@ -57,7 +57,7 @@ struct TicketDetailSheetField: View {
 
     var body: some View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(c.text3), axis: .vertical)
-            .font(.system(size: 16))
+            .font(.scaled(size: 16))
             .foregroundStyle(c.text)
             .lineLimit(4...)
             .focused($focused)
@@ -96,20 +96,19 @@ struct TicketDetailNotesSheet: View {
             Text(reopen
                 ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
                 : "The ticket moves back to In progress and the agent gets your notes.")
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(c.text3)
         }
     }
 
     private func submit() {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let text = notes
         Task {
             let ok: Ticket? = if reopen {
-                await actions.run("Re-opened") { try await api.reopenTicket(key, ReopenBody(notes: text)) }
+                await actions.run("Re-opened") { try await store.connectedAPI().reopenTicket(key, ReopenBody(notes: text)) }
             } else {
-                await actions.run("Changes requested") { try await api.humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
+                await actions.run("Changes requested") { try await store.connectedAPI().humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
             }
             if ok != nil { dismiss() }
         }
@@ -139,13 +138,13 @@ struct TicketDetailApproveCustomSheet: View {
             TicketDetailSheetField(text: $instructions, placeholder: "What should the agent do with the work? e.g. “deploy it to staging, then open a PR”",
                                    minHeight: 140, accessibilityLabel: "Completion instructions", autoFocus: true)
             Text("Once the ticket is ready, the agent finishes the work following these instructions and marks it done.")
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(c.text3)
         }
     }
 
     private func submit() {
-        guard let api = store.client as? HarnessClient,
+        guard let api = store.api,
               case let .review(body) = Approve.approveRequest(.action(.custom), instructions: instructions) else { return }
         let key = ticket.key
         Task {
@@ -180,7 +179,7 @@ struct TicketDetailCompleteSheet: View {
         let state = store.state
         let project = state.projects[ticket.projectId]
         let parent = ticket.parentId.flatMap { state.tickets[$0] }
-        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent)
+        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: state.settings?.baseBranch)
         let choose = TicketDetailLogic.completeSheetChooses(ready: BoardState.isReady(ticket), autoComplete: project?.autoComplete ?? false, opts: opts)
         let action = choice ?? TicketDetailLogic.completeSheetInitial(initialAction, opts: opts)
         let explicit = choose || initialAction != nil
@@ -190,7 +189,7 @@ struct TicketDetailCompleteSheet: View {
         } content: {
             if choose {
                 HStack(spacing: 10) {
-                    Text("When approved").font(.system(size: 15)).foregroundStyle(c.text)
+                    Text("When approved").font(.scaled(size: 15)).foregroundStyle(c.text)
                     Spacer()
                     SelectMenu(value: action,
                                options: Approve.completionActionOptions(opts.actions).map { PickerOption(value: $0.value, label: $0.label ?? $0.value.rawValue) },
@@ -199,7 +198,7 @@ struct TicketDetailCompleteSheet: View {
                 }
             }
             Text(TicketDetailLogic.completeSheetText(action, opts: opts))
-                .font(.system(size: 15))
+                .font(.scaled(size: 15))
                 .foregroundStyle(c.text2)
                 .lineSpacing(4)
             TicketDetailSheetField(text: $instructions,
@@ -209,11 +208,10 @@ struct TicketDetailCompleteSheet: View {
     }
 
     private func submit(choose: Bool, action: CompletionAction) {
-        guard let api = store.client as? HarnessClient else { return }
         let key = ticket.key
         let body = Approve.completeBody(choose: choose, action: action, instructions: instructions)
         Task {
-            if await actions.run("Completion run queued", { try await api.completeTicket(key, body) }) != nil {
+            if await actions.run("Completion run queued", { try await store.connectedAPI().completeTicket(key, body) }) != nil {
                 haptic(.success)
                 dismiss()
             }

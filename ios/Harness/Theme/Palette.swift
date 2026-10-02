@@ -112,6 +112,15 @@ extension EnvironmentValues {
 extension Font {
     /// The monospaced face used for keys, paths and tokens (RN MONO).
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+        .scaled(size: size, weight: weight, design: .monospaced)
+    }
+
+    /// The system face at `size` points at the default text size, following Dynamic Type like the
+    /// body style (RN Text scales with the system text size by default). `Font.system(size:)` never
+    /// scales; a custom font relative to a text style does, and a family that isn't installed falls
+    /// back to the system face, so this keeps SF (or SF Mono) and only adds the scaling.
+    static func scaled(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        let font = Font.custom("HarnessSystemScaled", size: size, relativeTo: .body).weight(weight)
+        return design == .monospaced ? font.monospaced() : font
     }
 }

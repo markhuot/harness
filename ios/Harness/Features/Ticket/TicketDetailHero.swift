@@ -27,7 +27,7 @@ struct TicketDetailHero: View {
         var action: CompletionAction?
     }
 
-    private var api: HarnessClient? { store.client as? HarnessClient }
+    private var api: HarnessClient? { store.api }
 
     var body: some View {
         let compact = compactTab && !expanded
@@ -59,11 +59,11 @@ struct TicketDetailHero: View {
         }
         title(compact: compact)
         if !compact {
-            TicketDetailFlow(spacing: 6) {
+            FlowLayout(spacing: 6) {
                 if let project { ProjectKeyBadge(project.key, color: project.color) }
                 StatusPill(status: ticket.status)
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
-                ModelBadge(model: ticket.model, models: nil)
+                ModelBadge(model: ticket.model, driver: ticket.driver)
                 KindBadge(ticket: ticket, childCount: ticket.isConductor ? state.childrenOf(ticket.id).count : nil)
                 if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
                 if let url = ticket.pullRequestUrl.optional { pullRequestBadge(url) }
@@ -77,13 +77,19 @@ struct TicketDetailHero: View {
             TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
         }
         if !compact && (ticket.busy || [.planning, .review, .done].contains(ticket.status)) {
-            TicketDetailFlow(spacing: 8) { buttons(project: project, parent: parent) }
+            FlowLayout(spacing: 8) { buttons(project: project, parent: parent) }
+        }
+        // A child's conductor acts as its human reviewer and lands it, so its Approve and Complete are off.
+        if !compact, ticket.status == .review, let conductor = Completion.managingConductor(ticket: ticket, parent: parent) {
+            Text(Completion.conductorManagedReason(conductorKey: conductor.key))
+                .font(.scaled(size: 13))
+                .foregroundStyle(c.text3)
         }
     }
 
     private func title(compact: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
-            .font(.system(size: compact ? 16 : 19, weight: .bold))
+            .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
             .lineLimit(compact ? 1 : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -114,9 +120,12 @@ struct TicketDetailHero: View {
     }
 
     @ViewBuilder private func buttons(project: Project?, parent: Ticket?) -> some View {
-        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent)
+        // A ticket on its base branch offers no merge or pull request, only clean up.
+        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: store.state.settings?.baseBranch)
         let ready = BoardState.isReady(ticket)
         let label = Keys.keyLabel(ticket)
+        let managedReason = Completion.managingConductor(ticket: ticket, parent: parent).map { Completion.conductorManagedReason(conductorKey: $0.key) }
+        let managed = managedReason != nil
         if ticket.status == .planning {
             HButton("Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
                 perform(nil) { try await $0.startTicket($1) }
@@ -124,19 +133,22 @@ struct TicketDetailHero: View {
         }
         if ticket.status == .review && ticket.humanReview != .approved {
             HStack(spacing: 2) {
-                HButton(Completion.approveLabel(opts) ?? "Approve", icon: "check", variant: .primary, small: true, fullWidth: false, haptic: .success) {
+                let approveTitle = Completion.approveLabel(opts) ?? "Approve"
+                HButton(approveTitle, icon: "check", variant: .primary, small: true, fullWidth: false, haptic: .success,
+                        accessibilityLabel: TicketDetailLogic.approveButtonLabel(approveTitle, managedReason: managedReason)) {
                     send(Approve.primaryApproveRequest(opts, ticket: ticket), toast: "Approved")
                 }
-                approveMenu(opts, label: label)
+                .disabled(managed)
+                approveMenu(opts, label: label).disabled(managed)
             }
             HButton("Request changes", icon: "edit", small: true, fullWidth: false) { requestingChanges = true }
         }
         if ticket.status == .review {
             HStack(spacing: 2) {
                 HButton("Complete", icon: "checkCircle", variant: ready ? .primary : .secondary, small: true, fullWidth: false,
-                        accessibilityLabel: TicketDetailLogic.completeButtonLabel(ready: ready, busy: ticket.busy)) { completing = Completing() }
-                    .disabled(!ready || ticket.busy)
-                if ticket.humanReview == .approved { completeMenu(opts, ready: ready, label: label) }
+                        accessibilityLabel: TicketDetailLogic.completeButtonLabel(ready: ready, busy: ticket.busy, managedReason: managedReason)) { completing = Completing() }
+                    .disabled(!ready || ticket.busy || managed)
+                if ticket.humanReview == .approved { completeMenu(opts, ready: ready, label: label).disabled(managed) }
             }
             HButton(TicketDetailLogic.agentReviewButton(ticket.agentReview), icon: "refresh", variant: .ghost, small: true, fullWidth: false) {
                 perform("Agent review queued") { try await $0.rerunAgentReview($1) }
@@ -162,7 +174,7 @@ struct TicketDetailHero: View {
                     Button(choice.label ?? "") { approve(choice.value, label: label) }
                 }
             } header: {
-                Text(TicketDetailLogic.parentBranchMessage(opts) ?? "Approve \(label)")
+                Text("Approve \(label)")
             }
             if let last = choices.last {
                 Section { Button(last.label ?? "") { approve(last.value, label: label) } }
@@ -194,7 +206,7 @@ struct TicketDetailHero: View {
                     Button(choice.label ?? "") { complete(choice.value, label: label) }
                 }
             } header: {
-                Text(TicketDetailLogic.parentBranchMessage(opts) ?? "Complete \(label)")
+                Text("Complete \(label)")
             }
             if let last = choices.last {
                 Section { Button(last.label ?? "") { complete(last.value, label: label) } }

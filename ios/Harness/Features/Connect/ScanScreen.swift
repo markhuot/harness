@@ -10,6 +10,7 @@ struct ScanScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var permission = AVCaptureDevice.authorizationStatus(for: .video)
     @State private var message: String?
@@ -25,7 +26,7 @@ struct ScanScreen: View {
             } else {
                 VStack(spacing: 14) {
                     Text("Harness needs the camera to scan the pairing QR code.")
-                        .font(.system(size: 17)).foregroundStyle(.white).multilineTextAlignment(.center)
+                        .font(.scaled(size: 17)).foregroundStyle(.white).multilineTextAlignment(.center)
                     if permission == .notDetermined {
                         HButton("Allow camera", variant: .primary, fullWidth: false) {
                             Task {
@@ -52,7 +53,7 @@ struct ScanScreen: View {
                 Spacer()
                 if busy { ProgressView().tint(.white) }
                 Text(message ?? "Point at the QR code in Harness → Settings → Network on your Mac.")
-                    .font(.system(size: 15)).foregroundStyle(.white).multilineTextAlignment(.center)
+                    .font(.scaled(size: 15)).foregroundStyle(.white).multilineTextAlignment(.center)
                     .padding(10)
                     .background(.black.opacity(0.55), in: .rect(cornerRadius: 12))
             }
@@ -62,7 +63,7 @@ struct ScanScreen: View {
         .overlay(alignment: .topTrailing) {
             Button { router.cover = nil } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.scaled(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 40, height: 40)
                     .background(.black.opacity(0.5), in: .circle)
@@ -72,6 +73,10 @@ struct ScanScreen: View {
             .padding(.trailing, 16)
         }
         .onAppear { permission = AVCaptureDevice.authorizationStatus(for: .video) }
+        // Back from Settings (Open Settings to allow): pick up the new answer.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { permission = AVCaptureDevice.authorizationStatus(for: .video) }
+        }
     }
 
     private func onScan(_ data: String) async {

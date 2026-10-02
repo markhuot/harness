@@ -180,7 +180,7 @@ private struct TicketSettingsRows: View {
             } footer: {
                 if let hint {
                     Text(hint.text)
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(hint.tone == .warn ? c.amber : hint.tone == .error ? c.red : c.text3)
                 }
             }
@@ -209,14 +209,6 @@ private struct TicketSettingsRows: View {
     }
 }
 
-/// The latest render's values, for callbacks SwiftUI may keep from an earlier render: a TextField's
-/// `onSubmit` (and the focus-change handlers next to it) can fire with closures that captured an
-/// older ticket, so they read it from here. Set during body; not observed.
-final class PickerLatest<Value> {
-    private(set) var value: Value?
-    func set(_ v: Value) { value = v }
-}
-
 /// One settings row (RN `Prop`): the label with its hint under it, the control on the right, and
 /// an optional footer across the row.
 struct TicketSettingsRow<Control: View, Footer: View>: View {
@@ -231,8 +223,8 @@ struct TicketSettingsRow<Control: View, Footer: View>: View {
         VStack(alignment: .trailing, spacing: 6) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label).font(.system(size: 15)).foregroundStyle(c.text)
-                    if let hint { Text(hint).font(.system(size: 12.5)).foregroundStyle(c.text3) }
+                    Text(label).font(.scaled(size: 15)).foregroundStyle(c.text)
+                    if let hint { Text(hint).font(.scaled(size: 12.5)).foregroundStyle(c.text3) }
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 8)
@@ -291,16 +283,17 @@ private struct TicketDependsOnRow: View {
             }
         } footer: {
             if !bad.isEmpty {
-                Text("Not a ticket key: \(bad.joined(separator: ", "))").font(.system(size: 13)).foregroundStyle(c.red)
+                Text("Not a ticket key: \(bad.joined(separator: ", "))").font(.scaled(size: 13)).foregroundStyle(c.red)
             } else if !deps.isEmpty {
-                HStack(spacing: 6) {
-                    Spacer(minLength: 0)
+                // RN wraps the chips (flexWrap) and packs them to the right.
+                FlowLayout(spacing: 6, alignment: .trailing) {
                     ForEach(deps, id: \.key) { d in
                         let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
                         DepChip(label: d.ticket.map(Keys.keyLabel) ?? d.key, done: d.done, unknown: d.state == .unknown,
                                 onTap: opens ? { router.push(.ticket(key: d.ticket?.key ?? d.key, tab: nil)) } : nil)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .onAppear { text = ticket.dependsOn.joined(separator: ", ") }
@@ -348,7 +341,7 @@ private struct TicketRemoteIdRow: View {
         } footer: {
             VStack(alignment: .trailing, spacing: 6) {
                 TextField("", text: $url, prompt: Text("Link (optional), e.g. https://…").foregroundStyle(c.text3))
-                    .font(.system(size: 13.5))
+                    .font(.scaled(size: 13.5))
                     .foregroundStyle(c.text)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.URL)
@@ -358,7 +351,7 @@ private struct TicketRemoteIdRow: View {
                     .focused($focus, equals: .url)
                     .onSubmit(save)
                     .accessibilityLabel("Remote ID link")
-                if let error { Text(error).font(.system(size: 13)).foregroundStyle(c.red) }
+                if let error { Text(error).font(.scaled(size: 13)).foregroundStyle(c.red) }
                 if let ref {
                     HButton("Unlink \(ref.key)", icon: "x", variant: .ghost, small: true, fullWidth: false) { onPatch(UpdateTicketBody(externalRef: .null)) }
                 }

@@ -15,7 +15,7 @@ struct ConnectionBanner: View {
             Button { router.present(.connect) } label: {
                 HStack(spacing: 8) {
                     Icon("key", size: 14, weight: .semibold)
-                    Text("Token changed on the Mac. Tap to pair again.").font(.system(size: 13.5)).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Token changed on the Mac. Tap to pair again.").font(.scaled(size: 13.5)).frame(maxWidth: .infinity, alignment: .leading)
                     Icon("chevronRight", size: 13)
                 }
                 .foregroundStyle(c.red)
@@ -35,9 +35,9 @@ struct ConnectionBanner: View {
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Reconnecting to \(MobilePair.displayHost(store.baseUrl))…")
-                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(c.amber)
+                            .font(.scaled(size: 13.5, weight: .semibold)).foregroundStyle(c.amber)
                         if let e = store.loadError {
-                            Text(e).font(.system(size: 12.5)).foregroundStyle(c.text2).lineLimit(3)
+                            Text(e).font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(3)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

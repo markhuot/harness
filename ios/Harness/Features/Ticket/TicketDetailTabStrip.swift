@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// The ticket's tabs (TicketDetail.tsx TabStrip): Summaries, Tickets (conductors), Transcript,
-/// Agents (once there are sub-agents), Browser, Changes (with a workdir or a pinned diff),
+/// Agents (once there are sub-agents), Browser, Changes (when the service lists the git plugin's tab),
 /// Details, then the plugin tabs. Counts and a live
 /// dot ride along; a sub-agent's view highlights Agents.
 struct TicketDetailTabStrip: View {
@@ -45,7 +45,10 @@ struct TicketDetailTabStrip: View {
         // ChangesTab.visibleTabs'; this adds labels, counts, live dots and plugin icons.
         let plugins = ChangesTab.otherPluginTabs(pluginTabs) ?? []
         return ChangesTab.visibleTabs(conductor: conductor, workdir: ticket.workdir, subagents: subagents, pluginTabs: pluginTabs).map { tab in
-            if tab == .changes { return Item(id: tab, label: ChangesTab.label) }
+            if tab == .changes {
+                let icon = ChangesTab.icon(pluginTabs)
+                return Item(id: tab, label: ChangesTab.label, icon: Icons.isIconName(icon) ? icon : ChangesTab.defaultIcon)
+            }
             if let t = tab.builtin {
                 let count: Int? = switch t {
                 case .summaries: state.summaries[ticket.sessionId]?.count ?? 0
@@ -69,11 +72,11 @@ struct TicketDetailTabStrip: View {
             HStack(spacing: 5) {
                 if let icon = item.icon { Icon(icon, size: 13).foregroundStyle(on ? c.text : c.text2) }
                 Text(item.label)
-                    .font(.system(size: 14.5, weight: on ? .semibold : .medium))
+                    .font(.scaled(size: 14.5, weight: on ? .semibold : .medium))
                     .foregroundStyle(on ? c.text : c.text2)
                 if let count = item.count, count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.scaled(size: 11.5, weight: .semibold))
                         .foregroundStyle(c.text2)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 18)

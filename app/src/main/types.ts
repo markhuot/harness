@@ -3,10 +3,19 @@
 import type { ThemePatch, ThemePreference, ThemeState } from "./theme";
 export type { ResolvedTheme, ThemePatch, ThemePreference, ThemeState } from "./theme";
 
+/**
+ * Who runs the service the app is connected to: "app", its own child process (the default); "login",
+ * launchd, which starts it at login and keeps it running after the app quits; "external", a
+ * service someone started by hand.
+ */
+export type ServiceMode = "app" | "login" | "external";
+
 export interface Connection {
   baseUrl: string;
   token: string;
   source: "env" | "service";
+  /** Service connections: who runs it (see ServiceMode) */
+  mode?: ServiceMode;
   /** Where the token lives (service connections); re-read after a token rotation */
   tokenPath?: string;
   home?: string;
@@ -123,8 +132,15 @@ export interface HarnessBridge {
   retryService(): Promise<ConnectionResult>;
   /** Re-read the token file after POST /token/rotate (env connections take `rotated`). */
   reloadToken(rotated?: string): Promise<ConnectionResult>;
-  /** Restart the service now (launchd for the service the app started); running agents are stopped. */
+  /** Restart the service now (the app's child, or launchd's job); running agents are stopped. */
   restartService(): Promise<{ ok: true } | ConnectionError>;
+  /**
+   * Hand the service to launchd ("login": it starts at login and outlives the app) or take it back
+   * as the app's child ("app"). Either way the service restarts and running agents are stopped.
+   * Resolves with the new connection; `error` is set when the switch failed (the connection is
+   * then whatever could be restored).
+   */
+  setServiceMode(mode: "app" | "login"): Promise<{ connection: ConnectionResult; error?: ConnectionError }>;
   pickDirectory(opts?: PickDirectoryOptions): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   /** Reveal a file or folder in Finder */

@@ -6,7 +6,7 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
 
 ```
 ┌──────────────┐  REST + WS (127.0.0.1:7717, bearer token)  ┌─────────────────────────────┐
-│ Electron app │ ─────────────────────────────────────────▶ │ harness service (Bun, launchd)│
+│ Electron app │ ─────────────────────────────────────────▶ │ harness service (bun binary) │
 │ (React UI)   │ ◀──── events: tickets, transcript, frames ─ │  SQLite · orchestrator · runs │
 └──────────────┘                                            │  drivers · tools · MCP · CDP  │
    iOS app ── Tailscale / LAN (settings.listen) ────────────▶ │  headless Chrome (one tab per │
@@ -14,7 +14,9 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
                                                              └─────────────────────────────┘
 ```
 
-Closing the app never stops agents: runs live in the service, which launchd keeps alive.
+Runs live in the service, never in the app. By default the service is the app's child process, so
+closing the app stops it; with Settings → Service → Start at login, launchd runs it instead and it
+outlives the app (see "Service supervision").
 
 ## Layout and ownership
 
@@ -132,7 +134,45 @@ place of the key.
   (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
-  runs `bun <repo>/service/src/daemon.ts`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+  runs the daemon command (below), `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+- The service runs from one of two places (`service/src/runtime.ts`):
+  - **A checkout**: `bun <repo>/service/src/daemon.ts`, builtin plugins from `<repo>/plugins`.
+    Dev builds of the app (`bun run build`, `bun run install-app`) record the checkout and bun in
+    `app/resources/harness.json` (`{ repoRoot, bunPath }`).
+  - **The compiled executable** in a packaged app: `service/scripts/compile.ts` runs
+    `bun build --compile` on `service/src/bin.ts` into `Harness.app/Contents/MacOS/harness-service`
+    (`harness-service daemon` is the daemon, any other arguments the CLI) and prebuilds each builtin
+    plugin into `Contents/Resources/plugins/<id>` (its server bundled with its dependencies as
+    `server.js`, its UI built, no `build` step left in `plugin.json`). `harness.json` is then
+    `{ executable: "harness-service" }`, resolved next to the app's own executable. Nothing on the
+    Mac needs bun or the source.
+
+## Service supervision
+
+Something has to start the daemon and start it again when it exits (a restart onto new code,
+`POST /service/restart`, a crash). That's the app by default, or launchd once it's a login item.
+The app decides at connect (`app/src/main/service.ts` `ServiceManager`) from
+`service status --json`: with the plist installed it runs `service ensure --json` as before;
+otherwise it starts the daemon as its child (`app/src/main/child.ts`), unless a service someone
+started by hand already answers on the port (`mode: "external"`, used as is). The connection
+carries the mode (`app`, `login`, `external`).
+
+- **App (default).** The child gets `HARNESS_SUPERVISOR_PID=<app pid>` and its output appended to
+  `service.log`. The app starts it again 1s after it exits and gives up after five exits within
+  10s of starting (the error screen then shows the log tail). Restart now restarts the child in
+  place. On quit the app asks first when agents are running (`GET /sessions`, any `busy`), then
+  SIGTERMs the child and waits for it to exit (SIGKILL after 30s). If the app dies without doing
+  that, the daemon notices within 2s that the supervisor pid is gone (`kill(pid, 0)`; Bun caches
+  `process.ppid`) and shuts down, so no service outlives the app unsupervised.
+- **Login (Settings → Service → Start at login).** Install stops the child and runs
+  `service ensure` (writes the plist, bootstraps it, waits for /health). If launchd refuses, the
+  app removes the plist and starts its child again, and reports the error. Remove runs
+  `service uninstall` (`launchctl bootout`, which waits for the job to exit), waits until the port
+  stops answering, then starts the child. Either switch restarts the service, so the section
+  confirms first when agents are running.
+- The daemon counts as supervised when its parent is the supervisor: launchd (pid 1, with
+  `XPC_SERVICE_NAME` set to the label) or the app (`HARNESS_SUPERVISOR_PID` is its ppid). Agents
+  inherit both variables but not the parent. Only a supervised daemon restarts itself.
 
 ## Ticket lifecycle
 
@@ -274,7 +314,10 @@ the base branch (`git worktree add -b <branch> <dir> <base>`). It blocks with "C
 worktree: …" naming the branch and path when the branch is already checked out in another
 worktree, or naming the base when the base branch doesn't exist. `requestedBranch` can change
 (HTTP, `update_ticket`) only while the ticket has no worktree on disk. `plannedBranch(ticket)` is
-what clients show: the branch it uses, or will use. `GET /projects/:id/branches?q=&limit=`
+what clients show: the branch it uses, or will use. A ticket whose branch *is* its base branch
+(both set to an existing pull request's head, as triage does for fixes on an open PR) works and
+pushes on that branch directly: `system.work` tells it so (`onBase`), and approving it only
+offers `cleanup` and `custom` (see "Completion"). `GET /projects/:id/branches?q=&limit=`
 (`BranchInfo[]`: name, lastCommitAt, checkedOutAt) feeds the new-session branch picker.
 
 **Re-pointing** is the ticket's own agent's job (`update_branch`, work and conductor runs): a
@@ -346,10 +389,11 @@ How an approved ticket's work lands is chosen per approval (`CompletionAction`, 
 | --- | --- | --- |
 | `merge` ("Approve and merge") | `system.complete_merge`, `run.complete_merge` | Merges the ticket branch into the base branch by name, from wherever the base is checked out (`git worktree list`): merge there when a worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is `harness/<key>`, deleted from the worktree that has the base checked out (`branch -d` checks against what's checked out where it runs). A harness worktree left behind by `update_branch` is removed only once its commits are merged. |
 | `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url }`, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
+| `cleanup` ("Approve and clean up") | `system.complete_cleanup`, `run.complete_cleanup` | For work that already landed or never needed git: a ticket on an existing pull request's head branch that pushed there itself, a branch merged by hand, or an empty worktree after a database or config change. It merges, pushes and opens nothing. It stops if the worktree has uncommitted changes or the branch has commits on no remote branch (and, off the base, not in the base branch); otherwise it removes the harness worktree and deletes `harness/<key>` with `branch -D` (the check already proved its commits are safe; `-d` refuses commits that are only on a remote). A branch the harness didn't create is kept. Afterwards the service checks: while the harness worktree or `harness/<key>` is still there, the ticket moves to `blocked` ("Cleanup didn't finish") instead of done, so the human can deal with the commits. |
 | `custom` ("Approve and…") | `system.complete_custom`, `run.complete_custom` | Commits leftovers, then does what the approver's instructions say, merging, pushing or deleting nothing they don't ask for. With no instructions (the plain "Approve" of a folder outside git) it's a light wrap-up. |
 
 **What a project offers** (`Project.completionActions`, worked out on every read like `isGit`):
-`custom` only outside git; `merge` and `custom` in a git repo; `pr` as well when
+`custom` only outside git; `merge`, `cleanup` and `custom` in a git repo; `pr` as well when
 `Project.pullRequestHost` is set. That takes three checks, all file reads (`store/remotes.ts`,
 cached for 2 s per path): `gh` is on the daemon's PATH; the repo's git config (following a
 worktree's `.git` file to the common dir) has a remote, `origin` or the only one, whose URL parses
@@ -370,9 +414,16 @@ it's approved (`POST /review`, `review_ticket`) or completed (`POST /complete`,
 `complete_ticket`), because a human approval can come before the agent review finishes. A new
 action without instructions drops the old instructions. `completionOptions` (shared) decides what
 a ticket may do and what's preselected: a child on its parent's branch only merges; otherwise the
-offered actions, preselecting the ticket's earlier choice, then `pr` for a ticket that already has
-a `pullRequestUrl` (a re-approval updates the same pull request), then the project default. An
-action the ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
+offered actions (`cleanup` always among them in git, even for a worktree with no commits, when
+the work was a change outside git), less `merge` and `pr` for a ticket whose branch is its
+effective base branch (`worksOnBase`: there's nothing to merge or
+open a pull request from; triage makes such tickets with `dispatch_ticket { branch, base_branch }`
+for work on an existing pull request's branch). It preselects the ticket's earlier choice, then
+`pr` for a ticket that already has a `pullRequestUrl` (a re-approval updates the same pull
+request), then the project default, then the first action left (so a ticket on its base branch
+preselects `cleanup`). The apps pass the base branch they resolve (`resolveBaseBranch`); the
+service passes its own, which can also fall back to the main checkout's branch. An action the
+ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
 ticket, so the run's system prompt and first message agree.
 
 **Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
@@ -400,12 +451,16 @@ takes its first child. Children default to `autoStart: true`: they start as soon
 (coalesced) run of the parent's own kind (conductor or work) with `conductorUpdatePrompt`. The conductor acts as the human reviewer
 for its children (`review_ticket`) and completes them (`complete_ticket`). When the parent works in
 a worktree of its own, its children branch from its branch and merge back into it (the `"parent"`
-base branch source, "Branches"): they only complete with `merge` (`pr` and `custom` get a 400), and
+base branch source, "Branches"): they only complete with `merge` (`pr`, `cleanup` and `custom` get a 400), and
 the whole goal lands on the base branch, by the parent's own merge, pull request or custom
 completion, only when the parent completes. So in the app a
 child "needs you" only when it is blocked or waiting on a tool approval; a child in Review
 with the human review pending is the conductor's to act on (it stays dimmed on the board and
-isn't counted in the rollup). Top-level tickets in Review still wait on the human. When all children
+isn't counted in the rollup). While the parent isn't done (`managingConductor`), the apps show
+the child's Approve and Complete split buttons with their usual labels, but disabled (the menu too),
+with `conductorManagedReason` ("Conductor managed: <parent> approves and lands this ticket") as the
+tooltip, and the palette leaves out their commands. The service still takes a human approval
+(over the API, say). A done parent hands its children back to the human. Top-level tickets in Review still wait on the human. When all children
 are done and the parent's run ends without submitting, the orchestrator submits it for review
 automatically; while any child isn't done, a run that ends without submitting leaves the parent in
 progress, and `submit_for_review` is refused (a parent in review or done would strand children
@@ -513,7 +568,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
 | `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
-| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs") |
+| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
@@ -747,6 +802,15 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   the difference from the previous result. Before this, a work run whose agent ended its turn
   to wait on a background test run was cut short, and the orchestrator auto-submitted the
   "I'll be notified…" text (HARNESS-81).
+
+  A resumed session whose last process ended with background tasks still running (a submit
+  with a dev server up, say) opens differently (claude 2.1.286): the CLI reports those tasks
+  `stopped` ("didn't finish before the previous session ended"), then emits an `init` and an
+  empty `result` (`num_turns: 0`) before it reads the prompt, whose replay comes after. The
+  driver ignores a non-error `num_turns: 0` result that arrives before the prompt's replay (the
+  prompt is written with its own uuid). Before this, that result closed stdin, so the prompt's
+  turn still ran but the CLI exited after it and killed whatever it had put in the background:
+  HARNESS-139's completion run started sim-check in the background and was marked done.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
 
@@ -1048,7 +1112,7 @@ Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
 ```
 GET    /health                   → { ok, version, pid, build, stale } (see "Service updates")
-POST   /service/restart          → { ok }; exits so launchd restarts it (409 when not run by launchd)
+POST   /service/restart          → { ok }; exits so its supervisor restarts it (409 when unsupervised)
 GET    /projects                 POST /projects            PATCH/DELETE /projects/:id
 GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
 GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q=&limit=50   → CommandMatch[] (/command autocomplete; see "Slash commands")
@@ -1269,21 +1333,24 @@ same folder `/tickets/:key/files` searches (worktree, else session cwd, else pro
 
 ## Service updates
 
-launchd runs the daemon straight from the repo checkout, so a merge into that checkout (a
-ticket's complete run, a `git pull`) changes the code on disk under a service that keeps running
-the old code. Routes the new app calls then 404 until the service restarts.
+A service run from a checkout runs the code on disk, so a merge into that checkout (a ticket's
+complete run, a `git pull`) changes the code under a service that keeps running the old code.
+Routes the new app calls then 404 until the service restarts.
 
 - At boot the daemon hashes the files it loads (`sourceFingerprint` in `service/src/code-watch.ts`):
   `service/src`, `shared/src` and `plugins`, skipping tests, `node_modules`, `dist` and dotfiles,
   plus the package manifests and `bun.lock`. `build` is that hash.
+- The compiled executable has no source on disk, so it fingerprints its own file instead
+  (`executableFingerprint`: inode, size, mtime). Replacing Harness.app with a new build makes a
+  service launchd still runs from the old one stale. While the file is missing (mid-replace, or
+  the app moved) the last value stands.
 - Every 20s it hashes again. When the result differs from `build` the service is `stale`:
   `/health` says so and a `service.status { build, stale }` event goes out (again if the code
   changes back).
-- A stale service run by launchd (`XPC_SERVICE_NAME` is the label and its parent is launchd, pid 1;
-  agents inherit the variable) restarts by itself once the
+- A stale supervised service (launchd's, or the app's child; see "Service supervision") restarts by itself once the
   new code is settled (the same hash two checks in a row, so a checkout still writing files isn't
   loaded half-done) and nothing is queued, running or starting (`Orchestrator.isIdle`). It exits
-  through the normal shutdown and KeepAlive starts the new code. Run by hand, it only reports stale.
+  through the normal shutdown and its supervisor starts the new code. Run by hand, it only reports stale.
 - `POST /service/restart` restarts right away. Running agents are stopped: their runs end
   cancelled and their tickets stay in their columns.
 - Tests and embedded services don't track their source: `/health` reports `build: null`,
@@ -1292,9 +1359,9 @@ the old code. Routes the new app calls then 404 until the service restarts.
 The desktop app shows a banner under the main view while the service is stale, and it can't be
 dismissed. A service whose `/health` has no `build` at all predates build tracking. It never
 restarts by itself, and the app counts it as stale too. "Restart now" asks for confirmation when
-agents are running. For the service the app started, the main process runs
-`cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age. Other
-connections call `POST /service/restart`. The banner goes away when the reconnected service
+agents are running. The app restarts its own child in place. For a login item the main process
+runs `cli.ts service restart` (`launchctl kickstart -k`), which works on a service of any age.
+Other connections call `POST /service/restart`. The banner goes away when the reconnected service
 reports fresh code.
 
 ## Network
@@ -1944,3 +2011,40 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   commits; the tag's digits are the build number and its CHANGELOG.md section is the notes; see
   CLAUDE.md → Releases), and deploys the install page plus `manifest.plist` to Vercel. The OTA manifest points at
   `releases/latest/download/Harness.ipa` on GitHub.
+
+## Native iOS app (`ios/`)
+
+`ios/` is a SwiftUI rewrite of the iPhone and iPad app. It's another client of the same REST +
+WebSocket API, with no service changes, and it replaces `mobile/` once releases switch to it
+(`release:publish --ios-app=native` already builds it, with the same bundle id, so it installs
+over the RN app). Until then both apps are maintained, and `mobile/` plus `shared/` are the spec:
+where they disagree, the RN app's behavior wins. ios/ARCHITECTURE.md has the conventions and the
+parity table, feature by feature.
+
+- **Two halves.** `ios/Harness` is the app target: SwiftUI views, navigation, and platform glue
+  (Keychain, camera, haptics, WKWebView). `ios/HarnessKit` is a Swift package with everything that
+  doesn't draw: the Codable protocol types, `HarnessClient` (REST) and `HarnessSocket` (WebSocket),
+  the board reducer and selectors, and every helper a screen branches on (completion and approve
+  menus, tabs, paging, drafts, mentions, markdown, file links, settings rules). It imports
+  Foundation only, so `swift test` runs on the Mac host in seconds.
+- **Fixture parity with `shared/`.** Ported logic can't drift from TypeScript. Each case file in
+  `shared/fixtures/cases/` runs the real TS functions over a list of inputs, and
+  `bun shared/scripts/export-fixtures.ts` writes the outputs as JSON into HarnessKit's tests.
+  `swift test` checks the Swift ports against them, and `bun run test` fails when the committed
+  JSON is stale. `cases/protocol.ts` holds a sample of every entity and event, which the Swift
+  types must decode and re-encode unchanged, so a field added to `shared/src/protocol.ts` has to
+  reach Swift too. Reducer scenarios replay real TS actions and compare selector probes.
+- **Syntax highlighting.** The RN app's own `mobile/src/lib/highlight.ts` (Shiki, its JavaScript
+  regex engine, the same languages and themes) is bundled into one script at build time and runs
+  in JavaScriptCore (`HarnessHighlight`), so code colors match the desktop and the RN app exactly.
+  A view draws plain lines in its first frame and swaps colors in when the job finishes.
+- **Plugin tabs.** A WKWebView loads the plugin's UI from the service, and the host bridge is a
+  fixture-checked port of `shared/src/state/pluginBridge.ts` over `WKScriptMessageHandler`, with
+  the same injected theme. The Browser tab draws `browser.frame` events natively and sends input
+  through the same touch and keyboard rules as the RN app (`lib/browserInput`).
+- **Changes tab.** Built in rather than the git plugin's page in a web view: the diff, file list,
+  viewed marks and Unified/Split toggle are SwiftUI, fed by a `ChangesSource`. Today that reads the
+  git plugin's `/plugins/git/api/*` routes; a core Changes API would be one more conformance.
+  `plugin:git:changes` links open it, and its files open in the file viewer.
+- **Checks.** `bun mobile/scripts/sim-check.ts --native` runs the RN app's simulator walk-through
+  against the native build, through the accessibility tree, so both apps expose the same labels.

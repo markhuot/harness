@@ -194,11 +194,26 @@ import Testing
         #expect(ChangesTab.otherPluginTabs(nil) == nil)
     }
 
-    @Test func showsWithAWorkdirOrAPinnedDiff() {
+    @Test func showsWhenTheServiceListsTheGitTab() {
+        // Not loaded yet: a workdir is the guess.
         #expect(ChangesTab.shows(workdir: "/w", pluginTabs: nil))
-        #expect(ChangesTab.shows(workdir: nil, pluginTabs: [Self.git]))
-        #expect(!ChangesTab.shows(workdir: nil, pluginTabs: [Self.other]))
         #expect(!ChangesTab.shows(workdir: nil, pluginTabs: nil))
+        // Loaded: the service's list decides, workdir or not (a pinned diff has no workdir).
+        #expect(ChangesTab.shows(workdir: nil, pluginTabs: [Self.git]))
+        #expect(ChangesTab.shows(workdir: "/w", pluginTabs: [Self.other, Self.git]))
+        #expect(!ChangesTab.shows(workdir: nil, pluginTabs: [Self.other]))
+        // The git plugin is disabled (or its tab isn't offered): no Changes tab despite the workdir.
+        #expect(!ChangesTab.shows(workdir: "/w", pluginTabs: [Self.other]))
+        #expect(!ChangesTab.shows(workdir: "/w", pluginTabs: []))
+    }
+
+    @Test func iconComesFromTheListedTabOrThePluginDefault() {
+        #expect(ChangesTab.icon(nil) == "branch")
+        #expect(ChangesTab.icon([Self.other]) == "branch")
+        #expect(ChangesTab.icon([PluginTab(pluginId: "git", id: "changes", title: "Changes", icon: "diff", when: .workdir)]) == "diff")
+        #expect(ChangesTab.icon([PluginTab(pluginId: "git", id: "changes", title: "Changes", icon: "", when: .workdir)]) == "branch")
+        // Another plugin's icon never leaks in.
+        #expect(ChangesTab.icon([PluginTab(pluginId: "notes", id: "list", title: "Notes", icon: "file", when: .always)]) == "branch")
     }
 
     @Test func effectiveTab() {
@@ -218,6 +233,10 @@ import Testing
             == [.summaries, .transcript, .browser, .changes, .details, "plugin:notes:list"])
         #expect(ChangesTab.visibleTabs(conductor: false, workdir: nil, subagents: nil, pluginTabs: [Self.other])
             == [.summaries, .transcript, .browser, .details, "plugin:notes:list"])
+        #expect(ChangesTab.visibleTabs(conductor: false, workdir: "/w", subagents: nil, pluginTabs: [Self.other])
+            == [.summaries, .transcript, .browser, .details, "plugin:notes:list"])
+        #expect(ChangesTab.visibleTabs(conductor: false, workdir: "/w", subagents: nil, pluginTabs: nil)
+            == [.summaries, .transcript, .browser, .changes, .details])
     }
 
     @Test func styleFallsBackOnNarrowScreensButKeepsTheChoice() {

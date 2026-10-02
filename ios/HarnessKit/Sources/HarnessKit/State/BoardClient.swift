@@ -26,10 +26,3 @@ public protocol BoardClient: LoaderClient, DetailClient {
 }
 
 extension HarnessClient: BoardClient {}
-
-/// `e instanceof Error ? e.message : String(e)`: the message a failed request shows.
-func errorMessage(_ error: any Error) -> String {
-    if let e = error as? HarnessAPIError { return e.message }
-    if let e = error as? LocalizedError, let d = e.errorDescription { return d }
-    return String(describing: error)
-}

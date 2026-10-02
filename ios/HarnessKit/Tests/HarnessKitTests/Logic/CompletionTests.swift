@@ -8,6 +8,22 @@ struct CompletionTests {
         let ticket: Completion.TicketInfo?
         let project: Completion.ProjectInfo?
         let parent: Completion.ParentInfo?
+        let base: String?
+    }
+
+    struct WorksOnBaseInput: Decodable, Sendable {
+        let ticket: Completion.TicketInfo?
+        let base: String?
+    }
+
+    struct ConductorTicketIn: Decodable, Sendable { let parentId: String? }
+    struct ConductorParentIn: Codable, Sendable, Equatable {
+        let key: String
+        let status: TicketStatus?
+    }
+    struct ManagingInput: Decodable, Sendable {
+        let ticket: ConductorTicketIn?
+        let parent: ConductorParentIn?
     }
 
     struct ResolveInput: Decodable, Sendable {
@@ -15,6 +31,7 @@ struct CompletionTests {
         let ticket: Completion.TicketInfo?
         let project: Completion.ProjectInfo?
         let parent: Completion.ParentInfo?
+        let base: String?
     }
 
     struct CompletionLabels: Decodable {
@@ -39,7 +56,7 @@ struct CompletionTests {
 
     @Test(arguments: Fixture.cases("completion", "completionOptionsCases", input: OptionsInput.self, output: Completion.Options.self))
     func completionOptions(_ c: Fixture.Case<OptionsInput, Completion.Options>) throws {
-        let got = Completion.completionOptions(c.input.ticket, c.input.project, parent: c.input.parent)
+        let got = Completion.completionOptions(c.input.ticket, c.input.project, parent: c.input.parent, base: c.input.base)
         #expect(got == c.output)
         // parentBranch: null is always sent, like the TS object.
         let json = try #require(String(data: JSONEncoder().encode(got), encoding: .utf8))
@@ -48,17 +65,28 @@ struct CompletionTests {
 
     @Test(arguments: Fixture.cases("completion", "approveLabelCases", input: OptionsInput.self, output: String?.self))
     func approveLabel(_ c: Fixture.Case<OptionsInput, String?>) {
-        #expect(Completion.approveLabel(Completion.completionOptions(c.input.ticket, c.input.project, parent: c.input.parent)) == c.output)
+        #expect(Completion.approveLabel(Completion.completionOptions(c.input.ticket, c.input.project, parent: c.input.parent, base: c.input.base)) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("completion", "approveMenuActionsCases", input: OptionsInput.self, output: [CompletionAction].self))
-    func approveMenuActions(_ c: Fixture.Case<OptionsInput, [CompletionAction]>) {
-        #expect(Completion.approveMenuActions(Completion.completionOptions(c.input.ticket, c.input.project, parent: c.input.parent)) == c.output)
+    @Test(arguments: Fixture.cases("completion", "worksOnBaseCases", input: WorksOnBaseInput.self, output: Bool.self))
+    func worksOnBase(_ c: Fixture.Case<WorksOnBaseInput, Bool>) {
+        #expect(Completion.worksOnBase(c.input.ticket, base: c.input.base) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("completion", "managingConductorCases", input: ManagingInput.self, output: ConductorParentIn?.self))
+    func managingConductor(_ c: Fixture.Case<ManagingInput, ConductorParentIn?>) {
+        let key = Completion.managingConductor(parentId: c.input.ticket?.parentId, parentKey: c.input.parent?.key, parentStatus: c.input.parent?.status)
+        #expect(key == c.output?.key)
+    }
+
+    @Test(arguments: Fixture.cases("completion", "conductorManagedReasonCases", input: ConductorParentIn.self, output: String.self))
+    func conductorManagedReason(_ c: Fixture.Case<ConductorParentIn, String>) {
+        #expect(Completion.conductorManagedReason(conductorKey: c.input.key) == c.output)
     }
 
     @Test(arguments: Fixture.cases("completion", "resolveCompletionActionCases", input: ResolveInput.self, output: Completion.Resolution.self))
     func resolveCompletionAction(_ c: Fixture.Case<ResolveInput, Completion.Resolution>) {
-        #expect(Completion.resolveCompletionAction(c.input.requested, c.input.ticket, c.input.project, parent: c.input.parent) == c.output)
+        #expect(Completion.resolveCompletionAction(c.input.requested, c.input.ticket, c.input.project, parent: c.input.parent, base: c.input.base) == c.output)
     }
 
     @Test func labelsMatchTS() throws {
@@ -82,5 +110,22 @@ struct CompletionTests {
         var mergeProject = project
         mergeProject.completionAction = .merge
         #expect(Completion.completionOptions(ticket: opened, project: mergeProject).defaultAction == .pr)
+        // A ticket whose branch is its effective base (here the settings' default) drops merge and pr.
+        var onBase = child
+        onBase.branch = "release"
+        #expect(Completion.completionOptions(ticket: onBase, project: project, settingsBaseBranch: "release").actions == [.cleanup, .custom])
+        #expect(Completion.completionOptions(ticket: onBase, project: project, settingsBaseBranch: "main").actions == [.merge, .pr, .cleanup, .custom])
+        // The parent manages its child until it's done.
+        #expect(Completion.managingConductor(ticket: Self.withParent(child), parent: parent)?.key == "P-1")
+        var doneParent = parent
+        doneParent.status = .done
+        #expect(Completion.managingConductor(ticket: Self.withParent(child), parent: doneParent) == nil)
+        #expect(Completion.managingConductor(ticket: child, parent: parent) == nil)
+    }
+
+    private static func withParent(_ t: Ticket) -> Ticket {
+        var t = t
+        t.parentId = "a"
+        return t
     }
 }

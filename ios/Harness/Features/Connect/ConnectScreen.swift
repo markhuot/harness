@@ -1,9 +1,5 @@
 import HarnessKit
 import SwiftUI
-import UIKit
-
-/// "iPhone" / "iPad" (lib/device.ts DEVICE), for copy that names the device.
-@MainActor var deviceName: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
 
 /// Pairing (screens/Connect.tsx): scan the desktop's QR code (or let the Camera app open
 /// harness://pair…), or enter the URL and token by hand. Saved Macs can be switched between.
@@ -30,9 +26,9 @@ struct ConnectScreen: View {
                         .frame(width: 64, height: 64)
                         .background(c.accentSoft, in: .rect(cornerRadius: 16))
                     Text("Pair with Harness on your Mac")
-                        .font(.system(size: 22, weight: .bold)).foregroundStyle(c.text).multilineTextAlignment(.center)
+                        .font(.scaled(size: 22, weight: .bold)).foregroundStyle(c.text).multilineTextAlignment(.center)
                     Text("On the Mac, open Harness → Settings → Network, choose Tailscale or All networks, and scan the QR code.")
-                        .font(.system(size: 15)).foregroundStyle(c.text2).multilineTextAlignment(.center)
+                        .font(.scaled(size: 15)).foregroundStyle(c.text2).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
@@ -78,7 +74,7 @@ struct ConnectScreen: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Service URL").font(.system(size: 13, weight: .semibold)).foregroundStyle(c.text2)
+                    Text("Service URL").font(.scaled(size: 13, weight: .semibold)).foregroundStyle(c.text2)
                     TextField("http://100.64.0.2:7717", text: $url)
                         .font(.mono(15))
                         .keyboardType(.URL)
@@ -92,7 +88,7 @@ struct ConnectScreen: View {
                 }
                 .listRowBackground(c.bgElev)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Token").font(.system(size: 13, weight: .semibold)).foregroundStyle(c.text2)
+                    Text("Token").font(.scaled(size: 13, weight: .semibold)).foregroundStyle(c.text2)
                     SecureField("From Settings → Network → Show token", text: $token)
                         .font(.mono(14))
                         .textInputAutocapitalization(.never)
@@ -173,13 +169,13 @@ struct PairScreen: View {
             if busy {
                 VStack(spacing: 12) {
                     Spinner(large: true)
-                    Text("Connecting to \(host.isEmpty ? "your Mac" : host)…").font(.system(size: 16)).foregroundStyle(c.text2)
+                    Text("Connecting to \(host.isEmpty ? "your Mac" : host)…").font(.scaled(size: 16)).foregroundStyle(c.text2)
                 }
             } else {
                 Callout(tone: .red, icon: "wifiOff", title: "Couldn't pair", message: error ?? "")
                 HButton("Try again", variant: .primary) { attempt += 1 }
                 Button("Enter the details manually") { router.present(.connect) }
-                    .font(.system(size: 15))
+                    .font(.scaled(size: 15))
                     .foregroundStyle(c.accent)
             }
         }
