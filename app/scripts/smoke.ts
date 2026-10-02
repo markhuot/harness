@@ -280,50 +280,26 @@ try {
   const autoDone = await until("auto-completed", async () => (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-4")).ticket.status === "done", 10000);
   check("approving a ready ticket runs the completion step and moves it to done", autoDone);
 
-  // 4b. With Complete when approved off, approval leaves the ticket ready and Complete runs it.
+  // 4b. Approving before the agent review is in: the ticket waits in review, and the agent's
+  // approval then completes it with no Complete step.
   const nyProject = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!;
-  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: false });
-  const manual = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Manual completion" });
-  await until("manual ticket agent-approved", async () => {
-    const t = (await api<{ ticket: { status: string; agentReview: string; busy: boolean } }>("GET", `/tickets/${manual.key}`)).ticket;
-    return t.status === "review" && t.agentReview === "approved" && !t.busy;
+  const early = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Approve before the agent review" });
+  type EarlyT = { status: string; agentReview: string; humanReview: string };
+  const earlyT = async () => (await api<{ ticket: EarlyT }>("GET", `/tickets/${early.key}`)).ticket;
+  await until("early ticket in review, agent review running", async () => {
+    const t = await earlyT();
+    return t.status === "review" && t.agentReview === "pending";
   }, 15000);
-  await js(`location.hash = "#/board/all/ticket/${manual.key}"`);
+  await js(`location.hash = "#/board/all/ticket/${early.key}"`);
   await until("approve button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Approve"))`));
   await clickText(".actions button", "Approve");
-  const completeEnabled = await until("Complete enabled", () =>
-    js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Complete") && !b.disabled)`),
-  );
-  check("with auto-complete off, Complete enables once both reviews approve", completeEnabled);
-  check("with auto-complete off, the ticket waits in review", (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "review");
-  // The two approved review marks say it's ready; the card has no separate Ready badge.
-  const readyCard = await until("ready card marks", () =>
-    js<{ marks: number; ready: boolean } | null>(`(() => { const card = document.querySelector('.card[data-key="${manual.key}"]'); if (!card) return null;
-      const marks = card.querySelectorAll(".card-reviews .badge-green").length; return marks === 2 ? { marks, ready: card.querySelectorAll(".badge-green").length > marks } : null; })()`),
-  );
-  check("a ready card shows both approved marks and no Ready badge", readyCard.marks === 2 && !readyCard.ready, JSON.stringify(readyCard));
-  const completeItems = await (async () => {
-    await js(`document.querySelector("[data-testid=complete-menu]").click()`);
-    const items = await until("complete menu", async () => {
-      const t = await js<string[]>(`[...document.querySelectorAll(".land-menu-complete button")].map(b => b.textContent.trim())`);
-      return t.length > 0 && t;
-    });
-    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await until("complete menu closed", async () => !(await exists(".land-menu-complete")));
-    return items;
-  })();
-  check(
-    "the Complete button offers the same choices as Approve",
-    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and clean up|Complete and…|Complete and take no action",
-    completeItems.join("|"),
-  );
-  await clickText(".actions button", "Complete");
-  await until("complete modal", () => exists(".modal"));
-  check("the Complete sheet has no Mark done switch (the menu's take no action replaces it)", !(await exists(".modal .switch")));
-  await clickText(".modal-foot button", "Complete");
-  const manualDone = await until("manual done", async () => (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "done", 10000);
-  check("Complete runs the completion step and moves it to done", manualDone);
-  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: true });
+  const waiting = await until("human approved first", async () => {
+    const t = await earlyT();
+    return t.humanReview === "approved" && t;
+  });
+  check("approving before the agent review leaves the ticket in review", waiting.status === "review" && waiting.agentReview === "pending", JSON.stringify(waiting));
+  const earlyDone = await until("early done", async () => (await earlyT()).status === "done", 10000);
+  check("the agent's approval then completes the ticket by itself", earlyDone);
 
   // 4c. The Approve split button: its menu follows the checkout (a gh remote: merge / PR / …; plain
   // git: no PR; no git: a plain Approve), "Approve and…" asks for instructions, "Approve and take
@@ -869,13 +845,8 @@ try {
   await until("project mode cleared", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === null);
   const unnamed = await js<number>(`[...document.querySelectorAll("input[type=checkbox]")].filter(i => i.getAttribute("role") !== "switch" || !(i.getAttribute("aria-label") || i.closest("label")?.textContent.trim())).length`);
   check("every project settings switch is a named role=switch", unnamed === 0, `${unnamed} unnamed`);
-  const autoCompleteSwitch = `document.querySelector('#settings-project-agents input[role=switch][aria-label="Complete when approved"]')`;
-  check("project settings show Complete when approved, on by default", await js<boolean>(`${autoCompleteSwitch}?.checked === true`));
-  await js(`${autoCompleteSwitch}.click()`);
-  const autoOff = await until("autoComplete saved", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === false);
-  check("toggling Complete when approved PATCHes the project", autoOff && (await js<boolean>(`${autoCompleteSwitch}?.checked === false`)));
-  await js(`${autoCompleteSwitch}.click()`);
-  await until("autoComplete restored", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === true);
+  const switches = await js<string[]>(`[...document.querySelectorAll("#settings-project-agents input[role=switch]")].map(i => i.getAttribute("aria-label"))`);
+  check("project settings have no Complete when approved switch", switches.length > 0 && !switches.includes("Complete when approved"), switches.join(","));
   await js(`location.hash = "#/board/${hh.id}"`);
   const boardKeys = await until("board shows renamed cards", async () => {
     const k = await js<string[]>(`[...document.querySelectorAll(".card-key")].map(e => e.textContent)`);

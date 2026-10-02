@@ -136,9 +136,9 @@ test("approval input: config tools show the watcher command line and what they a
   });
   expect(describeApprovalInput("update_watcher", { watcher: "jira", enabled: false }).primary).toEqual({ label: "Watcher", value: "jira", code: false });
   expect(describeApprovalInput("delete_ticket", { key: "ACME-3" }).primary).toEqual({ label: "Ticket", value: "ACME-3", code: false });
-  expect(describeApprovalInput("update_project", { project_key: "ACME", auto_complete: true })).toMatchObject({
+  expect(describeApprovalInput("update_project", { project_key: "ACME", require_human_review: true })).toMatchObject({
     primary: { label: "Project", value: "ACME" },
-    rest: { auto_complete: true },
+    rest: { require_human_review: true },
   });
 });
 

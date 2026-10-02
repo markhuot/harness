@@ -5,7 +5,7 @@
 //   bun scripts/acceptance.ts [driver=dummy] [projectDir=~/Sites/hello-harness]
 //
 // Drives the UI: New session pane → "hello world" → watches the card go In progress → Review →
-// Approve → the complete run (autoComplete, or Complete when the project turned it off) → Done, then prints the agent's summaries.
+// Approve → the complete run → Done, then prints the agent's summaries.
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -120,11 +120,6 @@ try {
 
   await until("Approve", () => clickText(".actions button", "Approve"));
   console.log("✓ human approved in the UI");
-  if (!project.autoComplete) {
-    await until("Complete", () => clickText(".actions button", "Complete"));
-    await until("complete modal", () => exists(".modal"));
-    await clickText(".modal-foot button", "Complete");
-  }
   await until("ticket done", async () => (await api<TicketDetail>("GET", `/tickets/${ticket.key}`)).ticket.status === "done", driver === "dummy" ? 30000 : 300000);
   await until("card in Done", () => column("Done", ticket.key));
   console.log(`✓ ${ticket.key} is Done on the board`);

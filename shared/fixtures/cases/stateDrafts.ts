@@ -25,7 +25,7 @@ import { cases } from "../case";
 type Settings = { defaultDriver: string; defaultModels: Record<string, string | null>; baseBranch?: string };
 
 const project = (over: Partial<Project> = {}): Project =>
-  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, requireHumanReview: true, autoComplete: false, createdAt: 0, updatedAt: 0, ...over }) as Project;
+  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, requireHumanReview: true, createdAt: 0, updatedAt: 0, ...over }) as Project;
 const settings: Settings = { defaultDriver: "claude-code", defaultModels: {}, baseBranch: "main" };
 const blank = (p = project()) => blankDraftTicket(p, settings, "WEB-4", 1);
 const launched = (over: Partial<Ticket> = {}): Ticket => ({ ...blank(), key: "WEB-4", draft: false, ...over });

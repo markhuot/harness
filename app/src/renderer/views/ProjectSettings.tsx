@@ -140,9 +140,6 @@ function ProjectSettings({ project }: { project: Project }) {
               <Row title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
                 <Switch ariaLabel="Require human review" checked={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
               </Row>
-              <Row title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done.">
-                <Switch ariaLabel="Complete when approved" checked={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
-              </Row>
               {project.isGit && <CompletionActionRow project={project} onChange={(completionAction) => void save({ completionAction })} />}
             </div>
           </Section>

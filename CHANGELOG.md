@@ -21,6 +21,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   buttons says so. The conductor approves and lands its children itself. Once the conductor is
   done, the buttons work again.
 
+### Removed
+
+- The **Complete when approved** switch is gone from project settings on the Mac, iPhone and
+  iPad. Approving a ticket now always lands the work the way the Approve button says (merge,
+  open a PR, clean up, or your instructions) once both reviews pass, with no separate
+  **Complete** step. To approve without landing anything, pick **Approve and take no action**.
+  A project with **Require human review** off now lands each ticket as soon as the agent
+  reviewer approves it, so turn that switch on if you want to sign off yourself. Update the
+  iPhone and iPad app along with the Mac: older versions can't read projects from the new
+  service.
+
 ### Fixed
 
 - An agent that picks up a ticket where an earlier run left a background job running (approving

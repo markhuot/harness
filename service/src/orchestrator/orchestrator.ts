@@ -675,7 +675,6 @@ export class Orchestrator {
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       requireHumanReview: body.requireHumanReview,
-      autoComplete: body.autoComplete,
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
@@ -2529,7 +2528,6 @@ export class Orchestrator {
       defaultModels: p.defaultModels,
       useWorktrees: p.useWorktrees,
       requireHumanReview: p.requireHumanReview,
-      autoComplete: p.autoComplete,
       permissionMode: p.permissionMode,
       color: p.color,
       baseBranch: p.baseBranch ?? null,
@@ -3158,13 +3156,13 @@ export class Orchestrator {
   }
 
   /**
-   * Both reviews approved: say so, and with the project's autoComplete on start the complete run
-   * right away. Conductor children wait for their conductor's complete_ticket instead.
+   * Both reviews approved: start the complete run right away, with the action chosen at approval
+   * (else the project default). Conductor children wait for their conductor's complete_ticket
+   * instead.
    */
   private noteReady(t: Ticket) {
     if (t.status !== "review" || !reviewPassed(t.agentReview) || t.humanReview !== "approved") return;
-    const project = this.store.projects.get(t.projectId);
-    if (!project?.autoComplete || t.parentId || this.completing(t)) {
+    if (t.parentId || this.completing(t)) {
       this.appendStatus(t.sessionId, null, "Ready to complete");
       return;
     }

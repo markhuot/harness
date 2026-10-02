@@ -442,6 +442,12 @@ export const MIGRATIONS: string[] = [
   END;
 
   `,
+  // 21: projects.auto_complete goes. Approving always completes now: the approval option picks
+  //     what happens (an action, or "Approve and take no action"), so the per-project switch that
+  //     could hold an approved ticket back from its complete run is gone.
+  `
+  ALTER TABLE projects DROP COLUMN auto_complete;
+  `,
 ];
 
 /**

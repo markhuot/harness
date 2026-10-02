@@ -209,7 +209,7 @@ export const describeApprovalInputCases = cases(approval, {
   "create_watcher doesn't pick watcher": { toolName: "create_watcher", input: { watcher: "jira" } },
   "delete_ticket shows the key": { toolName: "delete_ticket", input: { key: "ACME-3" } },
   "other tools don't pick key": { toolName: "get_ticket", input: { key: "ACME-3" } },
-  "update_project shows the project": { toolName: "update_project", input: { project_key: "ACME", auto_complete: true } },
+  "update_project shows the project": { toolName: "update_project", input: { project_key: "ACME", require_human_review: true } },
   "create_project prefers the directory": { toolName: "create_project", input: { path: "~/Sites/x", project_key: "X" } },
   "generic command fallback": { toolName: "mcp__x__run", input: { command: "make", url: "https://x" } },
   "generic url fallback": { toolName: "mcp__x__open", input: { url: "https://x", path: "/p" } },

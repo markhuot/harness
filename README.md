@@ -134,8 +134,9 @@ you answer.
   the repo's host (`gh auth login`, with `--hostname` for GitHub Enterprise) and push access, and
   only shows up when both are in place.
 - Once both reviews approve, a final agent step runs on its own, lands the work the way you
-  chose, and moves the ticket to Done. Turn off **Complete when approved** in project settings
-  to press **Complete** yourself instead.
+  chose, and moves the ticket to Done. **Approve and take no action** is the way to approve
+  without landing anything. To hold the work back for now, leave the ticket in Review until
+  you're ready to approve it.
 - **Conductor** tickets break a goal into child tickets with dependencies, start each
   child when its dependencies finish, review and complete the children, and submit
   themselves for review once every child is done.

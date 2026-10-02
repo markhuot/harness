@@ -44,19 +44,25 @@ describe("db", () => {
     again.close();
   });
 
-  test("migration 7 turns autoComplete on for projects that already exist", () => {
+  test("migration 21 drops projects.auto_complete; a project that had it off keeps its other settings", () => {
     const db = new Database(":memory:", { strict: true });
-    for (const [v, sql] of MIGRATIONS.slice(0, 6).entries()) {
+    for (const [v, sql] of MIGRATIONS.slice(0, 20).entries()) {
       db.exec(sql);
       db.exec(`PRAGMA user_version = ${v + 1}`);
     }
-    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    db.exec(
+      `INSERT INTO projects (id, key, name, path, next_seq, require_human_review, auto_complete, completion_action, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 3, 0, 0, 'cleanup', 0, 0)`,
+    );
     migrate(db);
+    const cols = (db.query("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).not.toContain("auto_complete");
     const store = new Store(db);
-    expect(store.projects.get("p1")!.autoComplete).toBe(true);
-    const off = store.projects.update("p1", { autoComplete: false })!;
-    expect(off.autoComplete).toBe(false);
-    expect(store.projects.update("p1", { name: "renamed" })!.autoComplete).toBe(false);
+    const p = store.projects.get("p1")!;
+    expect([p.nextSeq, p.requireHumanReview, p.completionAction]).toEqual([3, false, "cleanup"]);
+    expect(p).not.toHaveProperty("autoComplete");
+    // Inserts and updates no longer name the column.
+    expect(store.projects.update("p1", { name: "renamed" })!.name).toBe("renamed");
+    expect(store.projects.create({ path: "/new", name: "new" }).key).toBe("NEW");
   });
 
   test("migration 8 gives existing watchers an empty prompt and keeps their command + args", () => {

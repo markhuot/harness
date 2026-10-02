@@ -210,7 +210,7 @@ plan`; the `mcp__harness` allow rule keeps `update_plan` and `post_summary` runn
 | Agent `review_decision(approve)` | `agentReview=approved` |
 | Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
 | Human `POST /review {approve, action?, instructions?}` | the choice (`completionAction`, `completionInstructions`) is stored on the ticket first, 400 for an action the ticket doesn't offer (see "Completion"); `humanReview=approved` |
-| Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | project `autoComplete` on (the default) and not a conductor child: enqueue the **complete** run right away (status "Both reviews approved: completing automatically"). Otherwise the ticket is **ready** (still in review) and the UI shows "Complete". |
+| Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | not a conductor child: enqueue the **complete** run right away with the action chosen at approval, else the project default (status "Both reviews approved: completing automatically"). A conductor child is **ready** instead (still in review, status "Ready to complete") until its conductor's `complete_ticket`; the UI shows "Complete" for any ready ticket. There's no per-project switch: the approval option decides what happens, and "Approve and take no action" is the way to approve without landing anything (the project setting `autoComplete` was dropped in migration 21). |
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
 | `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
@@ -227,8 +227,8 @@ agent to check, like a question answered in text. Submitting such a ticket (the 
 `submit_for_review` or the auto-submit at the end of a run) sets `agentReview = "skipped"` and
 starts no review run, so the ticket waits in Review only on the human, or on its conductor for a
 child. `"skipped"` is only ever an agent review state, and `reviewPassed` (shared) treats it like
-`approved`: the human's approval makes the ticket ready, and with `autoComplete` it completes right
-away. A project with human review off makes the ticket ready as soon as it's submitted. A request
+`approved`: the human's approval makes the ticket ready, and it completes right away. A project
+with human review off completes the ticket as soon as it's submitted. A request
 for changes resets the agent review to `pending` as usual; the next submit skips it again.
 
 Who sets it:
@@ -404,7 +404,7 @@ PR option.
 
 **The project default** (`Project.completionAction`, migration 18, default `merge`) is what the
 Approve button preselects and what completes a ticket nobody picks for (human review off, a
-conductor's `complete_ticket` without `action`, auto-complete). `create_project` /
+conductor's `complete_ticket` without `action`). `create_project` /
 `update_project` / `PATCH /projects/:id` refuse a default the project doesn't offer; a stored
 default the project stops offering (gh logged out, the remote removed) falls back to merge, then
 custom (`projectCompletionDefault`).
@@ -576,7 +576,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, auto_complete?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
@@ -716,7 +716,7 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, auto-complete, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |

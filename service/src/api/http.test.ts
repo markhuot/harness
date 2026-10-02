@@ -116,8 +116,7 @@ describe("http api", () => {
       const tail = await client.transcript(t.sessionId, seqs.at(-3)!);
       expect(tail.map((e) => e.seq)).toEqual(seqs.slice(-2));
 
-      // autoComplete is on by default: the approval itself starts the complete run.
-      expect(p.autoComplete).toBe(true);
+      // The approval itself starts the complete run.
       await client.humanReview(t.key, { decision: "approve" });
       await h.orchestrator.idle();
       detail = await client.getTicket(t.key);
