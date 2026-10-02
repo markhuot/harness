@@ -16,6 +16,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   covers a ticket that worked in the project folder without a worktree of its own (a release, say)
   and one whose worktree has no new commits or uncommitted changes. If you commit to its worktree
   by hand while it's in Review, opening the ticket brings the merge choices back.
+- On iPhone and iPad, the New session button at the bottom right of the board is now a pencil on a
+  square, the same compose icon Mail and Notes use, instead of a plus.
 
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 
