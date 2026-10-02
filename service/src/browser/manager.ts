@@ -283,13 +283,13 @@ export class BrowserManager implements BrowserService {
         if (input.key === "Enter") text = "\r";
         // Shortcuts must not insert their character.
         if (modifiers & (MOD_CTRL | MOD_META)) text = undefined;
+        // No nativeVirtualKeyCode (see keys.ts): on macOS it sends unhandled keys into a loop.
         const params: Record<string, unknown> = {
           type: input.action === "up" ? "keyUp" : text ? "keyDown" : "rawKeyDown",
           key: input.key,
           code: input.code,
           modifiers,
           windowsVirtualKeyCode: vk,
-          nativeVirtualKeyCode: vk,
         };
         if (text && input.action === "down") {
           params.text = text;
@@ -801,10 +801,9 @@ export class BrowserManager implements BrowserService {
       key,
       code,
       windowsVirtualKeyCode: vk,
-      nativeVirtualKeyCode: vk,
       ...(text ? { text, unmodifiedText: text } : {}),
     });
-    await tab.session.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
+    await tab.session.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: vk });
   }
 
   // -------------------------------------------------------------------------
