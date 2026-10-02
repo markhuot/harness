@@ -29,13 +29,13 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
     plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    work: ["post_summary", "block", "unblock", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    work: ["post_summary", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
     complete: ["post_summary", "record_pull_request", ...BOARD, ...CONFIG_READ],
-    conductor: ["post_summary", "unblock", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    conductor: ["post_summary", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
     // A chat (a message to a blocked, review or done task ticket) gets the work run's tools.
-    chat: ["post_summary", "block", "unblock", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    chat: ["post_summary", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -71,6 +71,7 @@ describe("toolsForRun", () => {
     const who = (tool: string) => kinds.filter((k) => names(k, builtin).includes(tool));
     expect(who("block")).toEqual(["work", "chat"]);
     expect(who("unblock")).toEqual(["work", "conductor", "chat"]);
+    expect(who("resume_work")).toEqual(["work", "conductor", "chat"]);
     expect(who("submit_for_review")).toEqual(["work", "conductor", "chat"]);
     expect(who("update_plan")).toEqual(["plan"]);
     expect(who("review_decision")).toEqual(["review"]);

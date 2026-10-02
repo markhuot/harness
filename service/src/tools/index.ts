@@ -9,7 +9,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
-import { block, postSummary, recordPullRequest, reviewDecision, submitForReview, unblock, updateBranch, updatePlan } from "./ticket";
+import { block, postSummary, recordPullRequest, resumeWork, reviewDecision, submitForReview, unblock, updateBranch, updatePlan } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -39,6 +39,7 @@ export const allTools: ToolDefinition[] = [
   updatePlan,
   block,
   unblock,
+  resumeWork,
   submitForReview,
   updateBranch,
   reviewDecision,
@@ -72,13 +73,13 @@ export const allTools: ToolDefinition[] = [
 const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
-    harness: [postSummary, block, unblock, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postSummary, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",
   },
   review: { harness: [postSummary, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postSummary, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postSummary, unblock, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postSummary, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },

@@ -1,8 +1,27 @@
 import { expect, test } from "bun:test";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
-import { acquire, checkDisk, deviceTypeFor, ensureDevice, lockHolder, pinnedRuntime, processStart, releaseLock, tryLock, withLock, type Runtime, type Simctl } from "./sim";
+import {
+  acquire,
+  checkDisk,
+  deviceTypeFor,
+  ensureDevice,
+  etimeSeconds,
+  lockHolder,
+  markKept,
+  parseSimDaemons,
+  pinnedRuntime,
+  planReap,
+  processStart,
+  reap,
+  releaseLock,
+  tryLock,
+  withLock,
+  writeRunOwner,
+  type Runtime,
+  type Simctl,
+} from "./sim";
 
 const iphone = { identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro", name: "iPhone 18 Pro" };
 const ipad = { identifier: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB", name: "iPad Pro 11-inch (M5)" };
@@ -231,4 +250,89 @@ test("ensureDevice creates nothing without iOS 27.0 or without disk space", asyn
   await expect(ensureDevice("harness-shared", { simctl: full.run, lockDir: dir, freeGiB: () => 2 })).rejects.toThrow(/only 2\.0 GiB/);
   expect([...noRuntime.calls, ...full.calls].some((c) => c[0] === "create")).toBe(false);
   expect(existsSync(join(dir, "harness-shared.ensure.lock"))).toBe(false);
+});
+
+// ---------------------------------------------------------------- reaping
+
+const dev = (name: string, state = "Booted", udid = name.replace(/\W+/g, "-")) => ({ udid, name, state, isAvailable: true });
+const noDirs = { daemons: [], dirs: [] };
+
+test("planReap shuts down only booted, unheld sim-check devices the caller doesn't want", () => {
+  const devices = [dev("harness-shared"), dev("sim-check 2"), dev("sim-check 3"), dev("sim-check iPad 1"), dev("sim-check iPad 2", "Shutdown"), dev("harness-HARNESS-9"), { ...dev("sim-check 4"), isAvailable: false }];
+  const plan = planReap({ devices, held: (n) => n === "sim-check 3", except: ["sim-check iPad 1"], ...noDirs });
+  expect(plan.shutdown.map((d) => d.name)).toEqual(["sim-check 2"]);
+});
+
+test("planReap stops a daemon whose run died, but not a live run's, a kept one, or a young legacy one", () => {
+  const T = "/tmp/x";
+  const owned = (id: string, ownerAlive: boolean, keep = false) => ({ path: `${T}/harness-sim-home-${id}`, kind: "home" as const, ageSec: 10, owner: { pid: 1, start: "s", scratch: `${T}/harness-sim-projects-${id}` }, ownerAlive, keep });
+  const legacy = (id: string, ageSec: number) => ({ path: `${T}/harness-sim-home-${id}`, kind: "home" as const, ageSec, owner: null, ownerAlive: false, keep: false });
+  const d = (pid: number, id: string, ppid = 1, ageSec = 100) => ({ pid, ppid, ageSec, home: `${T}/harness-sim-home-${id}` });
+  const plan = planReap({
+    devices: [],
+    held: () => false,
+    dirs: [owned("dead", false), owned("live", true), owned("kept", false, true), legacy("old", 7200), legacy("young", 60), owned("parented", false)],
+    daemons: [d(10, "dead"), d(11, "live"), d(12, "kept"), d(13, "old", 1, 7200), d(14, "young", 1, 60), d(15, "parented", 999)],
+  });
+  expect(plan.kill.map((p) => p.pid)).toEqual([10, 13]);
+  // "parented" lost its owner but its daemon still has a parent (not reparented), so it stays, and its home with it.
+  expect(plan.remove).toEqual([`${T}/harness-sim-home-dead`, `${T}/harness-sim-projects-dead`, `${T}/harness-sim-home-old`]);
+});
+
+test("planReap removes a stray projects dir only when no home claims it and it's six hours old", () => {
+  const T = "/tmp/x";
+  const proj = (id: string, ageSec: number) => ({ path: `${T}/harness-sim-projects-${id}`, kind: "projects" as const, ageSec, owner: null, ownerAlive: false, keep: false });
+  const home = { path: `${T}/harness-sim-home-a`, kind: "home" as const, ageSec: 10, owner: { pid: 1, start: "s", scratch: `${T}/harness-sim-projects-claimed` }, ownerAlive: true, keep: false };
+  const plan = planReap({ devices: [], held: () => false, daemons: [], dirs: [home, proj("claimed", 99999), proj("stray", 6 * 3600 + 1), proj("recent", 6 * 3600 - 1)] });
+  expect(plan.remove).toEqual([`${T}/harness-sim-projects-stray`]);
+});
+
+test("parseSimDaemons finds sim-check daemons by their HARNESS_HOME and reads their age", () => {
+  const ps = [
+    "  9519     1 03:17:29 bun /w/HARNESS-172/service/src/daemon.ts PATH=/bin HARNESS_HOME=/var/T/harness-sim-home-tf4UXu HARNESS_PORT=7848",
+    "  3374  3325 1-02:03:04 bun /w/HARNESS-174/service/src/daemon.ts HARNESS_HOME=/var/T/harness-sim-home-fiOcad",
+    "   700     1 10:00 bun /Applications/Harness.app/service/src/daemon.ts HARNESS_HOME=/Users/me/.harness",
+    "   701     1 10:00 bun test HARNESS_HOME=/var/T/harness-sim-home-zzz",
+    "garbage",
+  ].join("\n");
+  expect(parseSimDaemons(ps)).toEqual([
+    { pid: 9519, ppid: 1, ageSec: 3 * 3600 + 17 * 60 + 29, home: "/var/T/harness-sim-home-tf4UXu" },
+    { pid: 3374, ppid: 3325, ageSec: 86400 + 2 * 3600 + 3 * 60 + 4, home: "/var/T/harness-sim-home-fiOcad" },
+  ]);
+  expect(etimeSeconds("05")).toBe(5);
+  expect(etimeSeconds("01:05")).toBe(65);
+});
+
+test("reap shuts down unheld devices under their lock, stops an orphaned daemon and removes a dead run's dirs", async () => {
+  const locks = tempDir();
+  const tmp = tempDir();
+  const mk = (name: string) => (mkdirSync(join(tmp, name)), join(tmp, name));
+  const deadHome = mk("harness-sim-home-dead");
+  const deadProjects = mk("harness-sim-projects-dead");
+  writeFileSync(join(deadHome, "owner.json"), JSON.stringify({ pid: deadPid(), start: "gone", scratch: deadProjects }));
+  const liveHome = mk("harness-sim-home-live");
+  const liveProjects = mk("harness-sim-projects-live");
+  writeRunOwner(liveHome, liveProjects);
+  const keptHome = mk("harness-sim-home-kept");
+  writeFileSync(join(keptHome, "owner.json"), JSON.stringify({ pid: deadPid(), start: "gone", scratch: join(tmp, "nope") }));
+  markKept(keptHome);
+  const stray = mk("harness-sim-projects-stray");
+  const old = (Date.now() - 7 * 3600 * 1000) / 1000;
+  utimesSync(stray, old, old);
+
+  // A stand-in for an orphaned daemon: a real process the fake ps reports as reparented to launchd.
+  const orphan = Bun.spawn(["sleep", "60"]);
+  const ps = () => `${orphan.pid} 1 02:00:00 bun /w/service/src/daemon.ts HARNESS_HOME=${deadHome}\n`;
+  const rt = "com.apple.CoreSimulator.SimRuntime.iOS-27-0";
+  const sim = fakeSimctl([runtime("27.0")], { [rt]: [dev("sim-check 2"), dev("sim-check 3"), dev("harness-shared")] });
+  expect(tryLock("sim-check 3", locks)).toBe(true);
+
+  const done = await reap({ tmp, lockDir: locks, simctl: sim.run, ps, log: () => {} });
+  expect(sim.calls.filter((c) => c[0] === "shutdown")).toEqual([["shutdown", "sim-check-2"]]);
+  expect(done.shutdown.map((d) => d.name)).toEqual(["sim-check 2"]);
+  expect(lockHolder("sim-check 2", locks)).toBeNull();
+  expect(lockHolder("sim-check 3", locks)?.pid).toBe(process.pid);
+  expect(await orphan.exited).not.toBe(0);
+  expect(readdirSync(tmp).sort()).toEqual(["harness-sim-home-kept", "harness-sim-home-live", "harness-sim-projects-live"]);
+  releaseLock("sim-check 3", locks);
 });

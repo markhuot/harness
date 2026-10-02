@@ -68,7 +68,7 @@ import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket
 import { findTheme } from "@harness/shared/themes";
 import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
-import { acquire, checkDisk, ensureDevice, SHARED_DEVICE } from "./sim";
+import { acquire, checkDisk, ensureDevice, markKept, reap, SHARED_DEVICE, writeRunOwner } from "./sim";
 
 /** ios/: screenshots go to its build/ folder. */
 const here = resolve(import.meta.dir, "..");
@@ -294,27 +294,49 @@ async function running(udid: string): Promise<boolean> {
  * The simulators to drive, each held under its lock (Tools/sim.ts) until this run exits, so two
  * runs or agents never install over each other: --udid=a,b, or the shared "harness-shared" iPhone
  * ("sim-check iPad 1" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
- * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted.
+ * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted. First it
+ * cleans up after runs that died (Tools/sim.ts reap): their booted devices and orphaned daemons.
  */
 async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
-  const all = Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
+  const list = async () => Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
   const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? `sim-check iPad ${i + 1}` : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
+  const names = (devices: Device[]) => wanted.map((id) => devices.find((x) => x.udid === id)?.name ?? id);
+  await reap({ except: names(await list()), log: console.log }).catch((e: Error) => console.log(`reap: ${e.message}`));
+  const all = await list();
   return Promise.all(
     wanted.map(async (id) => {
       const d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
       if (!d && given) throw new Error(`--udid: no simulator ${id}`);
       const name = d?.name ?? id;
       await acquire(name, { onWait: (h) => console.log(`waiting for simulator "${name}"${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
-      if (!given) return ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
+      if (!given) {
+        const udid = await ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
+        if (name !== SHARED_DEVICE) toShutDown.add(udid);
+        return udid;
+      }
       if (d!.state !== "Booted") {
         await simctl("boot", d!.udid);
         await sh(["xcrun", "simctl", "bootstatus", d!.udid, "-b"]);
+        if (name !== SHARED_DEVICE) toShutDown.add(d!.udid);
       }
       return d!.udid;
     }),
   );
+}
+
+/**
+ * The devices this run shuts down when it ends: its own sim-check devices, and --udid devices it
+ * booted. harness-shared stays up for the next agent, and --keep leaves everything running.
+ */
+const toShutDown = new Set<string>();
+async function shutDownDevices() {
+  if (flag("keep") || !toShutDown.size) return;
+  const udids = [...toShutDown];
+  toShutDown.clear();
+  await Promise.all(udids.map((u) => sh(["xcrun", "simctl", "shutdown", u], { allowFail: true })));
+  console.log(`shut down ${udids.join(", ")}`);
 }
 
 // ------------------------------------------------------------ navigating the running app
@@ -436,6 +458,8 @@ const scratch = mkdtempSync(join(tmpdir(), "harness-sim-projects-"));
 const port = 7830 + Math.floor(Math.random() * 60);
 const base = `http://127.0.0.1:${port}`;
 console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
+// Lets a later run's reap tell this run's dirs (and daemon) from a dead run's.
+writeRunOwner(home, scratch);
 // --mentions' /command check runs a project on the claude-code driver, pointed at the fake CLI:
 // it answers `initialize` with SLASH_COMMANDS and records each agent run's prompt.
 const SLASH_COMMANDS = [
@@ -457,19 +481,24 @@ const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
   stderr: Bun.file(join(home, "daemon.err")),
 });
 // The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
-// error, Ctrl-C), except with --keep, which leaves the daemon running in them.
+// error, Ctrl-C), except with --keep, which leaves the daemon running in them. A run killed
+// outright (SIGKILL) can't clean up; the next run's reap (Tools/sim.ts) does it instead.
 const removeTemp = () => {
   if (flag("keep")) return;
   rmSync(home, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
 };
 process.on("exit", removeTemp);
+// An exit that skips the finally (an uncaught error) leaves its devices booted: shutting them down
+// after this process lets go of their locks could catch the next run's boot, so the next reap
+// (which takes each lock first) shuts them down instead.
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-  process.on(sig, () => {
-    console.error(`sim-check: ${sig}, stopping the daemon and removing ${home}`);
+  process.on(sig, async () => {
+    console.error(`sim-check: ${sig}, stopping the daemon, shutting down its simulators and removing ${home}`);
     if (!flag("keep")) {
       daemon.kill("SIGKILL");
       Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
+      await Promise.race([shutDownDevices(), Bun.sleep(15000)]);
     }
     process.exit(130); // runs removeTemp and lets go of the simulator locks
   });
@@ -1995,6 +2024,7 @@ try {
   console.error(readFileSync(join(home, "daemon.err"), "utf8").slice(-2000));
 } finally {
   if (flag("keep")) {
+    markKept(home);
     console.log(`--keep: daemon still running at ${base} (pid ${daemon.pid}); token in ${home}/token`);
   } else {
     await timed("daemon shutdown", async () => {
@@ -2008,6 +2038,7 @@ try {
       }
     });
     removeTemp();
+    await timed("simulator shutdown", shutDownDevices);
   }
   reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
