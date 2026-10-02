@@ -115,13 +115,34 @@ struct MainTabs: View {
     }
 }
 
-/// The header button that opens the Projects sidebar, on each section's root screen.
+/// The header button that opens the Projects sidebar, on each section's root screen. Its amber
+/// badge counts the triage sessions triaging or busy, like the sidebar's Inbox row, so the tab
+/// bar's old Inbox badge still shows from every section.
 struct SidebarToolbarItem: ToolbarContent {
     @Environment(Router.self) private var router
+    @Environment(BoardStore.self) private var store
+    @Environment(\.palette) private var c
 
     var body: some ToolbarContent {
+        let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
         ToolbarItem(placement: .topBarLeading) {
-            Button("Projects", systemImage: "sidebar.left") { router.present(.projects) }
+            Button { router.present(.projects) } label: {
+                Image(systemName: "sidebar.left")
+                    .overlay(alignment: .topTrailing) {
+                        if triaging > 0 {
+                            Text("\(triaging)")
+                                .font(.scaled(size: 11, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(c.onAmber)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .background(c.amber, in: .capsule)
+                                .offset(x: 9, y: -9)
+                        }
+                    }
+            }
+            .accessibilityLabel("Projects")
+            .accessibilityValue(triaging > 0 ? "\(triaging) triaging" : "")
         }
     }
 }
