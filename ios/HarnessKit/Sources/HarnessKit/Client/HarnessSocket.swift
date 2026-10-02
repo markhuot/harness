@@ -52,7 +52,8 @@ public final class URLSessionWebSocketConnection: WebSocketConnection {
 /// The live event stream: the port of HarnessSocket in shared/src/client.ts.
 ///
 /// It connects as soon as it's made and reconnects until `close()`. On open (the first `hello`
-/// that sends), it re-sends `browser.subscribe` for every remembered subscription, resets the
+/// that sends), it re-sends `browser.subscribe` for every remembered subscription (on the tab it was
+/// last on: each incoming browser.state for a subscribed session updates it), resets the
 /// backoff and reports connected. When the connection fails or drops it reports disconnected,
 /// waits `ReconnectBackoff.next()` (250 ms doubling to 5 s) and tries again.
 ///
@@ -84,8 +85,9 @@ public actor HarnessSocket {
     private var closed = false
     private var connected = false
     private var backoff = ReconnectBackoff()
-    /// Ordered so re-subscribes go out in the order they were made.
-    private var browserSubs: [String] = []
+    /// Session → the tab it's on (nil: the lowest open one), ordered so re-subscribes go out in the
+    /// order they were made.
+    private var browserSubs: [(sessionId: String, tabId: Int?)] = []
 
     public init(url: String, factory: @escaping WebSocketFactory = URLSessionWebSocketConnection.factory, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.url = url
@@ -114,8 +116,8 @@ public actor HarnessSocket {
                 // Open: from here `send` goes through, so a subscribe made while re-subscribing
                 // isn't lost (at worst it's sent twice, which the service tolerates).
                 open = true
-                for id in browserSubs {
-                    try await conn.send(Self.encode(.browserSubscribe(sessionId: id)))
+                for sub in browserSubs {
+                    try await conn.send(Self.encode(.browserSubscribe(sessionId: sub.sessionId, tabId: sub.tabId)))
                 }
                 backoff.reset()
                 setConnected(true)
@@ -137,7 +139,12 @@ public actor HarnessSocket {
         case let .data(d): data = d
         }
         guard let msg = try? JSONDecoder().decode(ServerMessage.self, from: data) else { return }
-        if case let .event(event) = msg { eventsOut.yield(event) }
+        guard case let .event(event) = msg else { return }
+        // The service moves a subscription between tabs itself (newTab, closing the watched tab):
+        // follow it, so a reconnect comes back to the same tab. TS leaves this to its caller
+        // (noteBrowserTab).
+        if case let .browserState(sessionId, state) = event { noteBrowserTab(sessionId, tabId: state.tabId) }
+        eventsOut.yield(event)
     }
 
     private func setConnected(_ value: Bool) {
@@ -157,14 +164,27 @@ public actor HarnessSocket {
         try? await conn.send(Self.encode(msg))
     }
 
-    /// Stream this session's browser frames; remembered and re-sent on every reconnect.
-    public func subscribeBrowser(_ sessionId: String) async {
-        if !browserSubs.contains(sessionId) { browserSubs.append(sessionId) }
-        await send(.browserSubscribe(sessionId: sessionId))
+    /// Stream this session's browser frames; again with another `tabId` switches tabs. Remembered
+    /// (with its tab) and re-sent on every reconnect.
+    public func subscribeBrowser(_ sessionId: String, tabId: Int? = nil) async {
+        if let i = browserSubs.firstIndex(where: { $0.sessionId == sessionId }) {
+            browserSubs[i].tabId = tabId
+        } else {
+            browserSubs.append((sessionId, tabId))
+        }
+        await send(.browserSubscribe(sessionId: sessionId, tabId: tabId))
     }
 
+    /// Remember the tab a session's subscription is on, for reconnects (no-op when not subscribed).
+    public func noteBrowserTab(_ sessionId: String, tabId: Int?) {
+        if let i = browserSubs.firstIndex(where: { $0.sessionId == sessionId }) { browserSubs[i].tabId = tabId }
+    }
+
+    /// The tab each remembered subscription is on, in subscription order (for tests).
+    var browserSubscriptions: [(sessionId: String, tabId: Int?)] { browserSubs }
+
     public func unsubscribeBrowser(_ sessionId: String) async {
-        browserSubs.removeAll { $0 == sessionId }
+        browserSubs.removeAll { $0.sessionId == sessionId }
         await send(.browserUnsubscribe(sessionId: sessionId))
     }
 

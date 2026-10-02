@@ -387,10 +387,14 @@ public struct InjectOutputBody: Codable, Sendable, Equatable {
     }
 }
 
-/// POST /browser/:sessionId/navigate
+/// POST /browser/:sessionId/navigate. `tabId`: the tab to load it in (nil: the lowest open one).
 public struct NavigateBody: Codable, Sendable, Equatable {
     public var url: String
-    public init(url: String) { self.url = url }
+    public var tabId: Int?
+    public init(url: String, tabId: Int? = nil) {
+        self.url = url
+        self.tabId = tabId
+    }
 }
 
 // ---------------------------------------------------------------------------

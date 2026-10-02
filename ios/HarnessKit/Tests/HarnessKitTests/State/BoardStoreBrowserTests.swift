@@ -23,11 +23,13 @@ struct BoardStoreBrowserTests {
 
         func send(_ msg: ClientMessage) async {
             try? await Task.sleep(for: .milliseconds(Int.random(in: 0...3)))
-            guard case let .browserInput(sessionId, input) = msg else { return log.append("other \(msg.type)") }
-            log.append("\(sessionId) \(Self.describe(input))")
+            guard case let .browserInput(sessionId, tabId, input) = msg else { return log.append("other \(msg.type)") }
+            log.append("\(sessionId)\(tabId.map { "#\($0)" } ?? "") \(Self.describe(input))")
         }
 
-        func subscribeBrowser(_ sessionId: String) async { log.append("subscribe \(sessionId)") }
+        func subscribeBrowser(_ sessionId: String, tabId: Int?) async {
+            log.append("subscribe \(sessionId)\(tabId.map { "#\($0)" } ?? "")")
+        }
         func unsubscribeBrowser(_ sessionId: String) async { log.append("unsubscribe \(sessionId)") }
 
         func close() async {
@@ -68,6 +70,18 @@ struct BoardStoreBrowserTests {
         let socket = r.sockets[0]
         #expect(await eventually { socket.log.all.count == 23 })
         #expect(socket.log.all == ["subscribe s1"] + (0..<20).map { "s1 mouse move \($0),0" } + ["s1 text hi", "unsubscribe s1"])
+    }
+
+    @Test func tabIdsRideAlongOnSubscribeAndInput() async {
+        let r = Rig()
+        r.store.start()
+        r.store.subscribeBrowser("s1", tabId: 2)
+        r.store.sendBrowserInput("s1", tabId: 3, .closeTab)
+        r.store.sendBrowserInput("s1", .newTab(url: nil))
+        r.store.subscribeBrowser("s1")
+        let socket = r.sockets[0]
+        #expect(await eventually { socket.log.all.count == 4 })
+        #expect(socket.log.all == ["subscribe s1#2", "s1#3 closeTab", "s1 newTab", "subscribe s1"])
     }
 
     @Test func nothingIsSentBeforeStart() async {

@@ -28,8 +28,9 @@ extension HarnessSocket: EventSource {}
 public protocol BrowserChannel: AnyObject, Sendable {
     /// Sent when a connection is open, otherwise dropped.
     func send(_ msg: ClientMessage) async
-    /// Stream a session's browser frames; re-sent on every reconnect of this socket.
-    func subscribeBrowser(_ sessionId: String) async
+    /// Stream a session's browser frames (on tab `tabId`; nil: the lowest open one; again with
+    /// another tab switches); re-sent on every reconnect of this socket.
+    func subscribeBrowser(_ sessionId: String, tabId: Int?) async
     func unsubscribeBrowser(_ sessionId: String) async
 }
 
@@ -182,7 +183,7 @@ public final class BoardStore {
                     guard let channel else { continue }
                     switch op {
                     case let .send(msg): await channel.send(msg)
-                    case let .subscribe(id): await channel.subscribeBrowser(id)
+                    case let .subscribe(id, tabId): await channel.subscribeBrowser(id, tabId: tabId)
                     case let .unsubscribe(id): await channel.unsubscribeBrowser(id)
                     }
                 }
@@ -268,14 +269,15 @@ public final class BoardStore {
 
     enum BrowserOp: Sendable {
         case send(ClientMessage)
-        case subscribe(String)
+        case subscribe(String, tabId: Int?)
         case unsubscribe(String)
     }
 
     /// Stream a session's browser frames and state (browser.frame / browser.state reach `onEvent`
-    /// listeners) on the current socket. Resubscribe when `epoch` or `socketGeneration` changes.
-    public func subscribeBrowser(_ sessionId: String) {
-        outbox?.yield(.subscribe(sessionId))
+    /// listeners) on the current socket, on tab `tabId` (nil: the lowest open one); again with
+    /// another tab switches to it. Resubscribe when `epoch` or `socketGeneration` changes.
+    public func subscribeBrowser(_ sessionId: String, tabId: Int? = nil) {
+        outbox?.yield(.subscribe(sessionId, tabId: tabId))
     }
 
     public func unsubscribeBrowser(_ sessionId: String) {
@@ -283,9 +285,9 @@ public final class BoardStore {
     }
 
     /// Mouse, key, text, navigation and resize input for a session's browser, sent in call order.
-    /// Dropped while the socket is down.
-    public func sendBrowserInput(_ sessionId: String, _ input: BrowserInput) {
-        outbox?.yield(.send(.browserInput(sessionId: sessionId, input: input)))
+    /// `tabId`: the tab it's for (nil: the tab this socket watches). Dropped while the socket is down.
+    public func sendBrowserInput(_ sessionId: String, tabId: Int? = nil, _ input: BrowserInput) {
+        outbox?.yield(.send(.browserInput(sessionId: sessionId, tabId: tabId, input: input)))
     }
 
     /// Whether an action can change what DetailFetcher wants (it re-syncs on ready, tickets,

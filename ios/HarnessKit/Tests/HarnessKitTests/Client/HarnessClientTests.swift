@@ -224,6 +224,16 @@ struct HarnessClientRequestTests {
         #expect(path(none) == "/browser/ses_1")
     }
 
+    @Test func browserCallsCarryTheTabOnlyWhenGiven() async throws {
+        let get = FakeTransport(status: 200, body: try envelope(protocolSample("BrowserState")))
+        _ = try await client(get).browserState("ses_1", tabId: 3)
+        #expect(path(get) == "/browser/ses_1?tab=3")
+
+        let nav = FakeTransport(status: 200, body: try envelope(protocolSample("BrowserState")))
+        _ = try await client(nav).browserNavigate("ses_1", url: "http://localhost:3000/", tabId: 2)
+        #expect(try bodyJSON(nav.last) == json(#"{"url":"http://localhost:3000/","tabId":2}"#))
+    }
+
     @Test func decodesData() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Health")))
         let h = try await client(t).health()

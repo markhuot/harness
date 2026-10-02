@@ -370,13 +370,14 @@ public final class HarnessClient: Sendable {
 
     // MARK: Browser
 
-    /// nil when the session has no browser.
-    public func browserState(_ sessionId: String) async throws -> BrowserState? {
-        try await request("GET", "/browser/\(sessionId)")
+    /// nil when the session has no browser. `tabId` nil: the lowest open tab.
+    public func browserState(_ sessionId: String, tabId: Int? = nil) async throws -> BrowserState? {
+        try await request("GET", "/browser/\(sessionId)" + (tabId.map { "?tab=\($0)" } ?? ""))
     }
 
-    public func browserNavigate(_ sessionId: String, url: String) async throws -> BrowserState {
-        try await request("POST", "/browser/\(sessionId)/navigate", body: NavigateBody(url: url))
+    /// Load `url` in tab `tabId` (nil: the lowest open tab).
+    public func browserNavigate(_ sessionId: String, url: String, tabId: Int? = nil) async throws -> BrowserState {
+        try await request("POST", "/browser/\(sessionId)/navigate", body: NavigateBody(url: url, tabId: tabId))
     }
 
     // MARK: Plugins
