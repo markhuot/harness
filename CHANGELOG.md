@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261002.0906](https://github.com/markhuot/harness/releases/tag/app-20261002.0906) - 2026-10-02
+
 ### Changed
 
 - The iPhone and iPad app is now a fully native iOS app (built in SwiftUI), version 2.0. It has
