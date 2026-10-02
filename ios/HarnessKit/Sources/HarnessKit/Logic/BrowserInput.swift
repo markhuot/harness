@@ -1,8 +1,7 @@
 import Foundation
 
-// Port of mobile/src/lib/browserInput.ts, plus the two bits of timing glue that live in
-// mobile/src/screens/BrowserTab.tsx (wheel coalescing and the hidden input's 120-character reset),
-// so the SwiftUI view only forwards touches and timestamps.
+// The Browser tab's input model, timing glue included (wheel coalescing and the hidden input's
+// 120-character reset), so the SwiftUI view only forwards touches and timestamps.
 //
 // Touch → page input for the Browser tab. The screencast frame is letterboxed into the stage; a
 // finger on it maps to page CSS pixels (toPagePoint from @harness/shared/state), and gestures become
@@ -13,9 +12,9 @@ import Foundation
 // Pure and clock-injected so it can be tested without a screen.
 //
 // Clock mapping: nothing here reads a clock or owns a timer. TouchGesture takes the event time
-// (epoch or monotonic ms, as long as one gesture uses one clock) with every call, as the TS does.
-// The RN screen's `setTimeout(flushWheel, 33)` becomes WheelCoalescer's `deadline` + `tick(now:)`:
-// the view schedules one wake-up at `deadline` (a Task sleep, a display link) and calls `tick`.
+// (epoch or monotonic ms, as long as one gesture uses one clock) with every call. Wheel batching
+// is WheelCoalescer's `deadline` + `tick(now:)` rather than a timer of its own: the view schedules
+// one wake-up at `deadline` (a Task sleep, a display link) and calls `tick`.
 
 /// A gesture recognizer that turns one finger's begin/move/end into BrowserInput, driven by
 /// explicit points (stage coordinates) and timestamps (ms). Feed it from a SwiftUI
@@ -156,19 +155,17 @@ private func mouse(_ action: MouseAction, _ p: TouchGesture.Point, button: Mouse
 }
 
 // ---------------------------------------------------------------------------
-// Wheel coalescing (BrowserTab.tsx dispatchInputs / flushWheel)
+// Wheel coalescing
 // ---------------------------------------------------------------------------
 
 /// Wheel events arrive at touch rate; coalesce them to ~30/s. Wheels are summed (at the latest
 /// point) until `deadline`; any other input flushes the pending wheel first so ordering holds.
 ///
-/// Timer mapping: the RN screen arms `setTimeout(flushWheel, 33)` on the first wheel of a batch.
-/// Here `push` sets `deadline = now + intervalMs` instead, and the view calls `tick(now:)` at or
-/// after it (a sleeping Task, say). `tick` before the deadline returns nothing, so an early wake-up
-/// is harmless. Call `flush()` when the view goes away if pending scroll should still be sent.
-/// (One deliberate difference: when other input flushes early, the RN screen nulls its timer ref
-/// without `clearTimeout`, so the stale timer can flush the next batch before its 33 ms. Here a
-/// flush disarms the deadline and the next wheel starts a fresh 33 ms.)
+/// Timing: the first wheel of a batch makes `push` set `deadline = now + intervalMs`, and the
+/// view calls `tick(now:)` at or after it (a sleeping Task, say). `tick` before the deadline
+/// returns nothing, so an early wake-up is harmless. Call `flush()` when the view goes away if
+/// pending scroll should still be sent.
+/// A flush disarms the deadline, so the next wheel starts a fresh 33 ms.
 public struct WheelCoalescer: Sendable {
     private struct Pending: Sendable {
         var x: Double
@@ -235,9 +232,10 @@ public enum BrowserTyping {
 
     /// What changed between two values of the hidden input (autocorrect replacements included).
     ///
-    /// Compares UTF-16 code units like the TS. When the shared prefix ends inside a surrogate pair
-    /// (two emoji with the same high surrogate), TS inserts a lone low surrogate; a Swift String
-    /// can't hold one, so it becomes U+FFFD here. `deletes` still matches TS.
+    /// Compares UTF-16 code units, as the page counts them. When the shared prefix ends inside a
+    /// surrogate pair (two emoji with the same high surrogate), the insert would start with a lone
+    /// low surrogate; a Swift String can't hold one, so it becomes U+FFFD. `deletes` still counts
+    /// code units.
     public static func textDelta(_ prev: String, _ next: String) -> Delta {
         let a = Array(prev.utf16)
         let b = Array(next.utf16)
@@ -249,9 +247,7 @@ public enum BrowserTyping {
     private static let namedKeys: Set<String> = ["Backspace", "Enter", "Tab", "Escape"]
 
     /// Press and release a named key ("Backspace", "Enter", "Tab", "Escape"); [] for anything else.
-    ///
-    /// (The TS looks the key up in a plain object literal, so "toString" or "constructor" hit
-    /// Object.prototype and produce a malformed key event. Here they're [] like any unnamed key.)
+    /// "toString", "constructor" and the like are [] too, like any unnamed key.
     public static func keyPress(_ key: String) -> [BrowserInput] {
         guard namedKeys.contains(key) else { return [] }
         return [.key(.init(action: .down, key: key, code: key)), .key(.init(action: .up, key: key, code: key))]
@@ -265,7 +261,7 @@ public enum BrowserTyping {
         return out
     }
 
-    /// The hidden field's bookkeeping from BrowserTab.tsx `onChangeText`: diff against what was
+    /// The hidden field's bookkeeping on each text change: diff against what was
     /// last typed, and once the text passes `limit` UTF-16 units, clear it (the page already has
     /// it) so the diff stays short.
     public struct HiddenInput: Sendable, Equatable {
@@ -298,8 +294,8 @@ public enum BrowserTyping {
 /// browser.state for the session confirms the subscription, then only sizes that differ from the
 /// last one sent. Call reset() for a new session or after a reconnect.
 ///
-/// (The RN screen debounces `take` by 250 ms after layout and 100 ms after confirm; that stays in
-/// the view, e.g. `.task(id: size) { try await Task.sleep(for: .milliseconds(250)); … }`.)
+/// (Debounce `take` by 250 ms after layout and 100 ms after confirm; that belongs in the view,
+/// e.g. `.task(id: size) { try await Task.sleep(for: .milliseconds(250)); … }`.)
 public struct ResizeGate: Sendable, Equatable {
     private var subscribed = false
     private var lastSent: (Int, Int)?
@@ -322,8 +318,8 @@ public struct ResizeGate: Sendable, Equatable {
         return true
     }
 
-    /// The resize to send for this stage size, or nil. (TS would send NaN/Infinity sizes through;
-    /// those can't be an Int, so they're nil here.)
+    /// The resize to send for this stage size, or nil. NaN and infinite sizes can't be an Int, so
+    /// they're nil.
     public mutating func take(width: Double, height: Double) -> BrowserInput? {
         guard subscribed else { return nil }
         guard let w = Int(exactly: JSCompat.round(width)), let h = Int(exactly: JSCompat.round(height)) else { return nil }

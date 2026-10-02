@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/draftSync.ts. New session's draft saving (DESIGN.md "Drafts"): the
+// New session's draft saving (DESIGN.md "Drafts"): the
 // editor's state is a Ticket; nothing reaches the service while it's still empty, the first
 // worthwhile edit POSTs the draft, and later edits go out as debounced PATCHes of only what
 // changed. One request at a time, in order. A change from another device (an upsert for the saved
@@ -129,7 +129,7 @@ public final class DraftSync {
             return
         }
         clearTimer()
-        // Strong captures, like the TS closures: a pending save still goes out if the screen lets go.
+        // Strong captures: a pending save still goes out if the screen lets go.
         timer = timers.set(delayMs) {
             self.timer = nil
             self.enqueueFlush()

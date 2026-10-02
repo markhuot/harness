@@ -1,8 +1,7 @@
 import Foundation
 
-// The decisions Settings, Project settings and the watcher rows make inline in the RN screens
-// (screens/Settings.tsx, screens/ProjectSettings.tsx), pulled out of the SwiftUI views so they can
-// be tested: labels, what a committed field saves, counts and confirm copy.
+// The decisions behind Settings, Project settings and the watcher rows, pulled out of the SwiftUI
+// views so they can be tested: labels, what a committed field saves, counts and confirm copy.
 
 public enum SettingsRules {
     // MARK: Network
@@ -173,7 +172,7 @@ public enum SettingsRules {
 
     // MARK: Project settings
 
-    /// The identifier field as typed: upper case, at most 20 UTF-16 units (the TextInput's maxLength).
+    /// The identifier field as typed: upper case, at most 20 UTF-16 units (the field's length cap).
     public static func identifierDraft(_ text: String) -> String {
         var out = ""
         var units = 0

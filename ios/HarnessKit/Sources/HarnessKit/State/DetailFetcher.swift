@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/details.ts: ticket details the board and ticket screens need but the
+// Ticket details the board and ticket screens need but the
 // snapshot doesn't carry. Done tickets page in, so a dependency, a dependent, a conductor's done
 // children or the ticket a deep link opens may not be loaded. The selectors say what's missing
 // (unresolvedKeys, conductorsNeedingChildren); this fetches each once per snapshot, a few at a
@@ -45,7 +45,8 @@ public final class DetailFetcher {
         queue.removeAll()
     }
 
-    /// The tickets a remote-only key points to, from a getTicket 404 (lib/related.ts remoteMatchesOf).
+    /// The tickets a remote-only key points to, from a getTicket 404 (the same rule as
+    /// Related.remoteMatchesOf).
     public static func remoteMatches(_ error: any Error) -> RemoteKeyMatches? {
         guard let e = error as? HarnessAPIError, e.status == 404, let data = e.data,
               let bytes = try? JSONEncoder().encode(data),

@@ -1,7 +1,7 @@
 import Foundation
 
-// The branches of the ticket detail screen (mobile/src/screens/TicketDetail.tsx, TicketTabs.tsx,
-// Approval.tsx) that are worth testing without a screen: which header actions and sheets apply,
+// The branches of the ticket detail screen (its header, tabs and approval sheet) that are worth
+// testing without a screen: which header actions and sheets apply,
 // the labels its rows show, and the runs list. The views in Harness/Features/Ticket read these.
 
 public enum TicketDetailLogic {

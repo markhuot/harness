@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/newSession.ts: the "Skip agent review" hint in ticket settings (Details
+// The "Skip agent review" hint in ticket settings (Details
 // and a draft's Options).
 
 public enum NewSession {

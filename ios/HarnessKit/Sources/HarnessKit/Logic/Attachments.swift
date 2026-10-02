@@ -1,11 +1,11 @@
 import Foundation
 
-// Ports of shared/src/state/attachments.ts (thumbnail boxes, lightbox stepping, the count label)
-// and mobile/src/lib/attachments.ts (thumbnail sizes in the Summaries tab, fitting, paging and
-// swipe-to-close in the full-screen viewer). Pure layout math: points in, points out.
+// A port of shared/src/state/attachments.ts (thumbnail boxes, lightbox stepping, the count label),
+// plus the iPhone's own layout: thumbnail sizes in the Summaries tab, fitting, paging and
+// swipe-to-close in the full-screen viewer. Pure layout math: points in, points out.
 //
-// FileViewer.formatSize and Attachments.formatSize are different functions in the TS (one keeps
-// "3.0 MB", the other reads "3 MB" and promotes 1023.96 KB to "1 MB"), so both are ported.
+// FileViewer.formatSize and Attachments.formatSize are deliberately different (one keeps
+// "3.0 MB", the other reads "3 MB" and promotes 1023.96 KB to "1 MB"), so both exist.
 
 /// The parts of an attachment the layout math reads: its kind, and its pixel size when the
 /// service parsed it from the file header.
@@ -81,7 +81,7 @@ public enum Attachments {
         attachmentsLabel(list.map(\.kind))
     }
 
-    // MARK: - mobile/src/lib/attachments.ts
+    // MARK: - iPhone layout (frozen fixtures)
 
     /// Thumbnail row height; widths follow each attachment's aspect ratio within these bounds.
     public struct ThumbMetrics: Codable, Equatable, Sendable {

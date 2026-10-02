@@ -1,11 +1,11 @@
 import Foundation
 
-// Port of mobile/src/lib/prefs.ts: the preferences blob (persisted in the Keychain).
+// The preferences blob (persisted in the Keychain).
 //
-// The stored blob is whatever an older build (or a hand edit) left, so `normalizePrefs` reads it as
-// JSONValue. TS spreads the blob over the defaults and only checks `hideChildren`, `version` and the
-// theme fields; `lastProject`, `boardProject` and `activeServer` pass through untyped there. Here a
-// non-string value for those becomes nil, and unknown keys are dropped.
+// The stored blob is whatever an older build (the 1.x React Native app included) or a hand edit
+// left, so `normalizePrefs` reads it as JSONValue: its fields are laid over the defaults, a
+// non-string `lastProject`, `boardProject` or `activeServer` becomes nil, and unknown keys are
+// dropped.
 
 public struct Prefs: Codable, Sendable, Equatable {
     /// The Appearance preference stored in prefs (`ThemePreference`: "system" | "light" | "dark").
@@ -46,7 +46,7 @@ public struct Prefs: Codable, Sendable, Equatable {
     )
 
     /// Stored prefs (possibly from an older build, or hand-damaged) → valid prefs. Only a JSON object
-    /// contributes fields (TS also spreads an array, whose index keys nothing reads).
+    /// contributes fields.
     public static func normalize(_ stored: JSONValue?) -> Prefs {
         let fields: [String: JSONValue] = if case let .object(o)? = stored { o } else { [:] }
         // A key that's present (even as null) replaces the default, as in `{ ...DEFAULT_PREFS, ...stored }`.

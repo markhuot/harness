@@ -1,7 +1,5 @@
 import Foundation
 
-// Port of mobile/src/lib/pluginHost.ts.
-//
 // WebView transport for the plugin host bridge (DESIGN.md "Plugins" → "Bridge"). The app hosts
 // plugin tab UIs in a WKWebView and drives them with the same `PluginHostBridge` the desktop iframe
 // uses; this file adapts the web view's channels to the bridge's `PluginFrame` / `HostMessageEvent`
@@ -10,13 +8,15 @@ import Foundation
 //   host → page: webView.evaluateJavaScript(buildInjection(msg, serviceOrigin)), which calls
 //                window.postMessage inside the page only if the page is still at serviceOrigin
 //   page → host: the plugin SDK calls window.ReactNativeWebView.postMessage(JSON.stringify(msg))
-//                (the name the SDK detects; `nativeBridgeScript` defines it over a WKScriptMessage
-//                handler) → messageEvent(data:url:source:) → bridge.onMessage
+//                (a historical name, from the 1.x React Native app's web view, that plugins
+//                and the desktop still use; `nativeBridgeScript` defines it over a
+//                WKScriptMessage handler) → messageEvent(data:url:source:) → bridge.onMessage
 //
-// The injected script is byte-identical to the TS one for the same message. JSON.stringify writes
-// keys in insertion order, which a JSONValue doesn't have, so `jsonStringify` uses a canonical
-// order (array-index keys numerically, then the rest by UTF-16 code units); TS gives the same bytes
-// for an object whose keys were inserted in that order. Key order never changes what the page gets.
+// The injected script is byte-for-byte what the frozen fixtures expect. JSON.stringify writes keys
+// in insertion order, which a JSONValue doesn't have, so `jsonStringify` uses a canonical order
+// (array-index keys numerically, then the rest by UTF-16 code units); JavaScript gives the same
+// bytes for an object whose keys were inserted in that order. Key order never changes what the
+// page gets.
 
 public enum PluginHost {
     /// `JSON.stringify(value)`: the same escaping (`"` `\` and C0 controls only; `/`, U+2028/2029 and
@@ -43,14 +43,14 @@ public enum PluginHost {
 
     /// A script for `evaluateJavaScript` that delivers `msg` as a window "message" event inside the
     /// page, but only when the page is still at `targetOrigin` (so the token never reaches a page
-    /// that navigated away). Ends in `true;` as react-native-webview required; kept so the bytes
-    /// match the TS (WKWebView just returns true).
+    /// that navigated away). Ends in `true;`, which the 1.x React Native app's web view required;
+    /// kept so the bytes match the frozen fixtures (WKWebView just returns true).
     public static func buildInjection(_ msg: JSONValue, targetOrigin: String) -> String {
         let origin = jsLiteral(.string(targetOrigin))
         return "(function(){ if (location.origin !== \(origin)) return; window.postMessage(\(jsLiteral(msg)), \(origin)); })(); true;"
     }
 
-    /// `buildInjection` for a bridge message (encoded the way the service and TS shape it).
+    /// `buildInjection` for a bridge message (encoded the way the service shapes it).
     public static func buildInjection(_ msg: PluginHostMessage, targetOrigin: String) -> String {
         buildInjection(json(msg), targetOrigin: targetOrigin)
     }
@@ -67,7 +67,8 @@ public enum PluginHost {
 
     /// A user script (inject at document start, main frame only) that gives the page the
     /// `window.ReactNativeWebView.postMessage(string)` the plugin SDK looks for, forwarding to the
-    /// WKScriptMessageHandler registered as `handler`. Swift-only: react-native-webview provided it.
+    /// WKScriptMessageHandler registered as `handler`. (react-native-webview provided it in the
+    /// 1.x app.)
     public static func nativeBridgeScript(handler: String) -> String {
         let name = jsLiteral(.string(handler))
         return "window.ReactNativeWebView = { postMessage: function (data) { window.webkit.messageHandlers[\(name)].postMessage(String(data)); } }; true;"

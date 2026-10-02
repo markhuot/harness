@@ -7,7 +7,7 @@ public struct TimerHandle: Hashable, Sendable {
 }
 
 /// One-shot timers, injectable so debounces, retries and polling run without real waiting in tests
-/// (the `Timers` seam of mobile/src/lib/boardLoader.ts: `set(fn, ms)` / `clear(handle)`).
+/// (`set(fn, ms)` / `clear(handle)`).
 /// Main-actor bound: every stateful type that uses it (BoardLoader, DraftSync, BoardStore) lives
 /// on the main actor, and callbacks fire there.
 @MainActor

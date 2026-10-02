@@ -1,15 +1,14 @@
 import Foundation
 
-// Port of mobile/src/lib/approve.ts: the Approve button and its menu, and the Complete sheet's
-// action choice: which request each choice sends. The choices themselves come from
-// `Completion.completionOptions`.
+// The Approve button and its menu, and the Complete sheet's action choice: which request each
+// choice sends. The choices themselves come from `Completion.completionOptions`.
 //
-// Labels for an action this build doesn't know are nil, as in TS (`COMPLETION_ACTION_LABELS[a]` is
-// undefined, so the JSON row has no label). TS's `asComplete` would throw on such a label; here it
-// stays nil. Instructions are trimmed with JS `trim()` semantics (NBSP goes, NEL stays).
+// Labels for an action this build doesn't know are nil (`COMPLETION_ACTION_LABELS` has no entry,
+// so the JSON row has no label), and a choice with such a label stays nil rather than failing.
+// Instructions are trimmed with JS `trim()` semantics (NBSP goes, NEL stays).
 
 public enum Approve {
-    /// A row of the Approve menu: a completion action, or approving without one. Encodes as the TS
+    /// A row of the Approve menu: a completion action, or approving without one. Encodes as the
     /// string union `CompletionAction | "none"`.
     public enum Choice: Codable, Sendable, Hashable {
         case action(CompletionAction)
@@ -41,7 +40,7 @@ public enum Approve {
     }
 
     /// A row of a select of completion actions: the JSON shape of `SelectOption<CompletionAction>`
-    /// (mobile/src/lib/selectOptions.ts). Local stand-in: dedupe with the SelectOption port
+    /// (SelectOptions.swift). Local stand-in: dedupe with the SelectOption port
     /// (HARNESS-131) once both land. `label` is nil only for an action this build doesn't know.
     public struct Option: Codable, Sendable, Equatable {
         public var value: CompletionAction
@@ -59,7 +58,7 @@ public enum Approve {
     }
 
     /// What a choice sends: a human review (`POST /tickets/:key/review`) or a completion
-    /// (`POST /tickets/:key/complete`). Encodes as TS's `{ via, body }`.
+    /// (`POST /tickets/:key/complete`). Encodes as `{ via, body }`.
     public enum Request: Codable, Sendable, Equatable {
         case review(HumanReviewBody)
         case complete(CompleteBody)

@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/heroCollapse.ts: when the ticket hero (title, badges, actions) gets out of
+// When the ticket hero (title, badges, actions) gets out of
 // the way. A gesture that scrolls a tab's body forward hides it and one that scrolls back brings it
 // back, like Safari's toolbars. The tab strip stays put, so the hero reads as the top of the page
 // scrolling off.
@@ -24,7 +24,7 @@ public struct Collapse: Codable, Equatable, Sendable {
     }
 }
 
-/// What happened to the tab body's scroll view (the TS `CollapseEvent`, decoded from its JSON).
+/// What happened to the tab body's scroll view (decoded from the fixtures' JSON).
 public enum CollapseEvent: Decodable, Equatable, Sendable {
     case beginDrag(ScrollMetrics)
     case scroll(ScrollMetrics)
@@ -95,7 +95,7 @@ public enum HeroCollapse {
     /// momentum when the view goes on decelerating; the deceleration ending (or a finger catching
     /// it) ends the momentum. `tracking` and `animating` aren't gestures and send nothing, except
     /// that an animated scroll which settles at the top is how a status-bar tap shows up (SwiftUI
-    /// has no scroll-to-top callback), so it sends `show`, as RN's `onScrollToTop` does.
+    /// has no scroll-to-top callback), so it sends `show`, as a scroll-to-top does.
     public static func events(from old: StickScrollPhase, to new: StickScrollPhase, metrics m: ScrollMetrics) -> [CollapseEvent] {
         if old == new { return [] }
         var events: [CollapseEvent] = []

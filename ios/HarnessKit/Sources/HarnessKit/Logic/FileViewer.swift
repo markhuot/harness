@@ -1,13 +1,12 @@
 import Foundation
 
-// Port of mobile/src/lib/fileViewer.ts. The file viewer's pure parts: where a file link in chat
+// The file viewer's pure parts: where a file link in chat
 // opens (route params for the viewer, and the params an OS-level harness://file/… URL opens),
 // reading those params back, which lines of a long file to syntax highlight, and a unified patch
 // as numbered rows.
 //
-// Skipped: fileScreenHref's expo-router specifics. In RN it rewrites the URL into a `/file?…` href
-// string for redirectSystemPath; here `fileRoute(forURL:)` returns the same params as a struct and
-// the SwiftUI navigation pushes it directly, so there's no href to build or parse.
+// `fileRoute(forURL:)` returns the viewer's params as a struct and the SwiftUI navigation pushes it
+// directly, so there's no route href to build or parse.
 
 /// The ticket (or project) a piece of markdown belongs to, which a link's relative path resolves in.
 public struct FileLinkContext: Codable, Equatable, Sendable {
@@ -20,8 +19,7 @@ public struct FileLinkContext: Codable, Equatable, Sendable {
     }
 }
 
-/// The viewer's params. Strings, because that's what the RN router hands back (and what a
-/// harness:// URL carries).
+/// The viewer's params. Strings, because that's what a harness:// URL carries.
 public struct FileRouteParams: Codable, Equatable, Hashable, Sendable {
     public var path: String
     public var ticket: String?
@@ -138,20 +136,19 @@ public enum FileViewer {
     /// What a harness://file/… URL opened from outside the app (Safari, Notes, a QR code) shows:
     /// the viewer's params, or nil for anything else (left alone). A link without
     /// `?ticket=`/`?project=` still opens the viewer, which says it can't tell where.
-    /// (fileScreenHref in the TS, minus the expo-router href.)
     public static func fileRoute(forURL url: String) -> FileRouteParams? {
         let p = Array(FileLinks.prefix.unicodeScalars)
         let u = Array(url.unicodeScalars)
-        // The TS lower-cases the first 15 code units and compares; only ASCII can lower-case into
-        // this ASCII prefix, so an ASCII-only fold is exact.
+        // A case-insensitive match on the first 15 code units; only ASCII can lower-case into this
+        // ASCII prefix, so an ASCII-only fold is exact.
         guard u.count >= p.count, zip(u, p).allSatisfy({ asciiLower($0) == $1 }) else { return nil }
         guard let link = FileLinks.parseFileLink(url) else { return nil }
         return fileRouteFor(link) ?? FileRouteParams(path: link.path)
     }
 
     /// The viewer's params, checked: a missing path is nil, and a bad or reversed range is fixed or
-    /// dropped. Each param holds the router's values (only the first counts, as with an array
-    /// param in expo-router).
+    /// dropped. Each param holds the query's values (only the first counts when a
+    /// param repeats).
     public static func readFileParams(_ params: [String: [String]]) -> FileTarget? {
         func one(_ k: String) -> String? { nonEmpty(params[k]?.first) }
         guard let path = one("path") else { return nil }
@@ -224,9 +221,8 @@ public enum FileViewer {
     /// `---`/`+++`) and `\ No newline at end of file` markers are left out; so is everything when
     /// the patch has no hunk (a binary change).
     ///
-    /// The sign is dropped as one scalar, where the TS drops one code unit (they differ only for a
-    /// hand-written line that starts with an astral character instead of a sign). Line numbers
-    /// past Int.max saturate.
+    /// The sign is dropped as one scalar (which matters only for a hand-written line that starts
+    /// with an astral character instead of a sign). Line numbers past Int.max saturate.
     public static func patchRows(_ patch: String) -> [PatchRow] {
         if patch.isEmpty { return [] }
         var rows: [PatchRow] = []

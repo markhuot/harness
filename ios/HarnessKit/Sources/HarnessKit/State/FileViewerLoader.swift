@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// A request's state on the file viewer (the RN `Load<T>`).
+/// A request's state on the file viewer.
 public enum FileLoad<T: Sendable & Equatable>: Equatable, Sendable {
     case loading
     case ok(T)
@@ -23,7 +23,7 @@ public protocol FileViewerClient: Sendable {
 
 extension HarnessClient: FileViewerClient {}
 
-/// The file viewer's loading (FileViewer.tsx `Viewer.load`): the file, then, when git says it
+/// The file viewer's loading: the file, then, when git says it
 /// changed, its diff. A refresh keeps the old diff on screen while the new one loads. Lines and
 /// patch rows are worked out off the main actor once per load, so a 2 MB file never splits on
 /// every render.

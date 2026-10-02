@@ -1,7 +1,7 @@
 import Foundation
 
-// The board screen's decisions that don't need a screen (mobile/src/screens/Board.tsx,
-// TicketCard.tsx, Projects.tsx): which column a first visit lands on, where search results jump,
+// The board screen's decisions that don't need a screen (the board, its cards and the Projects
+// sheet): which column a first visit lands on, where search results jump,
 // what a card's menu offers, what VoiceOver reads for a card, where a dragged card goes, and the
 // Projects sheet's open counts.
 
@@ -18,7 +18,7 @@ public enum BoardScreenRules {
         return TicketStatus.allKnown.first { !shown[$0].isEmpty }
     }
 
-    /// One entry in a card's context menu, in the RN action sheet's order.
+    /// One entry in a card's context menu, in menu order.
     public enum CardMenuItem: Equatable, Sendable {
         case discardDraft
         case move(TicketStatus)
@@ -38,8 +38,8 @@ public enum BoardScreenRules {
         return out
     }
 
-    /// The card menu's title (the RN action sheet's): "KEY · title" cut to 90 characters, or
-    /// "KEY · Draft" for a draft. RN cuts the whole line, key included.
+    /// The card menu's title: "KEY · title" cut to 90 characters, or "KEY · Draft" for a draft.
+    /// The cut applies to the whole line, key included.
     public static func menuTitle(_ t: Ticket) -> String {
         if t.draft == true { return "\(Keys.keyLabel(t)) · Draft" }
         return String("\(Keys.keyLabel(t)) · \(t.title)".prefix(90))

@@ -1,7 +1,7 @@
 import Foundation
 
-// The decisions screens/Inbox.tsx and screens/AgentsTab.tsx make inline, for the native Inbox,
-// triage screen, Agents tab and sub-agent view.
+// The decisions behind the Inbox, the triage screen, the Agents tab and the sub-agent view, pulled
+// out of the views so they can be tested.
 
 public enum InboxLogic {
     /// The watcher strip's order: enabled ones first, then by name (`localeCompare`).
@@ -43,7 +43,7 @@ public enum InboxLogic {
         Format.dispatchedKey(s).flatMap { state.ticketByKey($0) }
     }
 
-    /// Where its file links open (RN `triageLinkContext(key, dispatched)`).
+    /// Where its file links open (FileViewer.triageLinkContext for its dispatched ticket).
     public static func linkContext(_ state: BoardState, _ s: Session) -> FileLinkContext {
         let key = Format.dispatchedKey(s)
         return FileViewer.triageLinkContext(dispatchedKey: key, dispatchedProjectId: key.flatMap { state.ticketByKey($0) }?.projectId)

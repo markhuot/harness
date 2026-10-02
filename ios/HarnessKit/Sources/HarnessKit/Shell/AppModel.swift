@@ -1,12 +1,13 @@
 import Foundation
 import Observation
 
-// Port of mobile/src/state/app.tsx and lib/storage.ts: app state that outlives a connection —
+// App state that outlives a connection —
 // preferences, the saved servers and which one is active (tokens in the Keychain), pairing — plus
-// the one BoardStore for the active server (RN's <Connection> keyed by `${active.id}:${nonce}`).
+// the one BoardStore for the active server, rebuilt when the server, its token or the nonce changes.
 // Storage goes through `SecureStorage` (KeychainStorage in the app, MemoryStorage in tests).
 
-/// The Keychain as a string store. Keys match the RN app's expo-secure-store keys.
+/// The Keychain as a string store. Keys match the 1.x React Native app's expo-secure-store keys,
+/// so its saved servers, tokens and preferences carry over.
 public protocol SecureStorage: Sendable {
     func get(_ key: String) throws -> String?
     func set(_ key: String, _ value: String) throws

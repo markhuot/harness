@@ -1,8 +1,8 @@
 import Foundation
 
-// Ports of shared/src/state/stickToBottom.ts (nextPinned: whether a transcript or summaries list
-// should keep following new content) and mobile/src/lib/stickToBottom.ts (stickStep: which scroll
-// events may unpin or re-pin, and when to jump to the end).
+// A port of shared/src/state/stickToBottom.ts (nextPinned: whether a transcript or summaries list
+// should keep following new content), plus stickStep: which scroll events may unpin or re-pin, and
+// when to jump to the end.
 //
 // Scroll events don't say who caused them: the app's own jump to the bottom, the scroll view
 // clamping after content shrinks, a list re-measuring rows, or the user. Only the user moves the
@@ -56,8 +56,8 @@ public struct Stick: Codable, Equatable, Sendable {
     }
 }
 
-/// What happened to the scroll view. The cases are UIScrollView's delegate callbacks, as the RN
-/// hook gets them; `StickToBottom.events(from:to:metrics:)` derives them from SwiftUI scroll phases.
+/// What happened to the scroll view. The cases are UIScrollView's delegate callbacks;
+/// `StickToBottom.events(from:to:metrics:)` derives them from SwiftUI scroll phases.
 public enum StickEvent: Decodable, Equatable, Sendable {
     /// The offset moved (onScrollGeometryChange).
     case scroll(ScrollMetrics)
@@ -107,12 +107,9 @@ public enum StickScrollPhase: Sendable, Equatable {
     case idle, tracking, interacting, decelerating, animating
 }
 
-/// Dropped from the RN port: the hook's plumbing (`scrollEventThrottle`, `onLayout`,
-/// `onContentSizeChange`, and the FlatList `scrollToEnd` workaround for estimated row heights),
-/// which belongs to RN's list components. A SwiftUI view reports geometry and phases instead, so
-/// `events(from:to:metrics:)` replaces UIKit's drag and momentum callbacks, and the release
-/// velocity collapses to "does a decelerating phase follow". The decisions (nextPinned, stickStep)
-/// are unchanged.
+/// A SwiftUI view reports geometry and phases, so `events(from:to:metrics:)` stands in for UIKit's
+/// drag and momentum callbacks, and the release velocity collapses to "does a decelerating phase
+/// follow".
 public enum StickToBottom {
     /// Within this many points of the bottom counts as "at the bottom" for re-pinning.
     public static let threshold = 48.0

@@ -1,20 +1,18 @@
 import Foundation
 
-/// Port of mobile/src/lib/mentionCaret.ts: the caret bookkeeping behind @-mention and /command
+/// The caret bookkeeping behind @-mention and /command
 /// autocomplete in the composer, apart from the view. Where the caret is, and the selection the
 /// input is forced to after a pick so the caret lands after the inserted mention or command.
 ///
 /// Offsets are UTF-16 code units (NSRange, `String.utf16Offset(in:)`).
 ///
-/// The RN quirk it works around: after a pick replaces the text and sets the selection, iOS reports
-/// the caret from before the pick once more, and doesn't always report the forced caret at all. A
-/// SwiftUI `TextEditor(text:selection:)` (UITextView underneath) behaves the same way: replacing the
-/// text moves UITextView's selection, and that change reaches the selection binding separately from
-/// (and possibly after) the selection the pick wrote. So the whole state machine applies.
+/// The iOS quirk it works around: after a pick replaces the text and sets the selection, iOS reports
+/// the caret from before the pick once more, and doesn't always report the forced caret at all. In a
+/// SwiftUI `TextEditor(text:selection:)` (UITextView underneath), replacing the text moves
+/// UITextView's selection, and that change reaches the selection binding separately from (and
+/// possibly after) the selection the pick wrote.
 ///
-/// What's RN-only is how the forced selection is applied. RN's `selection` prop is controlled only
-/// while one is forced (`selectionProp` returns undefined otherwise, leaving the TextInput free). A
-/// SwiftUI selection binding is always two-way, so `forcedSelection` is the value to write into the
+/// A SwiftUI selection binding is always two-way, so `forcedSelection` is the value to write into the
 /// binding when a pick happens; the view doesn't need to keep re-applying it.
 public struct MentionCaret: Codable, Equatable, Sendable {
     /// The collapsed caret, or nil for no caret or a range selection.

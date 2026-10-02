@@ -1,9 +1,9 @@
 import Foundation
 
-// The file viewer screen's decisions that don't draw (mobile/src/screens/FileViewer.tsx): its
-// title and subtitle, the info bar's badges and meta line, the Diff tab's counts, which state the
-// file and diff bodies are in, the error copy, and the "More" menu's link. The pure parts of
-// lib/fileViewer (windows, patch rows, sizes) are in FileViewer.swift.
+// The file viewer screen's decisions that don't draw: its title and subtitle, the info bar's
+// badges and meta line, the Diff tab's counts, which state the file and diff bodies are in, the
+// error copy, and the "More" menu's link. The viewer's other pure parts (windows, patch rows,
+// sizes) are in FileViewer.swift.
 
 /// What the file body shows (FileBody's early returns, in order).
 public enum FileBodyState: Equatable, Sendable {
@@ -44,7 +44,7 @@ public struct FileLoadError: Equatable, Sendable, Error {
         self.message = message
     }
 
-    /// The RN `failed(e)`: a HarnessAPIError keeps its status; anything else is a status-less message.
+    /// A failed load: a HarnessAPIError keeps its status; anything else is a status-less message.
     public init(_ error: any Error) {
         self.init(status: (error as? HarnessAPIError)?.status, message: localizedErrorMessage(error))
     }
@@ -82,7 +82,7 @@ public enum FileViewerRules {
         s.contains("\t") ? s.replacingOccurrences(of: "\t", with: "    ") : s
     }
 
-    /// A line's drawn width in characters: UTF-16 units after tabs expand, like the TS `tabs(l).length`.
+    /// A line's drawn width in characters: UTF-16 units after tabs expand.
     public static func drawnLength(_ line: String) -> Int {
         var n = 0
         for u in line.utf16 { n += u == 0x09 ? 4 : 1 }
@@ -127,7 +127,7 @@ public enum FileViewerRules {
         return .lines(truncated: view.truncated)
     }
 
-    /// `diff` nil means it hasn't started loading (the RN `null`), which shows the spinner too.
+    /// `diff` nil means it hasn't started loading , which shows the spinner too.
     public static func diffBody(_ diff: FileLoad<FileDiff>?, rows: [PatchRow]) -> DiffBodyState {
         switch diff {
         case nil, .loading: return .loading

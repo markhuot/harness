@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/watcherDraft.ts: the watcher form's editable draft and the request body
+// The watcher form's editable draft and the request body
 // it saves.
 
 public struct WatcherDraft: Codable, Sendable, Equatable {
