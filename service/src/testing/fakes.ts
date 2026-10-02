@@ -10,6 +10,7 @@ import { openDb } from "../db";
 import { Store } from "../store";
 import { EventBus } from "../events";
 import { Orchestrator, type OrchestratorOptions } from "../orchestrator/orchestrator";
+import { git } from "../orchestrator/worktree";
 
 /** A temp HARNESS_HOME, removed after the test file by the bun test preload (see bunfig.toml). */
 export function tempHome(prefix = "harness-test-") {
@@ -82,6 +83,15 @@ export interface RecordedCall {
  * messages sent meanwhile and answers each with `Steered: <text>`; `/deaf` never takes them in.
  * review: request_changes while `rejectsLeft > 0` or the prompt contains [dummy:reject].
  */
+/** A commit in `cwd` (FakeDriver.commitsWork), when it's a git checkout. */
+async function commitWork(cwd: string, runId: string) {
+  if ((await git(["rev-parse", "--is-inside-work-tree"], cwd)).code !== 0) return;
+  const env = ["-c", "user.name=fake", "-c", "user.email=fake@fake"];
+  await Bun.write(`${cwd}/fake-work-${runId}.txt`, "work\n");
+  await git(["add", "-A"], cwd);
+  await git([...env, "commit", "-q", "-m", `fake work ${runId}`], cwd);
+}
+
 export class FakeDriver implements Driver {
   id: string;
   name = "Fake";
@@ -104,6 +114,11 @@ export class FakeDriver implements Driver {
   commands: CommandMatch[] | ((cwd: string) => Promise<CommandMatch[]>) | null = null;
   /** The cwd of every listCommands() call */
   listCommandsCalls: string[] = [];
+  /**
+   * Work runs commit a file in their cwd before submitting, so the ticket has something to land
+   * (Ticket.hasChanges). Off by default: most tests' tickets change nothing.
+   */
+  commitsWork = false;
   /** Optional per-run override */
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
 
@@ -234,6 +249,7 @@ export class FakeDriver implements Driver {
         const thrown = /\/throw (.+)/.exec(p);
         if (thrown) throw new Error(thrown[1]!);
         if (p.includes("/nosubmit")) return;
+        if (this.commitsWork) await commitWork(req.cwd, req.runId);
         await ops.postSummary(ctx, "Did the work.");
         const skips = { ...(p.includes("/skipreview") && { skipAgentReview: true }), ...(p.includes("/skiphuman") && { skipHumanReview: true }) };
         if (Object.keys(skips).length) {

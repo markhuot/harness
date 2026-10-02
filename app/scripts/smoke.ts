@@ -342,7 +342,9 @@ try {
     const [ghT, plainT, siteT] = await Promise.all(
       [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, prompt: "Land me" })),
     );
-    for (const t of [ghT!, plainT!, siteT!]) {
+    // A ticket that ran in the project checkout: no branch of its own to merge or open a PR from.
+    const checkoutT = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Land me in place", useWorktree: false });
+    for (const t of [ghT!, plainT!, siteT!, checkoutT]) {
       await until(`${t.key} ready for human review`, async () => {
         const x = await getT(t.key);
         return x.status === "review" && x.agentReview === "approved" && !x.busy;
@@ -400,6 +402,17 @@ try {
       JSON.stringify({ action: custom.completionAction, instructions: custom.completionInstructions }),
     );
     check("the sheet closes after approving", !!(await until("sheet closed", async () => !(await exists("[data-testid=land-sheet]")))));
+
+    // No branch of its own: clean up is the primary, and merge and PR are gone from the menu.
+    const checkoutPrimary = await openApprove(checkoutT.key);
+    check("no branch of its own: the Approve primary reads Approve and clean up", checkoutPrimary === "Approve and clean up", checkoutPrimary);
+    const checkoutItems = await openMenu();
+    check(
+      "no branch of its own: the menu has no merge or open PR",
+      checkoutItems.join("|") === "Approve and clean up|Approve and…|Approve and take no action",
+      checkoutItems.join("|"),
+    );
+    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
 
     // Plain git: no PR choice; take no action approves and finishes without a run.
     await openApprove(plainT!.key);

@@ -41,8 +41,10 @@ afterAll(() => {
   clearPullRequestTargets();
 });
 
-async function setup(opts: { remote?: string | null; git?: boolean } = {}) {
+async function setup(opts: { remote?: string | null; git?: boolean; commits?: boolean } = {}) {
   const h = makeOrchestrator();
+  // Work runs commit, so tickets have something to merge (Ticket.hasChanges).
+  h.driver.commitsWork = opts.commits ?? true;
   const repo = join(h.home, "repo");
   mkdirSync(repo);
   const git = async (...args: string[]) => {
@@ -204,14 +206,72 @@ describe("pull request completions", () => {
     };
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
-    // The script also stands in for work and review: submit and approve by hand.
+    // The script also stands in for work and review: commit, submit and approve by hand.
     const u = h.get(t);
-    h.store.tickets.update(u.id, { status: "review", agentReview: "approved" });
+    await runGit(["commit", "-q", "--allow-empty", "-m", "work"], u.workdir!);
+    h.store.tickets.update(u.id, { status: "review", agentReview: "approved", hasChanges: true });
     h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
     await h.orch.idle();
     expect(refused).toContain("only for completion runs that open a pull request");
     expect(h.get(t).pullRequestUrl).toBeNull();
     expect(h.get(t).status).toBe("done");
+  });
+});
+
+describe("tickets with nothing to land (Ticket.hasChanges)", () => {
+  test("a worktree with no commits and nothing uncommitted offers no merge or pr, and approving cleans up", async () => {
+    const h = await setup({ commits: false });
+    const t = await h.inReview();
+    expect(t.hasChanges).toBe(false);
+    expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "merge" }), 400, /has no changes to land, so there is nothing to merge/);
+    expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "pr" }), 400, /nothing to open a pull request from/);
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.completes()[0]!.prompt).toContain("is approved to clean up");
+  });
+
+  test("a commit made by hand during review shows up once the ticket is opened, and approving merges it", async () => {
+    const h = await setup({ commits: false });
+    const t = await h.inReview();
+    expect(t.hasChanges).toBe(false);
+    const upserts: Ticket[] = [];
+    h.bus.on((e) => void (e.kind === "ticket.upserted" && e.ticket.id === t.id && upserts.push(e.ticket)));
+    await runGit(["commit", "-q", "--allow-empty", "-m", "by hand"], t.workdir!);
+    h.orch.ticketDetail(t.key);
+    await h.orch.idle();
+    expect(h.get(t).hasChanges).toBe(true);
+    // The apps hear about it.
+    expect(upserts.at(-1)?.hasChanges).toBe(true);
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.completes()[0]!.systemPrompt).toContain("into the base branch `main`");
+    expect(h.get(t).completionAction).toBe("merge");
+  });
+
+  test("an uncommitted file counts as a change; one the base branch already has doesn't", async () => {
+    const h = await setup({ commits: false });
+    const t = await h.inReview();
+    writeFileSync(join(t.workdir!, "notes.txt"), "draft\n");
+    h.orch.ticketDetail(t.key);
+    await h.orch.idle();
+    expect(h.get(t).hasChanges).toBe(true);
+    // Committed, then merged into main by hand: nothing left to land.
+    await runGit(["add", "-A"], t.workdir!);
+    await runGit(["commit", "-q", "-m", "notes"], t.workdir!);
+    await h.git("merge", "-q", "--ff-only", "harness/web-1");
+    h.orch.ticketDetail(t.key);
+    await h.orch.idle();
+    expect(h.get(t).hasChanges).toBe(false);
+  });
+
+  test("a ticket without a worktree of its own (it ran in the project checkout) can't merge or open a pr", async () => {
+    const h = await setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", useWorktree: false });
+    await h.orch.idle();
+    const u = h.get(t);
+    expect(u).toMatchObject({ status: "review", branch: null, hasChanges: null });
+    expectStatus(() => h.orch.humanReview(u.key, { decision: "approve", action: "merge" }), 400, /has no branch of its own, so there is nothing to merge/);
+    expect(h.orch.humanReview(u.key, { decision: "approve", action: "cleanup" }).completionAction).toBe("cleanup");
   });
 });
 
@@ -277,7 +337,7 @@ describe("cleanup completions", () => {
   });
 
   test("a ticket whose worktree holds no work (a change made outside git) cleans up to done", async () => {
-    const h = await setup();
+    const h = await setup({ commits: false });
     const t = await h.inReview();
     expect(await h.git("rev-list", "--count", "main..harness/web-1")).toBe("0");
     cleansUp(h, "harness/web-1");
@@ -359,7 +419,7 @@ describe("children land on their parent's branch", () => {
     const mk = async () => {
       const child = await h.orch.createTicket({ projectId: h.project.id, prompt: "part", start: false });
       h.store.db.query("UPDATE tickets SET parent_id = $p WHERE id = $id").run({ p: parent.id, id: child.id });
-      return h.store.tickets.update(child.id, { status: "review", agentReview: "approved" })!;
+      return h.store.tickets.update(child.id, { status: "review", agentReview: "approved", branch: `harness/${child.key.toLowerCase()}` })!;
     };
     const own = h.store.tickets.update((await mk()).id, { baseBranch: "release" })!;
     expect(h.orch.humanReview(own.key, { decision: "approve", action: "pr" }).completionAction).toBe("pr");

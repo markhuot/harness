@@ -109,6 +109,7 @@ import {
   commitsNotIn,
   currentBranch,
   ensureWorktree,
+  hasChangesToLand,
   isGitRepo,
   isInside,
   listBranches,
@@ -883,6 +884,8 @@ export class Orchestrator {
       throw notFound(`Unknown ticket: ${key}`);
     }
     const { ticket } = found;
+    // Opening a ticket in review re-checks its worktree, so a commit made by hand shows up.
+    if (ticket.status === "review") this.track(this.refreshHasChanges(ticket));
     return {
       ...(found.alias ? { resolvedFrom: found.alias } : {}),
       relatedTickets: this.relatedTickets(found.alias ?? ticket.key, ticket).map((t) => this.relatedView(t)),
@@ -1605,6 +1608,8 @@ export class Orchestrator {
     this.startingComplete.add(ticket.id);
     try {
       await this.refreshBaseBranch(ticket);
+      // Commits made since the ticket moved to review count (a hand-made one, or update_branch).
+      if (ticket.branch && ticket.workdir) await this.refreshHasChanges(ticket);
       let t = this.store.tickets.get(ticket.id);
       if (!t || t.status !== "review") return;
       // The action this completion runs with: the stored choice while the ticket still offers it,
@@ -3220,6 +3225,7 @@ export class Orchestrator {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
       }
       if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
+      if (to === "review") this.track(this.refreshHasChanges(t));
       if (to === "done") {
         this.kickScheduler();
         this.releaseReadyChildren(t);
@@ -3323,6 +3329,20 @@ export class Orchestrator {
 
   private allChildrenDone(t: Ticket): boolean {
     return this.store.tickets.list({ parentId: t.id }).every((c) => c.status === "done");
+  }
+
+  /**
+   * Re-check Ticket.hasChanges with git (hasChangesToLand against its effective base branch) and
+   * broadcast the ticket when it changed. A ticket without a worktree of its own stays null.
+   */
+  private async refreshHasChanges(ticket: Ticket): Promise<void> {
+    const t = this.store.tickets.get(ticket.id);
+    if (!t) return;
+    const has = t.branch && t.workdir ? await hasChangesToLand(t.workdir, t.branch, (await this.refreshBaseBranch(t)).branch) : null;
+    const current = this.store.tickets.get(t.id);
+    if (!current || (current.hasChanges ?? null) === has) return;
+    this.store.tickets.update(current.id, { hasChanges: has });
+    this.touchTicket(current.id);
   }
 
   /** Run async work in the background, tracked for idle(). Errors are logged. */

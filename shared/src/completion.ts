@@ -5,7 +5,7 @@ import { parentLandingBranch } from "./branches";
 import { COMPLETION_ACTIONS, type CompletionAction, type Project, type Ticket } from "./protocol";
 
 type ProjectLike = Pick<Project, "isGit" | "completionAction" | "completionActions" | "pullRequestHost">;
-type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl"> & { baseBranch?: string | null; branch?: string | null };
+type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl" | "hasChanges"> & { baseBranch?: string | null; branch?: string | null };
 type ParentLike = { branch?: string | null; status?: string } | null | undefined;
 
 /**
@@ -44,6 +44,27 @@ export function worksOnBase(ticket: Pick<TicketLike, "branch"> | null | undefine
   return !!ticket?.branch && !!base && ticket.branch === base;
 }
 
+/**
+ * Whether the ticket has no branch of its own: `branch` is null (not just left out), so it never
+ * got a worktree. It worked in the project checkout, or outside git, and there's nothing to merge
+ * or open a pull request from.
+ */
+export function hasNoBranch(ticket: Pick<TicketLike, "branch"> | null | undefined): boolean {
+  return ticket?.branch === null;
+}
+
+/**
+ * Why approving `ticket` has nothing to merge or open a pull request from, or null when it may:
+ * it works on its base branch, it has no branch of its own, or the service found no changes in
+ * its worktree (`hasChanges` false).
+ */
+export function nothingToLand(ticket: TicketLike | null | undefined, base: string | null | undefined): string | null {
+  if (worksOnBase(ticket, base)) return `this ticket works on its base branch ${base}`;
+  if (hasNoBranch(ticket)) return "this ticket has no branch of its own";
+  if (ticket?.hasChanges === false) return "this ticket has no changes to land";
+  return null;
+}
+
 export interface CompletionOptions {
   /** The actions this ticket may complete with, in menu order */
   actions: CompletionAction[];
@@ -62,16 +83,17 @@ export interface CompletionOptions {
  * What approving `ticket` can do. A child whose parent has a branch only merges into it.
  * Otherwise the project's offered actions; cleanup always among them, since even a worktree with no
  * commits (the work was a database or config change outside git) is worth removing. A ticket on
- * its base branch (`base`, the effective base branch, when the caller knows it) has nothing to
- * merge or open a pull request from, so those two drop out. Preselects
+ * its base branch (`base`, the effective base branch, when the caller knows it), one with no
+ * branch of its own, or one with no changes in its worktree (`nothingToLand`) has nothing to merge
+ * or open a pull request from, so those two drop out. Preselects
  * the ticket's earlier choice, then pr when the ticket already opened a pull request (so a
  * re-approval updates it), then the project default, then the first action left.
  */
 export function completionOptions(ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, parent?: ParentLike, base?: string | null): CompletionOptions {
   const parentBranch = parentLandingBranch(ticket, parent);
   if (parentBranch) return { actions: ["merge"], defaultAction: "merge", parentBranch };
-  const onBase = worksOnBase(ticket, base);
-  const actions = offeredCompletionActions(project).filter((a) => !(onBase && (a === "merge" || a === "pr")));
+  const nothing = nothingToLand(ticket, base) !== null;
+  const actions = offeredCompletionActions(project).filter((a) => !(nothing && (a === "merge" || a === "pr")));
   const earlier = ticket?.completionAction;
   const projectDefault = projectCompletionDefault(project);
   let defaultAction = actions.includes(projectDefault) ? projectDefault : actions[0] ?? "custom";
@@ -100,7 +122,8 @@ export function resolveCompletionAction(
 function completionRefusal(action: CompletionAction, opts: CompletionOptions, ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, base?: string | null): string {
   if (opts.parentBranch) return `this ticket merges into its parent's branch ${opts.parentBranch}, so it can't complete with "${action}"`;
   const offered = offeredCompletionActions(project).includes(action);
-  if (offered && worksOnBase(ticket, base)) return `this ticket works on its base branch ${base}, so there is nothing to ${action === "pr" ? "open a pull request from" : "merge"}: complete it with "cleanup" or "custom"`;
+  const why = offered ? nothingToLand(ticket, base) : null;
+  if (why) return `${why}, so there is nothing to ${action === "pr" ? "open a pull request from" : "merge"}: complete it with "cleanup" or "custom"`;
   if (action === "pr") return `"pr" needs a git remote on a host gh is logged into (run gh auth login)`;
   if (action === "merge" || action === "cleanup") return `"${action}" needs a git repository`;
   return `"${action}" isn't offered here (offered: ${opts.actions.join(", ")})`;

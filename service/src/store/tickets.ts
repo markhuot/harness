@@ -39,6 +39,7 @@ interface TicketRow {
   completion_action?: string | null;
   completion_instructions?: string | null;
   pull_request_url?: string | null;
+  has_changes?: number | null;
   draft?: number;
   completed_at: number | null;
   busy: number;
@@ -135,6 +136,7 @@ export type TicketPatch = Partial<{
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
   pullRequestUrl: string | null;
+  hasChanges: boolean | null;
   draft: boolean;
   kind: TicketKind;
   useWorktree: boolean | null;
@@ -164,6 +166,7 @@ const COLUMNS: Record<string, string> = {
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
   pullRequestUrl: "pull_request_url",
+  hasChanges: "has_changes",
   draft: "draft",
   kind: "kind",
   useWorktree: "use_worktree",
@@ -223,6 +226,7 @@ export class TicketRepo {
       completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
       completionInstructions: r.completion_instructions ?? null,
       pullRequestUrl: r.pull_request_url ?? null,
+      hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
       position: r.position,
       completedAt: r.completed_at ?? null,

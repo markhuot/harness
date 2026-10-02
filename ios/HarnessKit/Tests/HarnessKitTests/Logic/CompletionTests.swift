@@ -73,6 +73,11 @@ struct CompletionTests {
         #expect(Completion.worksOnBase(c.input.ticket, base: c.input.base) == c.output)
     }
 
+    @Test(arguments: Fixture.cases("completion", "hasNoBranchCases", input: Completion.TicketInfo?.self, output: Bool.self))
+    func hasNoBranch(_ c: Fixture.Case<Completion.TicketInfo?, Bool>) {
+        #expect(Completion.hasNoBranch(c.input) == c.output)
+    }
+
     @Test(arguments: Fixture.cases("completion", "managingConductorCases", input: ManagingInput.self, output: ConductorParentIn?.self))
     func managingConductor(_ c: Fixture.Case<ManagingInput, ConductorParentIn?>) {
         let key = Completion.managingConductor(parentId: c.input.ticket?.parentId, parentKey: c.input.parent?.key, parentStatus: c.input.parent?.status)
@@ -106,10 +111,13 @@ struct CompletionTests {
         let child = Ticket(id: "b", key: "P-2", projectId: "p", title: "b", description: "", status: .review, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
         #expect(Completion.completionOptions(ticket: child, project: project, parent: parent) == Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/p-1"))
         var opened = child
+        opened.branch = "harness/p-2"
         opened.pullRequestUrl = .value("https://github.com/o/r/pull/1")
         var mergeProject = project
         mergeProject.completionAction = .merge
         #expect(Completion.completionOptions(ticket: opened, project: mergeProject).defaultAction == .pr)
+        // A ticket with no branch of its own (it worked in the project checkout) drops merge and pr.
+        #expect(Completion.completionOptions(ticket: child, project: project) == Completion.Options(actions: [.cleanup, .custom], defaultAction: .cleanup))
         // A ticket whose branch is its effective base (here the settings' default) drops merge and pr.
         var onBase = child
         onBase.branch = "release"

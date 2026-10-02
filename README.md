@@ -126,7 +126,9 @@ you answer.
   branch into its base branch), **Approve and open PR** (push the branch and open a GitHub pull
   request, which ends the ticket), **Approve and…** (your own instructions for the agent), or
   **Approve and take no action** (done, with no agent run). **When approved** in project
-  settings sets the default. Open PR needs the [GitHub CLI](https://cli.github.com) logged into
+  settings sets the default. When the ticket has nothing to land (no commits or uncommitted
+  changes in its worktree, or no worktree of its own), merge and open PR are left out and
+  **Approve and clean up** comes first. Open PR needs the [GitHub CLI](https://cli.github.com) logged into
   the repo's host (`gh auth login`, with `--hostname` for GitHub Enterprise) and push access, and
   only shows up when both are in place.
 - Once both reviews approve, a final agent step runs on its own, lands the work the way you

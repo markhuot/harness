@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- When a ticket has nothing to land, its Approve button no longer offers **Approve and merge** or
+  **Approve and open PR** (Mac, iPhone and iPad). It reads **Approve and clean up** instead. That
+  covers a ticket that worked in the project folder without a worktree of its own (a release, say)
+  and one whose worktree has no new commits or uncommitted changes. If you commit to its worktree
+  by hand while it's in Review, opening the ticket brings the merge choices back.
+
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 
 ### Added
