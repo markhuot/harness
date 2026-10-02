@@ -17,6 +17,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Summaries and messages can name a linked ticket as `[FOO-123](WEB-12)`. The Mac, iPhone and
   iPad show FOO-123 as a link that opens WEB-12. Agents are now told to write linked tickets
   this way.
+- On iPad, tapping a ticket opens it in a window of its own, centered over the board, so the board
+  stays where you left it. Use the window's controls (the three dots at its top) to move or resize
+  it, put it in Slide Over, or tile it next to the board. Tapping another ticket shows it in that
+  same window, and a ticket that already has a window of its own brings that one forward. To keep a
+  ticket in its own window, choose Open in New Window from its card's menu (touch and hold) or the
+  ticket's More menu. You can keep several of those open at once. Links inside a ticket window open
+  in that window, and your ticket windows come back when you reopen the app. On iPhone, and in a
+  narrow Split View, tickets open as they did before.
 
 ### Changed
 
@@ -25,8 +33,25 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   covers a ticket that worked in the project folder without a worktree of its own (a release, say)
   and one whose worktree has no new commits or uncommitted changes. If you commit to its worktree
   by hand while it's in Review, opening the ticket brings the merge choices back.
-- On iPhone and iPad, the New session button at the bottom right of the board is now a pencil on a
+- On iPhone and iPad, the board's New session button is now a pencil on a
   square, the same compose icon Mail and Notes use, instead of a plus.
+- On iPad, the sidebar stays on screen beside the board, Inbox or Settings, like it does on the
+  Mac: Inbox, All projects, each project with its settings gear, and Settings with the connection
+  at the bottom. Tap the sidebar button in the top corner to hide it or bring it back, and the app
+  remembers your choice. The board's search field, Filter menu and New session button sit in the
+  top bar instead of along the bottom. With a keyboard, ⌘F jumps to search and ⌘N starts a new
+  session. In a narrow Split View window the iPad uses the iPhone layout.
+- On iPad, the board shows all five columns side by side, as on the Mac, instead of one column at a
+  time. Each column has its own header with its count and scrolls on its own. When the window is too
+  narrow for all five (portrait on an 11-inch iPad, a small Stage Manager window), the board scrolls
+  sideways, and tapping a column's header brings it into view. Move a card from its menu (touch and
+  hold), as on the Mac. In a narrow Split View the board works as it does on iPhone.
+
+### Removed
+
+- On iPhone and iPad, you can no longer drag a card to another column or chip on the board, the same
+  as on the Mac. Touch and hold a card and use its menu to move it to another column, or to the top
+  or bottom of its own.
 
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 

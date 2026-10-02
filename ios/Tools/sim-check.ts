@@ -1346,12 +1346,48 @@ async function tapHeaderCancel(udid: string) {
   if (el) await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(el.frame.y + el.frame.height / 2)), "--udid", udid);
   else await axe("tap", "-x", "36", "-y", "89", "--udid", udid);
 }
+/** The iPad's sidebar column is up: its Inbox and All projects rows are on screen. */
+const sidebarShown = (l: string[]) => l.includes("Inbox") && l.some((x) => x.startsWith("All projects"));
+/**
+ * Hides or shows the iPad's sidebar with the split view's own toggle. AXe may leave the glass header
+ * items out of its tree, so without a "…Sidebar" label it taps where the toggle sits: the sidebar
+ * column's trailing edge on the Projects title's line when shown, the bar's leading edge when hidden.
+ */
+async function toggleSidebar(udid: string, show: boolean) {
+  const all = await nodes(udid);
+  if (sidebarShown(all.map((n) => n.AXLabel ?? "")) === show) return;
+  const toggle = all.find((n) => n.AXLabel && /sidebar/i.test(n.AXLabel));
+  // A navigation title (the bar's line), not a sidebar row.
+  const title = all.find((n) => n.frame.y < 90 && n.frame.y > 20 && (n.AXLabel === "Projects" || n.AXLabel === "All projects"));
+  const inbox = all.find((n) => n.AXLabel === "Inbox" && n.frame.y > 100);
+  const y = title ? title.frame.y + title.frame.height / 2 : 54;
+  const [x, ty] = toggle
+    ? [toggle.frame.x + toggle.frame.width / 2, toggle.frame.y + toggle.frame.height / 2]
+    : show ? [32, y] : [inbox ? inbox.frame.x + inbox.frame.width - 16 : 268, y];
+  await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(ty)), "--udid", udid);
+  await until(`sidebar ${show ? "shown" : "hidden"}`, async () => sidebarShown(await labels(udid)) === show, 8000);
+  await Bun.sleep(500);
+}
+/** The ticket --ipad's ticket-window check opened a window for. */
+let windowKey = "";
+/** A ticket screen for `key` is up: its key and its tab strip. */
+const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Summaries") && l.includes("Details");
 function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
   const pluginLoaded = (l: string[]) => l.includes("Changes") && !l.includes("In progress");
   return [
-    { name: "projects", url: "harness://projects" },
+    // The iPad keeps the sidebar in a split view column (harness://projects only shows it), so it
+    // shoots the board with the sidebar hidden instead, and the link brings the sidebar back.
+    ipad
+      ? {
+          name: "board-no-sidebar",
+          url: BOARD,
+          seconds: 8,
+          prepare: (udid) => toggleSidebar(udid, false),
+          after: (udid) => simctl("openurl", udid, "harness://projects").then(() => until("sidebar shown again", async () => sidebarShown(await labels(udid)), 8000)),
+        }
+      : { name: "projects", url: "harness://projects" },
     { name: "ticket-summaries", url: `harness://ticket/${k(s.hello)}?tab=summaries` },
     { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
     { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
@@ -1514,6 +1550,45 @@ function screens(s: Seeded): Screen[] {
       },
     },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
+    // iPad: tapping a card opens the ticket in a window of its own (the system's prominent
+    // placement over the board); the window comes back on relaunch, and the next link brings the
+    // main window back.
+    ...(ipad
+      ? [
+          {
+            name: "ticket-window",
+            url: BOARD,
+            seconds: 12,
+            prepare: async (udid: string) => {
+              // A card fully on screen (the columns scroll sideways).
+              const card = await until("a card on screen", async () => (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && n.frame.x > 0 && n.frame.x + n.frame.width < 800), 8000);
+              const key = card.AXLabel!.split(" ")[0]!;
+              await axe("tap", "-x", String(Math.round(card.frame.x + card.frame.width / 2)), "-y", String(Math.round(card.frame.y + card.frame.height / 2)), "--udid", udid);
+              windowKey = key;
+              // AXe lists the board behind the prominent window too, so look for the ticket screen.
+              await until(`${key}'s window up`, async () => ticketShown(await labels(udid), key), 10000);
+              moved(udid);
+              await Bun.sleep(1200);
+            },
+            after: async (udid: string) => {
+              // The window comes back on relaunch (the scene saves its ticket): home, kill, launch.
+              await axe("button", "home", "--udid", udid);
+              await Bun.sleep(1500);
+              await simctl("terminate", udid, BUNDLE).catch(() => {});
+              await simctl("launch", udid, BUNDLE);
+              const restored = await until("ticket window restored", async () => {
+                const l = await labels(udid);
+                return ticketShown(l, windowKey);
+              }, 20000).catch((e) => e as Error);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-window-relaunched");
+              if (restored instanceof Error) throw restored;
+              await simctl("openurl", udid, BOARD);
+              await until("main window back", async () => onBoard(await labels(udid)), 10000);
+            },
+          } satisfies Screen,
+        ]
+      : []),
   ];
 }
 /** Deals `items` out to `n` lanes so each gets about the same total `weight`, keeping their order within a lane. */
@@ -1806,7 +1881,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
         if (!runs.some((r) => r.kind === "complete" && r.status === "succeeded")) throw new Error("no completion run landed it");
         await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("Re-open"));
-        const stray = (await labels(udid)).filter((l) => l.startsWith("Complete") || l === "More ways to complete");
+        // A Complete button ("Complete", "Complete and …"), not the completion run's "Completed." summary.
+        const stray = (await labels(udid)).filter((l) => l === "Complete" || l.startsWith("Complete ") || l === "More ways to complete");
         if (stray.length) throw new Error(`still offers ${stray.join(", ")}`);
         return `${t.key} → ${t.status} after one approval`;
       });

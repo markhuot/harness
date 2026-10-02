@@ -33,6 +33,52 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.columnWithResults(Columns(), current: .planning) == nil)
     }
 
+    @Test func sideBySideSearchStaysWhileAnyVisibleColumnHasResults() {
+        let cols = Columns(review: [Self.t("c", .review)], done: [Self.t("d", .done)])
+        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .review]) == nil)
+        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .blocked]) == .review)
+        // Before any column reports itself on screen there's nothing to judge by.
+        #expect(BoardScreenRules.columnWithResults(cols, visible: []) == nil)
+        #expect(BoardScreenRules.columnWithResults(Columns(), visible: [.planning]) == nil)
+    }
+
+    // MARK: side-by-side columns
+
+    @Test func columnsShareTheWidthWhenFiveFit() {
+        // An 11-inch iPad in landscape: 1210 − 2×14 − 4×10 = 1142, so 228.4 each.
+        let s = BoardScreenRules.columnSizing(available: 1210, spacing: 10, inset: 14)
+        #expect(!s.scrolls)
+        #expect(abs(s.width - 228.4) < 0.001)
+    }
+
+    @Test func columnsKeepTheMinimumAndScrollWhenTooNarrow() {
+        // Portrait (834 wide) can't fit five at 216.
+        #expect(BoardScreenRules.columnSizing(available: 834, spacing: 10, inset: 14) == .init(width: 216, scrolls: true))
+        // Exactly the minimum still fits: 5×216 + 4×10 + 2×14.
+        #expect(BoardScreenRules.columnSizing(available: 1148, spacing: 10, inset: 14) == .init(width: 216, scrolls: false))
+        #expect(BoardScreenRules.columnSizing(available: 1147, spacing: 10, inset: 14).scrolls)
+    }
+
+    @Test func columnsStopGrowingAtTheMaximum() {
+        #expect(BoardScreenRules.columnSizing(available: 3000, spacing: 10, inset: 14) == .init(width: 400, scrolls: false))
+        #expect(BoardScreenRules.columnSizing(available: 0, count: 0, spacing: 10, inset: 14).scrolls == false)
+    }
+
+    @Test func doneAutofillsOnlyWhileOnScreenAndNotSearching() {
+        func fill(_ layout: BoardScreenRules.Layout, page: TicketStatus? = nil, visible: Set<TicketStatus> = [], searching: Bool = false, count: Int = 3, canLoad: Bool = true) -> Bool {
+            BoardScreenRules.shouldAutofillDone(layout, page: page, visible: visible, searching: searching, visibleCount: count, canLoad: canLoad)
+        }
+        // The pager goes by its page; what's "visible" doesn't count there.
+        #expect(fill(.pager, page: .done))
+        #expect(!fill(.pager, page: .review, visible: [.done]))
+        // Side by side, Done only has to be partly on screen, whichever column leads.
+        #expect(fill(.columns, page: .planning, visible: [.blocked, .review, .done]))
+        #expect(!fill(.columns, page: .done, visible: [.planning, .inProgress]))
+        #expect(!fill(.columns, visible: [.done], searching: true))
+        #expect(!fill(.columns, visible: [.done], count: BoardLoader.autofillMin))
+        #expect(!fill(.columns, visible: [.done], canLoad: false))
+    }
+
     // MARK: card menu, labels, title
 
     @Test func draftMenuDiscardsInsteadOfMoving() {
@@ -79,54 +125,6 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", description: "\nsecond")) == "Empty draft")
         #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", description: "a\r\nb")) == "a\r")
         #expect(BoardScreenRules.cardTitle(Self.t("1", title: "", description: "words")) == "Untitled")
-    }
-
-    // MARK: drag and drop
-
-    @Test func dropBetweenTwoCardsTakesTheMidpoint() throws {
-        let a = Self.t("a", position: 1), b = Self.t("b", position: 2), c = Self.t("c", position: 3)
-        let cols = Columns(planning: [a, b, c])
-        // c dropped above b: between a (1) and b (2).
-        let m = try #require(BoardScreenRules.dropMove(c, to: .planning, before: "b", cols: cols))
-        #expect(m.body == .init(status: nil, position: 1.5))
-        // a dropped at the end: after c.
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: nil, cols: cols)?.body.position == 4)
-    }
-
-    @Test func dropWhereItAlreadyIsChangesNothing() {
-        let a = Self.t("a", position: 1), b = Self.t("b", position: 2), c = Self.t("c", position: 3)
-        let cols = Columns(planning: [a, b, c])
-        #expect(BoardScreenRules.dropMove(b, to: .planning, before: "b", cols: cols) == nil)
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: "b", cols: cols) == nil) // a is already above b
-        #expect(BoardScreenRules.dropMove(c, to: .planning, before: nil, cols: cols) == nil)
-        // One step down is a real move.
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: "c", cols: cols)?.body.position == 2.5)
-    }
-
-    @Test func dropCountsHiddenCardsSoTheyKeepTheirPlace() {
-        // A hidden child at position 2 sits between the two visible cards; dropping above b lands
-        // between the child and b, not between a and b.
-        let a = Self.t("a", position: 1), kid = Self.t("k", position: 2, parentId: "x"), b = Self.t("b", position: 3)
-        let moving = Self.t("m", .review)
-        let m = BoardScreenRules.dropMove(moving, to: .planning, before: "b", cols: Columns(planning: [a, kid, b]))
-        #expect(m?.body == .init(status: .planning, position: 2.5))
-        #expect(m?.completedAt == .null)
-    }
-
-    @Test func dropIntoDoneSendsNoPositionAndCompletesNow() {
-        let t = Self.t("a", .review)
-        let m = BoardScreenRules.dropMove(t, to: .done, before: "z", cols: Columns(done: [Self.t("z", .done)]), now: 42)
-        #expect(m?.body == .init(status: .done, position: nil))
-        #expect(m?.completedAt == .value(42))
-        // Reordering within Done is a no-op.
-        let d = Self.t("d", .done, completedAt: .value(5))
-        #expect(BoardScreenRules.dropMove(d, to: .done, before: nil, cols: Columns(done: [d])) == nil)
-    }
-
-    @Test func dropOnAnUnknownCardGoesToTheEnd() {
-        let a = Self.t("a", position: 1)
-        let m = BoardScreenRules.dropMove(Self.t("m", .review), to: .planning, before: "gone", cols: Columns(planning: [a]))
-        #expect(m?.body.position == 2)
     }
 
     // MARK: projects

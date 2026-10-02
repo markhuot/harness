@@ -104,28 +104,21 @@ struct TicketDetailScreen: View {
         tab = t
     }
 
-    /// This screen's place on the stack (the last ticket route with the link's key).
-    private func ownIndex(_ path: [Route]) -> Int? {
-        path.lastIndex { if case let .ticket(k, _) = $0 { k == key } else { false } }
-    }
-
+    /// Off this screen's place on the stack (the last ticket route with the link's key; a ticket
+    /// window's root closes the window), into the New session editor.
     private func openDraft() {
-        let tab = router.selectedTab
-        var path = router.path(tab)
-        if let i = ownIndex(path) { path.remove(at: i) }
-        router.setPath(tab, path)
-        router.present(.newSession(projectId: nil, key: ticketKey))
+        let draftKey = ticketKey
+        router.removeTicket { $0 == key }
+        // A ticket window closing on its draft hands the editor to a main window.
+        if router.closeRequested {
+            WindowDirectory.shared.openInMain(.sheet(.newSession(projectId: nil, key: draftKey)))
+        } else {
+            router.present(.newSession(projectId: nil, key: draftKey))
+        }
     }
 
-    private func replaceSelf(with key: String) {
-        let tab = router.selectedTab
-        var path = router.path(tab)
-        if let i = ownIndex(path) {
-            path[i] = .ticket(key: key, tab: nil)
-            router.setPath(tab, path)
-        } else {
-            router.push(.ticket(key: key, tab: nil))
-        }
+    private func replaceSelf(with newKey: String) {
+        router.replaceTicket(key, with: newKey)
     }
 }
 
@@ -212,6 +205,8 @@ private struct TicketDetailHeader: ViewModifier {
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @Environment(\.openURL) private var openURL
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var multipleWindows
     @State private var confirm: Confirmation?
 
     func body(content: Content) -> some View {
@@ -237,6 +232,12 @@ private struct TicketDetailHeader: ViewModifier {
         let api = store.api
         return Menu {
             Button("Copy key", systemImage: "number") { UIPasteboard.general.string = key }
+            // iPad: not in the window that's already this ticket's own.
+            if multipleWindows && !isWindowRoot(key) {
+                Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                    openWindow(id: SceneID.ticket, value: TicketWindowValue(key: key, tab: nil))
+                }
+            }
             if let ref = ticket.externalRef, let url = ref.url.flatMap(URL.init(string:)) {
                 Button("Open \(ref.key)", systemImage: "arrow.up.right.square") { openURL(url) }
             }
@@ -269,15 +270,15 @@ private struct TicketDetailHeader: ViewModifier {
         }
     }
 
+    /// This screen is the root of a ticket window.
+    private func isWindowRoot(_ key: String) -> Bool {
+        router.scope == .ticket && TicketWindowValue(route: router.root)?.key == key
+    }
+
     /// Back off the deleted ticket's screen.
     private func pop(_ key: String) {
-        let tab = router.selectedTab
-        var path = router.path(tab)
-        guard let i = path.lastIndex(where: {
-            if case let .ticket(k, _) = $0 { k.uppercased() == key.uppercased() || store.state.ticketByKey(k) == nil } else { false }
-        }) else { return }
-        path.remove(at: i)
-        router.setPath(tab, path)
+        let state = store.state
+        router.removeTicket { $0.uppercased() == key.uppercased() || state.ticketByKey($0) == nil }
     }
 }
 

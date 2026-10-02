@@ -1,9 +1,9 @@
 import Foundation
 
 // The board screen's decisions that don't need a screen (the board, its cards and the Projects
-// sheet): which column a first visit lands on, where search results jump,
-// what a card's menu offers, what VoiceOver reads for a card, where a dragged card goes, and the
-// Projects sheet's open counts.
+// sheet): which column a first visit lands on, where search results jump, how the iPad's
+// side-by-side columns are sized, when Done tops itself up, what a card's menu offers, what
+// VoiceOver reads for a card, and the Projects sheet's open counts.
 
 public enum BoardScreenRules {
     /// The first visit lands on the most useful column: what needs you, else what's moving.
@@ -14,8 +14,57 @@ public enum BoardScreenRules {
 
     /// When search results land and `current` has none, the first column that does (nil: stay).
     public static func columnWithResults(_ shown: Columns, current: TicketStatus) -> TicketStatus? {
-        if !shown[current].isEmpty { return nil }
+        columnWithResults(shown, visible: [current])
+    }
+
+    /// The same for the iPad's side-by-side columns: stay while any column on screen has results
+    /// (or nothing is known to be on screen yet).
+    public static func columnWithResults(_ shown: Columns, visible: Set<TicketStatus>) -> TicketStatus? {
+        if visible.isEmpty || visible.contains(where: { !shown[$0].isEmpty }) { return nil }
         return TicketStatus.allKnown.first { !shown[$0].isEmpty }
+    }
+
+    // MARK: Layout
+
+    /// How the board lays out its columns: the phone's one-column pager, or every column side by
+    /// side (iPad at regular width).
+    public enum Layout: Equatable, Sendable {
+        case pager
+        case columns
+    }
+
+    /// The narrowest a side-by-side column gets before the board scrolls sideways instead (the Mac's
+    /// is 216): five fit an 11-inch iPad in landscape, not in portrait.
+    public static let columnMinWidth: Double = 216
+    /// The widest one gets (the Mac's is 380); a wider window leaves room at the trailing edge.
+    public static let columnMaxWidth: Double = 400
+
+    /// Side-by-side column sizing: `width` per column, and whether they overflow `available`.
+    public struct ColumnSizing: Equatable, Sendable {
+        public let width: Double
+        public let scrolls: Bool
+        public init(width: Double, scrolls: Bool) {
+            self.width = width
+            self.scrolls = scrolls
+        }
+    }
+
+    /// Equal flexible widths that fill `available` (less `inset` on each side and `spacing` between),
+    /// clamped to `min`…`max`. Below `min` the columns keep `min` and the board scrolls.
+    public static func columnSizing(available: Double, count: Int = TicketStatus.allKnown.count, spacing: Double, inset: Double, min: Double = columnMinWidth, max: Double = columnMaxWidth) -> ColumnSizing {
+        guard count > 0 else { return ColumnSizing(width: min, scrolls: false) }
+        let fit = (available - 2 * inset - spacing * Double(count - 1)) / Double(count)
+        if fit < min { return ColumnSizing(width: min, scrolls: true) }
+        return ColumnSizing(width: Swift.min(fit, max), scrolls: false)
+    }
+
+    /// Whether to fetch another Done page unasked: hidden children can leave the loaded run nearly
+    /// empty, so top it up while Done is on screen (the pager's page; any visible part of the
+    /// side-by-side column). Never while searching, whose results page on their own.
+    public static func shouldAutofillDone(_ layout: Layout, page: TicketStatus?, visible: Set<TicketStatus>, searching: Bool, visibleCount: Int, canLoad: Bool) -> Bool {
+        if searching { return false }
+        let onScreen = layout == .pager ? page == .done : visible.contains(.done)
+        return onScreen && BoardLoader.shouldAutoFill(visibleCount: visibleCount, canLoad: canLoad)
     }
 
     /// One entry in a card's context menu, in menu order.
@@ -65,24 +114,6 @@ public enum BoardScreenRules {
         let scalars = t.description.unicodeScalars
         let first = String(String.UnicodeScalarView(scalars.prefix { $0 != "\n" }))
         return first.isEmpty ? "Empty draft" : first
-    }
-
-    /// The update for dropping `t` into `status` just above the card `beforeId` (nil: at the end).
-    /// `cols` is the unfiltered board, so hidden children keep their place around the drop. Nil when
-    /// nothing would change (dropped where it already is). Done is ordered by completion, so a
-    /// drop there sends no position.
-    public static func dropMove(_ t: Ticket, to status: TicketStatus, before beforeId: String?, cols: Columns, now: Timestamp = Date().timeIntervalSince1970 * 1000) -> BoardColumns.Move? {
-        if beforeId == t.id { return nil }
-        let column = cols[status]
-        let others = column.filter { $0.id != t.id }
-        let index = beforeId.flatMap { id in others.firstIndex { $0.id == id } } ?? others.count
-        // Inserting a card back at its own index (in the column without it) leaves the order as is.
-        let inPlace = t.status == status && column.firstIndex { $0.id == t.id } == index
-        let position = status == .done || inPlace ? nil : BoardState.positionForDrop(others, index: index)
-        let body = BoardColumns.Move.Body(status: t.status != status ? status : nil, position: position)
-        if body.status == nil && body.position == nil { return nil }
-        let completedAt: Patch<Timestamp> = t.status == status ? t.completedAt : status == .done ? .value(now) : .null
-        return BoardColumns.Move(body: body, completedAt: completedAt)
     }
 
     /// Open (not done) tickets per project id, for the Projects sheet.

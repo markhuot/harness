@@ -1,12 +1,21 @@
 import HarnessKit
 import SwiftUI
 
-/// The desktop sidebar on a phone, and how the app moves between its sections: Inbox, All
-/// projects and each project with its open count and a settings gear (pick one to filter the
-/// board), and Settings at the bottom with the connection. Add a project by its path on the Mac.
-/// Presented with medium/large detents by the shell, which closes it by its grabber (no Cancel
-/// button).
+/// The desktop sidebar on a phone: ProjectsSidebar, presented with medium/large detents by the
+/// shell, which closes it by its grabber (no Cancel button). A row's link closes it.
 struct ProjectsSheet: View {
+    var body: some View { ProjectsSidebar() }
+}
+
+/// The desktop sidebar, and how the app moves between its sections: Inbox, All projects and each
+/// project with its open count and a settings gear (pick one to filter the board), and Settings at
+/// the bottom with the connection. Add a project by its path on the Mac. The phone shows it as the
+/// Projects sheet; the iPad (regular width) keeps it in the split view's sidebar column
+/// (`column`), where a gear pushes on the detail column's stack.
+struct ProjectsSidebar: View {
+    /// In the iPad's sidebar column (the desktop sidebar's background), not the phone's sheet.
+    var column = false
+
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -22,17 +31,18 @@ struct ProjectsSheet: View {
         let counts = BoardScreenRules.openCounts(state.tickets.values)
         let totalOpen = counts.values.reduce(0, +)
         let triaging = state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        let section = router.selectedTab
+        let row = SidebarRow.current(tab: router.selectedTab, boardProject: app.prefs.boardProject) { state.projects[$0] != nil }
+        let bg = column ? c.bgSidebar : c.bg
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Card {
-                    ProjectsNavRow(icon: "inbox", label: "Inbox", badge: triaging, active: section == .inbox) {
-                        open(.inbox)
+                    ProjectsNavRow(icon: "inbox", label: "Inbox", badge: triaging, active: row == .inbox) {
+                        select(.inbox)
                     }
                     Divider().overlay(c.border)
-                    ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: section == .board && app.prefs.boardProject == nil) {
-                        choose(nil)
+                    ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: row == .allProjects) {
+                        select(.allProjects)
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
@@ -48,7 +58,7 @@ struct ProjectsSheet: View {
                     Card {
                         ForEach(Array(projects.enumerated()), id: \.element.id) { i, p in
                             if i > 0 { Divider().overlay(c.border) }
-                            projectRow(p, count: counts[p.id] ?? 0)
+                            projectRow(p, count: counts[p.id] ?? 0, active: row == .project(p.id))
                         }
                         if projects.isEmpty {
                             Button { startAdding() } label: {
@@ -72,8 +82,8 @@ struct ProjectsSheet: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 Card {
-                    ProjectsNavRow(icon: "settings", label: "Settings", active: section == .settings) {
-                        open(.settings)
+                    ProjectsNavRow(icon: "settings", label: "Settings", active: row == .settings) {
+                        select(.settings)
                     }
                 }
                 HStack(spacing: 8) {
@@ -87,9 +97,9 @@ struct ProjectsSheet: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
             .padding(.bottom, 8)
-            .background(c.bg)
+            .background(bg)
         }
-        .background(c.bg)
+        .background(bg)
         .navigationTitle("Projects")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Add project", isPresented: $adding) {
@@ -104,10 +114,9 @@ struct ProjectsSheet: View {
         }
     }
 
-    private func projectRow(_ p: Project, count: Int) -> some View {
-        let active = app.prefs.boardProject == p.id
-        return HStack(spacing: 0) {
-            Button { choose(p.id) } label: {
+    private func projectRow(_ p: Project, count: Int, active: Bool) -> some View {
+        HStack(spacing: 0) {
+            Button { select(.project(p.id)) } label: {
                 HStack(spacing: 10) {
                     ProjectKeyBadge(p.key, color: p.color)
                     VStack(alignment: .leading, spacing: 1) {
@@ -138,16 +147,10 @@ struct ProjectsSheet: View {
         .background(active ? c.accentSoft : .clear)
     }
 
-    /// Filter the board by a project, or none, and go back to it.
-    private func choose(_ id: String?) {
-        app.setPref(\.boardProject, id)
-        open(.board)
-    }
-
-    /// Show a section at its root; the link closes this sheet.
-    private func open(_ section: AppTab) {
+    /// Show a row's section at its root (a board row filters it first); the link closes the sheet.
+    private func select(_ row: SidebarRow) {
         haptic(.select)
-        router.open(.tab(section))
+        router.select(row, app: app)
     }
 
     private func startAdding() {
@@ -158,7 +161,7 @@ struct ProjectsSheet: View {
     private func addProject() {
         let path = newPath
         Task {
-            if let p = await store.addProject(path: path, actions: actions) { choose(p.id) }
+            if let p = await store.addProject(path: path, actions: actions) { select(.project(p.id)) }
         }
     }
 }
