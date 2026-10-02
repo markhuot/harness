@@ -1,7 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-/// Live view of the session's headless Chrome tab. Screencast frames
+/// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips
+/// shows once there are two or more; + opens another). Screencast frames
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard. The page viewport follows the stage size, sent once the
@@ -30,6 +31,7 @@ struct BrowserTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            tabStrip
             status
             stage
         }
@@ -83,10 +85,45 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
+            BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
+                model.newTab()
+                // Like Safari: a new tab starts in the address bar.
+                urlDraft = ""
+                editingUrl = true
+            }
         }
         .padding(6)
         .background(c.bgElev)
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
+    }
+
+    // MARK: Tabs
+
+    /// The open tabs, once there are two or more; the shown one is highlighted and kept in view.
+    @ViewBuilder private var tabStrip: some View {
+        let tabs = BrowserTabSelection.strip(model.state)
+        if !tabs.isEmpty {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(tabs) { tab in
+                            BrowserTabChip(
+                                tab: tab, current: tab.id == model.selection.shown,
+                                select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
+                                .id(tab.id)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                }
+                .onChange(of: model.selection.shown, initial: true) { _, id in
+                    guard let id else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+                }
+            }
+            .background(c.bgElev)
+            .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
+        }
     }
 
     private var status: some View {
@@ -151,7 +188,57 @@ struct BrowserTabView: View {
         urlDraft = url
         editingUrl = false
         let id = sessionId
-        if let next = await actions.run(nil, { try await client.browserNavigate(id, url: url) }) { model.apply(next) }
+        let tab = model.selection.shown
+        if let next = await actions.run(nil, { try await client.browserNavigate(id, url: url, tabId: tab) }) { model.apply(next) }
+    }
+}
+
+/// One open tab in the strip: spinner while loading, its label (title, host, or "New Tab"), and a
+/// close button. Tapping it switches to that tab.
+struct BrowserTabChip: View {
+    let tab: BrowserTab
+    let current: Bool
+    let select: () -> Void
+    let close: () -> Void
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        let label = BrowserTabSelection.label(tab)
+        HStack(spacing: 6) {
+            if tab.loading { Spinner().controlSize(.mini) }
+            Text(label)
+                .font(.scaled(size: 12.5, weight: current ? .semibold : .regular))
+                .foregroundStyle(current ? c.accentText : c.text2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Button {
+                haptic(.tap)
+                close()
+            } label: {
+                Image(icon: "x")
+                    .font(.scaled(size: 10, weight: .bold))
+                    .foregroundStyle(current ? c.accentText : c.text3)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close \(label)")
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 2)
+        .frame(maxWidth: 180)
+        .frame(height: 30)
+        .background(current ? c.accentSoft : c.bgSunken, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(current ? .clear : c.border, lineWidth: 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            guard !current else { return }
+            haptic(.tap)
+            select()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { select() }
     }
 }
 

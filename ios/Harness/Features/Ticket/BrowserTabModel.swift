@@ -2,10 +2,11 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// The Browser tab's state and timing glue: the subscription, the latest
-/// decoded frame, live/idle, the resize gate and its debounce, wheel coalescing, and the hidden
+/// The Browser tab's state and timing glue: the subscription and which browser tab it's on, the
+/// latest decoded frame, live/idle, the resize gate and its debounce, wheel coalescing, and the hidden
 /// field's typing buffer. The input rules themselves are HarnessKit's (TouchGesture,
-/// WheelCoalescer, BrowserTyping, ResizeGate); this class feeds them touches and clock readings.
+/// WheelCoalescer, BrowserTyping, ResizeGate, BrowserTabSelection); this class feeds them touches,
+/// events and clock readings.
 @MainActor
 @Observable
 final class BrowserTabModel {
@@ -19,11 +20,15 @@ final class BrowserTabModel {
 
     private(set) var state: BrowserState?
     private(set) var frame: Frame?
+    /// The browser tab shown (followed across reconnects and kept while the session stays the same).
+    private(set) var selection = BrowserTabSelection()
     private(set) var live = false
     /// The stage's size (points), from the view's geometry.
     private(set) var stage: CGSize = .zero
 
     @ObservationIgnored private var send: (BrowserInput) -> Void = { _ in }
+    @ObservationIgnored private weak var store: BoardStore?
+    @ObservationIgnored private var sessionId: String?
     @ObservationIgnored private var lastFrameAt: Double = 0
     @ObservationIgnored private var gate = ResizeGate()
     @ObservationIgnored private var resizeTask: Task<Void, Never>?
@@ -53,27 +58,33 @@ final class BrowserTabModel {
     /// One subscription's lifetime: run it in `.task(id:)` keyed on the session, the store's epoch
     /// and its socket generation. Returns once the task is cancelled, after unsubscribing.
     func run(sessionId: String, store: BoardStore, client: HarnessClient?) async {
-        generation += 1
+        // A resubscribe (reconnect, foregrounding) comes back to the tab it was on; another
+        // session starts on its lowest tab.
+        if sessionId != self.sessionId { selection = BrowserTabSelection() }
+        self.sessionId = sessionId
+        self.store = store
         state = nil
-        frame = nil
-        pendingFrame = nil
+        dropFrame()
         gate.reset()
         send = { [weak store] input in store?.sendBrowserInput(sessionId, input) }
-        store.subscribeBrowser(sessionId)
+        let tab = selection.shown
+        store.subscribeBrowser(sessionId, tabId: tab)
         let off = store.onEvent { [weak self] event in
             guard let self else { return }
             switch event {
-            case let .browserFrame(id, data, width, height) where id == sessionId:
+            case let .browserFrame(id, tabId, data, width, height) where id == sessionId:
+                // Frames still in flight from the tab just left.
+                guard self.selection.accepts(frameTabId: tabId) else { return }
                 self.lastFrameAt = Self.now()
                 if !self.live { self.live = true }
                 self.receiveFrame(data: data, width: width, height: height)
             case let .browserState(id, s) where id == sessionId:
-                self.state = s
+                self.receive(s)
                 if self.gate.confirm() { self.scheduleResize(ms: 100) }
             default: break
             }
         }
-        if let client, let s = try? await client.browserState(sessionId), !Task.isCancelled { state = s }
+        if let client, let s = try? await client.browserState(sessionId, tabId: tab), !Task.isCancelled, state == nil { receive(s) }
         // Live = a frame within the last 2 s, checked twice a second.
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
@@ -90,7 +101,49 @@ final class BrowserTabModel {
 
     /// navigate() answered with the new state.
     func apply(_ s: BrowserState) {
+        receive(s)
+    }
+
+    /// A state for this session: when the service moved this viewer to another tab (newTab, or
+    /// the tab it watched closed), the old tab's frame goes.
+    private func receive(_ s: BrowserState) {
+        if selection.receive(s) { dropFrame() }
         state = s
+    }
+
+    /// Forget the current frame (another tab is coming); frames decoding meanwhile are discarded.
+    private func dropFrame() {
+        generation += 1
+        frame = nil
+        pendingFrame = nil
+    }
+
+    // MARK: Tabs
+
+    /// Show tab `id`: the socket switches to it and the service answers with its state and frame.
+    func selectTab(_ id: Int) {
+        guard let sessionId, selection.select(id) else { return }
+        dropFrame()
+        // Show the tab's address and title right away rather than the old tab's until the reply.
+        if var s = state, let t = s.tabs?.first(where: { $0.id == id }) {
+            s.tabId = id
+            s.url = t.url
+            s.title = t.title
+            s.loading = t.loading
+            state = s
+        }
+        store?.subscribeBrowser(sessionId, tabId: id)
+    }
+
+    /// Open a blank tab; the service moves this viewer to it (learnt from the next browser.state).
+    func newTab() {
+        send(.newTab(url: nil))
+    }
+
+    /// Close tab `id`. When it's the one shown the service moves this viewer to the lowest open tab.
+    func closeTab(_ id: Int) {
+        guard let sessionId else { return }
+        store?.sendBrowserInput(sessionId, tabId: id, .closeTab)
     }
 
     private func receiveFrame(data: String, width: Int, height: Int) {
