@@ -453,7 +453,8 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
     description: "Runs with the session browser (planning, work, review, conductor, chat): its tools.",
     variables: {},
     template: `## Browser
-This session has its own Chrome tab, driven with \`browser_open\` { url }, \`browser_content\` { selector?, format?: "text" | "html", max_chars? }, \`browser_click\` { selector }, \`browser_type\` { selector, text, submit? }, \`browser_eval\` { expression } and \`browser_screenshot\` { save_to? }. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.`,
+This session has its own Chrome browser, driven with \`browser_open\` { url, tab?, new_tab? }, \`browser_content\` { selector?, format?: "text" | "html", max_chars?, tab? }, \`browser_click\` { selector, tab? }, \`browser_type\` { selector, text, submit?, tab? }, \`browser_eval\` { expression, tab? } and \`browser_screenshot\` { save_to?, tab? }. The human can watch this browser live in the app, so use it to check web UIs you change and to read documentation.
+It can keep several pages open in numbered tabs. \`browser_open\` with \`new_tab\` opens one and its result names the tab; pass that number as \`tab\` to the other browser tools. Without \`tab\` they use the lowest open tab, tab 1 unless it was closed. \`browser_tabs\` lists the open tabs, and \`browser_close_tab\` { tab } closes one you're done with. Pages a tab opens itself (a \`target="_blank"\` link, \`window.open\`) arrive as new tabs too. When sub-agents browse at the same time, have each one open its own tab and pass its number on every call, so they don't steer each other's page.`,
   },
 
   // -------------------------------------------------------------------------
