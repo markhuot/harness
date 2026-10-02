@@ -70,7 +70,7 @@ function setup(sim: Partial<Sim> = {}) {
       yield { type: "tool_result", callId: "tu2", name: "Bash", result: { content: [{ type: "text", text: "scaffolded" }] } };
     }
     if (s.after === "block") await ctx.ops.block(ctx, "The classifier denied npx; may I run it?");
-    else if (s.after === "submit") await ctx.ops.submitForReview(ctx, "Done without scaffolding.");
+    else if (s.after === "submit") await ctx.ops.submitForReview(ctx, "Done without scaffolding.", true);
     else yield { type: "text", text: "It was denied." };
   };
   return { ...h, project, sim: s };
@@ -81,7 +81,7 @@ const work = (h: H) => h.driver.calls.filter((c) => c.kind === "work");
 const ticket = (h: H, key: string) => h.orch.ticketDetail(key).ticket;
 
 async function denied(h: H) {
-  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "scaffold it" });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "scaffold it" });
   await h.orch.idle();
   return t;
 }
@@ -95,7 +95,7 @@ describe("classifier denials → approval cards", () => {
     expect(cur.blockedReason).toBe("Permission needed: Bash — npx -y harness-check-pkg init");
     expect(cur.pendingApproval).toMatchObject({ toolName: "Bash", input: CALL, reason: REASON, source: "classifier", runId: work(h)[0]!.runId });
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]); // no review
-    expect(h.orch.summaries(t.key).some((s) => s.author === "system" && s.body.endsWith(`Classifier: ${REASON}`))).toBe(true);
+    expect(h.orch.activity(t.key).some((a) => a.kind === "permission" && a.author === "system" && a.body.endsWith(`Classifier: ${REASON}`))).toBe(true);
   });
 
   test("when the agent blocked after the denial, the approval is attached to its block", async () => {
@@ -120,9 +120,9 @@ describe("classifier denials → approval cards", () => {
     const cur = ticket(h, t.key);
     expect([cur.status, cur.pendingApproval]).toEqual(["review", null]);
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work", "review"]);
-    const bodies = h.orch.summaries(t.key).map((s) => `${s.author}: ${s.body}`);
-    expect(bodies).toContain("agent: Done without scaffolding.");
-    expect(bodies).toContain(`system: The classifier denied a call during this run, and the agent submitted without it:\n- Bash (npx -y harness-check-pkg init): ${REASON}`);
+    const bodies = h.orch.activity(t.key).map((a) => `${a.kind} ${a.author}: ${a.body}`);
+    expect(bodies).toContain("submitted agent: Done without scaffolding.");
+    expect(bodies).toContain(`permission system: The classifier denied a call during this run, and the agent submitted without it:\n- Bash (npx -y harness-check-pkg init): ${REASON}`);
   });
 
   test("no card when the denied call went through later in the same run", async () => {
@@ -164,7 +164,8 @@ describe("classifier denials → approval cards", () => {
     expect(chats.map((c) => c.grants?.once)).toEqual([[], [{ toolName: "Bash", input: CALL }]]);
     cur = ticket(h, t.key);
     expect([cur.status, cur.pendingApproval]).toEqual(["review", null]);
-    expect(h.orch.summaries(t.key).at(-1)).toMatchObject({ author: "agent", body: "Scaffolded the project." });
+    // The retried chat ran the call (its answer stays in the transcript: the message wasn't logged to Activity)
+    expect(h.orch.transcript(t.sessionId).filter((e) => e.content.type === "text").at(-1)?.content).toMatchObject({ text: "Scaffolded the project." });
   });
 
   test("a chat's denial of a tool the ticket allows is retried as a chat, where the ticket is", async () => {
@@ -275,7 +276,7 @@ describe("classifier denials → approval cards", () => {
 
   test("a denial during a complete run blocks instead of marking done; allow_once resumes the complete run", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle(); // denied → card
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
@@ -304,7 +305,7 @@ describe("classifier denials → approval cards", () => {
 
   test("read-only tickets get no grants", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "look around", permissionMode: "read_only" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "look around", permissionMode: "read_only" });
     await h.orch.idle();
     expect(work(h)[0]!.grants).toBeUndefined();
     expect(ticket(h, t.key).pendingApproval).toBeNull(); // the denial isn't put to a human either

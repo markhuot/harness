@@ -21,7 +21,7 @@ function setup(script: (req: RunRequest) => AsyncGenerator<DriverEvent>) {
   const upserts: Subagent[] = [];
   h.bus.onKind("subagent.upserted", (e) => upserts.push(e.subagent));
   const run = async (prompt = "do it") => {
-    const t = await h.orch.createTicket({ projectId: project.id, prompt });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: prompt });
     await h.orch.idle();
     return t;
   };
@@ -57,7 +57,7 @@ describe("sub-agents", () => {
     expect(h.orch.transcript(t.sessionId, sub[1]!.seq, "ag1").map((e) => e.id)).toEqual([sub[2]!.id, sub[3]!.id]);
 
     // Auto-submit uses the agent's last text, not the sub-agent's.
-    expect(h.orch.summaries(t.key).at(-1)?.body).toBe("The agent found two files.");
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "submitted", body: "The agent found two files." });
 
     const [agent] = h.orch.ticketDetail(t.key).subagents!;
     expect(agent).toMatchObject({ id: "ag1", sessionId: t.sessionId, parentId: null, description: "Scan", agentType: "Explore", prompt: "Scan the repo", status: "succeeded", result: "Found a and b." });
@@ -90,7 +90,7 @@ describe("sub-agents", () => {
       yield { type: "subagent", subagent: { id: "long", description: "Long", status: "running" } };
       await gate;
     });
-    const t = await h.orch.createTicket({ projectId: h.orch.listProjects()[0]!.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.orch.listProjects()[0]!.id, spec: "go" });
     while (!h.orch.subagents(t.sessionId).length) await Bun.sleep(5);
     await h.orch.cancelTicket(t.key);
     release();
