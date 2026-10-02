@@ -29,7 +29,7 @@ function setup() {
   };
   const web = project("WEB");
   const draft = (prompt = "Fix the footer", extra: Record<string, unknown> = {}) =>
-    h.orch.createTicket({ projectId: web.id, prompt, draft: true, ...extra });
+    h.orch.createTicket({ projectId: web.id, spec: prompt, draft: true, ...extra });
   const runKinds = (t: Ticket) => h.store.runs.listBySession(t.sessionId).map((r) => r.kind);
   const statusLines = (t: Ticket) =>
     h.store.transcript
@@ -58,33 +58,33 @@ describe("creating a draft", () => {
     const h = setup();
     const t = await h.draft("   ");
     expect(t.title).toBe("Untitled draft");
-    await expect(h.orch.createTicket({ projectId: h.web.id, prompt: "  " })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "  " })).rejects.toMatchObject({ status: 400 });
   });
 
   test("a launched ticket reports draft false", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.web.id, prompt: "real", start: false });
+    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "real", start: false });
     expect(t.draft).toBe(false);
     await h.orch.idle();
   });
 
   test("a draft can't be a child, nor have children, nor be depended on", async () => {
     const h = setup();
-    const parent = await h.orch.createTicket({ projectId: h.web.id, prompt: "parent", start: false });
+    const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", start: false });
     await expect(h.draft("child", { parentId: parent.id })).rejects.toMatchObject({ status: 400 });
     const d = await h.draft("d");
-    await expect(h.orch.createTicket({ projectId: h.web.id, prompt: "kid", parentId: d.id, start: false })).rejects.toMatchObject({ status: 400 });
-    await expect(h.orch.createTicket({ projectId: h.web.id, prompt: "after", dependsOn: [d.key], start: false })).rejects.toThrow(/is a draft/);
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "kid", parentId: d.id, start: false })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "after", dependsOn: [d.key], start: false })).rejects.toThrow(/is a draft/);
     await expect(h.orch.updateTicket(parent.key, { dependsOn: [d.key] })).rejects.toThrow(/is a draft/);
     await h.orch.idle();
   });
 });
 
 describe("submitting a draft", () => {
-  test("start true: in progress with a work run on its description, keeping its board position", async () => {
+  test("start true: in progress with a work run on its spec, keeping its board position", async () => {
     const h = setup();
     const d = await h.draft("Fix the footer");
-    const later = await h.orch.createTicket({ projectId: h.web.id, prompt: "later", start: false });
+    const later = await h.orch.createTicket({ projectId: h.web.id, spec: "later", start: false });
     await h.orch.idle();
     const pos = h.get(d).position;
     expect(pos).toBeLessThan(later.position);
@@ -109,7 +109,7 @@ describe("submitting a draft", () => {
 
   test("start true with an open dependency: waits (autoStart on) and starts when the dependency is done", async () => {
     const h = setup();
-    const dep = await h.orch.createTicket({ projectId: h.web.id, prompt: "dep", start: false });
+    const dep = await h.orch.createTicket({ projectId: h.web.id, spec: "dep", start: false });
     await h.orch.idle();
     const d = await h.draft("after dep", { dependsOn: [dep.key] });
     const t = await h.orch.submitTicket(d.key, { start: true });
@@ -122,10 +122,10 @@ describe("submitting a draft", () => {
 
   test("refused for a launched ticket (409), a blank draft (400) and a missing start (400)", async () => {
     const h = setup();
-    const real = await h.orch.createTicket({ projectId: h.web.id, prompt: "real", start: false });
+    const real = await h.orch.createTicket({ projectId: h.web.id, spec: "real", start: false });
     await expect(h.orch.submitTicket(real.key, { start: true })).rejects.toMatchObject({ status: 409 });
     const blank = await h.draft("");
-    await expect(h.orch.submitTicket(blank.key, { start: true })).rejects.toMatchObject({ status: 400, message: "prompt is required" });
+    await expect(h.orch.submitTicket(blank.key, { start: true })).rejects.toMatchObject({ status: 400, message: "spec is required" });
     expect(h.get(blank).draft).toBe(true);
     const d = await h.draft("ok");
     await expect(h.orch.submitTicket(d.key, {} as never)).rejects.toMatchObject({ status: 400 });
@@ -157,11 +157,11 @@ describe("drafts never run", () => {
 
   test("the scheduler skips a draft whose dependencies finish, even with autoStart set", async () => {
     const h = setup();
-    const dep = await h.orch.createTicket({ projectId: h.web.id, prompt: "dep", start: false });
+    const dep = await h.orch.createTicket({ projectId: h.web.id, spec: "dep", start: false });
     await h.orch.idle();
     const d = await h.draft("after", { dependsOn: [dep.key] });
     h.store.tickets.update(d.id, { autoStart: true }); // as if an old client had set it
-    const other = await h.orch.createTicket({ projectId: h.web.id, prompt: "other", dependsOn: [dep.key], start: true });
+    const other = await h.orch.createTicket({ projectId: h.web.id, spec: "other", dependsOn: [dep.key], start: true });
     await h.orch.updateTicket(dep.key, { status: "done" });
     await h.orch.idle();
     // The launched ticket behind the same dependency starts; the draft is left alone (no throw either).
@@ -187,31 +187,32 @@ describe("editing a draft", () => {
     expect((await h.orch.updateTicket(d.key, { useWorktree: null })).useWorktree).toBeNull();
     await expect(h.orch.updateTicket(d.key, { kind: "epic" as never })).rejects.toMatchObject({ status: 400 });
     await expect(h.orch.updateTicket(d.key, { useWorktree: "yes" as never })).rejects.toMatchObject({ status: 400 });
-    const real = await h.orch.createTicket({ projectId: h.web.id, prompt: "real", start: false });
+    const real = await h.orch.createTicket({ projectId: h.web.id, spec: "real", start: false });
     await expect(h.orch.updateTicket(real.key, { kind: "conductor" })).rejects.toMatchObject({ status: 409 });
     await expect(h.orch.updateTicket(real.key, { useWorktree: false })).rejects.toMatchObject({ status: 409 });
     expect(h.get(real).kind).toBe("task");
     await h.orch.idle();
   });
 
-  test("a description change re-titles a draft until it's named, never a launched ticket", async () => {
+  test("a spec change re-titles a draft until it's named, never a launched ticket", async () => {
     const h = setup();
     const d = await h.draft("");
-    expect((await h.orch.updateTicket(d.key, { description: "First idea\nmore" })).title).toBe("First idea");
-    expect((await h.orch.updateTicket(d.key, { description: "Second idea" })).title).toBe("Second idea");
+    expect((await h.orch.updateTicket(d.key, { spec: "First idea\nmore" })).title).toBe("First idea");
+    expect((await h.orch.updateTicket(d.key, { spec: "Second idea" })).title).toBe("Second idea");
     expect(h.store.sessions.get(d.sessionId)!.title).toBe("Second idea");
-    expect((await h.orch.updateTicket(d.key, { description: "" })).title).toBe("Untitled draft");
-    expect((await h.orch.updateTicket(d.key, { description: "Third", title: "My name" })).title).toBe("My name");
-    expect((await h.orch.updateTicket(d.key, { description: "Fourth" })).title).toBe("My name");
-    const real = await h.orch.createTicket({ projectId: h.web.id, prompt: "Launched", start: false });
-    expect((await h.orch.updateTicket(real.key, { description: "Changed brief" })).title).toBe("Launched");
+    expect((await h.orch.updateTicket(d.key, { spec: "" })).title).toBe("Untitled draft");
+    expect((await h.orch.updateTicket(d.key, { spec: "Third", title: "My name" })).title).toBe("My name");
+    const fourth = await h.orch.updateTicket(d.key, { spec: "Fourth" });
+    expect([fourth.title, fourth.spec, fourth.specRevision]).toEqual(["My name", "Fourth", 1]); // a draft rewrites revision 1 in place
+    const real = await h.orch.createTicket({ projectId: h.web.id, spec: "Launched", start: false });
+    expect((await h.orch.updateTicket(real.key, { spec: "Changed brief", baseRevision: real.specRevision })).title).toBe("Launched");
     await h.orch.idle();
   });
 
   test("turning the worktree off clears a requested branch; a branch needs a worktree and git", async () => {
     const h = setup();
     const repo = h.project("REPO", true);
-    const d = await h.orch.createTicket({ projectId: repo.id, prompt: "x", draft: true, branch: "feature/x", baseBranch: "main" });
+    const d = await h.orch.createTicket({ projectId: repo.id, spec: "x", draft: true, branch: "feature/x", baseBranch: "main" });
     expect(d.requestedBranch).toBe("feature/x");
     const off = await h.orch.updateTicket(d.key, { useWorktree: false });
     expect([off.useWorktree, off.requestedBranch, off.baseBranch]).toEqual([false, null, "main"]);
@@ -229,9 +230,9 @@ describe("moving a draft to another project", () => {
     const h = setup();
     const repo = h.project("REPO", true);
     const api = h.project("API", true);
-    await h.orch.createTicket({ projectId: api.id, prompt: "existing", start: false });
+    await h.orch.createTicket({ projectId: api.id, spec: "existing", start: false });
     await h.orch.idle();
-    const d = await h.orch.createTicket({ projectId: repo.id, prompt: "move me", draft: true, branch: "feature/x", baseBranch: "main", useWorktree: true });
+    const d = await h.orch.createTicket({ projectId: repo.id, spec: "move me", draft: true, branch: "feature/x", baseBranch: "main", useWorktree: true });
     expect(d.key).toBe("REPO-1");
     h.events.length = 0;
     const moved = await h.orch.updateTicket(d.key, { projectId: api.id });
@@ -249,7 +250,7 @@ describe("moving a draft to another project", () => {
     expect(upserted("ticket.upserted").some((e) => (e as { ticket: Ticket }).ticket.key === "API-2")).toBe(true);
     expect(upserted("session.upserted").some((e) => (e as { session: { key: string } }).session.key === "API-2")).toBe(true);
     // A new REPO ticket doesn't reuse REPO-1 (the number is spent), so the alias stays unambiguous.
-    const next = await h.orch.createTicket({ projectId: repo.id, prompt: "next", draft: true });
+    const next = await h.orch.createTicket({ projectId: repo.id, spec: "next", draft: true });
     expect(next.key).toBe("REPO-2");
   });
 
@@ -266,7 +267,7 @@ describe("moving a draft to another project", () => {
   test("refused for a launched ticket (409) and an unknown project (404); a failed PATCH doesn't move it", async () => {
     const h = setup();
     const api = h.project("API");
-    const real = await h.orch.createTicket({ projectId: h.web.id, prompt: "real", start: false });
+    const real = await h.orch.createTicket({ projectId: h.web.id, spec: "real", start: false });
     await expect(h.orch.updateTicket(real.key, { projectId: api.id })).rejects.toMatchObject({ status: 409 });
     const d = await h.draft("x");
     await expect(h.orch.updateTicket(d.key, { projectId: "nope" })).rejects.toMatchObject({ status: 404 });
@@ -290,7 +291,7 @@ describe("moving a draft to another project", () => {
 describe("agents don't see drafts", () => {
   test("list_tickets, search_tickets and get_ticket leave drafts out; acting on one is unknown", async () => {
     const h = setup();
-    const me = await h.orch.createTicket({ projectId: h.web.id, prompt: "me footer", start: false });
+    const me = await h.orch.createTicket({ projectId: h.web.id, spec: "me footer", start: false });
     await h.orch.idle();
     h.store.tickets.update(me.id, { status: "in_progress" });
     const d = await h.draft("secret footer");
@@ -308,7 +309,7 @@ describe("agents don't see drafts", () => {
     await expect(h.orch.ops.startTicket(c, d.key)).rejects.toThrow(/Unknown ticket/);
     await expect(h.orch.ops.moveTicket(c, d.key, "in_progress")).rejects.toThrow(/Unknown ticket/);
     await expect(h.orch.ops.updateTicket(c, d.key, { title: "x" })).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.createTicket(c, { title: "after", description: "after", dependsOn: [d.key] })).rejects.toThrow(/is a draft/);
+    await expect(h.orch.ops.createTicket(c, { title: "after", spec: "after", dependsOn: [d.key] })).rejects.toThrow(/is a draft/);
     // Through the MCP tool too, as the agent calls it.
     const r = await executeTool(toolsForRun("work", h.driver), "get_ticket", { key: d.key }, c);
     expect(r.isError).toBe(true);
@@ -331,7 +332,7 @@ describe("agents don't see drafts", () => {
       if (req.kind !== "triage") return;
       prompt = req.prompt;
       await req.toolContext.ops
-        .dispatchTicket(req.toolContext, { projectKey: "WEB", ticketKey: d.key, title: "t", description: "update" })
+        .dispatchTicket(req.toolContext, { projectKey: "WEB", ticketKey: d.key, title: "t", spec: "update" })
         .catch((err: Error) => (error = err.message));
     };
     h.orch.triage({ source: "jira", output: { text: `about ${d.key}`, truncated: false }, prompt: "", driver: h.driver.id });

@@ -234,7 +234,7 @@ describe("Cli service commands", () => {
     expect(await new Cli(d).run(["service", "ensure", "--json"])).toBe(0);
     mkdirSync(join(home, "proj"), { recursive: true });
     const project = await running!.orchestrator.createProject({ path: join(home, "proj") });
-    await running!.orchestrator.createTicket({ projectId: project.id, prompt: "Long one", driver: "dummy" });
+    await running!.orchestrator.createTicket({ projectId: project.id, spec: "Long one", driver: "dummy" });
 
     const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
     const plistBefore = readFileSync(moved.plistPath, "utf8");
@@ -315,12 +315,12 @@ describe("Cli new / tickets", () => {
     expect(out[0]).toMatch(/MYAPP-1\s+review/);
     // A draft is listed as one, not as the planning ticket it technically is.
     const project = running.orchestrator.listProjects()[0]!;
-    await running.orchestrator.createTicket({ projectId: project.id, prompt: "Later idea", draft: true, driver: "dummy" });
+    await running.orchestrator.createTicket({ projectId: project.id, spec: "Later idea", draft: true, driver: "dummy" });
     out.length = 0;
     expect(await cli.run(["tickets"])).toBe(0);
     expect(out[0]).toMatch(/MYAPP-3\s+draft\s/);
     // A ticket linked to a remote ID is listed by it, with its local key alongside.
-    await running.orchestrator.createTicket({ projectId: project.id, prompt: "From jira", start: false, driver: "dummy", externalRef: { source: "jira", key: "JIRA-5", url: null, raw: null } });
+    await running.orchestrator.createTicket({ projectId: project.id, spec: "From jira", start: false, driver: "dummy", externalRef: { source: "jira", key: "JIRA-5", url: null, raw: null } });
     await running.orchestrator.idle();
     out.length = 0;
     expect(await cli.run(["tickets"])).toBe(0);

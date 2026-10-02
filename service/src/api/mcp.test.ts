@@ -110,7 +110,7 @@ describe("tools", () => {
     const tools = r.result.tools as any[];
     expect(tools.map((t) => t.name)).toEqual(run.tools.map((t) => t.name));
     const submit = tools.find((t) => t.name === "submit_for_review");
-    expect(submit.inputSchema.required).toEqual(["summary"]);
+    expect(submit.inputSchema.required).toEqual(["note", "spec_is_up_to_date"]);
     expect(submit.annotations.readOnlyHint).toBe(true);
     // must stay callable under --permission-mode plan
     expect(tools.find((t) => t.name === "permission_prompt").annotations.readOnlyHint).toBe(true);
@@ -118,15 +118,15 @@ describe("tools", () => {
   });
 
   test("tools/call runs the tool against the run context", async () => {
-    const r = await rpc("tools/call", { name: "post_summary", arguments: { summary: "progress" } });
-    expect(r.result).toEqual({ content: [{ type: "text", text: "Summary posted." }], isError: false });
-    expect(ops.calls.at(-1)).toEqual({ method: "postSummary", args: ["progress"] });
+    const r = await rpc("tools/call", { name: "post_note", arguments: { note: "progress" } });
+    expect(r.result).toEqual({ content: [{ type: "text", text: "Note added to Activity." }], isError: false });
+    expect(ops.calls.at(-1)).toEqual({ method: "postNote", args: ["progress"] });
   });
 
   test("validation failures and thrown errors come back in-band as isError", async () => {
-    const invalid = await rpc("tools/call", { name: "post_summary", arguments: {} });
+    const invalid = await rpc("tools/call", { name: "post_note", arguments: {} });
     expect(invalid.result.isError).toBe(true);
-    expect(invalid.result.content[0].text).toContain('"summary" is required');
+    expect(invalid.result.content[0].text).toContain('"note" is required');
     const boom = await rpc("tools/call", { name: "explode", arguments: {} });
     expect(boom.result).toEqual({ content: [{ type: "text", text: "kaboom" }], isError: true });
   });
@@ -139,7 +139,7 @@ describe("tools", () => {
   test("unknown tools, a missing name and non-object arguments are -32602", async () => {
     expect((await rpc("tools/call", { name: "write_file", arguments: {} })).error.code).toBe(-32602);
     expect((await rpc("tools/call", { arguments: {} })).error.code).toBe(-32602);
-    expect((await rpc("tools/call", { name: "post_summary", arguments: [1] })).error.code).toBe(-32602);
+    expect((await rpc("tools/call", { name: "post_note", arguments: [1] })).error.code).toBe(-32602);
   });
 
   test("omitted arguments are treated as {}", async () => {
@@ -153,7 +153,7 @@ describe("batches", () => {
     const res = await post([
       { jsonrpc: "2.0", id: "a", method: "ping" },
       { jsonrpc: "2.0", method: "notifications/initialized" },
-      { jsonrpc: "2.0", id: "b", method: "tools/call", params: { name: "post_summary", arguments: { summary: "x" } } },
+      { jsonrpc: "2.0", id: "b", method: "tools/call", params: { name: "post_note", arguments: { note: "x" } } },
       { jsonrpc: "2.0", id: "c", method: "nope" },
     ]);
     expect(res.status).toBe(200);

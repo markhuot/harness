@@ -23,7 +23,7 @@ async function setup() {
   const web = project("WEB");
   const api = project("API");
   const make = async (title: string, extra: { status?: TicketStatus; parentId?: string; kind?: "conductor"; projectId?: string } = {}) => {
-    const t = await h.orch.createTicket({ projectId: extra.projectId ?? web.id, prompt: title, title, start: false, parentId: extra.parentId, kind: extra.kind });
+    const t = await h.orch.createTicket({ projectId: extra.projectId ?? web.id, spec: title, title, start: false, parentId: extra.parentId, kind: extra.kind });
     await h.orch.idle();
     if (extra.status && extra.status !== "planning") h.store.tickets.update(t.id, { status: extra.status });
     return h.store.tickets.get(t.id)!;
@@ -41,7 +41,7 @@ describe("create_ticket", () => {
   test("work run: a top-level ticket in planning with a plan run, on the project's driver", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    const t = await h.orch.ops.createTicket(h.ctx("work", me), { title: "Follow-up", description: "Fix the footer" });
+    const t = await h.orch.ops.createTicket(h.ctx("work", me), { title: "Follow-up", spec: "Fix the footer" });
     await h.orch.idle();
     const cur = h.get(t);
     expect([cur.parentId, cur.status, cur.autoStart, cur.projectId, cur.kind]).toEqual([null, "planning", false, h.web.id, "task"]);
@@ -51,7 +51,7 @@ describe("create_ticket", () => {
   test("work run: start true begins work; project_key and conductor pick another project and kind", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    const t = await h.orch.ops.createTicket(h.ctx("work", me), { title: "API job", description: "Split it up", projectKey: "api", conductor: true, start: true });
+    const t = await h.orch.ops.createTicket(h.ctx("work", me), { title: "API job", spec: "Split it up", projectKey: "api", conductor: true, start: true });
     expect(t.projectId).toBe(h.api.id);
     expect(t.kind).toBe("conductor");
     expect(t.parentId).toBeNull();
@@ -63,9 +63,9 @@ describe("create_ticket", () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     h.store.tickets.update(c.id, { model: "fake-model" });
-    const t = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "do a part", autoStart: false });
+    const t = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", spec: "do a part", autoStart: false });
     expect([t.parentId, t.autoStart, t.driver, t.model]).toEqual([c.id, false, c.driver, "fake-model"]);
-    const auto = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child 2", description: "do a part" });
+    const auto = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child 2", spec: "do a part" });
     expect(auto.autoStart).toBe(true);
   });
 
@@ -80,7 +80,7 @@ describe("create_ticket", () => {
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress", projectId: proj.id });
     // Through the tool itself, so the snake_case input is what's checked.
     const create = async (input: Record<string, unknown>) => {
-      const r = await executeTool([createTicketTool], "create_ticket", { description: "do a part", ...input }, h.ctx("conductor", h.get(c)));
+      const r = await executeTool([createTicketTool], "create_ticket", { spec: "do a part", ...input }, h.ctx("conductor", h.get(c)));
       expect(r.isError).toBeFalsy();
       return h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
     };
@@ -94,9 +94,9 @@ describe("create_ticket", () => {
   test("validation errors from the shared create path reach the model", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", description: "y", projectKey: "NOPE" })).rejects.toThrow("Unknown project: NOPE");
-    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", description: "y", dependsOn: ["WEB-99"] })).rejects.toThrow("Unknown dependency: WEB-99");
-    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", description: "y", driver: "nope" })).rejects.toThrow("Unknown driver: nope");
+    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", spec: "y", projectKey: "NOPE" })).rejects.toThrow("Unknown project: NOPE");
+    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", spec: "y", dependsOn: ["WEB-99"] })).rejects.toThrow("Unknown dependency: WEB-99");
+    await expect(h.orch.ops.createTicket(h.ctx("work", me), { title: "x", spec: "y", driver: "nope" })).rejects.toThrow("Unknown driver: nope");
   });
 });
 
@@ -106,7 +106,7 @@ describe("guard rails", () => {
     const me = await h.make("me", { status: "in_progress" });
     const c = h.ctx("work", me);
     // Through the tool, so the snake_case input is what's checked.
-    const r = await executeTool([createTicketTool], "create_ticket", { title: "Question", description: "Just answer it", skip_agent_review: true }, c);
+    const r = await executeTool([createTicketTool], "create_ticket", { title: "Question", spec: "Just answer it", skip_agent_review: true }, c);
     expect(r.isError).toBeFalsy();
     const created = h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
     expect(created.skipAgentReview).toBe(true);
@@ -115,10 +115,10 @@ describe("guard rails", () => {
     // A project whose new tickets skip the human review: the agent review is all they get, unless
     // the same call turns the human review back on.
     h.orch.updateProject(h.api.id, { skipHumanReview: true });
-    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true })).rejects.toThrow(
+    await expect(h.orch.ops.createTicket(c, { title: "x", spec: "y", projectKey: "API", skipAgentReview: true })).rejects.toThrow(
       "The new ticket skips its human review (its project's default), so the agent review is the only review it gets",
     );
-    const reviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true, skipHumanReview: false });
+    const reviewed = await h.orch.ops.createTicket(c, { title: "x", spec: "y", projectKey: "API", skipAgentReview: true, skipHumanReview: false });
     expect([reviewed.skipAgentReview, reviewed.skipHumanReview]).toEqual([true, false]);
     const apiTicket = await h.make("api work", { projectId: h.api.id });
     expect(apiTicket.skipHumanReview).toBe(true);
@@ -126,7 +126,7 @@ describe("guard rails", () => {
     expect(h.get(apiTicket).skipAgentReview).toBe(false);
     // Both skipped is the human's call on the project, and an agent's ticket there just follows it.
     h.orch.updateProject(h.api.id, { skipAgentReview: true });
-    const unreviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API" });
+    const unreviewed = await h.orch.ops.createTicket(c, { title: "x", spec: "y", projectKey: "API" });
     expect([unreviewed.skipAgentReview, unreviewed.skipHumanReview]).toEqual([true, true]);
 
     const inReview = await h.make("in review", { status: "review" });
@@ -146,14 +146,14 @@ describe("guard rails", () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
     const c = h.ctx("work", me);
-    const r = await executeTool([createTicketTool], "create_ticket", { title: "Land it", description: "Merge once reviewed", skip_human_review: true }, c);
+    const r = await executeTool([createTicketTool], "create_ticket", { title: "Land it", spec: "Merge once reviewed", skip_human_review: true }, c);
     expect(r.isError).toBeFalsy();
     const created = h.store.tickets.getByKey(text(r).match(/Created (\S+)\./)![1]!)!;
     expect([created.skipHumanReview, created.skipAgentReview]).toEqual([true, false]);
     expect(text(r)).toContain('"skipHumanReview": true');
 
     // One review has to check the work: never both from an agent, in one call or across two.
-    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", skipAgentReview: true, skipHumanReview: true })).rejects.toThrow("can't skip both");
+    await expect(h.orch.ops.createTicket(c, { title: "x", spec: "y", skipAgentReview: true, skipHumanReview: true })).rejects.toThrow("can't skip both");
     await expect(h.orch.ops.updateTicket(c, created.key, { skipAgentReview: true })).rejects.toThrow(`${created.key} skips its human review`);
     const noBot = await h.make("no bot");
     await h.orch.ops.updateTicket(c, noBot.key, { skipAgentReview: true });
@@ -174,7 +174,7 @@ describe("guard rails", () => {
     const me = await h.make("me");
     const other = await h.make("other");
     for (const kind of ["plan", "review", "complete", "triage"] as RunKind[]) {
-      await expect(h.orch.ops.createTicket(h.ctx(kind, me), { title: "x", description: "y" })).rejects.toThrow("only available in work, conductor and chat runs");
+      await expect(h.orch.ops.createTicket(h.ctx(kind, me), { title: "x", spec: "y" })).rejects.toThrow("only available in work, conductor and chat runs");
       await expect(h.orch.ops.moveTicket(h.ctx(kind, me), other.key, "in_progress")).rejects.toThrow("only available in work, conductor and chat runs");
     }
     expect(h.get(other).status).toBe("planning");
@@ -289,7 +289,7 @@ describe("permission modes across tickets", () => {
     const h = await setup(); // settings default: auto
     const me = await h.make("me", { status: "in_progress" });
     h.store.tickets.update(me.id, { permissionMode: "read_only" });
-    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "x", description: "rm the build dir", start: true });
+    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "x", spec: "rm the build dir", start: true });
     expect(h.get(t).permissionMode).toBe("read_only");
     expect(mode(h, t)).toBe("read_only");
   });
@@ -298,17 +298,17 @@ describe("permission modes across tickets", () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     h.store.tickets.update(c.id, { permissionMode: "ask" });
-    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "part", autoStart: false });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", spec: "part", autoStart: false });
     expect([h.get(child).permissionMode, mode(h, child)]).toEqual(["ask", "ask"]);
 
     h.orch.updateProject(h.web.id, { permissionMode: "ask" });
-    const same = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "same", description: "part", autoStart: false });
+    const same = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "same", spec: "part", autoStart: false });
     expect([h.get(same).permissionMode, mode(h, same)]).toEqual([null, "ask"]);
 
     // A stricter target project wins over a looser caller, and still by inheritance.
     const me = await h.make("me", { status: "in_progress" }); // ask via the project
     h.orch.updateProject(h.api.id, { permissionMode: "read_only" });
-    const strict = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "api", description: "x", projectKey: "API" });
+    const strict = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "api", spec: "x", projectKey: "API" });
     expect([h.get(strict).permissionMode, mode(h, strict)]).toEqual([null, "read_only"]);
   });
 
@@ -344,21 +344,21 @@ describe("permission modes across tickets", () => {
     const msg = `${loose.key} runs in auto, looser than your read_only; ask a human.`;
     const before = h.get(loose);
     await expect(h.orch.ops.updateTicket(c, loose.key, { title: "renamed" })).rejects.toThrow(msg);
-    await expect(h.orch.ops.updateTicket(c, loose.key, { description: "delete X" })).rejects.toThrow(msg);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { spec: "delete X" })).rejects.toThrow(msg);
     await expect(h.orch.ops.updateTicket(c, loose.key, { dependsOn: [dep.key] })).rejects.toThrow(msg);
     await expect(h.orch.ops.updateTicket(c, loose.key, { driver: "fake" })).rejects.toThrow(msg);
     // Bundling an edit with a tightening doesn't sneak it through.
-    await expect(h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only", description: "delete X" })).rejects.toThrow(msg);
+    await expect(h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only", spec: "delete X" })).rejects.toThrow(msg);
     const after = h.get(loose);
-    expect([after.title, after.description, after.dependsOn, after.driver, after.permissionMode]).toEqual([before.title, before.description, [], before.driver, null]);
+    expect([after.title, after.spec, after.dependsOn, after.driver, after.permissionMode]).toEqual([before.title, before.spec, [], before.driver, null]);
 
     const tightened = await h.orch.ops.updateTicket(c, loose.key, { permissionMode: "ask" });
     expect(tightened.permissionMode).toBe("ask"); // still looser than read_only, but safer
     await expect(h.orch.ops.updateTicket(c, loose.key, { title: "renamed" })).rejects.toThrow("runs in ask, looser than your read_only");
     expect((await h.orch.ops.updateTicket(c, loose.key, { permissionMode: "read_only" })).permissionMode).toBe("read_only");
     // Now as strict as the caller: every field is editable again.
-    const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", description: "new brief", dependsOn: [dep.key] });
-    expect([u.title, u.description, u.dependsOn]).toEqual(["renamed", "new brief", [dep.key]]);
+    const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", spec: "new brief", dependsOn: [dep.key] });
+    expect([u.title, u.spec, u.dependsOn]).toEqual(["renamed", "new brief", [dep.key]]);
   });
 
   test("create_ticket with depends_on from a strict caller: the new ticket is never looser", async () => {
@@ -366,7 +366,7 @@ describe("permission modes across tickets", () => {
     const me = await h.make("me", { status: "in_progress" });
     h.store.tickets.update(me.id, { permissionMode: "read_only" });
     const dep = await h.make("dep"); // auto: depending on a looser ticket only waits on it
-    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "after", description: "x", dependsOn: [dep.key], start: true });
+    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "after", spec: "x", dependsOn: [dep.key], start: true });
     expect([h.get(t).permissionMode, h.orch.permissionModeFor(h.get(t)), h.get(t).autoStart]).toEqual(["read_only", "read_only", true]);
   });
 
@@ -374,7 +374,7 @@ describe("permission modes across tickets", () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
     h.store.tickets.update(c.id, { permissionMode: "ask" });
-    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", description: "part", autoStart: false });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", spec: "part", autoStart: false });
     h.store.tickets.update(child.id, { status: "blocked" });
     await h.orch.ops.messageTicket(h.ctx("conductor", h.get(c)), child.key, "use postgres");
     // The child's agent gets the answer (a chat) and moves the ticket on itself.
@@ -389,8 +389,8 @@ describe("update, move, start, cancel, reopen", () => {
     const me = await h.make("me", { status: "in_progress" });
     const dep = await h.make("dep");
     const t = await h.make("t");
-    const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { title: " Renamed ", description: "New brief", dependsOn: [dep.key.toLowerCase()] });
-    expect([u.title, u.description, u.dependsOn]).toEqual(["Renamed", "New brief", [dep.key]]);
+    const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { title: " Renamed ", spec: "New brief", dependsOn: [dep.key.toLowerCase()] });
+    expect([u.title, u.spec, u.dependsOn]).toEqual(["Renamed", "New brief", [dep.key]]);
     expect(h.store.sessions.get(t.sessionId)!.title).toBe("Renamed");
     await expect(h.orch.ops.updateTicket(h.ctx("work", me), t.key, { dependsOn: [t.key] })).rejects.toThrow("cannot depend on itself");
     await expect(h.orch.ops.updateTicket(h.ctx("work", me), t.key, {})).rejects.toThrow("Nothing to update");
@@ -449,7 +449,7 @@ describe("update, move, start, cancel, reopen", () => {
   test("cancel_ticket aborts another ticket's run; reopen_ticket needs a done ticket and notes", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    const busy = await h.orch.createTicket({ projectId: h.web.id, prompt: "long /hold" });
+    const busy = await h.orch.createTicket({ projectId: h.web.id, spec: "long /hold" });
     while (!h.driver.holding) await Bun.sleep(2);
     await h.orch.ops.cancelTicket(h.ctx("work", me), busy.key);
     await h.orch.idle();
@@ -461,7 +461,7 @@ describe("update, move, start, cancel, reopen", () => {
     await expect(h.orch.ops.reopenTicket(h.ctx("work", me), t.key, " ")).rejects.toThrow("notes are required");
     const r = await h.orch.ops.reopenTicket(h.ctx("work", me), t.key, "the footer is broken");
     expect(r.status).toBe("in_progress");
-    expect(h.store.summaries.listBySession(t.sessionId).at(-1)!.body).toBe("Re-opened: the footer is broken");
+    expect(h.store.activity.listBySession(t.sessionId).at(-1)).toMatchObject({ kind: "reopened", body: "the footer is broken" });
   });
 });
 
@@ -471,7 +471,7 @@ describe("remote IDs (remote_id / remote_url)", () => {
   test("create_ticket links the new ticket, a top-level one or a conductor's child, to a manual remote ID", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    const r = await executeTool(tools, "create_ticket", { title: "Hero", description: "Dress the hero", remote_id: " rfawc-726 ", remote_url: "https://jira.test/browse/RFAWC-726" }, h.ctx("work", me));
+    const r = await executeTool(tools, "create_ticket", { title: "Hero", spec: "Dress the hero", remote_id: " rfawc-726 ", remote_url: "https://jira.test/browse/RFAWC-726" }, h.ctx("work", me));
     expect(r.isError).toBeFalsy();
     const key = text(r).match(/Created (\S+)\./)![1]!;
     expect(key).toMatch(/^WEB-\d+$/); // a native key: the remote ID never becomes the ticket's key
@@ -479,10 +479,10 @@ describe("remote IDs (remote_id / remote_url)", () => {
     expect(h.orch.ticketDetail(key).ticket.externalRef).toEqual({ source: "manual", key: "RFAWC-726", url: "https://jira.test/browse/RFAWC-726", raw: null });
 
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
-    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "part", description: "a part", remoteId: "RFAWC-727" });
+    const child = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "part", spec: "a part", remoteId: "RFAWC-727" });
     expect([child.parentId, child.externalRef?.key, child.externalRef?.url]).toEqual([c.id, "RFAWC-727", null]);
     // Blank strings through the tool mean "no remote ID", not a validation error.
-    const plain = await executeTool(tools, "create_ticket", { title: "Plain", description: "No item", remote_id: " ", remote_url: "" }, h.ctx("work", me));
+    const plain = await executeTool(tools, "create_ticket", { title: "Plain", spec: "No item", remote_id: " ", remote_url: "" }, h.ctx("work", me));
     expect(h.orch.ticketDetail(text(plain).match(/Created (\S+)\./)![1]!).ticket.externalRef).toBeNull();
   });
 
@@ -490,7 +490,7 @@ describe("remote IDs (remote_id / remote_url)", () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
     const before = h.orch.listTickets().length;
-    const create = (input: Record<string, unknown>) => executeTool(tools, "create_ticket", { title: "x", description: "y", ...input }, h.ctx("work", me));
+    const create = (input: Record<string, unknown>) => executeTool(tools, "create_ticket", { title: "x", spec: "y", ...input }, h.ctx("work", me));
     expect(text(await create({ remote_id: "not a key" }))).toContain("Invalid remote ID: not a key");
     expect(text(await create({ remote_id: "FOO-1", remote_url: "ftp://x/FOO-1" }))).toContain("must be an http(s) link");
     expect(text(await create({ remote_url: "https://x/FOO-1" }))).toContain("remote_url needs remote_id");
@@ -551,14 +551,14 @@ describe("end to end", () => {
         results.push(`${name}: ${r.isError ? "error " : ""}${text(r).split("\n")[0]}`);
         return r;
       };
-      const r = await run("create_ticket", { title: "Found bug", description: "The footer overlaps on mobile." });
+      const r = await run("create_ticket", { title: "Found bug", spec: "The footer overlaps on mobile." });
       created = text(r).match(/Created (\S+)\./)![1]!;
       await run("update_ticket", { key: created, title: "Footer overlaps on mobile", permission_mode: "ask" });
       await run("move_ticket", { key: created, status: "in_progress" });
       await run("move_ticket", { key: ctx.ticket!.key, status: "done" }); // own ticket: refused
-      await ctx.ops.submitForReview(ctx, "Filed and started a follow-up.");
+      await ctx.ops.submitForReview(ctx, "Filed and started a follow-up.", true);
     };
-    const me = await h.orch.createTicket({ projectId: h.web.id, prompt: "agent", title: "agent" });
+    const me = await h.orch.createTicket({ projectId: h.web.id, spec: "agent", title: "agent" });
     await h.orch.idle();
 
     expect(results).toEqual([

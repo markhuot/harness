@@ -47,18 +47,18 @@ describe("project key", () => {
     try {
       const p = await client.createProject({ path: dir });
       expect(p.key).toBe("HELLOHARNESS");
-      const t1 = await client.createTicket({ projectId: p.id, prompt: "one", start: false });
-      const t2 = await client.createTicket({ projectId: p.id, prompt: "two", start: false, dependsOn: [t1.key] });
-      const t3 = await client.createTicket({ projectId: p.id, prompt: "three", start: false });
+      const t1 = await client.createTicket({ projectId: p.id, spec: "one", start: false });
+      const t2 = await client.createTicket({ projectId: p.id, spec: "two", start: false, dependsOn: [t1.key] });
+      const t3 = await client.createTicket({ projectId: p.id, spec: "three", start: false });
       const mirror = await client.createTicket({
         projectId: p.id,
-        prompt: "from jira",
+        spec: "from jira",
         start: false,
         key: "FOO-123",
         externalRef: { source: "jira", key: "FOO-123", url: null, raw: {} },
       });
       const q = await client.createProject({ path: other });
-      const cross = await client.createTicket({ projectId: q.id, prompt: "needs three", start: false, dependsOn: [t3.key, "FOO-123"] });
+      const cross = await client.createTicket({ projectId: q.id, spec: "needs three", start: false, dependsOn: [t3.key, "FOO-123"] });
       await h.orchestrator.idle();
       expect([t1.key, t2.key, t3.key]).toEqual(["HELLOHARNESS-1", "HELLOHARNESS-2", "HELLOHARNESS-3"]);
 
@@ -100,7 +100,7 @@ describe("project key", () => {
       expect(transcript.some((e) => e.content.type === "status" && e.content.text === "Renamed HELLOHARNESS-1 → HEL-1")).toBe(true);
 
       // New tickets continue the sequence under the new key.
-      const t4 = await client.createTicket({ projectId: p.id, prompt: "four", start: false });
+      const t4 = await client.createTicket({ projectId: p.id, spec: "four", start: false });
       expect(t4.key).toBe("HEL-4");
       await h.orchestrator.idle();
     } finally {
@@ -112,8 +112,8 @@ describe("project key", () => {
     const { h, client, dir, other, socket } = await boot();
     try {
       const p = await client.createProject({ path: dir, key: "HH" });
-      const t1 = await client.createTicket({ projectId: p.id, prompt: "one", start: false });
-      await client.createTicket({ projectId: p.id, prompt: "two", start: false });
+      const t1 = await client.createTicket({ projectId: p.id, spec: "one", start: false });
+      await client.createTicket({ projectId: p.id, spec: "two", start: false });
       const q = await client.createProject({ path: other });
 
       for (const bad of ["", "1ABC", "MY-APP", "A".repeat(17), "triage"]) {
@@ -121,7 +121,7 @@ describe("project key", () => {
       }
       await expect(client.updateProject(p.id, { key: "other" })).rejects.toMatchObject({ status: 409 });
       // A mirrored ticket already holds X-2, which HH-2 would become.
-      await client.createTicket({ projectId: q.id, prompt: "ext", start: false, key: "X-2", externalRef: { source: "jira", key: "X-2", url: null, raw: {} } });
+      await client.createTicket({ projectId: q.id, spec: "ext", start: false, key: "X-2", externalRef: { source: "jira", key: "X-2", url: null, raw: {} } });
       const err = await client.updateProject(p.id, { key: "X", name: "Renamed" }).catch((e) => e);
       expect(err.status).toBe(409);
       expect(err.message).toContain("X-2");
