@@ -2,6 +2,10 @@
 // Chrome only performs editing actions (Backspace, arrows, Enter, Tab…) when
 // windowsVirtualKeyCode is set, and on macOS shortcut editing (Cmd+A, Cmd+C…) additionally
 // needs explicit `commands`.
+//
+// Never send nativeVirtualKeyCode. On macOS Chrome builds an NSEvent from it, and any key the
+// page leaves unhandled (Shift, Meta, Escape, F-keys…) is redispatched to the window, back to
+// the page, and around again forever: 100% CPU and every later CDP command stalls (HARNESS-190).
 
 export const MOD_ALT = 1;
 export const MOD_CTRL = 2;

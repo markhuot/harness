@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
+  a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
+  kept Chrome busy until it was quit.
+
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 
 ### Changed

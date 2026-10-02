@@ -384,6 +384,47 @@ withChrome("BrowserManager (real Chrome)", () => {
       expect(await browser.evaluate("s-input", "document.getElementById('field').value")).toBe('"hell!"');
     }, 30_000);
 
+    test("keys the page doesn't handle reach it once, not in an endless redispatch loop", async () => {
+      // With a nativeVirtualKeyCode, macOS Chrome redispatched every unhandled key (Shift,
+      // Escape, Meta…) back to the page forever, pegging the CPU and stalling every command.
+      await browser.open("s-input", `${base}/pad`);
+      await browser.evaluate(
+        "s-input",
+        "document.getElementById('field').focus(); window.downs = []; addEventListener('keydown', (e) => downs.push(e.key))",
+      );
+      const press = async (key: string, code: string, modifiers = 0) => {
+        await browser.input("s-input", { type: "key", action: "down", key, code, modifiers });
+        await browser.input("s-input", { type: "key", action: "up", key, code, modifiers: 0 });
+      };
+      await press("Shift", "ShiftLeft", 8);
+      await press("Meta", "MetaLeft", 4);
+      await press("Alt", "AltLeft", 1);
+      await press("Escape", "Escape");
+      await press("F5", "F5");
+      await Bun.sleep(300);
+      expect(await browser.evaluate("s-input", "window.downs")).toBe('["Shift","Meta","Alt","Escape","F5"]');
+    }, 30_000);
+
+    test("arrow keys and ⌘A editing still work", async () => {
+      await browser.open("s-input", `${base}/pad`);
+      await browser.evaluate("s-input", "document.getElementById('field').focus()");
+      const field = () => browser.evaluate("s-input", "document.getElementById('field').value");
+      const press = async (key: string, code: string, modifiers = 0, text?: string) => {
+        await browser.input("s-input", { type: "key", action: "down", key, code, modifiers, ...(text ? { text } : {}) });
+        await browser.input("s-input", { type: "key", action: "up", key, code, modifiers });
+      };
+      await browser.input("s-input", { type: "text", text: "hello" });
+      await press("ArrowLeft", "ArrowLeft");
+      await press("ArrowLeft", "ArrowLeft");
+      await press("X", "KeyX", 8, "X");
+      expect(await field()).toBe('"helXlo"');
+      if (process.platform === "darwin") {
+        await press("a", "KeyA", 4);
+        await press("Backspace", "Backspace");
+        expect(await field()).toBe('""');
+      }
+    }, 30_000);
+
     test("navigate, back, forward and reload", async () => {
       await browser.open("s-nav", `${base}/`);
       await browser.input("s-nav", { type: "navigate", url: `127.0.0.1:${server.port}/page2` });
