@@ -435,13 +435,15 @@ is) to the store, never a single window's.
   NSUserActivityTypes; `targetContentIdentifier` = `sceneMatch`, which the ticket WindowGroup's
   `handlesExternalEvents` matches) and `UIWindowSceneProminentPlacement`: the system's centered
   window over the board, which the user moves, resizes, tiles or puts in Slide Over with the
-  window's own controls. Nothing in the app draws a panel or handles a drag for it. The window that
-  activation makes is the **viewer**: the next tap reuses it (`router.show(route)` and an activation
-  request for its session) rather than adding a window per card, unless the ticket already has a
-  window (WindowDirectory tracks them by key), which comes forward instead. "Open in New Window"
-  (the card's menu, the ticket's More menu) is `openWindow(id: SceneID.ticket, value:)`, a standard
-  window that stays on its ticket. Compact width (iPhone, narrow
-  Split View) pushes as before.
+  window's own controls. Nothing in the app draws a panel or handles a drag for it. Each ticket
+  gets a window of its own; a ticket that already has one (WindowDirectory tracks them by key)
+  brings it forward instead (`router.show(route)` and an activation request for its session).
+  A closed window's Router and scene can outlive it, but an activation request for its destroyed
+  session does nothing, so WindowDirectory only reuses an entry whose scene is still attached and
+  whose session is in `UIApplication.openSessions` (`Entry.isOpen`); otherwise it opens a new
+  window. "Open in New Window" (the card's menu, the ticket's More menu) is
+  `openWindow(id: SceneID.ticket, value:)`. Compact width (iPhone, narrow Split View) pushes as
+  before.
 - **A ticket window's Router** has the `.ticket` scope: `root` is its ticket, pushes (sub-tickets,
   files, triage) land on its own stack, sheets are its own, and a section link (`.tab`, such as
   harness://board) goes to `onSectionLink`, which WindowDirectory sends to the last active main
@@ -450,7 +452,7 @@ is) to the store, never a single window's.
   RouterWindowTests.
 - **Restoring.** SwiftUI saves the WindowGroup's value with the scene only when `openWindow` gave
   it (and `@SceneStorage` didn't come back for activation-made scenes either), so TicketWindowRoot
-  also keeps the ticket (and whether the window is the viewer) in the scene session's `userInfo`
+  also keeps the ticket in the scene session's `userInfo`
   (`TicketWindowValue.userInfo`), which UIKit saves across launches. A relaunch brings ticket windows back on their tickets; their stacks start
   over at the root.
 - **External links** (`onOpenURL`) prefer a main window (`handlesExternalEvents(preferring:)` on
