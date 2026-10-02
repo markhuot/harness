@@ -40,7 +40,7 @@ export interface DraftDeps {
 }
 
 /** The fields a draft editor changes. The rest (title, status, ids) are the service's. */
-const EDITABLE = ["projectId", "description", "kind", "driver", "model", "permissionMode", "useWorktree", "requestedBranch", "baseBranch", "skipAgentReview", "skipHumanReview", "dependsOn"] as const;
+const EDITABLE = ["projectId", "spec", "kind", "driver", "model", "permissionMode", "useWorktree", "requestedBranch", "baseBranch", "skipAgentReview", "skipHumanReview", "dependsOn"] as const;
 
 const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v, i) => v === b[i]) : (a ?? null) === (b ?? null));
 

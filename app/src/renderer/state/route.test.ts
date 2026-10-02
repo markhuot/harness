@@ -3,12 +3,25 @@ import { subagentTabRoute } from "@harness/shared/state";
 import { formatRoute, mirrorRoute, parsePluginTab, parseRoute, pluginTabRoute, type Route } from "./route";
 
 test("parses board routes with and without a project", () => {
-  expect(parseRoute("")).toEqual({ view: "board", projectId: null, ticketKey: null, tab: "summaries" });
-  expect(parseRoute("#/board/p1")).toEqual({ view: "board", projectId: "p1", ticketKey: null, tab: "summaries" });
+  expect(parseRoute("")).toEqual({ view: "board", projectId: null, ticketKey: null, tab: "spec" });
+  expect(parseRoute("#/board/p1")).toEqual({ view: "board", projectId: "p1", ticketKey: null, tab: "spec" });
   // A ticket route without a project segment must not treat "ticket" as a project id.
-  expect(parseRoute("#/board/ticket/FOO-1")).toEqual({ view: "board", projectId: null, ticketKey: "FOO-1", tab: "summaries" });
+  expect(parseRoute("#/board/ticket/FOO-1")).toEqual({ view: "board", projectId: null, ticketKey: "FOO-1", tab: "spec" });
   expect(parseRoute("#/board/all/ticket/FOO-1/browser")).toMatchObject({ ticketKey: "FOO-1", tab: "browser" });
-  expect(parseRoute("#/board/all/ticket/FOO-1/bogus")).toMatchObject({ tab: "summaries" });
+  expect(parseRoute("#/board/all/ticket/FOO-1/bogus")).toMatchObject({ tab: "spec" });
+});
+
+test("the Spec is the default tab and has no segment; Activity has one", () => {
+  expect(formatRoute({ view: "board", projectId: null, ticketKey: "FOO-1", tab: "spec" })).toBe("#/board/all/ticket/FOO-1");
+  const activity: Route = { view: "board", projectId: "p1", ticketKey: "FOO-1", tab: "activity" };
+  expect(formatRoute(activity)).toBe("#/board/p1/ticket/FOO-1/activity");
+  expect(parseRoute(formatRoute(activity))).toEqual(activity);
+});
+
+test("an old link to the Summaries tab opens the Spec and is rewritten without the segment", () => {
+  const r = parseRoute("#/board/p1/ticket/FOO-1/summaries");
+  expect(r).toEqual({ view: "board", projectId: "p1", ticketKey: "FOO-1", tab: "spec" });
+  expect(formatRoute(r)).toBe("#/board/p1/ticket/FOO-1");
 });
 
 test("the conductor Tickets tab has its own route segment", () => {
@@ -19,7 +32,7 @@ test("the conductor Tickets tab has its own route segment", () => {
 
 test("round-trips every view", () => {
   const routes: Route[] = [
-    { view: "board", projectId: null, ticketKey: null, tab: "summaries" },
+    { view: "board", projectId: null, ticketKey: null, tab: "spec" },
     { view: "board", projectId: "p 1", ticketKey: "NYTIMES-3", tab: "transcript" },
     { view: "inbox", sessionId: "s1" },
     { view: "inbox", sessionId: null },
@@ -44,7 +57,7 @@ test("plugin tabs round-trip as plugin:<id>:<tab>; malformed ones fall back to s
   expect(parsePluginTab("plugin:git:changes")).toEqual({ pluginId: "git", tabId: "changes" });
   expect(parsePluginTab("details")).toBeNull();
   for (const bad of ["plugin:git", "plugin::x", "plugin:Git:changes", "plugin:git:changes:extra"]) {
-    expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "summaries" });
+    expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "spec" });
   }
 });
 
@@ -55,7 +68,7 @@ test("a sub-agent's transcript round-trips as agent:<id>; the Agents list as age
   expect(parseRoute("#/board/p1/ticket/HELLO-1/agents")).toMatchObject({ tab: "agents" });
   // An encoded colon (a link copied from elsewhere) decodes to the same tab.
   expect(parseRoute("#/board/p1/ticket/HELLO-1/agent%3Atoolu_01AbC")).toMatchObject({ tab: "agent:toolu_01AbC" });
-  for (const bad of ["agent:", "agent:a.b", "agents:x"]) expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "summaries" });
+  for (const bad of ["agent:", "agent:a.b", "agents:x"]) expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "spec" });
 });
 
 test("the board hash mirrors the focused ticket pane and keeps the project filter", () => {

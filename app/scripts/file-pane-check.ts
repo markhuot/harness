@@ -1,5 +1,5 @@
 // File panes end to end in the built app, against the REAL service (throwaway HARNESS_HOME) and a
-// throwaway git project: a file link in a ticket's brief opens the file beside the ticket, scrolled
+// throwaway git project: a file link in a ticket's spec opens the file beside the ticket, scrolled
 // to and highlighting its lines; another range reuses the pane; a dirty file has a Diff tab drawn by
 // @pierre/diffs, a clean one doesn't; a gitignored file opens; and the pane survives a reload.
 //
@@ -55,18 +55,18 @@ try {
   const token = readFileSync(join(home, "token"), "utf8").trim();
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "files", key: "FILES" });
-  const brief = [
+  const spec = [
     "Look at [app.ts:10-20](harness://file/src/app.ts#L10-L20) first,",
     "then [the tail](harness://file/src/app.ts#L100-L104), [long.ts:150-152](src/long.ts#L150-L152), [clean.ts](src/clean.ts#L2),",
     "the log [debug.log](debug.log) and [a missing one](harness://file/nope.ts).",
   ].join(" ");
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: brief, driver: "dummy", start: false });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: false });
 
   app = await launchApp({ baseUrl: base, token, theme, env: {} });
   const { js, exists, go } = app;
   await until("sidebar shows the project", () => js<boolean>(`document.querySelector(".sidebar")?.textContent.includes("files")`), 10000);
   await go(`#/board/${project.id}/ticket/${ticket.key}`);
-  await until("the brief's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000); // the dummy plan run may repeat them
+  await until("the spec's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000); // the dummy plan run may repeat them
 
   const clickLink = (text: string) =>
     js<boolean>(`(() => { const a = [...document.querySelectorAll('.pane-ticket [data-testid="file-link"]')].find(e => e.textContent.includes(${JSON.stringify(text)})); a?.click(); return !!a; })()`);
@@ -96,7 +96,7 @@ try {
   check("the error offers Reload window", (await js<string>(`document.querySelector('[data-testid="file-retry"]')?.textContent ?? ""`)).includes("Reload window"));
   await js(`document.querySelector('[data-testid="file-retry"]').click()`);
   check("reloading restores the pane with the viewer", !!(await until("viewer after reload", () => js<boolean>(`!!document.querySelector('[data-testid="file-body"] diffs-container')`), 15000).catch(() => false)));
-  await until("brief links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000);
+  await until("spec links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000);
 
   // 1. A ranged link opens the file beside the ticket, highlighted and scrolled to.
   check("clicked app.ts:10-20", await clickLink("app.ts:10-20"));

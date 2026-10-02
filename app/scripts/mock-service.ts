@@ -8,6 +8,11 @@ import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
 import type {
+  ActivityAuthor,
+  ActivityEntry,
+  ActivityKind,
+  ActivityMeta,
+  Attachment,
   BranchInfo,
   BrowserInput,
   BrowserState,
@@ -24,9 +29,11 @@ import type {
   RunKind,
   ServerMessage,
   Session,
-  Summary,
-  SummaryAttachment,
-  SummaryAuthor,
+  SpecConflict,
+  SpecDiff,
+  SpecRevision,
+  SpecRevisionAuthor,
+  SpecRevisionInfo,
   Ticket,
   RelatedTicket,
   RemoteKeyMatches,
@@ -42,6 +49,8 @@ import { buildPairUrl, checkProjectKey, isCompletionAction, isLegacyMirror, isTi
 import type { CompletionAction } from "@harness/shared";
 // The real catalog, so the Prompts screen shows the text runs get.
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
+// The real diff, so the Spec tab's history shows what the service would send.
+import { unifiedDiff } from "../../service/src/spec";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -65,7 +74,9 @@ const tickets = new Map<string, Ticket>(); // by id
 const keyAliases = new Map<string, string>();
 const sessions = new Map<string, Session>();
 const runs = new Map<string, Run>();
-const summaries: Summary[] = [];
+const activity: ActivityEntry[] = [];
+/** Every ticket's spec revisions (with bodies), oldest first, by ticket id */
+const specRevisions = new Map<string, SpecRevision[]>();
 /** Attachment bytes by id, served at GET /attachments/:id (an attachment seeded without bytes 404s). Rendered on first request. */
 const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Array }>();
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
@@ -313,11 +324,59 @@ function appendEntry(sessionId: string, runId: string | null, role: TranscriptRo
   return entry;
 }
 
-function addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string) {
-  const summary: Summary = { id: newId("sum"), sessionId, ticketId, author, body, createdAt: now(), attachments: [] };
-  summaries.push(summary);
-  broadcast({ kind: "summary.added", summary });
-  return summary;
+function addActivity(sessionId: string, ticketId: string | null, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}) {
+  const entry: ActivityEntry = { id: newId("act"), sessionId, ticketId, kind, author, body, meta, createdAt: now() };
+  activity.push(entry);
+  broadcast({ kind: "activity.added", entry });
+  return entry;
+}
+
+const revisionInfo = ({ body: _body, ...info }: SpecRevision): SpecRevisionInfo => info;
+
+/** Revision 1, written with the ticket (no event: the ticket.upserted that follows carries it). */
+function seedSpec(t: Ticket, createdAt: number) {
+  specRevisions.set(t.id, [{ rev: 1, author: "human", runId: null, runKind: null, note: "Created", approvedBaseline: false, body: t.spec, createdAt }]);
+  t.specRevision = 1;
+  t.specBaselineRevision ??= null;
+}
+
+/**
+ * Mirrors Orchestrator.reviseSpec: the next revision (none when the body didn't change), then
+ * spec.revised. A stale `baseRevision` is a 409 carrying SpecConflict, like the service's PATCH.
+ * The caller broadcasts the ticket.
+ */
+function reviseSpec(t: Ticket, body: string, w: { author: SpecRevisionAuthor; note: string; baseRevision?: number; runId?: string | null; runKind?: RunKind | null; createdAt?: number }): SpecRevisionInfo | null {
+  const list = specRevisions.get(t.id) ?? [];
+  const current = t.specRevision ?? 1;
+  if (w.baseRevision !== undefined && w.baseRevision !== current) {
+    throw new HttpError(409, `${t.key}'s spec is at revision ${current}, not ${w.baseRevision}: it changed since this edit started. Reload it, or send it again with baseRevision ${current} to overwrite.`, {
+      currentRevision: current,
+      spec: t.spec,
+    } satisfies SpecConflict);
+  }
+  if (body === t.spec) return null;
+  const rev: SpecRevision = { rev: current + 1, author: w.author, runId: w.runId ?? null, runKind: w.runKind ?? null, note: w.note, approvedBaseline: false, body, createdAt: w.createdAt ?? now() };
+  list.push(rev);
+  specRevisions.set(t.id, list);
+  t.spec = body;
+  t.specRevision = rev.rev;
+  t.updatedAt = rev.createdAt;
+  broadcast({ kind: "spec.revised", ticketId: t.id, rev: rev.rev, author: rev.author, note: rev.note, runId: rev.runId, runKind: rev.runKind, createdAt: rev.createdAt });
+  return revisionInfo(rev);
+}
+
+/** Pressing Start (planning → work) approves the current revision as the review baseline. */
+function markBaseline(t: Ticket, rev = t.specRevision ?? 1) {
+  t.specBaselineRevision = rev;
+  for (const r of specRevisions.get(t.id) ?? []) r.approvedBaseline = r.rev === rev;
+}
+
+function specRevisionOf(t: Ticket, raw: string, what: string): SpecRevision {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) throw new HttpError(400, `${what} must be a revision number`);
+  const r = specRevisions.get(t.id)?.find((x) => x.rev === n);
+  if (!r) throw new HttpError(404, `${t.key} has no spec revision ${n} (it's at ${t.specRevision ?? 1})`);
+  return r;
 }
 
 function startRun(t: Ticket, kind: RunKind, prompt: string): Run {
@@ -439,7 +498,10 @@ interface SeedTicket {
   model?: string | null;
   key?: string;
   title: string;
-  description: string;
+  /** Revision 1 of the spec */
+  spec: string;
+  /** Later revisions: [author, note, body], each written a few minutes after the last */
+  revisions?: [SpecRevisionAuthor, string, string][];
   status: TicketStatus;
   driver: string;
   kind?: Ticket["kind"];
@@ -456,7 +518,8 @@ interface SeedTicket {
   permissionMode?: Ticket["permissionMode"];
   externalRef?: Ticket["externalRef"];
   autoStart?: boolean;
-  summaries?: [SummaryAuthor, string, SummaryAttachment[]?][];
+  /** Activity entries: [author, body, kind (default: note from an agent, system from the system, message from a human)] */
+  activity?: [ActivityAuthor, string, ActivityKind?][];
   ageMin: number;
 }
 
@@ -479,7 +542,7 @@ function seedTicket(s: SeedTicket): Ticket {
     projectId: s.project.id,
     kind: s.kind ?? "task",
     title: s.title,
-    description: s.description,
+    spec: s.spec,
     status: s.status,
     sessionId: session.id,
     driver: s.driver,
@@ -517,7 +580,7 @@ function seedTicket(s: SeedTicket): Ticket {
     kind,
     status: t.busy ? "running" : s.status === "blocked" ? "failed" : "succeeded",
     driver: t.driver,
-    prompt: s.description,
+    prompt: s.spec,
     error: s.status === "blocked" ? s.blockedReason ?? null : null,
     createdAt,
     startedAt: createdAt,
@@ -529,7 +592,7 @@ function seedTicket(s: SeedTicket): Ticket {
     at += 7_000;
     list.push({ id: newId("te"), sessionId: session.id, runId, seq: ++seq, role, content, createdAt: at });
   };
-  push("user", { type: "text", text: s.description });
+  push("user", { type: "text", text: s.spec });
   push("system", { type: "status", text: `Run started (${kind})` });
   push("assistant", { type: "thinking", text: "The user wants this done carefully. Let me look at the relevant files first." });
   push("assistant", { type: "text", text: `I'll start by looking at how \`${s.title.split(" ").slice(-1)[0]}\` is wired up in the codebase.` });
@@ -552,11 +615,20 @@ function seedTicket(s: SeedTicket): Ticket {
   push("assistant", { type: "text", text: "Found it. The hook caches by slug, not by id, which explains the stale data. I'll switch the cache key and add a regression test." });
   if (s.status !== "planning" && s.status !== "in_progress") push("system", { type: "status", text: `Moved to ${s.status.replace("_", " ")}` });
 
-  // Like the service's block tool: the question lands on the Summary tab (the detail view has no callout).
-  const seeded: [SummaryAuthor, string, SummaryAttachment[]?][] = [...(s.summaries ?? [])];
-  if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", `Blocked: ${s.blockedReason}`]);
-  for (const [i, [author, body, attachments = []]] of seeded.entries()) {
-    summaries.push({ id: newId("sum"), sessionId: session.id, ticketId: t.id, author, body, createdAt: createdAt + (i + 1) * 3 * 60_000, attachments });
+  // The spec: revision 1 with the ticket, then the agent's (or human's) later revisions.
+  seedSpec(t, createdAt);
+  for (const [i, [author, note, body]] of (s.revisions ?? []).entries()) {
+    reviseSpec(t, body, { author, note, runId: author === "agent" ? runId : null, runKind: author === "agent" ? kind : null, createdAt: createdAt + (i + 1) * 2 * 60_000 });
+  }
+  // Pressing Start approved what the spec said then (seeded tickets past planning started from revision 1).
+  if (s.status !== "planning") markBaseline(t, 1);
+
+  // Like the service's block tool: the question lands in Activity as a `blocked` entry.
+  const seeded: [ActivityAuthor, string, ActivityKind?][] = [...(s.activity ?? [])];
+  if (s.status === "blocked" && s.blockedReason && !s.pendingApproval) seeded.push(["agent", s.blockedReason, "blocked"]);
+  for (const [i, [author, body, kind = author === "agent" ? "note" : author === "human" ? "message" : "system"]] of seeded.entries()) {
+    const meta: ActivityMeta = kind === "blocked" ? { question: body } : kind === "review_approved" || kind === "changes_requested" ? { round: 1, by: "agent" } : kind === "submitted" ? { specRevision: t.specRevision } : {};
+    activity.push({ id: newId("act"), sessionId: session.id, ticketId: t.id, kind, author, body, meta, createdAt: createdAt + (i + 1) * 3 * 60_000 });
   }
   return t;
 }
@@ -570,40 +642,47 @@ function seed() {
   seedTicket({
     project: ny,
     title: "Fix stale article cache on slug change",
-    description: "Articles show stale content after an editor renames the slug. Investigate the `useArticle` hook cache and fix it.",
+    spec: "Articles show stale content after an editor renames the slug. Investigate the `useArticle` hook cache and fix it.",
     status: "in_progress",
     driver: "claude-code",
     model: "sonnet",
     busy: true,
     ageMin: 42,
-    summaries: [
+    activity: [
       ["agent", "Reproduced the bug locally. The cache is keyed by `slug`, so a rename orphans the old entry.\n\nNext:\n- switch the key to `article.id`\n- add a regression test"],
     ],
   }); // NYTIMES-1 (live stream)
   seedTicket({
     project: ny,
     title: "Add dark mode to the crossword player",
-    description: "Support prefers-color-scheme in the crossword player. Keep contrast AA for filled squares.",
+    spec: "Support prefers-color-scheme in the crossword player. Keep contrast AA for filled squares.",
     status: "planning",
     driver: "claude-code",
     ageMin: 300,
-    summaries: [["agent", "Drafted a plan:\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes\n\n| Token | Light | Dark | Contrast |\n|:------|:-----:|:----:|---------:|\n| `--cell-bg` | #ffffff | #1e1f24 | — |\n| `--cell-filled` | #111111 | #f2f2f2 | **15.3:1** |\n| `--cell-focus` | #ffda00 | #8a6d00 | 4.6:1 |"]],
+    revisions: [
+      [
+        "agent",
+        "Drafted the plan",
+        "## Goal\n\nSupport prefers-color-scheme in the crossword player. Keep contrast AA for filled squares.\n\n## Plan\n\n1. Introduce CSS variables for the grid palette\n2. Map them under `@media (prefers-color-scheme: dark)`\n3. Snapshot test both themes\n\n| Token | Light | Dark | Contrast |\n|:------|:-----:|:----:|---------:|\n| `--cell-bg` | #ffffff | #1e1f24 | — |\n| `--cell-filled` | #111111 | #f2f2f2 | **15.3:1** |\n| `--cell-focus` | #ffda00 | #8a6d00 | 4.6:1 |\n\n## Open questions\n\n- Should the clue list follow the system theme too, or only the grid?",
+      ],
+    ],
+    activity: [["agent", "Drafted a plan in the spec. One open question on the clue list."]],
   }); // NYTIMES-2
   seedTicket({
     project: ny,
     title: "Migrate newsletter signup to the new API",
-    description: "Move the newsletter form from the legacy /subscribe endpoint to the v2 subscriptions API.",
+    spec: "Move the newsletter form from the legacy /subscribe endpoint to the v2 subscriptions API.",
     status: "blocked",
     driver: "anthropic-api",
     blockedReason: "The v2 API requires an OAuth client id for the signup form. Which environment's client id should I use — staging or production?",
     ageMin: 180,
-    summaries: [["agent", "Ported the form and validation. Blocked on credentials for the v2 API; see the question."]],
+    activity: [["agent", "Ported the form and validation. Blocked on credentials for the v2 API; see the question."]],
   }); // NYTIMES-3
   seedTicket({
     project: hx,
     key: "HARNESS-9",
     title: "Install Playwright and add a smoke test",
-    description: "Add a Playwright smoke test that loads the board and checks five columns render.",
+    spec: "Add a Playwright smoke test that loads the board and checks five columns render.",
     status: "blocked",
     driver: "claude-code",
     blockedReason: "Waiting for permission to use Bash",
@@ -618,13 +697,13 @@ function seed() {
     },
     allowedTools: ["Read", "Edit"],
     ageMin: 25,
-    summaries: [["agent", "Scaffolded `tests/smoke.spec.ts`. Needs Playwright installed to run it."]],
+    activity: [["agent", "Scaffolded `tests/smoke.spec.ts`. Needs Playwright installed to run it."]],
   }); // HARNESS-9
   seedTicket({
     project: hx,
     key: "HARNESS-20",
     title: "Watch the events API",
-    description: "Add a watcher that polls https://api.example.com/events every minute. If an event is assigned to me and has actionable next steps, dispatch it to an agent.",
+    spec: "Add a watcher that polls https://api.example.com/events every minute. If an event is assigned to me and has actionable next steps, dispatch it to an agent.",
     status: "blocked",
     driver: "claude-code",
     blockedReason: `Permission needed: create_watcher — ${EVENTS_SUMMARY}`,
@@ -646,24 +725,34 @@ function seed() {
       onceOnly: true,
     },
     ageMin: 5,
-    summaries: [["agent", "Checked the events endpoint with `curl`. Asking to add the watcher with your triage instructions."]],
+    activity: [["agent", "Checked the events endpoint with `curl`. Asking to add the watcher with your triage instructions."]],
   }); // HARNESS-20
   seedTicket({
     project: ny,
     title: "Lazy-load below-the-fold images on section fronts",
-    description: "Use native loading=lazy and add width/height to avoid CLS.",
+    spec: "Use native loading=lazy and add width/height to avoid CLS.",
     status: "review",
     driver: "claude-code",
     agentReview: "approved",
     humanReview: "pending",
     ageMin: 600,
-    summaries: [
+    activity: [
       ["agent", "Added `loading=\"lazy\"` to `SectionImage` and explicit dimensions.\n\n```tsx\n<img loading=\"lazy\" width={w} height={h} src={src} />\n```\n\nLighthouse CLS dropped from 0.14 to 0.02."],
-      ["system", "Agent review approved: change is minimal and well tested."],
+      ["agent", "Lazy-loading and explicit sizes on section fronts; CLS 0.14 → 0.02.", "submitted"],
+      ["agent", "Change is minimal and well tested.", "review_approved"],
+    ],
+    revisions: [
       [
         "agent",
+        "Status: what changed",
         [
-          "Follow-up: the image helper, its config and the template change.",
+          "## Goal",
+          "",
+          "Use native loading=lazy and add width/height to avoid CLS.",
+          "",
+          "## Status",
+          "",
+          "Done. The image helper, its config and the template change:",
           "",
           "```ts",
           "export function imageProps(src: string, w: number, h: number): ImgProps {",
@@ -699,13 +788,13 @@ function seed() {
   const upgrade = seedTicket({
     project: ny,
     title: "Upgrade Next.js to 15 and fix type errors",
-    description: "Bump next and react, fix the resulting type errors.",
+    spec: "Bump next and react, fix the resulting type errors.",
     status: "done",
     driver: "dummy",
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 3000,
-    summaries: [["agent", "Upgraded to Next 15. All `tsc` errors fixed; `bun test` green."], ["agent", "Completed. Opened https://github.com/markhuot/nytimes/pull/318 from `harness/nytimes-5`."]],
+    activity: [["agent", "Upgraded to Next 15. All `tsc` errors fixed; `bun test` green."], ["agent", "Completed. Opened https://github.com/markhuot/nytimes/pull/318 from `harness/nytimes-5`."]],
   }); // NYTIMES-5
   // Completed with "Approve and open PR": the card shows a PR chip, the ticket a PR link.
   upgrade.completionAction = "pr";
@@ -713,14 +802,14 @@ function seed() {
   seedTicket({
     project: ny,
     title: "Paywall meter counts AMP pageviews twice",
-    description: "Jira FOO-123: The meter increments twice on AMP article views.",
+    spec: "Jira FOO-123: The meter increments twice on AMP article views.",
     key: "FOO-123",
     status: "in_progress",
     driver: "claude-code",
     externalRef: { source: "jira", key: "FOO-123", url: "https://happycog.atlassian.net/browse/FOO-123", raw: { key: "FOO-123", summary: "Paywall meter counts AMP pageviews twice" } },
     dependsOn: ["NYTIMES-5", "NYTIMES-3"],
     ageMin: 90,
-    summaries: [["agent", "Dispatched from Jira. Waiting on the newsletter migration before touching the meter script."]],
+    activity: [["agent", "Dispatched from Jira. Waiting on the newsletter migration before touching the meter script."]],
   });
 
   // Conductor with seven children in HARNESS, across every column (Tickets tab, board rollup)
@@ -728,42 +817,54 @@ function seed() {
     project: hx,
     kind: "conductor",
     title: "Build the harness desktop app",
-    description: "Coordinate the Electron app build.\n- Board view with drag and drop\n- Ticket detail with live transcript",
+    spec: "Coordinate the Electron app build.\n- Board view with drag and drop\n- Ticket detail with live transcript",
     status: "in_progress",
     driver: "claude-code",
     busy: true,
     ageMin: 120,
-    summaries: [["agent", "Split the work into seven child tickets. The shell (HARNESS-5) goes first; the store, signing and settings build on it."]],
+    activity: [["agent", "Split the work into seven child tickets. The shell (HARNESS-5) goes first; the store, signing and settings build on it."]],
   }); // HARNESS-1
   seedTicket({
     project: hx,
     parentKey: "HARNESS-1",
     title: "Board view with drag and drop",
-    description: "Five columns, cards update live.",
+    spec: "Five columns, cards update live.",
     status: "review",
     driver: "claude-code",
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 110,
-    summaries: [
+    revisions: [
       [
         "agent",
-        "Board renders all five columns; drag and drop calls `updateTicket({ status })`. Screenshots of the board in both themes, the narrow layout, and a recording of a drag.",
+        "Status with screenshots",
         [
-          mockScreenshot("board-light.png", 1440, 900, 215, false),
-          mockScreenshot("board-dark.png", 1440, 900, 265, true),
-          mockScreenshot("board-narrow.png", 390, 844, 150, false),
-          ...mockVideo("drag.mp4"),
-          { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 },
-        ],
+          "## Goal",
+          "",
+          "Five columns, cards update live.",
+          "",
+          "## Status",
+          "",
+          "Board renders all five columns; drag and drop calls `updateTicket({ status })`. Screenshots of the board in both themes, the narrow layout, and a recording of a drag.",
+          "",
+          // deleted.png has no bytes: its attachment 404s, like one whose ticket was deleted.
+          ...[
+            mockScreenshot("board-light.png", 1440, 900, 215, false),
+            mockScreenshot("board-dark.png", 1440, 900, 265, true),
+            mockScreenshot("board-narrow.png", 390, 844, 150, false),
+            ...mockVideo("drag.mp4"),
+            { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 } satisfies Attachment,
+          ].map((a) => `![${a.name}](attachment:${a.id})`),
+        ].join("\n"),
       ],
     ],
+    activity: [["agent", "Board view done, with screenshots in the spec.", "submitted"]],
   }); // HARNESS-2
   seedTicket({
     project: hx,
     parentKey: "HARNESS-1",
     title: "Ticket detail with live transcript",
-    description: "Summaries, transcript and browser tabs.",
+    spec: "Spec, Activity, transcript and browser tabs.",
     status: "planning",
     driver: "dummy",
     dependsOn: ["HARNESS-2"],
@@ -772,52 +873,52 @@ function seed() {
   seedTicket({
     project: hx,
     title: "Write launchd install docs",
-    description: "Document `harness service install` and log locations.",
+    spec: "Document `harness service install` and log locations.",
     status: "done",
     driver: "dummy",
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 2000,
-    summaries: [["agent", "Docs written in `DESIGN.md` under Runtime paths."]],
+    activity: [["agent", "Docs written in `DESIGN.md` under Runtime paths."]],
   }); // HARNESS-4
   const child = (s: Omit<SeedTicket, "project" | "parentKey">) => seedTicket({ project: hx, parentKey: "HARNESS-1", ...s });
   child({
     key: "HARNESS-5",
     title: "Scaffold the Electron shell and preload bridge",
-    description: "Main process, preload with a typed bridge, hidden-inset titlebar.",
+    spec: "Main process, preload with a typed bridge, hidden-inset titlebar.",
     status: "done",
     driver: "claude-code",
     agentReview: "approved",
     humanReview: "approved",
     ageMin: 118,
-    summaries: [["agent", "Shell boots with a typed `window.harness` bridge; window state persists across launches."]],
+    activity: [["agent", "Shell boots with a typed `window.harness` bridge; window state persists across launches."]],
   });
   child({
     key: "HARNESS-6",
     title: "Wire the WebSocket store and reducer",
-    description: "REST snapshot + live events into one normalized store.",
+    spec: "REST snapshot + live events into one normalized store.",
     status: "in_progress",
     driver: "anthropic-api",
     busy: true,
     dependsOn: ["HARNESS-5"],
     ageMin: 100,
-    summaries: [["agent", "Reducer handles every event kind; reconnect refetches the snapshot. Writing the dedupe tests now."]],
+    activity: [["agent", "Reducer handles every event kind; reconnect refetches the snapshot. Writing the dedupe tests now."]],
   });
   child({
     key: "HARNESS-7",
     title: "Sign and notarize the macOS build",
-    description: "Developer ID signing + notarytool in the package script.",
+    spec: "Developer ID signing + notarytool in the package script.",
     status: "blocked",
     driver: "claude-code",
     dependsOn: ["HARNESS-5"],
     blockedReason: "Which Apple Developer team should sign the build: Happy Cog or your personal account?",
     ageMin: 95,
-    summaries: [["agent", "Packaging works unsigned. Need to know which team's certificate to use."]],
+    activity: [["agent", "Packaging works unsigned. Need to know which team's certificate to use."]],
   });
   child({
     key: "HARNESS-8",
     title: "Add a Playwright e2e for the board",
-    description: "Drive the built app and check drag and drop.",
+    spec: "Drive the built app and check drag and drop.",
     status: "blocked",
     driver: "claude-code",
     dependsOn: ["HARNESS-2"],
@@ -834,14 +935,14 @@ function seed() {
   child({
     key: "HARNESS-10",
     title: "Settings screen for drivers and watchers",
-    description: "Driver login state and watcher CRUD.",
+    spec: "Driver login state and watcher CRUD.",
     status: "review",
     driver: "claude-code",
     dependsOn: ["HARNESS-5"],
     agentReview: "approved",
     humanReview: "pending",
     ageMin: 80,
-    summaries: [["agent", "Settings has Drivers and Watchers sections; each saves on blur."]],
+    activity: [["agent", "Settings has Drivers and Watchers sections; each saves on blur."]],
   });
   hx.nextSeq = 11;
 
@@ -852,13 +953,13 @@ function seed() {
     ["Add a greeting API route", "done", 2400],
     ["Localize the greeting", "planning", 30],
   ] as const) {
-    seedTicket({ project: hh, title, description: title, status, driver: "claude-code", agentReview: status === "done" ? "approved" : "pending", humanReview: status === "done" ? "approved" : "pending", ageMin });
+    seedTicket({ project: hh, title, spec: title, status, driver: "claude-code", agentReview: status === "done" ? "approved" : "pending", humanReview: status === "done" ? "approved" : "pending", ageMin });
   }
   seedTicket({
     project: hh,
     key: "ACME-12",
     title: "Greeting typo on the landing page",
-    description: "Reported in Jira.",
+    spec: "Reported in Jira.",
     status: "planning",
     driver: "claude-code",
     externalRef: { source: "jira", key: "ACME-12", url: "https://example.atlassian.net/browse/ACME-12", raw: {} },
@@ -878,7 +979,7 @@ function seed() {
       project: site,
       key: `SITE-${i}`,
       title,
-      description: i === 42 ? "Swap the carousel for a CSS scroll-snap strip; drop jquery.slick." : `Routine maintenance ${i}.`,
+      spec: i === 42 ? "Swap the carousel for a CSS scroll-snap strip; drop jquery.slick." : `Routine maintenance ${i}.`,
       status: "done",
       driver: "dummy",
       agentReview: "approved",
@@ -901,29 +1002,29 @@ function seed() {
     project: mh,
     key: "MH-62",
     title: "Newsletter signup posts twice on slow connections",
-    description: "The signup form doesn't disable its button while the request is in flight.",
+    spec: "The signup form doesn't disable its button while the request is in flight.",
     status: "in_progress",
     driver: "claude-code",
     ageMin: 400,
-    summaries: [["agent", "Reproduced with network throttling. The button re-enables before the response lands."]],
+    activity: [["agent", "Reproduced with network throttling. The button re-enables before the response lands."]],
   });
   seedTicket({
     project: mh,
     key: "MH-124",
     title: "Review the checkout PR: API changes",
-    description: "Jira MH-62, stage 1: review the order API changes in the checkout PR.",
+    spec: "Jira MH-62, stage 1: review the order API changes in the checkout PR.",
     status: "review",
     driver: "claude-code",
     agentReview: "approved",
     externalRef: jira("MH-62", "Checkout rewrite"),
     ageMin: 180,
-    summaries: [["agent", "Reviewed the order API. Two comments on idempotency keys; otherwise good."]],
+    activity: [["agent", "Reviewed the order API. Two comments on idempotency keys; otherwise good."]],
   });
   seedTicket({
     project: mh,
     key: "MH-130",
     title: "Review the checkout PR: UI pass",
-    description: "Jira MH-62, stage 2: review the checkout UI once the API changes land.",
+    spec: "Jira MH-62, stage 2: review the checkout UI once the API changes land.",
     status: "in_progress",
     driver: "claude-code",
     externalRef: jira("MH-62", "Checkout rewrite"),
@@ -934,7 +1035,7 @@ function seed() {
     project: mh,
     key: "MH-131",
     title: "Rotate the CDN signing key",
-    description: "Jira OPS-41: rotate the key and update the edge config.",
+    spec: "Jira OPS-41: rotate the key and update the edge config.",
     status: "planning",
     driver: "claude-code",
     externalRef: jira("OPS-41", "Rotate CDN keys"),
@@ -944,7 +1045,7 @@ function seed() {
     project: mh,
     key: "MH-132",
     title: "Rotate the CDN signing key on staging",
-    description: "Jira OPS-41, staging first.",
+    spec: "Jira OPS-41, staging first.",
     status: "done",
     driver: "claude-code",
     agentReview: "approved",
@@ -1092,8 +1193,8 @@ function searchRank(t: Ticket, q: string): number | null {
   const remote = t.externalRef?.key.toLowerCase();
   if (remote && (remote === needle || remote.startsWith(needle))) return 0.5;
   if (t.title.toLowerCase().includes(needle)) return 1;
-  const latest = summaries.filter((s) => s.ticketId === t.id).at(-1)?.body ?? "";
-  if (t.description.toLowerCase().includes(needle) || latest.toLowerCase().includes(needle)) return 2;
+  const latest = activity.filter((e) => e.ticketId === t.id).at(-1)?.body ?? "";
+  if (t.spec.toLowerCase().includes(needle) || latest.toLowerCase().includes(needle)) return 2;
   return null;
 }
 
@@ -1143,7 +1244,7 @@ function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDeta
     ...(resolvedFrom ? { resolvedFrom } : {}),
     ticket: t,
     session: sessions.get(t.sessionId)!,
-    summaries: summaries.filter((s) => s.ticketId === t.id),
+    activity: activity.filter((e) => e.ticketId === t.id),
     runs: [...runs.values()].filter((r) => r.sessionId === t.sessionId),
     dependents: [...tickets.values()].filter((o) => o.dependsOn.includes(t.key)).map((o) => o.key),
     children: [...tickets.values()].filter((o) => o.parentId === t.id),
@@ -1190,7 +1291,7 @@ function submitForReview(t: Ticket) {
   setStatus(t, "review");
   t.agentReview = t.skipAgentReview ? "skipped" : "pending";
   t.humanReview = t.skipHumanReview ? "approved" : "pending";
-  addSummary(t.sessionId, t.id, "agent", `Work finished for **${t.title}**. Ready for review.`);
+  addActivity(t.sessionId, t.id, "submitted", "agent", `Work finished for **${t.title}**. Ready for review.`, { specRevision: t.specRevision ?? 1 });
   upsertTicket(t);
   if (t.skipHumanReview) appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
   if (t.skipAgentReview) {
@@ -1202,6 +1303,7 @@ function submitForReview(t: Ticket) {
 function agentReviewRun(t: Ticket, text: string) {
   simulateRun(t, "review", "Review the change.", text, (cur) => {
     cur.agentReview = "approved";
+    addActivity(cur.sessionId, cur.id, "review_approved", "agent", text, { round: 1, by: "agent" });
     queueMicrotask(() => noteReady(cur));
   });
 }
@@ -1253,14 +1355,17 @@ function completeRun(t: Ticket, instructions = t.completionInstructions ?? "") {
   const result = { merge: "Merged the branch and cleaned up the worktree.", pr: "Pushed the branch and opened a pull request.", cleanup: "Removed the worktree and the harness branch.", custom: instructions ? `Done: ${instructions}` : "Wrapped up." }[action];
   simulateRun(t, "complete", `${prompt} ${instructions}`.trim(), result, (cur) => {
     if (action === "pr" && !cur.pullRequestUrl) cur.pullRequestUrl = `https://${project?.pullRequestHost ?? "github.com"}/markhuot/${project?.name ?? "repo"}/pull/${400 + tickets.size}`;
-    addSummary(cur.sessionId, cur.id, "agent", action === "pr" ? `Completed. Opened ${cur.pullRequestUrl}` : "Completed.");
+    addActivity(cur.sessionId, cur.id, "note", "agent", action === "pr" ? `Completed. Opened ${cur.pullRequestUrl}` : "Completed.");
     setStatus(cur, "done");
   });
 }
 
-function workRun(t: Ticket, prompt: string) {
+/** `log`: the prompt was a message sent with log: true, so the agent's answer goes into Activity too. */
+function workRun(t: Ticket, prompt: string, log = false) {
   appendEntry(t.sessionId, null, "user", { type: "text", text: prompt });
-  simulateRun(t, "work", prompt, `Hello from the mock driver! You said: "${prompt}"`, (cur) => {
+  const answer = `Hello from the mock driver! You said: "${prompt}"`;
+  simulateRun(t, "work", prompt, answer, (cur) => {
+    if (log) addActivity(cur.sessionId, cur.id, "answer", "agent", answer);
     if (cur.status === "in_progress") submitForReview(cur);
   });
 }
@@ -1269,13 +1374,13 @@ function createTicket(body: Record<string, any>): Ticket {
   const project = projects.get(body.projectId);
   if (!project) throw new HttpError(400, "Unknown projectId");
   const draft = body.draft === true;
-  if (typeof body.prompt !== "string" || (!draft && !body.prompt.trim())) throw new HttpError(400, "prompt is required");
+  if (typeof body.spec !== "string" || (!draft && !body.spec.trim())) throw new HttpError(400, "spec is required");
   const key: string = body.key ?? `${project.key}-${project.nextSeq++}`;
   if (byKey(key)) throw new HttpError(409, `Ticket ${key} already exists`);
   broadcast({ kind: "project.upserted", project });
   const id = newId("tkt");
   const driver = body.driver ?? project.defaultDriver ?? settings.defaultDriver;
-  const title: string = body.title ?? draftTitle(body.prompt);
+  const title: string = body.title ?? draftTitle(body.spec);
   const session = makeSession(key, "ticket", id, driver, project.path, title, now());
   // A draft is saved in planning and never runs until it's submitted.
   const start = !draft && (body.start ?? true);
@@ -1286,7 +1391,7 @@ function createTicket(body: Record<string, any>): Ticket {
     projectId: project.id,
     kind: body.kind ?? "task",
     title,
-    description: body.prompt,
+    spec: body.spec,
     status: start ? "in_progress" : "planning",
     sessionId: session.id,
     driver,
@@ -1314,6 +1419,7 @@ function createTicket(body: Record<string, any>): Ticket {
     createdAt: now(),
     updatedAt: now(),
   };
+  seedSpec(t, t.createdAt);
   tickets.set(t.id, t);
   broadcast({ kind: "session.upserted", session });
   upsertTicket(t);
@@ -1325,9 +1431,9 @@ function createTicket(body: Record<string, any>): Ticket {
   return t;
 }
 
-/** A ticket's title from its prompt: the first line (a blank draft is "Untitled draft"). */
-function draftTitle(prompt: string): string {
-  return prompt.trim().split("\n")[0]!.slice(0, 80) || "Untitled draft";
+/** A ticket's title from its spec: the first line (a blank draft is "Untitled draft"). */
+function draftTitle(spec: string): string {
+  return spec.trim().split("\n")[0]!.slice(0, 80) || "Untitled draft";
 }
 
 /** Start a new (or just submitted) ticket's first run: work (start) or a plan. */
@@ -1339,15 +1445,19 @@ function launchTicket(t: Ticket, start: boolean) {
     t.branch = t.requestedBranch || `harness/${t.key.toLowerCase()}`;
   }
   const title = t.title;
-  const body = { prompt: t.description };
-  appendEntry(t.sessionId, null, "user", { type: "text", text: body.prompt });
+  const prompt = t.spec;
+  appendEntry(t.sessionId, null, "user", { type: "text", text: prompt });
   if (start) {
-    simulateRun(t, t.kind === "conductor" ? "conductor" : "work", body.prompt, `Hello from the mock driver! You said: "${body.prompt}"`, (cur) => {
+    markBaseline(t);
+    simulateRun(t, t.kind === "conductor" ? "conductor" : "work", prompt, `Hello from the mock driver! You said: "${prompt}"`, (cur) => {
       if (cur.status === "in_progress") submitForReview(cur);
     }, 4000);
   } else {
-    simulateRun(t, "plan", body.prompt, `Here's a plan for: ${title}\n\n1. Investigate\n2. Implement\n3. Test`, (cur) => {
-      addSummary(cur.sessionId, cur.id, "agent", `Drafted a plan:\n\n1. Investigate\n2. Implement\n3. Test`);
+    simulateRun(t, "plan", prompt, `Here's a plan for: ${title}\n\n1. Investigate\n2. Implement\n3. Test`, (cur) => {
+      // Like a plan run's update_spec: the plan goes into the spec, a note into Activity.
+      const run = [...runs.values()].filter((r) => r.sessionId === cur.sessionId && r.kind === "plan").at(-1);
+      reviseSpec(cur, `${cur.spec.trim()}\n\n## Plan\n\n1. Investigate\n2. Implement\n3. Test`, { author: "agent", note: "Drafted the plan", runId: run?.id ?? null, runKind: "plan" });
+      addActivity(cur.sessionId, cur.id, "note", "agent", "Drafted a plan in the spec.");
     });
   }
 }
@@ -1494,6 +1604,23 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (body[k] !== undefined && !t.draft) throw new HttpError(409, `${t.key} isn't a draft; ${k} is fixed once a ticket launches`);
         }
         if (t.draft && body.status && body.status !== t.status) throw new HttpError(409, `${t.key} is a draft; submit it to start it`);
+        // The spec first, like the service: a stale baseRevision refuses the whole PATCH (409 + SpecConflict).
+        if (body.spec !== undefined) {
+          if (typeof body.spec !== "string") throw new HttpError(400, "spec must be a string");
+          if (t.draft) {
+            // A draft keeps revision 1 and rewrites it in place.
+            const first = specRevisions.get(t.id)?.[0];
+            if (first) first.body = body.spec;
+            t.spec = body.spec;
+            if (body.title === undefined) t.title = draftTitle(t.spec);
+          } else {
+            if (body.baseRevision === undefined) throw new HttpError(400, "baseRevision is required with spec: the revision your edit started from (Ticket.specRevision)");
+            if (!Number.isInteger(body.baseRevision) || body.baseRevision < 1) throw new HttpError(400, "baseRevision must be a revision number");
+            const note = typeof body.specNote === "string" && body.specNote.trim() ? body.specNote.trim() : "Edited by hand";
+            const rev = reviseSpec(t, body.spec, { author: "human", note, baseRevision: body.baseRevision });
+            if (rev) appendEntry(t.sessionId, null, "system", { type: "status", text: `Spec revision ${rev.rev}: ${rev.note}` });
+          }
+        }
         if (body.projectId !== undefined && body.projectId !== t.projectId) moveDraft(t, body.projectId);
         if (body.kind !== undefined) t.kind = body.kind;
         if (body.useWorktree !== undefined) {
@@ -1502,11 +1629,9 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (!(t.useWorktree ?? project.useWorktrees) && body.branch === undefined) t.requestedBranch = null;
         }
         if (body.driver !== undefined && body.driver !== t.driver && body.model === undefined) t.model = null;
-        for (const k of ["title", "description", "driver", "dependsOn", "position"] as const) {
+        for (const k of ["title", "driver", "dependsOn", "position"] as const) {
           if (body[k] !== undefined) (t as any)[k] = body[k];
         }
-        // A draft's title follows its prompt.
-        if (t.draft && body.description !== undefined && body.title === undefined) t.title = draftTitle(t.description);
         if (body.model !== undefined) t.model = body.model || null;
         if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
         if (body.baseBranch !== undefined) t.baseBranch = body.baseBranch || null;
@@ -1536,6 +1661,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           const to = body.status as TicketStatus;
           if (to === "in_progress" && t.status === "planning") {
             setStatus(t, "in_progress");
+            markBaseline(t);
             workRun(t, "The plan is approved. Begin work.");
           } else {
             setStatus(t, to);
@@ -1551,12 +1677,22 @@ async function route(req: Request, url: URL): Promise<Response> {
         return ok({ ok: true });
       }
     }
-    if (method === "GET" && c === "summaries") return ok(summaries.filter((s) => s.ticketId === t.id));
+    if (method === "GET" && c === "activity") return ok(activity.filter((e) => e.ticketId === t.id));
+    if (method === "GET" && c === "spec" && parts[3] === "revisions") {
+      // /spec/revisions: every revision's metadata; /spec/revisions/:rev a body; ?diff=<rev> the diff from that one.
+      const raw = parts[4];
+      if (!raw) return ok((specRevisions.get(t.id) ?? []).map(revisionInfo));
+      const rev = specRevisionOf(t, raw, "rev");
+      const diff = url.searchParams.get("diff");
+      if (!diff) return ok(rev);
+      const other = specRevisionOf(t, diff, "diff");
+      return ok({ from: other.rev, to: rev.rev, diff: unifiedDiff(other.body, rev.body, `${t.key} spec rev ${other.rev}`, `${t.key} spec rev ${rev.rev}`) } satisfies SpecDiff);
+    }
     if (method === "POST") {
       const body = await readBody(req);
       if (c === "submit") {
         if (!t.draft) throw new HttpError(409, `${t.key} isn't a draft`);
-        if (!t.description.trim()) throw new HttpError(400, "A draft needs a prompt before it's submitted");
+        if (!t.spec.trim()) throw new HttpError(400, "A draft needs a spec before it's submitted");
         t.draft = false;
         const start = body.start === true;
         if (start) setStatus(t, "in_progress");
@@ -1568,29 +1704,38 @@ async function route(req: Request, url: URL): Promise<Response> {
       switch (c) {
         case "start":
           setStatus(t, "in_progress");
+          markBaseline(t);
           workRun(t, "The plan is approved. Begin work.");
           return ok(t);
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
+          if (body.log !== undefined && typeof body.log !== "boolean") throw new HttpError(400, "log must be true or false");
+          // log: true (sent from the Spec or Activity tab): the message and the agent's final
+          // answer also go into Activity. Without it they're only in the transcript.
+          const log = body.log === true;
+          if (log) addActivity(t.sessionId, t.id, "message", "human", text);
+          const answered = (answer: string) => (cur: Ticket) => {
+            if (log) addActivity(cur.sessionId, cur.id, "answer", "agent", answer);
+          };
           // Mirrors the service: planning → the plan run, in progress → the work, and blocked,
           // review and done stay put (a chat) unless `move` sends review/done back to work first.
           if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
-            simulateRun(t, "plan", text, `Updated the plan to account for: "${text}"`, () => {});
+            const answer = `Updated the plan to account for: "${text}"`;
+            simulateRun(t, "plan", text, answer, answered(answer));
           } else if (t.status === "in_progress") {
-            workRun(t, text);
+            workRun(t, text, log);
           } else if (body.move === true && (t.status === "review" || t.status === "done")) {
             t.agentReview = "pending";
             t.humanReview = "pending";
             setStatus(t, "in_progress");
             t.blockedReason = null;
-            workRun(t, text);
+            workRun(t, text, log);
           } else {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
-            addSummary(t.sessionId, t.id, "human", text);
             const answer = `Here's what I know about that: "${text}". The ticket stays where it is.`;
-            simulateRun(t, "chat", text, answer, (cur) => addSummary(cur.sessionId, cur.id, "agent", answer));
+            simulateRun(t, "chat", text, answer, answered(answer));
           }
           return ok(t);
         }
@@ -1602,14 +1747,14 @@ async function route(req: Request, url: URL): Promise<Response> {
               t.completionInstructions = typeof body.instructions === "string" && body.instructions.trim() ? body.instructions.trim() : null;
             }
             t.humanReview = "approved";
-            addSummary(t.sessionId, t.id, "human", body.notes ? `Approved: ${body.notes}` : "Approved.");
+            addActivity(t.sessionId, t.id, "approved", "human", body.notes ? `Approved: ${body.notes}` : "Approved.", { by: "human" });
             upsertTicket(t);
             noteReady(t);
           } else {
             t.agentReview = "pending";
             t.humanReview = "pending";
             setStatus(t, "in_progress");
-            addSummary(t.sessionId, t.id, "human", `Changes requested: ${body.notes ?? ""}`);
+            addActivity(t.sessionId, t.id, "changes_requested", "human", `Changes requested: ${body.notes ?? ""}`, { by: "human" });
             workRun(t, body.notes ?? "Please address the review feedback.");
           }
           return ok(t);
@@ -1621,7 +1766,7 @@ async function route(req: Request, url: URL): Promise<Response> {
           t.agentReview = "pending";
           t.humanReview = "pending";
           setStatus(t, "in_progress");
-          addSummary(t.sessionId, t.id, "human", `Re-opened: ${notes}`);
+          addActivity(t.sessionId, t.id, "reopened", "human", notes);
           workRun(t, notes);
           return ok(t);
         }
@@ -2060,7 +2205,7 @@ function encodePng(width: number, height: number, rgb: Uint8Array): Uint8Array {
 }
 
 /** A fake app screenshot (header bar, sidebar, card columns) stored as an attachment. */
-function mockScreenshot(name: string, w: number, h: number, hue: number, dark: boolean): SummaryAttachment {
+function mockScreenshot(name: string, w: number, h: number, hue: number, dark: boolean): Attachment {
   const id = newId("att");
   let png: Uint8Array | undefined;
   attachmentFiles.set(id, { mimeType: "image/png", bytes: () => (png ??= renderScreenshot(w, h, hue, dark)) });
@@ -2089,7 +2234,7 @@ function renderScreenshot(w: number, h: number, hue: number, dark: boolean): Uin
 }
 
 /** MOCK_VIDEO=/path/to/clip.mp4 adds that clip as a video attachment; without it, nothing. */
-function mockVideo(name: string): SummaryAttachment[] {
+function mockVideo(name: string): Attachment[] {
   const path = process.env.MOCK_VIDEO;
   if (!path) return [];
   const bytes = new Uint8Array(readFileSync(path));
@@ -2213,7 +2358,7 @@ async function liveLoop() {
       output: [{ type: "text", text: `bun test v1.2.23\n\n src/hooks/useArticle.test.ts:\n✓ resolves renamed articles by id [3.10ms]\n\n 1 pass\n 0 fail\nRan 1 test across 1 file. [${40 + cycle}ms]` }],
       isError: false,
     });
-    if (cycle % 2 === 0) addSummary(t.sessionId, t.id, "agent", `Cycle ${cycle}: switched the cache key to \`article.id\`.\n\n- regression test passes\n- next: check the RSS feed builder for the same bug`);
+    if (cycle % 2 === 0) addActivity(t.sessionId, t.id, "note", "agent", `Cycle ${cycle}: switched the cache key to \`article.id\`.\n\n- regression test passes\n- next: check the RSS feed builder for the same bug`);
     await sleep(2000);
   }
 }

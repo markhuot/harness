@@ -279,13 +279,13 @@ export function StoreProvider({
       const known = new Set(snapshot.projects.map((p) => p.id));
       const shown = paneScopeOf(parseRoute(location.hash));
       retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope) || isPopoutScope(scope));
-      // Board cards show the latest summary; backfill for tickets that are still moving
-      // (and the most recent done ones). Live summary.added events keep them fresh after.
+      // Board cards show the latest Activity entry; backfill for tickets that are still moving
+      // (and the most recent done ones). Live activity.added events keep them fresh after.
       const done = snapshot.donePage?.page.tickets.slice(0, 12) ?? snapshot.tickets.filter((t) => t.status === "done").sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
       const wanted = [...snapshot.tickets.filter((t) => t.status !== "done"), ...done];
       void pool(wanted, 6, async (t) => {
-        const summaries = await client.listSummaries(t.key);
-        dispatch({ type: "summaries", sessionId: t.sessionId, summaries });
+        const activity = await client.listActivity(t.key);
+        dispatch({ type: "activity", sessionId: t.sessionId, activity });
       });
     } catch (e) {
       toast(`Couldn't load from the service: ${(e as Error).message}`, "error");
@@ -464,7 +464,7 @@ export function StoreProvider({
       // scopeRef is the board on screen, or the last one shown while elsewhere.
       const scope = projectId === undefined ? terminalScope(r, scopeRef.current) : scopeOf(projectId);
       updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(terminalCwd(scope, stateRef.current.projects))));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
     },
     [navigate],
   );
@@ -474,7 +474,7 @@ export function StoreProvider({
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
       updatePanes(scope, (s) => openComposePane(s, null, newComposeContent(projectId)));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
     },
     [navigate],
   );
@@ -487,7 +487,7 @@ export function StoreProvider({
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
       updatePanes(scope, (s) => openFilePane(s, content));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "summaries" });
+      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
     },
     [navigate, toast],
   );

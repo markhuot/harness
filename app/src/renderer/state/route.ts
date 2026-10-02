@@ -9,7 +9,7 @@
 //   #/popout/<id>/<fromScope>   a pop-out window's one pane (components/PopoutWindow.tsx), which
 //                               goes back to the board of `fromScope` when popped back in
 
-import { ALL_SCOPE, isTicketTab, scopeOf, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, scopeOf, ticketTabFrom, type TicketTab } from "@harness/shared/state";
 
 // Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
@@ -35,11 +35,11 @@ export function parseRoute(hash: string): Route {
     i = 1;
   }
   let ticketKey: string | null = null;
-  let tab: TicketTab = "summaries";
+  let tab: TicketTab = "spec";
   if (rest[i] === "ticket" && rest[i + 1]) {
     ticketKey = rest[i + 1]!;
-    const t = rest[i + 2];
-    if (isTicketTab(t)) tab = t;
+    // Older links may name a renamed tab (".../summaries" is now the Spec).
+    tab = ticketTabFrom(rest[i + 2]) ?? "spec";
   }
   return { view: "board", projectId, ticketKey, tab };
 }
@@ -57,7 +57,7 @@ export function formatRoute(r: Route): string {
       return `#/popout/${e(r.id)}/${e(r.fromScope)}`;
     case "board": {
       let s = `#/board/${r.projectId ? e(r.projectId) : "all"}`;
-      if (r.ticketKey) s += `/ticket/${e(r.ticketKey)}` + (r.tab !== "summaries" ? `/${r.tab}` : "");
+      if (r.ticketKey) s += `/ticket/${e(r.ticketKey)}` + (r.tab !== "spec" ? `/${r.tab}` : "");
       return s;
     }
   }
@@ -73,5 +73,5 @@ export const paneScopeOf = (r: Route): string | null => (r.view === "board" ? sc
 /** The board route the hash should show for the focused ticket pane (none focused = just the board). */
 export function mirrorRoute(r: Route, focused: { ticketKey: string; tab: TicketTab } | null): Route {
   if (r.view !== "board") return r;
-  return { view: "board", projectId: r.projectId, ticketKey: focused?.ticketKey ?? null, tab: focused?.tab ?? "summaries" };
+  return { view: "board", projectId: r.projectId, ticketKey: focused?.ticketKey ?? null, tab: focused?.tab ?? "spec" };
 }

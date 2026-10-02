@@ -55,7 +55,7 @@ try {
   const token = readFileSync(join(home, "token"), "utf8").trim();
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "files", key: "FILES" });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Nothing to do", driver: "dummy", start: false });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Nothing to do", driver: "dummy", start: false });
 
   app = await launchApp({ baseUrl: base, token, theme, env: {} });
   const { js, exists, go, key, type } = app;

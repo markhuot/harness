@@ -274,14 +274,6 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.child-attachments {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--text-3);
-}
 .child-row.is-done .child-summary {
   -webkit-line-clamp: 1;
   color: var(--text-3);

@@ -35,11 +35,11 @@ function fakeService(auto = false) {
       list.push(p);
       if (auto) queueMicrotask(() => p.resolve(answer()));
     });
-  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, description: body.prompt, kind: body.kind ?? "task", model: body.model ?? null, draft: true });
+  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, spec: body.spec, kind: body.kind ?? "task", model: body.model ?? null, draft: true });
   const patchAnswer = (key: string, body: UpdateTicketBody): Ticket => {
     let t = applyTicketPatch(server!, body);
     if (body.projectId && body.projectId !== server!.projectId) t = { ...t, key: `${projects[body.projectId]!.key}-${++seq}` };
-    return (server = { ...t, title: t.description.slice(0, 20) });
+    return (server = { ...t, title: t.spec.slice(0, 20) });
   };
   const deps: DraftDeps = {
     client: {
@@ -64,7 +64,7 @@ describe("DraftSession: lazy creation", () => {
     const svc = fakeService(true);
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
     s.edit({ projectId: "p2", branch: null, baseBranch: null, useWorktree: null });
-    s.edit({ description: "   " });
+    s.edit({ spec: "   " });
     await tick(20);
     expect(svc.creates.length).toBe(0);
     expect(s.key).toBeNull();
@@ -74,18 +74,18 @@ describe("DraftSession: lazy creation", () => {
   test("the first edit worth keeping creates the draft once, and names its key", async () => {
     const svc = fakeService();
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
-    s.edit({ description: "F" });
-    s.edit({ description: "Fi" });
+    s.edit({ spec: "F" });
+    s.edit({ spec: "Fi" });
     expect(svc.creates.length).toBe(1);
     expect((svc.creates[0]!.body as CreateTicketBody).draft).toBe(true);
-    expect((svc.creates[0]!.body as CreateTicketBody).prompt).toBe("F");
+    expect((svc.creates[0]!.body as CreateTicketBody).spec).toBe("F");
     svc.creates[0]!.resolve(svc.createAnswer(svc.creates[0]!.body as CreateTicketBody));
     await tick(20);
     expect(s.key).toBe("WEB-4");
     expect(svc.rekeys).toEqual([[null, "WEB-4"]]);
     // What was typed while the POST was out goes out as the first PATCH, and stays in the editor.
-    expect(s.local.description).toBe("Fi");
-    expect(svc.patches.map((p) => p.body)).toEqual([{ description: "Fi" }]);
+    expect(s.local.spec).toBe("Fi");
+    expect(svc.patches.map((p) => p.body)).toEqual([{ spec: "Fi" }]);
     expect(svc.creates.length).toBe(1);
   });
 });
@@ -94,7 +94,7 @@ describe("DraftSession: saving edits", () => {
   const saved = async () => {
     const svc = fakeService(true);
     const s = new DraftSession(blank(), null, svc.deps, "n1", 30);
-    s.edit({ description: "Fix the header" });
+    s.edit({ spec: "Fix the header" });
     await tick(5);
     svc.patches.length = 0;
     return { svc, s };
@@ -102,31 +102,31 @@ describe("DraftSession: saving edits", () => {
 
   test("edits are debounced into one PATCH of only what changed", async () => {
     const { svc, s } = await saved();
-    s.edit({ description: "Fix the header now" });
+    s.edit({ spec: "Fix the header now" });
     s.edit({ permissionMode: "ask" });
     await tick(10);
     expect(svc.patches.length).toBe(0);
     await tick(40);
-    expect(svc.patches.map((p) => p.body)).toEqual([{ description: "Fix the header now", permissionMode: "ask" }]);
+    expect(svc.patches.map((p) => p.body)).toEqual([{ spec: "Fix the header now", permissionMode: "ask" }]);
     expect(s.unsent).toBe(false);
   });
 
   test("while edits are unsent the service's copy is ignored; once they're sent it's taken", async () => {
     const { svc, s } = await saved();
-    s.edit({ description: "mine" });
-    s.receive({ ...svc.server, description: "theirs", updatedAt: 99 });
-    expect(s.local.description).toBe("mine");
+    s.edit({ spec: "mine" });
+    s.receive({ ...svc.server, spec: "theirs", updatedAt: 99 });
+    expect(s.local.spec).toBe("mine");
     await s.flush();
-    s.receive({ ...svc.server, description: "theirs later", permissionMode: "read_only" });
-    expect(s.local.description).toBe("theirs later");
+    s.receive({ ...svc.server, spec: "theirs later", permissionMode: "read_only" });
+    expect(s.local.spec).toBe("theirs later");
     expect(s.local.permissionMode).toBe("read_only");
     expect(s.unsent).toBe(false);
   });
 
   test("another ticket's upsert is never taken", async () => {
     const { svc, s } = await saved();
-    s.receive({ ...svc.server, id: "other", description: "nope" });
-    expect(s.local.description).toBe("Fix the header");
+    s.receive({ ...svc.server, id: "other", spec: "nope" });
+    expect(s.local.spec).toBe("Fix the header");
   });
 
   test("moving to another project PATCHes projectId and follows the new key", async () => {
@@ -136,7 +136,7 @@ describe("DraftSession: saving edits", () => {
     expect(svc.patches.map((p) => [p.key, p.body])).toEqual([["WEB-4", { projectId: "p2" }]]);
     expect(s.key).toBe("API-5");
     expect(svc.rekeys.at(-1)).toEqual(["WEB-4", "API-5"]);
-    s.edit({ description: "next" });
+    s.edit({ spec: "next" });
     await s.flush();
     expect(svc.patches.at(-1)!.key).toBe("API-5");
   });
@@ -144,17 +144,17 @@ describe("DraftSession: saving edits", () => {
   test("a failed PATCH reports and leaves the edit unsent, to go with the next one", async () => {
     const svc = fakeService();
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
-    s.edit({ description: "x" });
+    s.edit({ spec: "x" });
     svc.creates[0]!.resolve(svc.createAnswer(svc.creates[0]!.body as CreateTicketBody));
     await tick(1);
-    s.edit({ description: "xy" });
+    s.edit({ spec: "xy" });
     const flushed = s.flush();
     await tick(1);
     svc.patches[0]!.reject(new Error("409 conflict"));
     expect(await flushed).toBe(false);
     expect(svc.errors).toEqual(["409 conflict"]);
     expect(s.unsent).toBe(true);
-    expect(s.local.description).toBe("xy");
+    expect(s.local.spec).toBe("xy");
   });
 });
 
@@ -162,7 +162,7 @@ describe("DraftSession: submit and discard", () => {
   test("submit saves what's waiting (creating it) before launching", async () => {
     const svc = fakeService(true);
     const s = new DraftSession(blank(), null, svc.deps, "n1", 1000);
-    s.edit({ description: "Ship it" });
+    s.edit({ spec: "Ship it" });
     s.edit({ skipAgentReview: true });
     const t = await s.submit(true);
     expect(svc.creates.length).toBe(1);
@@ -175,7 +175,7 @@ describe("DraftSession: submit and discard", () => {
   test("a failed save means no submit", async () => {
     const svc = fakeService();
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
-    s.edit({ description: "x" });
+    s.edit({ spec: "x" });
     const sub = s.submit(false);
     svc.creates[0]!.reject(new Error("offline"));
     expect(await sub).toBeNull();
@@ -185,7 +185,7 @@ describe("DraftSession: submit and discard", () => {
   test("discard deletes a saved draft (after its create lands) and sends nothing else", async () => {
     const svc = fakeService();
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
-    s.edit({ description: "x" });
+    s.edit({ spec: "x" });
     const gone = s.discard();
     svc.creates[0]!.resolve(svc.createAnswer(svc.creates[0]!.body as CreateTicketBody));
     expect(await gone).toBe(true);
@@ -198,11 +198,11 @@ describe("DraftSession: submit and discard", () => {
 
 describe("rebase", () => {
   test("keeps what the editor changed since the request, takes the rest from the service", () => {
-    const sent = { ...blank(), description: "a", permissionMode: null };
-    const local = { ...sent, description: "ab" };
+    const sent = { ...blank(), spec: "a", permissionMode: null };
+    const local = { ...sent, spec: "ab" };
     const server = { ...sent, id: "t1", key: "WEB-4", title: "a", permissionMode: "ask" as const };
     const out = rebase(server, sent, local);
-    expect([out.id, out.key, out.title, out.description, out.permissionMode]).toEqual(["t1", "WEB-4", "a", "ab", "ask"]);
+    expect([out.id, out.key, out.title, out.spec, out.permissionMode]).toEqual(["t1", "WEB-4", "a", "ab", "ask"]);
   });
 });
 
@@ -228,11 +228,11 @@ describe("unloading the page mid-debounce", () => {
     const sent: [string, string, unknown][] = [];
     svc.deps.keepalive = (method, path, body) => void sent.push([method, path, body]);
     const s = paneDraftSession("u1", () => false, () => new DraftSession(blank(), null, svc.deps, "n1", 30));
-    s.edit({ description: "Fix the header" });
+    s.edit({ spec: "Fix the header" });
     await tick(5);
-    s.edit({ description: "Fix the header and footer", permissionMode: "ask" });
+    s.edit({ spec: "Fix the header and footer", permissionMode: "ask" });
     expect(unloadDraftSessions()).toBe(1);
-    expect(sent).toEqual([["PATCH", "/tickets/WEB-4", { description: "Fix the header and footer", permissionMode: "ask" }]]);
+    expect(sent).toEqual([["PATCH", "/tickets/WEB-4", { spec: "Fix the header and footer", permissionMode: "ask" }]]);
     // pagehide after beforeunload: nothing left to send.
     expect(unloadDraftSessions()).toBe(0);
     await tick(50);
@@ -240,17 +240,17 @@ describe("unloading the page mid-debounce", () => {
     dropDraftSession("u1", s);
   });
 
-  test("an unsaved New session with a prompt is created; an empty one, or one whose create is out, isn't", async () => {
+  test("an unsaved New session with a spec is created; an empty one, or one whose create is out, isn't", async () => {
     const svc = fakeService();
     const sent: [string, string, unknown][] = [];
     svc.deps.keepalive = (method, path, body) => void sent.push([method, path, body]);
     const empty = new DraftSession(blank(), null, svc.deps, "n1");
     expect(empty.unload()).toBe(false);
     const creating = new DraftSession(blank(), null, svc.deps, "n2");
-    creating.edit({ description: "x" }); // its POST is out (unanswered)
+    creating.edit({ spec: "x" }); // its POST is out (unanswered)
     expect(creating.unload()).toBe(false);
-    const typed = new DraftSession({ ...blank(), description: "Typed, never saved" }, null, svc.deps, "n3");
+    const typed = new DraftSession({ ...blank(), spec: "Typed, never saved" }, null, svc.deps, "n3");
     expect(typed.unload()).toBe(true);
-    expect(sent.map(([m, p, b]) => [m, p, (b as CreateTicketBody).prompt, (b as CreateTicketBody).draft])).toEqual([["POST", "/tickets", "Typed, never saved", true]]);
+    expect(sent.map(([m, p, b]) => [m, p, (b as CreateTicketBody).spec, (b as CreateTicketBody).draft])).toEqual([["POST", "/tickets", "Typed, never saved", true]]);
   });
 });

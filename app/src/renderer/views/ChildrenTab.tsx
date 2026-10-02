@@ -1,10 +1,10 @@
 // Conductor → "Tickets" tab: a live list of the conductor's child tickets, derived from the
-// store (ticket.upserted / summary.added keep it current; nothing polls).
+// store (ticket.upserted / activity.added keep it current; nothing polls).
 
 import { useEffect, useMemo, useRef } from "react";
 import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestSummary, plainText, progressLabel, progressOf, workingTitle } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, plainText, progressLabel, progressOf, workingTitle } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -23,18 +23,18 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
 
-  // The store backfills summaries for moving tickets; fill in the rest (older done children).
+  // The store backfills Activity for moving tickets; fill in the rest (older done children).
   const fetched = useRef(new Set<string>());
   useEffect(() => {
     for (const c of children) {
-      if (state.summaries[c.sessionId] || fetched.current.has(c.id)) continue;
+      if (state.activity[c.sessionId] || fetched.current.has(c.id)) continue;
       fetched.current.add(c.id);
       client
-        .listSummaries(c.key)
-        .then((summaries) => dispatch({ type: "summaries", sessionId: c.sessionId, summaries }))
+        .listActivity(c.key)
+        .then((activity) => dispatch({ type: "activity", sessionId: c.sessionId, activity }))
         .catch(() => {});
     }
-  }, [children, client, dispatch, state.summaries]);
+  }, [children, client, dispatch, state.activity]);
   useEffect(() => fetched.current.clear(), [epoch]);
 
   const open = (key: string) => openTicket(key);
@@ -93,7 +93,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) => void }) {
   const { state } = useStore();
   const deps = depStates(state.tickets, c, state.keyAliases);
-  const summary = latestSummary(state, c.sessionId);
+  const latest = latestActivity(state, c.sessionId);
   const attention = attentionOf(c);
   const model = modelOf(c);
   const showDriver = hasCustomDriver(state, c);
@@ -143,17 +143,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
             <span>{c.blockedReason || "Blocked"}</span>
           </div>
         ) : (
-          summary && (
-            <>
-              <div className="child-summary">{plainText(summary.body)}</div>
-              {summary.attachments?.length > 0 && (
-                <div className="child-attachments">
-                  <Icon name="image" size={11} />
-                  {attachmentsLabel(summary.attachments)}
-                </div>
-              )}
-            </>
-          )
+          latest && <div className="child-summary">{plainText(latest.body)}</div>
         )}
 
         {(deps.length > 0 || showDriver || model) && (

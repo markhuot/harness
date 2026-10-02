@@ -1,9 +1,9 @@
-// Screenshots and recordings an agent attached to a summary: a strip of thumbnails under the text,
+// Screenshots and recordings attached to a ticket: a strip of thumbnails under the text,
 // and a lightbox that shows one at up to the window's size. URLs come from the current client on
 // every render (they carry the token), so a rotated token swaps them for working ones.
 
 import { useEffect, useState } from "react";
-import type { SummaryAttachment } from "@harness/shared";
+import type { Attachment } from "@harness/shared";
 import { stepAttachment, thumbnailBox } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
@@ -11,7 +11,7 @@ import { Modal } from "./bits";
 
 const THUMB_HEIGHT = 96;
 
-export function Attachments({ list }: { list: SummaryAttachment[] }) {
+export function Attachments({ list }: { list: Attachment[] }) {
   const { client } = useStore();
   const [open, setOpen] = useState<number | null>(null);
   if (!list.length) return null;
@@ -29,7 +29,7 @@ export function Attachments({ list }: { list: SummaryAttachment[] }) {
   );
 }
 
-function Thumbnail({ attachment: a, url, onOpen }: { attachment: SummaryAttachment; url: string; onOpen: () => void }) {
+function Thumbnail({ attachment: a, url, onOpen }: { attachment: Attachment; url: string; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
   const box = thumbnailBox(a, THUMB_HEIGHT);
   return (
@@ -68,7 +68,7 @@ export function Missing({ name }: { name: string }) {
 }
 
 /** One attachment at a time over the app. ← and → (or the side buttons) step through the list (a summary's attachments, or the images in a piece of markdown); Esc or the backdrop closes. */
-export function Lightbox({ list, index, onIndex, onClose }: { list: SummaryAttachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+export function Lightbox({ list, index, onIndex, onClose }: { list: Attachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const { client } = useStore();
   // Attachments renders this only with a non-empty list.
   const a = list[Math.min(index, list.length - 1)]!;

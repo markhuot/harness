@@ -6,13 +6,10 @@ import {
   childrenOf,
   COMPOSER_PLACEHOLDER,
   composerHint,
-  depChipTitle,
-  dependencyStates,
   effectiveTab,
   hasCustomDriver,
   moveSwitchLabel,
   nextTab,
-  openingTab,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
@@ -29,15 +26,17 @@ import {
   type TicketTab,
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
-import { FileLinkScope, Markdown } from "../components/Markdown";
-import { Attachments } from "../components/Attachments";
+import { FileLinkScope } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
-import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusDot, StatusPill, Switch, TicketKey, useNow } from "../components/bits";
+import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, Switch, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
 import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
+import { SpecTab } from "./SpecTab";
+import { ActivityTab } from "./ActivityTab";
+import { composerLog } from "../state/composer";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
@@ -46,7 +45,6 @@ import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
-import { useStickToBottom } from "../components/stickToBottom";
 import { useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
@@ -62,7 +60,7 @@ const keyHint = (id: string) => {
 
 /**
  * The tab body's scroller: the first element inside `root` that scrolls vertically (each tab has
- * its own, e.g. the transcript's or the summaries' list). Null for tabs that don't scroll here,
+ * its own, e.g. the transcript's or the Activity list). Null for tabs that don't scroll here,
  * like the browser canvas or a plugin iframe.
  */
 function scrollerIn(root: HTMLElement | null): HTMLElement | null {
@@ -85,14 +83,11 @@ export function TicketDetail({
   ticketKey,
   tab: paneTab,
   zoomed,
-  tabChosen = false,
 }: {
   paneId: string;
   ticketKey: string;
   tab: TicketTab;
   zoomed: boolean;
-  /** The pane's tab was picked for it (a draft just submitted from this pane): keep it. */
-  tabChosen?: boolean;
 }) {
   const { state, client, dispatch, epoch } = useStore();
   const scope = usePaneScope();
@@ -107,7 +102,7 @@ export function TicketDetail({
   /** The remote ID `related` was fetched for (undefined until the detail loads) */
   const relatedFor = useRef<string | null | undefined>(undefined);
 
-  // Detail (summaries, runs, session) — refetch on reconnect.
+  // Detail (activity, runs, session) — refetch on reconnect.
   useEffect(() => {
     let cancelled = false;
     client
@@ -154,31 +149,9 @@ export function TicketDetail({
   const asideRef = useRef<HTMLElement>(null);
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
   const tabs = ticket ? visibleTabs({ conductor: isConductor(ticket), subagents, pluginTabs }) : [];
-  // A plugin tab that doesn't apply (or no longer exists) falls back to Summaries once tabs are known.
+  // A plugin tab that doesn't apply (or no longer exists) falls back to the Spec once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
   const tab = ticket ? effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents }) : paneTab;
-  // A ticket opened on the default Summaries tab moves to the Transcript when it has no summaries.
-  // Decided once per ticket the pane shows, when its summaries first load, so a later click on
-  // Summaries stays there.
-  const openedOn = useRef<string | null>(paneTab !== "summaries" || tabChosen ? ticketKey : null);
-  const summaries = ticket ? state.summaries[ticket.sessionId] : undefined;
-  const draft = !!ticket?.draft;
-  useEffect(() => {
-    if (openedOn.current === ticketKey) return;
-    // A draft's pane has no tabs; submitting it picks the tab it goes to.
-    if (draft) {
-      openedOn.current = ticketKey;
-      return;
-    }
-    if (paneTab !== "summaries") {
-      openedOn.current = ticketKey;
-      return;
-    }
-    const t = openingTab(summaries);
-    if (!t) return;
-    openedOn.current = ticketKey;
-    if (t !== "summaries") updatePanes(scope, (s) => setPaneTab(s, paneId, t));
-  }, [ticketKey, paneTab, summaries, scope, paneId, draft]);
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {
@@ -274,7 +247,8 @@ export function TicketDetail({
         {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
             {TAB_LABEL[t]}
-            {t === "summaries" && (state.summaries[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.summaries[ticket.sessionId]!.length}</span>}
+            {t === "spec" && (ticket.specRevision ?? 1) > 1 && <span className="count" title="Revisions">{ticket.specRevision}</span>}
+            {t === "activity" && (state.activity[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.activity[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
             {t === "agents" && (subagents?.length ?? 0) > 0 && <span className="count">{subagents!.length}</span>}
             {t === "agents" && agentsRunning && <span className="live-dot" title={AGENTS_LIVE_LABEL} />}
@@ -293,7 +267,8 @@ export function TicketDetail({
       </nav>
       <div className="detail-body">
         <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
-        {tab === "summaries" && <Summaries ticket={ticket} />}
+        {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
+        {tab === "activity" && <ActivityTab ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
         {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
         {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
@@ -313,7 +288,7 @@ export function TicketDetail({
         )}
         </FileLinkScope>
       </div>
-      <MessageComposer ticket={ticket} key={ticket.id} />
+      <MessageComposer ticket={ticket} tab={tab} key={ticket.id} />
     </aside>
   );
 }
@@ -349,7 +324,7 @@ function DetailHeader({
   const label = keyLabel(ticket);
 
   const remove = async () => {
-    if (!confirm(`Delete ${label}? Its transcript and summaries are removed too.`)) return;
+    if (!confirm(`Delete ${label}? Its transcript, spec history and activity are removed too.`)) return;
     const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
     if (ok) onClose();
   };
@@ -638,68 +613,7 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
   );
 }
 
-function Summaries({ ticket }: { ticket: Ticket }) {
-  const { state } = useStore();
-  const now = useNow();
-  const list = state.summaries[ticket.sessionId] ?? [];
-  const deps = dependencyStates(state, ticket);
-  // Newest is last; open scrolled to it and follow new summaries until the user scrolls up.
-  const box = useStickToBottom<HTMLDivElement>();
-
-  return (
-    <div className="summaries" ref={box}>
-      {ticket.description && (
-        <section className="brief">
-          <div className="section-title">{ticket.status === "planning" ? "Plan" : "Brief"}</div>
-          <Markdown text={ticket.description} />
-        </section>
-      )}
-      {deps.length > 0 && (
-        <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-          <span className="section-title">Depends on</span>
-          {deps.map((d) => (
-            <span key={d.key} className={`chip ${d.state}`} data-dep-state={d.state} title={depChipTitle(d)}>
-              {d.done && <Icon name="check" size={9} strokeWidth={3} />}
-              {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
-            </span>
-          ))}
-        </div>
-      )}
-      {list.length === 0 ? (
-        <div className="empty">
-          <Icon name="fileText" />
-          <strong>No summaries yet</strong>
-          The agent posts short progress updates here as it works.
-        </div>
-      ) : (
-        <ol className="summary-list">
-          {list.map((s) => (
-            <li key={s.id} className={`summary summary-${s.author}`}>
-              <div className="summary-rail">
-                <span className="summary-avatar">
-                  <Icon name={s.author === "human" ? "user" : s.author === "system" ? "zap" : "sparkle"} size={11} />
-                </span>
-              </div>
-              <div className="summary-main">
-                <div className="summary-meta">
-                  <strong>{s.author === "agent" ? "Agent" : s.author === "human" ? "You" : "Harness"}</strong>
-                  <span className="muted" title={new Date(s.createdAt).toLocaleString()}>
-                    {relativeTime(s.createdAt, now)}
-                  </span>
-                </div>
-                <Markdown text={s.body} />
-                {/* An older service sends summaries without attachments. */}
-                <Attachments list={s.attachments ?? []} />
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-}
-
-function MessageComposer({ ticket }: { ticket: Ticket }) {
+function MessageComposer({ ticket, tab }: { ticket: Ticket; tab: TicketTab }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
@@ -711,6 +625,9 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
   const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
   const move = !!switchLabel && moveFirst;
+  // From Spec and Activity the message is logged to Activity; elsewhere it's transcript only.
+  const { log, destination } = composerLog(tab);
+  const hint = composerHint(ticket, move);
 
   useEffect(() => {
     const el = ref.current;
@@ -728,7 +645,7 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move, log }));
     setSending(false);
     if (ok) {
       setText("");
@@ -761,7 +678,9 @@ function MessageComposer({ ticket }: { ticket: Ticket }) {
       />
       <div className="composer-bar">
         {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} />}
-        <span className="muted">{composerHint(ticket, move)}</span>
+        <span className="muted" data-testid="composer-hint">
+          {hint ? `${hint} · ${destination}` : destination}
+        </span>
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">
