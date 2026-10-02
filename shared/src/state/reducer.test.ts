@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import type { Project, Run, Session, Summary, Ticket, TranscriptEntry } from "../index";
+import type { ActivityEntry, Project, Run, Session, SpecRevisionInfo, Ticket, TranscriptEntry } from "../index";
 import {
   boardColumns,
   dependencyStates,
   hasCustomDriver,
   initialState,
   isReady,
+  latestActivity,
   liveDelta,
   mergeById,
   reducer,
+  specBody,
+  specBodyKey,
   type Action,
   type State,
 } from "./reducer";
@@ -33,7 +36,7 @@ const ticket = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   projectId: "p1",
   kind: "task",
   title: id,
-  description: "",
+  spec: "",
   status: "planning",
   sessionId: `s-${id}`,
   driver: "dummy",
@@ -68,14 +71,27 @@ const entry = (id: string, seq: number, over: Partial<TranscriptEntry> = {}): Tr
   ...over,
 });
 
-const summary = (id: string, createdAt: number, body = id): Summary => ({
+const activity = (id: string, createdAt: number, over: Partial<ActivityEntry> = {}): ActivityEntry => ({
   id,
   sessionId: "s1",
   ticketId: "t1",
+  kind: "note",
   author: "agent",
-  body,
+  body: id,
+  meta: {},
   createdAt,
-  attachments: [],
+  ...over,
+});
+
+const revision = (rev: number, over: Partial<SpecRevisionInfo> = {}): SpecRevisionInfo => ({
+  rev,
+  author: "agent",
+  runId: null,
+  runKind: null,
+  note: `rev ${rev}`,
+  approvedBaseline: false,
+  createdAt: rev * 10,
+  ...over,
 });
 
 const run = (id: string, status: Run["status"]): Run => ({
@@ -189,7 +205,7 @@ describe("streaming deltas", () => {
   });
 });
 
-describe("summaries", () => {
+describe("activity", () => {
   test("ordered by createdAt and deduped when detail backfill overlaps live events", () => {
     const t = ticket("t1", { sessionId: "s1" });
     const session: Session = {
@@ -208,13 +224,131 @@ describe("summaries", () => {
     };
     const s = apply(
       initialState,
-      ev({ kind: "summary.added", summary: summary("b", 20) }),
-      { type: "detail", detail: { ticket: t, session, summaries: [summary("a", 10), summary("b", 20)], runs: [], dependents: [], children: [] } },
-      ev({ kind: "summary.added", summary: summary("c", 30) }),
+      ev({ kind: "activity.added", entry: activity("b", 20) }),
+      { type: "detail", detail: { ticket: t, session, activity: [activity("a", 10), activity("b", 20)], runs: [], dependents: [], children: [] } },
+      ev({ kind: "activity.added", entry: activity("c", 30) }),
     );
-    expect(s.summaries.s1!.map((x) => x.id)).toEqual(["a", "b", "c"]);
+    expect(s.activity.s1!.map((x) => x.id)).toEqual(["a", "b", "c"]);
     expect(s.tickets.t1).toEqual(t);
     expect(s.sessions.s1).toEqual(session);
+  });
+
+  test("an entry added again replaces the old copy in place, and one posted late sorts by createdAt", () => {
+    const s = apply(
+      initialState,
+      { type: "activity", sessionId: "s1", activity: [activity("a", 10), activity("c", 30)] },
+      ev({ kind: "activity.added", entry: activity("a", 10, { body: "edited" }) }),
+      ev({ kind: "activity.added", entry: activity("b", 20) }),
+      ev({ kind: "activity.added", entry: activity("x", 5, { sessionId: "s2" }) }),
+    );
+    expect(s.activity.s1!.map((x) => [x.id, x.body])).toEqual([["a", "edited"], ["b", "b"], ["c", "c"]]);
+    expect(s.activity.s2!.map((x) => x.id)).toEqual(["x"]);
+  });
+
+  test("latestActivity is the newest entry, or the newest of the kinds asked for", () => {
+    const s = apply(initialState, {
+      type: "activity",
+      sessionId: "s1",
+      activity: [activity("n1", 10), activity("sub", 20, { kind: "submitted" }), activity("n2", 30), activity("m", 40, { kind: "message", author: "human" })],
+    });
+    expect(latestActivity(s, "s1")?.id).toBe("m");
+    expect(latestActivity(s, "s1", ["note"])?.id).toBe("n2");
+    expect(latestActivity(s, "s1", ["submitted", "blocked"])?.id).toBe("sub");
+    expect(latestActivity(s, "s1", ["failed"])).toBeUndefined();
+    expect(latestActivity(s, "nope")).toBeUndefined();
+  });
+});
+
+describe("spec revisions", () => {
+  const revised = (rev: number, over: Partial<Extract<Action, { type: "event" }>["event"] & { kind: "spec.revised" }> = {}): Action =>
+    ev({ kind: "spec.revised", ticketId: "t1", rev, author: "agent", note: `rev ${rev}`, ...over });
+
+  test("spec.revised appends to a loaded list only: an unloaded one stays unknown", () => {
+    const untouched = apply(initialState, revised(2));
+    expect(untouched.specRevisions.t1).toBeUndefined();
+    expect(untouched).toBe(initialState);
+
+    const s = apply(initialState, { type: "specRevisions", ticketId: "t1", revisions: [revision(1)] }, revised(2, { runId: "r1", runKind: "work", createdAt: 99 }), revised(3));
+    expect(s.specRevisions.t1!.map((r) => r.rev)).toEqual([1, 2, 3]);
+    expect(s.specRevisions.t1![1]).toEqual({ rev: 2, author: "agent", note: "rev 2", runId: "r1", runKind: "work", approvedBaseline: false, createdAt: 99 });
+    // An older service's event: no run, no time.
+    expect(s.specRevisions.t1![2]).toMatchObject({ runId: null, runKind: null, createdAt: 0 });
+  });
+
+  test("a repeated spec.revised replaces its revision instead of duplicating it, and the list stays ordered by rev", () => {
+    const s = apply(initialState, { type: "specRevisions", ticketId: "t1", revisions: [revision(1), revision(3)] }, revised(2), revised(3, { note: "again" }));
+    expect(s.specRevisions.t1!.map((r) => [r.rev, r.note])).toEqual([[1, "rev 1"], [2, "rev 2"], [3, "again"]]);
+  });
+
+  test("specRevisions marks the ticket's baseline as approved, whatever the server sent", () => {
+    const s = apply(
+      initialState,
+      ev({ kind: "ticket.upserted", ticket: ticket("t1", { specRevision: 3, specBaselineRevision: 2 }) }),
+      { type: "specRevisions", ticketId: "t1", revisions: [revision(1, { approvedBaseline: true }), revision(2), revision(3)] },
+    );
+    expect(s.specRevisions.t1!.map((r) => r.approvedBaseline)).toEqual([false, true, false]);
+  });
+
+  test("specRevisions keeps the server's flags when the ticket isn't loaded", () => {
+    const s = apply(initialState, { type: "specRevisions", ticketId: "t1", revisions: [revision(2), revision(1, { approvedBaseline: true })] });
+    expect(s.specRevisions.t1!.map((r) => [r.rev, r.approvedBaseline])).toEqual([[1, true], [2, false]]);
+  });
+
+  test("ticket.upserted re-marks the baseline on a loaded list, and leaves it when the ticket doesn't say", () => {
+    let s = apply(initialState, { type: "specRevisions", ticketId: "t1", revisions: [revision(1, { approvedBaseline: true }), revision(2), revision(3)] });
+    s = apply(s, ev({ kind: "ticket.upserted", ticket: ticket("t1", { specRevision: 3, specBaselineRevision: 3 }) }));
+    expect(s.specRevisions.t1!.map((r) => r.approvedBaseline)).toEqual([false, false, true]);
+
+    // null: the ticket went back to planning, nothing is approved.
+    s = apply(s, ev({ kind: "ticket.upserted", ticket: ticket("t1", { specRevision: 3, specBaselineRevision: null }) }));
+    expect(s.specRevisions.t1!.map((r) => r.approvedBaseline)).toEqual([false, false, false]);
+
+    s = apply(s, ev({ kind: "ticket.upserted", ticket: ticket("t1", { specRevision: 3, specBaselineRevision: 1 }) }));
+    const before = s.specRevisions;
+    // An older service omits specBaselineRevision: keep what's marked.
+    s = apply(s, ev({ kind: "ticket.upserted", ticket: ticket("t1") }));
+    expect(s.specRevisions).toBe(before);
+    expect(s.specRevisions.t1!.map((r) => r.approvedBaseline)).toEqual([true, false, false]);
+  });
+
+  test("ticket.upserted doesn't create a list for a ticket whose revisions were never loaded", () => {
+    const s = apply(initialState, ev({ kind: "ticket.upserted", ticket: ticket("t1", { specBaselineRevision: 1 }) }));
+    expect(s.specRevisions).toBe(initialState.specRevisions);
+  });
+
+  test("specRevision stores the body; specBody serves the current revision from the ticket and older ones once fetched", () => {
+    let s = apply(
+      initialState,
+      ev({ kind: "ticket.upserted", ticket: ticket("t1", { spec: "current body", specRevision: 3 }) }),
+      { type: "specRevision", ticketId: "t1", revision: { ...revision(1), body: "first body" } },
+    );
+    expect(s.specBodies[specBodyKey("t1", 1)]).toBe("first body");
+    // The list wasn't loaded, so fetching one body doesn't invent a partial list.
+    expect(s.specRevisions.t1).toBeUndefined();
+    expect(specBody(s, "t1", 1)).toBe("first body");
+    expect(specBody(s, "t1", 3)).toBe("current body");
+    expect(specBody(s, "t1", 2)).toBeUndefined();
+    // A fetched body for the current revision doesn't shadow the ticket's own (newer) one.
+    s = apply(s, { type: "specRevision", ticketId: "t1", revision: { ...revision(3), body: "stale" } });
+    expect(specBody(s, "t1", 3)).toBe("current body");
+    // Bodies are per ticket.
+    expect(specBody(s, "t2", 1)).toBeUndefined();
+  });
+
+  test("specRevision merges its metadata into a loaded list", () => {
+    const s = apply(
+      initialState,
+      { type: "specRevisions", ticketId: "t1", revisions: [revision(1)] },
+      { type: "specRevision", ticketId: "t1", revision: { ...revision(2, { note: "from GET" }), body: "b" } },
+    );
+    expect(s.specRevisions.t1!.map((r) => [r.rev, r.note])).toEqual([[1, "rev 1"], [2, "from GET"]]);
+    expect(s.specRevisions.t1![1]).not.toHaveProperty("body");
+  });
+
+  test("a ticket without specRevision is on revision 1", () => {
+    const s = apply(initialState, ev({ kind: "ticket.upserted", ticket: ticket("t1", { spec: "only" }) }));
+    expect(specBody(s, "t1", 1)).toBe("only");
+    expect(specBody(s, "t1", 2)).toBeUndefined();
   });
 });
 

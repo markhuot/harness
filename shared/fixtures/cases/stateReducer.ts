@@ -3,7 +3,7 @@
 import { initialState, isReady, mergeById, positionForDrop, transcriptKey, type State } from "../../src/state";
 import type { Ticket } from "../../src/protocol";
 import { cases } from "../case";
-import { detail, entry, ev, project, run, scenario, session, settings, snapshot, sub, summary, ticket, upsert, watcher, PROBE_NAMES } from "../board";
+import { activity, detail, entry, ev, project, revision, run, scenario, session, settings, snapshot, sub, ticket, upsert, watcher, PROBE_NAMES } from "../board";
 
 export const probeNames = PROBE_NAMES;
 
@@ -69,17 +69,85 @@ export const scenarios = [
     { actions: [ev({ kind: "run.upserted", run: run("r1", "succeeded") }), ev({ kind: "run.upserted", run: run("r2", "failed") })], probes: [["liveDelta", "s1"]] },
   ]),
 
-  // summaries
-  scenario("summaries ordered by createdAt and deduped when detail backfill overlaps live events", [
-    { actions: [ev({ kind: "summary.added", summary: summary("b", 20) })], probes: [["latestSummary", "s1"]] },
+  // activity
+  scenario("activity ordered by createdAt and deduped when detail backfill overlaps live events", [
+    { actions: [ev({ kind: "activity.added", entry: activity("b", 20) })], probes: [["latestActivity", "s1"]] },
     {
-      actions: [{ type: "detail", detail: { ...detail(ticket("t1", { sessionId: "s1" })), summaries: [summary("a", 10), summary("b", 20)] } }],
-      probes: [["latestSummary", "s1"]],
+      actions: [{ type: "detail", detail: { ...detail(ticket("t1", { sessionId: "s1" })), activity: [activity("a", 10), activity("b", 20)] } }],
+      probes: [["latestActivity", "s1"]],
     },
-    { actions: [ev({ kind: "summary.added", summary: summary("c", 30) })], probes: [["latestSummary", "s1"], ["latestSummary", "nope"]] },
+    { actions: [ev({ kind: "activity.added", entry: activity("c", 30) })], probes: [["latestActivity", "s1"], ["latestActivity", "nope"]] },
   ]),
-  scenario("summaries backfill action merges by id", [
-    { actions: [{ type: "summaries", sessionId: "s1", summaries: [summary("z", 5), summary("y", 1)] }, { type: "summaries", sessionId: "s1", summaries: [summary("z", 5, { body: "edited" })] }] },
+  scenario("activity backfill action merges by id", [
+    { actions: [{ type: "activity", sessionId: "s1", activity: [activity("z", 5), activity("y", 1)] }, { type: "activity", sessionId: "s1", activity: [activity("z", 5, { body: "edited" })] }] },
+  ]),
+  scenario("activity.added replaces an entry in place and sorts a late one by createdAt", [
+    {
+      actions: [
+        { type: "activity", sessionId: "s1", activity: [activity("a", 10), activity("c", 30)] },
+        ev({ kind: "activity.added", entry: activity("a", 10, { body: "edited" }) }),
+        ev({ kind: "activity.added", entry: activity("b", 20, { kind: "submitted", meta: { specRevision: 2 } }) }),
+        ev({ kind: "activity.added", entry: activity("x", 5, { sessionId: "s2" }) }),
+      ],
+    },
+  ]),
+  scenario("latestActivity filtered by kind", [
+    {
+      actions: [
+        {
+          type: "activity",
+          sessionId: "s1",
+          activity: [
+            activity("n1", 10),
+            activity("sub", 20, { kind: "submitted" }),
+            activity("n2", 30),
+            activity("m", 40, { kind: "message", author: "human" }),
+          ],
+        },
+      ],
+      probes: [["latestActivity", "s1"], ["latestActivity", "s1", ["note"]], ["latestActivity", "s1", ["submitted", "blocked"]], ["latestActivity", "s1", ["failed"]], ["latestActivity", "s1", []]],
+    },
+  ]),
+
+  // spec revisions
+  scenario("spec.revised appends to a loaded revision list only", [
+    { actions: [ev({ kind: "spec.revised", ticketId: "t1", rev: 2, author: "agent", note: "unloaded" })], probes: [["specRevisions", "t1"]], full: true },
+    {
+      actions: [
+        { type: "specRevisions", ticketId: "t1", revisions: [revision(1), revision(3)] },
+        ev({ kind: "spec.revised", ticketId: "t1", rev: 2, author: "agent", note: "Plan", runId: "r1", runKind: "plan", createdAt: 15 }),
+        ev({ kind: "spec.revised", ticketId: "t1", rev: 4, author: "human", note: "Edited by hand" }),
+        ev({ kind: "spec.revised", ticketId: "t1", rev: 3, author: "agent", note: "again" }),
+      ],
+      probes: [["specRevisions", "t1"]],
+    },
+  ]),
+  scenario("the ticket's specBaselineRevision decides which revision is approved", [
+    { actions: [{ type: "specRevisions", ticketId: "t1", revisions: [revision(2), revision(1, { approvedBaseline: true })] }], probes: [["specRevisions", "t1"]] },
+    { actions: [upsert(ticket("t1", { specRevision: 3, specBaselineRevision: 2 }))], probes: [["specRevisions", "t1"]] },
+    { actions: [{ type: "specRevisions", ticketId: "t1", revisions: [revision(1, { approvedBaseline: true }), revision(2), revision(3)] }], probes: [["specRevisions", "t1"]] },
+    { actions: [upsert(ticket("t1", { specRevision: 3, specBaselineRevision: null }))], probes: [["specRevisions", "t1"]] },
+    { actions: [upsert(ticket("t1", { specRevision: 3, specBaselineRevision: 3 })), upsert(ticket("t1", { specRevision: 3 }))], probes: [["specRevisions", "t1"]] },
+    { actions: [upsert(ticket("t2", { specBaselineRevision: 1 }))], probes: [["specRevisions", "t2"]] },
+  ]),
+  scenario("specRevision stores bodies; specBody reads the current one from the ticket", [
+    {
+      actions: [
+        upsert(ticket("t1", { spec: "current body", specRevision: 3 })),
+        upsert(ticket("t2", { spec: "rev one" })),
+        { type: "specRevision", ticketId: "t1", revision: { ...revision(1), body: "first body" } },
+      ],
+      probes: [["specBody", "t1", 1], ["specBody", "t1", 2], ["specBody", "t1", 3], ["specBody", "t2", 1], ["specBody", "t2", 2], ["specBody", "nope", 1], ["specRevisions", "t1"]],
+      full: true,
+    },
+    {
+      actions: [
+        { type: "specRevisions", ticketId: "t1", revisions: [revision(1)] },
+        { type: "specRevision", ticketId: "t1", revision: { ...revision(2, { note: "from GET" }), body: "second body" } },
+        { type: "specRevision", ticketId: "t1", revision: { ...revision(3), body: "stale" } },
+      ],
+      probes: [["specBody", "t1", 2], ["specBody", "t1", 3], ["specRevisions", "t1"]],
+    },
   ]),
 
   // entities
@@ -135,11 +203,11 @@ export const scenarios = [
     // Equal or newer snapshot data wins.
     { actions: [snapshot([ticket("t1", { status: "done", updatedAt: 20 })])] },
   ]),
-  scenario("snapshot keeps transcripts, summaries, runs and deltas; prefers newer projects and sessions", [
+  scenario("snapshot keeps transcripts, activity, runs and deltas; prefers newer projects and sessions", [
     {
       actions: [
         appended("a", 1),
-        ev({ kind: "summary.added", summary: summary("x", 1) }),
+        ev({ kind: "activity.added", entry: activity("x", 1) }),
         delta("streaming"),
         ev({ kind: "project.upserted", project: project("p1", "LIVE", { updatedAt: 50 }) }),
         ev({ kind: "session.upserted", session: session("s1", { title: "live", updatedAt: 50 }) }),

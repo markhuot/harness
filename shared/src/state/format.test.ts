@@ -195,11 +195,11 @@ test("tabs: plugin tab ids; the Tickets tab only on conductors; plugin tabs that
   expect(parsePluginTab("details")).toBeNull();
   expect(parsePluginTab("plugin:Git:changes")).toBeNull();
   const tabs = [{ pluginId: "git", id: "changes" }];
-  expect(effectiveTab("children", { conductor: false, pluginTabs: tabs })).toBe("summaries");
+  expect(effectiveTab("children", { conductor: false, pluginTabs: tabs })).toBe("spec");
   expect(effectiveTab("children", { conductor: true, pluginTabs: tabs })).toBe("children");
   expect(effectiveTab("plugin:git:changes", { conductor: false, pluginTabs: tabs })).toBe("plugin:git:changes");
-  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: tabs })).toBe("summaries");
-  // Tabs still loading: keep the plugin tab so the UI can show a spinner rather than flash Summaries.
+  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: tabs })).toBe("spec");
+  // Tabs still loading: keep the plugin tab so the UI can show a spinner rather than flash the Spec.
   expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: null })).toBe("plugin:git:log");
 });
 

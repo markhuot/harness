@@ -115,8 +115,8 @@ const searchProbes: Probe[] = [["searchColumns", "p1"], ["searchStatusText"], ["
 export const searchScenarios = [
   scenario("typing shows local matches at once; the server's results replace them", [
     { actions: [searchBase, { type: "search.set", q: " widget ", scope: "p1" }], probes: [...searchProbes], full: true },
-    // The server also matches a done ticket that isn't loaded (description hit), and not C1.
-    { actions: [{ type: "search.results", q: "widget", scope: "p1", page: page([done("far", 10, { title: "Old", description: "widget cache" }), w2], "n", 3), append: false }], probes: [...searchProbes] },
+    // The server also matches a done ticket that isn't loaded (spec hit), and not C1.
+    { actions: [{ type: "search.results", q: "widget", scope: "p1", page: page([done("far", 10, { title: "Old", spec: "widget cache" }), w2], "n", 3), append: false }], probes: [...searchProbes] },
   ]),
   scenario("stale responses (an older query or scope) are ignored", [
     { actions: [searchBase, { type: "search.set", q: "wid", scope: "p1" }, { type: "search.set", q: "widgets", scope: "p1" }] },
@@ -237,7 +237,7 @@ export const matchesQueryCases = cases(({ ticket, q, aliases }: ReturnType<typeo
   "title, case-insensitive": mq(tk("r3", { title: "Fix the Widget" }), "WIDGET"),
   "blank query matches everything": mq(tk("r4"), "   "),
   "query is trimmed": mq(tk("r5", { title: "abc" }), " b "),
-  "description doesn't match locally": mq(tk("r6", { title: "x", description: "needle" }), "needle"),
+  "spec doesn't match locally": mq(tk("r6", { title: "x", spec: "needle" }), "needle"),
   "combining mark: e matches é decomposed": mq(tk("r7", { title: "cafe\u0301" }), "cafe"),
   "NBSP trimmed like JS": mq(tk("r8", { title: "abc" }), " b "),
 });

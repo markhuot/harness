@@ -1,4 +1,4 @@
-// Summary attachment layout for HarnessKit's Attachments.swift. The shared/src/state/attachments.ts
+// Ticket attachment layout for HarnessKit's Attachments.swift. The shared/src/state/attachments.ts
 // cases are computed; the viewer's sizing, paging and dismiss rules (from the retired RN app, now
 // only in Swift) are frozen.
 import { attachmentsLabel, stepAttachment, thumbnailBox } from "../../src/state/attachments";

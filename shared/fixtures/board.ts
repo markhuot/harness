@@ -8,7 +8,7 @@
 // order (which Swift dictionaries don't have) are sorted here and in Swift; see BoardState.swift.
 // Not a case file itself: it lives outside cases/ so the exporter doesn't write it out.
 
-import type { Project, Run, Session, Subagent, Summary, Ticket, TicketDetail, TicketPage, TranscriptEntry, Watcher } from "../src/protocol";
+import type { ActivityEntry, Project, Run, Session, SpecRevisionInfo, Subagent, Ticket, TicketDetail, TicketPage, TranscriptEntry, Watcher } from "../src/protocol";
 import {
   boardColumns,
   canLoadMoreDone,
@@ -23,7 +23,7 @@ import {
   doneCount,
   hasCustomDriver,
   initialState,
-  latestSummary,
+  latestActivity,
   liveDelta,
   matchesQuery,
   needsFirstDonePage,
@@ -31,6 +31,7 @@ import {
   searchColumns,
   searchStatusText,
   sortedProjects,
+  specBody,
   subagentById,
   subagentPath,
   subagentsOf,
@@ -74,7 +75,7 @@ export const ticket = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   projectId: "p1",
   kind: "task",
   title: id,
-  description: "",
+  spec: "",
   status: "planning",
   sessionId: `s-${id}`,
   driver: "dummy",
@@ -131,14 +132,26 @@ export const entry = (id: string, seq: number, over: Partial<TranscriptEntry> = 
   ...over,
 });
 
-export const summary = (id: string, createdAt: number, over: Partial<Summary> = {}): Summary => ({
+export const activity = (id: string, createdAt: number, over: Partial<ActivityEntry> = {}): ActivityEntry => ({
   id,
   sessionId: "s1",
   ticketId: "t1",
+  kind: "note",
   author: "agent",
   body: id,
+  meta: {},
   createdAt,
-  attachments: [],
+  ...over,
+});
+
+export const revision = (rev: number, over: Partial<SpecRevisionInfo> = {}): SpecRevisionInfo => ({
+  rev,
+  author: "agent",
+  runId: null,
+  runKind: null,
+  note: `rev ${rev}`,
+  approvedBaseline: false,
+  createdAt: rev * 10,
   ...over,
 });
 
@@ -203,7 +216,7 @@ export const settings = {
 
 /** A detail for `t` with a full session (Swift decodes every field). */
 export function detail(t: Ticket, over: Partial<TicketDetail> = {}): TicketDetail {
-  return { ticket: t, session: session(t.sessionId, { ticketId: t.id }), summaries: [], runs: [], dependents: [], children: [], ...over };
+  return { ticket: t, session: session(t.sessionId, { ticketId: t.id }), activity: [], runs: [], dependents: [], children: [], ...over };
 }
 
 export const ev = (event: Extract<Action, { type: "event" }>["event"]): Action => ({ type: "event", event });
@@ -241,7 +254,9 @@ const PROBES: Record<string, (s: State, ...args: never[]) => unknown> = {
   conductorsNeedingChildren: (s) => sorted(ids(conductorsNeedingChildren(s))),
   dependentsOf: (s, id: string) => dependentsOf(s, s.tickets[id]!).map((d) => ({ key: d.key, ticket: tid(d.ticket) })),
   liveDelta: (s, sessionId: string) => [...liveDelta(s, sessionId)].sort((a, b) => (a.runId < b.runId ? -1 : 1)),
-  latestSummary: (s, sessionId: string) => latestSummary(s, sessionId)?.id ?? null,
+  latestActivity: (s, sessionId: string, kinds?: ActivityEntry["kind"][]) => latestActivity(s, sessionId, kinds)?.id ?? null,
+  specBody: (s, ticketId: string, rev: number) => specBody(s, ticketId, rev) ?? null,
+  specRevisions: (s, ticketId: string) => s.specRevisions[ticketId]?.map((r) => ({ rev: r.rev, approvedBaseline: r.approvedBaseline })) ?? null,
   triageSessions: (s) => triageSessions(s).map((x) => x.id),
   defaultDriverOf: (s, projectId: string) => defaultDriverOf(s, projectId),
   hasCustomDriver: (s, t: Ticket) => hasCustomDriver(s, t),
