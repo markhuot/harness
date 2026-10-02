@@ -1,17 +1,23 @@
 // Markdown-ish rendering for agent summaries and transcript text: paragraphs, headings,
-// bullet/numbered lists, fenced code (syntax highlighted, Code.tsx), tables, inline code, bold/italic, links, ticket keys. Parsing is shared with the
+// nested bullet/numbered lists, fenced code (syntax highlighted, Code.tsx), tables, attachment images
+// and videos, inline code, bold/italic, links, ticket keys. Parsing is shared with the
 // iOS app (@harness/shared/state "markdown"); this builds React DOM nodes directly (no innerHTML),
 // so agent output can't inject markup.
 //
 // Links to files (harness://file/…, or a plain path; shared/src/fileLinks.ts) open the file pane.
 // Their path resolves in the ticket or project the text belongs to, which the view provides with
 // FileLinkScope; from inside a pane the file docks beside it. http(s) links open in the browser.
+//
+// `![alt](attachment:<id>)` shows the attachment, fitted to the width, and opens the lightbox on a
+// click (stepping through every image in the text). The parser turns remote and file images into
+// links, so nothing here loads a URL an agent wrote.
 
-import { createContext, Fragment, useContext, useMemo, type ReactNode } from "react";
-import { parseFileLink } from "@harness/shared";
-import { inlineTokens, parseBlocks, ticketByKey, ticketLinkable } from "@harness/shared/state";
+import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { parseFileLink, type AttachmentKind, type SummaryAttachment } from "@harness/shared";
+import { inlineTokens, parseBlocks, ticketByKey, ticketLinkable, type Block, type Media } from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
 import { useOptionalStore } from "../state/store";
+import { Lightbox, Missing } from "./Attachments";
 import { FencedCode } from "./Code";
 import { Icon } from "./Icon";
 import { PaneContext, PaneScopeContext, useOpenTicket } from "./paneContext";
@@ -101,6 +107,8 @@ export function inline(text: string, tickets?: TicketLinks, onLink?: (url: strin
         return <strong key={k}>{tok.text}</strong>;
       case "em":
         return <em key={k}>{tok.text}</em>;
+      case "img":
+        return <MdMedia key={k} media={tok} />;
       case "link":
         if (!onLink) return <MdLink key={k} url={tok.url}>{tok.text}</MdLink>;
         return (
@@ -141,70 +149,185 @@ function useTicketLinks(): TicketLinks | undefined {
   return { title: (key) => (ticketLinkable(state, key) ? (ticketByKey(state, key)?.title ?? "") : null), open: (key) => openTicket(key) };
 }
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
-  const blocks = parseBlocks(text);
-  const tickets = useTicketLinks();
+/** The images in a piece of markdown, for the lightbox: what kind each turned out to be, and opening one. */
+interface MediaScope {
+  kind: (m: Media) => AttachmentKind;
+  /** An image that failed to load as one is tried as a video; the lightbox then shows it as a video too. */
+  learn: (id: string, kind: AttachmentKind) => void;
+  open: (id: string) => void;
+}
+
+const MediaScopeContext = createContext<MediaScope | null>(null);
+
+/** Every attachment in `blocks`, first appearance first, once each. Paragraph and quote text goes line by line, as it renders. */
+function collectMedia(blocks: Block[], out = new Map<string, Media>()): Map<string, Media> {
+  const add = (text: string) => {
+    for (const line of text.split("\n")) for (const tok of inlineTokens(line)) if (tok.t === "img" && !out.has(tok.id)) out.set(tok.id, tok);
+  };
+  for (const b of blocks) {
+    if (b.t === "img") {
+      if (!out.has(b.id)) out.set(b.id, b);
+    } else if (b.t === "p" || b.t === "h" || b.t === "quote") add(b.text);
+    else if (b.t === "ul" || b.t === "ol")
+      for (const it of b.items) {
+        add(it.text);
+        collectMedia(it.children, out);
+      }
+    else if (b.t === "table") [b.header, ...b.rows].forEach((row) => row.forEach(add));
+  }
+  return out;
+}
+
+const defaultKind = (m: Media): AttachmentKind => (m.video ? "video" : "image");
+
+/**
+ * An attachment in markdown: the image fitted to the width, or a video's first frame with a play
+ * badge, opening the lightbox when clicked. Without a store there's no URL to load, so it's the alt text.
+ */
+function MdMedia({ media, block }: { media: Media; block?: boolean }) {
+  const store = useOptionalStore();
+  const scope = useContext(MediaScopeContext);
+  const [own, setOwn] = useState<AttachmentKind | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!store) return <>{media.alt}</>;
+  const url = store.client.attachmentUrl(media.id);
+  const kind = own ?? scope?.kind(media) ?? defaultKind(media);
+  const label = media.alt || (kind === "video" ? "Video" : "Image");
+  const fail = () => {
+    // The parser guesses the kind from a name; an id without one may still be a video.
+    if (kind === "image" && !media.video) {
+      setOwn("video");
+      scope?.learn(media.id, "video");
+    } else setFailed(url);
+  };
   return (
-    <div className={`md selectable ${className ?? ""}`}>
-      {blocks.map((b, i) => {
-        switch (b.t) {
-          case "p":
-            return <p key={i}>{withBreaks(b.text, tickets)}</p>;
-          case "h": {
-            const H = `h${Math.min(b.level, 4)}` as "h1";
-            return <H key={i}>{inline(b.text, tickets)}</H>;
-          }
-          case "ul":
-            return (
-              <ul key={i}>
-                {b.items.map((it, j) => (
-                  <li key={j}>{inline(it, tickets)}</li>
+    <button
+      className={`md-media ${block ? "is-block" : ""} ${failed === url ? "is-missing" : ""}`}
+      title={media.alt || undefined}
+      aria-label={`Open ${label}`}
+      data-testid="md-media"
+      onClick={() => scope?.open(media.id)}
+    >
+      {failed === url ? (
+        <Missing name={label} />
+      ) : kind === "image" ? (
+        <img key={url} src={url} alt={media.alt} loading="lazy" decoding="async" draggable={false} onError={fail} />
+      ) : (
+        <>
+          {/* #t= makes WebKit paint a frame for the poster instead of a black box. */}
+          <video key={url} src={`${url}#t=0.1`} preload="metadata" muted playsInline tabIndex={-1} onError={fail} />
+          <span className="attachment-play">
+            <Icon name="play" size={12} />
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/** A list and the lists nested in its items. Markers change with depth (• ◦ ▪, 1. a. i.), see .md-list in styles.css. */
+function MdList({ block, depth, tickets }: { block: Extract<Block, { t: "ul" | "ol" }>; depth: number; tickets?: TicketLinks }) {
+  const items = block.items.map((it, j) => (
+    <li key={j}>
+      {inline(it.text, tickets)}
+      {it.children.map((child, k) => (
+        <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
+      ))}
+    </li>
+  ));
+  const className = `md-list depth-${depth % 3}`;
+  return block.t === "ol" ? (
+    <ol className={className} start={block.start}>
+      {items}
+    </ol>
+  ) : (
+    <ul className={className}>{items}</ul>
+  );
+}
+
+function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: number; tickets?: TicketLinks }) {
+  switch (b.t) {
+    case "p":
+      return <p>{withBreaks(b.text, tickets)}</p>;
+    case "h": {
+      const H = `h${Math.min(b.level, 4)}` as "h1";
+      return <H>{inline(b.text, tickets)}</H>;
+    }
+    case "ul":
+    case "ol":
+      return <MdList block={b} depth={depth} tickets={tickets} />;
+    case "img":
+      return (
+        <p className="md-media-block">
+          <MdMedia media={b} block />
+        </p>
+      );
+    case "code":
+      return <FencedCode text={b.text} lang={b.lang} />;
+    case "quote":
+      return <blockquote>{withBreaks(b.text, tickets)}</blockquote>;
+    case "table":
+      return (
+        <div className="md-table">
+          <table>
+            <thead>
+              <tr>
+                {b.header.map((cell, j) => (
+                  <th key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                    {inline(cell, tickets)}
+                  </th>
                 ))}
-              </ul>
-            );
-          case "ol":
-            return (
-              <ol key={i}>
-                {b.items.map((it, j) => (
-                  <li key={j}>{inline(it, tickets)}</li>
-                ))}
-              </ol>
-            );
-          case "code":
-            return <FencedCode key={i} text={b.text} lang={b.lang} />;
-          case "quote":
-            return <blockquote key={i}>{withBreaks(b.text, tickets)}</blockquote>;
-          case "table":
-            return (
-              <div key={i} className="md-table">
-                <table>
-                  <thead>
-                    <tr>
-                      {b.header.map((cell, j) => (
-                        <th key={j} style={{ textAlign: b.align[j] ?? undefined }}>
-                          {inline(cell, tickets)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {b.rows.map((row, r) => (
-                      <tr key={r}>
-                        {row.map((cell, j) => (
-                          <td key={j} style={{ textAlign: b.align[j] ?? undefined }}>
-                            {inline(cell, tickets)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          case "hr":
-            return <hr key={i} />;
-        }
-      })}
-    </div>
+              </tr>
+            </thead>
+            <tbody>
+              {b.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, j) => (
+                    <td key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                      {inline(cell, tickets)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    case "hr":
+      return <hr />;
+  }
+}
+
+export function Markdown({ text, className }: { text: string; className?: string }) {
+  const blocks = useMemo(() => parseBlocks(text), [text]);
+  const media = useMemo(() => [...collectMedia(blocks).values()], [blocks]);
+  const tickets = useTicketLinks();
+  const [learned, setLearned] = useState<Record<string, AttachmentKind>>({});
+  const [open, setOpen] = useState<number | null>(null);
+  const kind = useCallback((m: Media) => learned[m.id] ?? defaultKind(m), [learned]);
+  const scope = useMemo<MediaScope>(
+    () => ({
+      kind,
+      learn: (id, k) => setLearned((prev) => (prev[id] === k ? prev : { ...prev, [id]: k })),
+      open: (id) => {
+        const i = media.findIndex((m) => m.id === id);
+        if (i >= 0) setOpen(i);
+      },
+    }),
+    [kind, media],
+  );
+  const list = useMemo<SummaryAttachment[]>(
+    () => media.map((m) => ({ id: m.id, kind: kind(m), mimeType: "", name: m.alt || m.id, size: 0 })),
+    [media, kind],
+  );
+  return (
+    <MediaScopeContext.Provider value={scope}>
+      <div className={`md selectable ${className ?? ""}`}>
+        {blocks.map((b, i) => (
+          <MdBlock key={i} block={b} tickets={tickets} />
+        ))}
+      </div>
+      {open !== null && list.length > 0 && <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
+    </MediaScopeContext.Provider>
   );
 }
